@@ -67,7 +67,11 @@ def real_skill_paths(repo_root: Path) -> set[str]:
     out: set[str] = set()
     for path in (repo_root / "skills").rglob("*.md"):
         rel = path.relative_to(repo_root).as_posix()
-        if rel == "skills/INDEX.md" or rel.startswith("skills/meta/templates/"):
+        if (
+            rel == "skills/INDEX.md"
+            or rel.startswith("skills/generated/")
+            or rel.startswith("skills/meta/templates/")
+        ):
             continue
         out.add(rel)
     return out

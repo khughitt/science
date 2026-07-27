@@ -17,7 +17,7 @@ that order:
 
 1. **Getting Started** — [Introduction](introduction.md), then the [Big Picture](big-picture.md).
 2. **Core Model** — the [Science Model](science-model.md), then [Project Layout](project-layout.md), [Entities](entities.md), and [Datasets](datasets.md), then the [Epistemic Model](epistemic-model.md), [Evidence Lines](evidence-lines.md), and [Graph And Derived State](graph-and-derived-state.md).
-3. **Workflows & Tooling** — [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Codex](codex.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Benchmarking](benchmarking.md), and [Feedback And Telemetry](feedback-and-telemetry.md).
+3. **Workflows & Tooling** — [CLI And Workflows](cli-and-workflows.md), [Agent Workflows](agent-workflows.md), [Coding Agents](coding-agents.md), [Codex](codex.md), [Crush](crush.md), [OpenCode](opencode.md), [Big-Picture Synthesis](big-picture-synthesis.md), [Health And Validation](health-and-validation.md), [Benchmarking](benchmarking.md), and [Feedback And Telemetry](feedback-and-telemetry.md).
 4. **Multi-Project** — [Cross-Project Work](cross-project-work.md) and [Project Packaging](project-packaging.md).
 
 ## Chapters
@@ -37,10 +37,13 @@ that order:
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
 | [CLI And Workflows](cli-and-workflows.md) | Command families, write classes, canonical vs migration surfaces, and shared CLI behavior. |
 | [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
-| [Codex](codex.md) | Using Science with OpenAI Codex via native skill discovery: install and skill generation. |
+| [Coding Agents](coding-agents.md) | Shared generated-skill distribution, installation, updates, collision handling, and Windows guidance for Codex, Crush, and OpenCode. |
+| [Codex](codex.md) | Codex skill discovery and explicit Science skill selection. |
+| [Crush](crush.md) | Crush skill discovery and the Science command palette. |
+| [OpenCode](opencode.md) | OpenCode skills, `/science-*` commands, and permission policy. |
 | [Feedback And Telemetry](feedback-and-telemetry.md) | Feedback entries, concern taxonomy, local telemetry, redaction, reporting, pruning, and telemetry-assisted triage. |
 | [Benchmarking](benchmarking.md) | Benchmark metadata, validation, catalog coverage, opportunities, gaps, calibration, and read-only test projections. |
-| [Skill Coverage](../conventions/skill-coverage.md) | Enrolling projects in skill coverage and scanning portfolio coverage. |
+| [Skill Coverage](https://github.com/khughitt/science/blob/main/docs/conventions/skill-coverage.md) | Enrolling projects in skill coverage and scanning portfolio coverage. |
 | [Project Packaging](project-packaging.md) | Deterministic project bundles, manifest payload inventories, verification, extraction, and exit-code semantics. |
 | [Cross-Project Work](cross-project-work.md) | Peers, sync, project collections, and federated Science projects. |
 

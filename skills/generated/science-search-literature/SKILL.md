@@ -1,0 +1,293 @@
+---
+name: science-search-literature
+description: "Search scientific literature using OpenAlex and PubMed, rank results by project relevance, and produce a prioritized reading queue."
+user-invocable: true
+---
+
+# Search Literature
+
+## Science Command Preamble
+
+Before executing any research command:
+
+1. **Resolve project profile:** Read `science.yaml` and identify the project's `profile`.
+   Use the canonical layout for that profile:
+   - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
+   - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
+2. Load the `science-command-preamble` skill. Use its
+   `references/role-prompts/research-assistant.md` role prompt and its aspect definitions.
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the emitted methodology router skills that own the relevant leaf guidance (for example, load the `science-literature` skill for `literature-evaluation` and `literature-citation-discipline` guidance, and load the `science-epistemics` skill for `epistemics-proposition-graph-reasoning` guidance).
+4. Read project context from current entity roots:
+   - `entities/questions/` for active research questions.
+   - `entities/hypotheses/` for hypotheses.
+5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
+   For each declared aspect, resolve the aspect file in this order:
+   1. the `science-command-preamble` skill's `references/aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under the `science-command-preamble` skill's `references/aspects/`.
+
+   When executing command steps, incorporate the additional sections, guidance,
+   and signal categories from loaded aspects. Aspect-contributed sections are
+   whole sections inserted at the placement indicated in each aspect file.
+6. **Check for missing aspects:** Scan for structural signals that suggest aspects
+   the project could benefit from but hasn't declared:
+
+   | Signal | Suggests |
+   |---|---|
+   | Files in `entities/hypotheses/` | `hypothesis-testing` |
+   | Files in `models/` (`.dot`, `.json` DAG files) | `causal-modeling` |
+   | Workflow files, notebooks, or benchmark scripts in `code/` | `computational-analysis` |
+   | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
+
+   If a signal is detected and the corresponding aspect is not in the `aspects` list,
+   briefly note it to the user before proceeding:
+   > "This project has [signal] but the `[aspect]` aspect isn't enabled.
+   > This would add [brief description of what the aspect contributes].
+   > Want me to add it to `science.yaml`?"
+
+   If the user agrees, add the aspect to `science.yaml` and load the aspect file
+   before continuing. If they decline, proceed without it.
+
+   Only check once per command invocation — do not re-prompt for the same aspect
+   if the user has previously declined it in this session.
+7. **Resolve templates:** When a command says "Read `.ai/templates/<name>.md`",
+   check the project's `.ai/templates/` directory first. If not found, read from
+   `references/templates/<name>.md`. If neither exists, warn the
+   user and proceed without a template — the command's Writing section provides
+   sufficient structure.
+8. **Verify the project-local Science CLI:** Execute the top-level CLI
+   Compatibility Gate below before the command's first Science invocation. It
+   uses the consumer's frozen lock; do not route through a toolkit checkout or
+   another environment.
+
+## CLI Compatibility Gate
+
+```bash
+SCIENCE_REQUIRED_VERSION=0.3.0
+if output=$(uv run --frozen science --version 2>&1); then
+  SCIENCE_INSTALLED_VERSION=${output##* }
+elif uv run --frozen science --help >/dev/null 2>&1; then
+  # The CLI runs but has no --version option, so it predates the baseline.
+  # Decided by behavior, never by matching Click's version-dependent wording.
+  SCIENCE_INSTALLED_VERSION=
+else
+  # The CLI cannot run at all: missing/stale lock, Git fetch failure, import
+  # error. Report the real diagnosis; never advise moving the Science pin.
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+
+if ! SCIENCE_INSTALLED_VERSION="$SCIENCE_INSTALLED_VERSION" \
+     SCIENCE_REQUIRED_VERSION="$SCIENCE_REQUIRED_VERSION" \
+     uv run --no-project python - <<'PY'
+import os
+import re
+import sys
+
+def release(name: str) -> tuple[int, int, int] | None:
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", name)
+    return tuple(map(int, match.groups())) if match else None
+
+installed = release(os.environ["SCIENCE_INSTALLED_VERSION"])
+required = release(os.environ["SCIENCE_REQUIRED_VERSION"])
+sys.exit(0 if installed is not None and required is not None and installed >= required else 1)
+PY
+then
+  display=${SCIENCE_INSTALLED_VERSION:-unknown-or-pre-0.3.0}
+  echo "This Science agent command requires science >=$SCIENCE_REQUIRED_VERSION; found $display." >&2
+  echo "upgrade with: uv lock --upgrade-package science && uv sync --frozen" >&2
+  exit 1
+fi
+```
+
+After the gate succeeds, run the command through the consumer's project-local
+environment as `uv run science <command>`. Missing dependency, missing or stale
+lock, and Git fetch failures are surfaced directly and must be fixed in the
+consumer project.
+
+A CLI that answers `--help` but rejects `--version` predates the baseline;
+malformed successful output and a version below the floor are likewise
+compatibility failures, and all three stop with the upgrade command. A CLI that
+cannot run at all is an environment failure: its output is printed verbatim and
+must be fixed as reported.
+
+The `--help` probe is what separates those two classes. Do not substitute a match
+against Click's error text — its wording changed in Click 8.4, and `science`
+allows any `click>=8.1`, so a freshly locked consumer can emit either form. The
+root `--version` probe is the permanent bootstrap surface; do not replace it with
+a preflight subcommand, which an older CLI could not recognize either.
+
+Search literature for the user input.
+If no argument is provided, derive candidate search foci from the `research-question` spec (`science project spec-path --slug research-question`) and `entities/questions/`, then ask the user to confirm the focus.
+
+## Setup
+
+
+Additionally:
+1. If present, read source-specific skills from the Science toolkit:
+   - `science-literature` skill
+   - `science-literature` skill
+2. Read `.ai/templates/paper.md` first; if not found, read `references/templates/paper.md`.
+3. Read project context:
+   - the `research-question` spec — resolve with `science project spec-path --slug research-question`
+   - the `scope-boundaries` spec — resolve with `science project spec-path --slug scope-boundaries`
+     (both resolve the canonical `entities/specs/` layout first, then legacy `specs/`, and exit
+     non-zero when the document exists in neither — do not treat a failed lookup as "no declared scope")
+   - `entities/questions/`
+   - `entities/hypotheses/`
+   - `entities/papers/`
+   - `entities/topics/`, `entities/questions/`
+4. Check `entities/searches/` for recent related searches and ask whether to refresh or create a new run.
+
+## Query Planning
+
+Create 3-5 query variants before running searches:
+
+1. A broad conceptual query.
+2. A mechanism/pathway query.
+3. A methods/measurement query.
+4. A contrasting/alternative explanation query (when relevant).
+5. An optional domain narrowing query (population, assay, disease subtype, etc.).
+
+Default constraints unless user specifies otherwise:
+
+- Time window: last 10 years, plus seminal older papers if they dominate citations.
+- Result depth: retrieve up to 50 candidates before ranking.
+- Output depth: keep top 20 ranked records.
+
+## Search Execution
+
+Use this execution order:
+
+1. Run direct source queries:
+   - OpenAlex API (primary broad-discovery source)
+   - PubMed E-utilities (for biomedical scope)
+2. If source APIs are temporarily unavailable, use web search as fallback and mark source as `fallback-web`.
+
+At least one query must hit OpenAlex with a broad conceptual framing and return ≥30 candidates before ranking. If every query is seed/author/title-driven and returns <30 results, you are in verify-mode, not discover-mode — stop and reformulate at least one query as a broad conceptual search.
+
+For each candidate, capture identifiers where available:
+
+- DOI
+- PMID/PMCID
+- OpenAlex ID
+- Year
+- Venue
+- First/last author
+
+Do not fabricate missing metadata. Mark unknown fields as `[UNVERIFIED]`.
+
+## Deduplication and Ranking
+
+Deduplicate across sources by DOI first, then PMID, then normalized title.
+
+Rank with explicit rationale using:
+
+1. Relevance to project question and active hypotheses.
+2. Evidence strength (study design and methodological clarity).
+3. Recency and citation momentum.
+4. Novelty or contradiction value (papers that challenge current assumptions are high value).
+5. Reproducibility signal (clear data/method reporting).
+
+Label each ranked item as one of:
+
+- `Core now` (read immediately)
+- `Relevant next` (read if time allows)
+- `Peripheral monitor` (track but defer)
+
+## Coverage Audit (before writing)
+
+Before writing output, enumerate the project's declared scope and check which parts this search does **not** cover.
+
+Sources of declared scope (read all that exist):
+
+- `science.yaml` aspects
+- `entities/topics/` (topic slugs and their subtopics)
+- `entities/questions/` (open questions)
+- `entities/hypotheses/` (active hypotheses)
+
+For each declared item, mark whether the current search surfaced at least one ranked candidate that materially addresses it. If gaps exist, either:
+
+1. Run one additional targeted query per uncovered item and fold results into the run, or
+2. Record the uncovered item explicitly in `## Coverage Notes and Gaps` with a suggested follow-up query.
+
+Do not skip this step — a reading queue that silently omits declared scope is worse than one that flags the omission.
+
+## Writing Output
+
+If `entities/searches/` does not exist yet, create it first.
+
+Create `entities/searches/YYYY-MM-DD-<slug>.md` with sections:
+
+1. `## Search Focus`
+2. `## Query Set`
+3. `## Sources and Run Metadata`
+4. `## Ranked Results`
+5. `## Priority Reading Queue`
+6. `## Coverage Notes and Gaps`
+7. `## Recommended Next Actions`
+
+In `## Ranked Results`, include a table with columns:
+
+- Rank
+- Citation (short)
+- Year
+- Source IDs (DOI / PMID / OpenAlex)
+- Tier
+- Why it matters for this project
+
+Also write machine-readable output to:
+
+- `entities/searches/YYYY-MM-DD-<slug>.json`
+
+Include the normalized candidate list, dedupe keys, source provenance, and rank/tier fields.
+
+## After Search
+
+1. Offer to create tasks for the top `Core now` papers via `science tasks add`.
+2. For selected high-priority papers, run the `science-research-papers` skill (or create a task for later).
+3. For `Core now` items, create a **stub-only** note at `entities/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `references/templates/paper.md`. The stub must contain:
+   - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
+   - Every prose/content section (Key Contribution, Methods, Key Findings, etc.) replaced with a single line: `UNREAD — populate after reading the paper`.
+   - Do **not** write plausible-sounding summaries from the LLM prior; those are hard to distinguish from real notes later and cause stub-drift when the paper is actually read.
+   Full content is populated later by the `science-research-papers` skill or during task execution.
+4. Populate note metadata fields from search results only (do not infer):
+   - `tags` for project-specific labels.
+   - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).
+   - `datasets` for relevant dataset accessions when identified.
+5. Update related topic/question notes (`entities/topics/`, `entities/questions/`) with new links and key takeaways.
+6. Add BibTeX entries for selected high-priority papers to `papers/references.bib`. If the file does not exist yet, create it with:
+   ```bibtex
+   % references.bib — BibTeX database for this Science project
+   % Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
+   ```
+7. If substantial gaps remain, run the `science-next-steps` skill focused on the searched scope.
+8. Commit: `git add -A && git commit -m "docs(papers): search literature <slug>"` (use `papers:` only if your project's commitlint config explicitly allows that type).
+
+## Process Reflection
+
+Reflect on the **template** and **workflow** used above.
+
+If you have feedback (friction, gaps, suggestions, or things that worked well),
+report each item via:
+
+```bash
+science feedback add \
+  --target "command:search-literature" \
+  --category <friction|gap|guidance|suggestion|positive> \
+  --summary "<one-line summary>" \
+  --detail "<optional prose>"
+```
+
+Guidelines:
+- One entry per distinct issue (not one big dump)
+- If the same issue has occurred before, the tool will detect it and
+  increment recurrence automatically
+- Skip if everything worked smoothly — no feedback is valid feedback
+- For template-specific issues, use `--target "template:<name>"` instead

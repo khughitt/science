@@ -76,6 +76,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `bib`, `doi`, `paper`, `paper-fetch`, `book-split`, `distill` | Specialized | Mixed | Literature metadata, source text, book outlines, and public knowledge graph snapshots. |
 | `entities` | Canonical / migration-only | Mixed | Inventory, archive, consolidation, migration, and local-kind registration. |
 | `skills` | Specialized | Read-only | Skills tree linting. |
+| `agents` | Specialized | Generated-write / External-write | Generate the committed cross-agent distributions, or install them as project links or user-scope external links for Codex, Crush, or OpenCode. |
 
 ## Dataset Commands
 

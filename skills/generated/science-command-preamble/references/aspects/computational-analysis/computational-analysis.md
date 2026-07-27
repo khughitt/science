@@ -1,0 +1,197 @@
+---
+name: computational-analysis
+description: Computational and exploratory data analysis
+---
+
+# Computational Analysis
+
+Projects involving computational experiments, exploratory analysis, benchmarks, or pipeline-driven results.
+
+## interpret-results
+
+### Additional section: Sub-group Analysis (optional)
+
+(insert after: Additional Observations)
+
+If results reveal sub-groups, clusters, or decompositions within the data:
+- Characterize each sub-group with quantitative descriptors
+- Compare sub-groups systematically (table format preferred)
+- Note whether sub-groups are stable across methods or parameters
+- Flag sub-groups that may be artifacts of the analysis method
+
+Only include this section when decomposition results are present.
+
+### Additional guidance
+
+For computational/exploratory results:
+- Distinguish between confirmatory analysis (testing a pre-specified hypothesis) and exploratory analysis (pattern discovery)
+- When results are exploratory, note what would be needed to confirm the patterns
+- For benchmark results, include baseline comparisons and report relative as well as absolute performance
+
+## discuss
+
+### Additional guidance
+
+When discussing computational results:
+- Consider whether findings are method-dependent (would a different algorithm produce the same pattern?)
+- Distinguish between statistical artifacts and genuine structure
+- For pipeline results, consider sensitivity to parameter choices
+
+## research-topic
+
+### Additional guidance
+
+When researching computational methods or tools:
+- Note implementation maturity and community adoption
+- Compare alternative approaches systematically
+- Include practical resources (libraries, frameworks, example code)
+
+## plan-analysis
+
+### Additional guidance: Cross-tab the contrast against technical structure BEFORE freezing
+
+For any case/control differential-expression or signature design on multi-submission /
+multi-batch / multi-platform data, cross-tab the **intended biological contrast** against
+**every available technical axis** (GEO submission / batch, platform, library depth,
+cell/sample count) at design time. Treat any strong contingency — e.g. all cases plus part
+of the controls coming from one submission and the rest of the controls from a deeper, later
+submission — as a **covariate to adjust for or a stratum to hold out, chosen BEFORE freezing
+the design**, not as something the downstream negative-control gates will catch. Coherence,
+face validity, and learnability (a high LODO Jaccard) do **not** rule out a batch confound:
+adjusting for submission can drop the headline genes and retain only a fraction of the top
+signature while a composition artifact (e.g. erythroid/ambient-RNA) rises. (fb-2026-07-18-008.)
+
+### Additional section: Numerical Accuracy
+
+(insert after: Model / Test Assumptions)
+
+When the workflow integrates an ODE, or otherwise discretises:
+
+- **An independent reference means a different error-generating mechanism.** Comparing two
+  implementations of the *same* scheme is an invariance check, not an accuracy check — they are
+  equivariant at any step size and will agree to machine precision while both are wrong. Name a
+  different scheme family, or an adaptive solver with error control 2–3 orders tighter than the
+  target.
+- **Refinement alone is not evidence.** A finer step of the same scheme shares the leading truncation
+  term and the stability boundary, and is blind to every error that is not a function of the step. If
+  you refine, report the **observed order of accuracy** against the theoretical order — if they
+  disagree, you are outside the asymptotic regime, or you have a bug.
+- **Assert stability.** Evaluate the Jacobian spectrum along the trajectory and assert the step stays
+  inside the scheme's stability region at every step. This needs no reference at all.
+- **State the tolerance on the decision statistic**, propagated — not on a trajectory, and not on an
+  absolute likelihood. Certifying a trajectory to a tolerance says nothing about the difference the
+  inference actually reads.
+
+See `science-study-design` skill.
+
+## plan-pipeline
+
+### Additional section: QA Checkpoints
+
+(insert after: the last Task in the pipeline plan)
+
+For each pipeline stage (each `sci:Transformation` node), define:
+
+**Input assertions:**
+- Expected row counts or data dimensions
+- Value ranges and type constraints
+- Missingness rates and schema conformance
+- Distribution checks (if known expectations exist)
+
+**Inter-stage invariants:**
+- No silent row drops: row count before/after each transformation with allowed tolerance
+- Referential integrity: foreign keys and join conditions verified
+- Value conservation: aggregation totals match, no data loss in reshaping
+- Cardinality checks: one-to-many, many-to-many relationships as expected
+
+**Sanity checks:**
+- Known-answer tests: run on synthetic or known data where the correct answer is predetermined
+- Spot checks: sample N records and verify by hand
+- Summary statistics: mean, median, range before/after each stage
+
+**Failure mode:**
+- Default: hard stop (assertion failure halts the pipeline)
+- Document any stages where a logged warning is acceptable instead, with justification
+- **Manifest generation:** verify `datapackage.json` is produced and passes
+  `frictionless validate`
+
+Add QA checkpoints as first-class steps in the pipeline plan, not as afterthoughts. Each transformation task should include its assertions alongside the implementation steps.
+
+For the concrete implementation shape — a dedicated QA step (one script + one rule) that
+reads the processed table and writes a `qa_report.md`, splitting flags into **structural**
+(build-fatal) vs **distribution** (surfaced, not fatal), with config-driven bounds — follow
+[`docs/conventions/pipeline-qa-checkpoints.md`](../../docs/conventions/pipeline-qa-checkpoints.md).
+Plan the QA step as its own task wired into the default target, and prefer a *structural*
+check that regression-guards any source-level fix the pipeline already makes.
+
+Plan the QA step to emit `qa_report.{md,json}` and scaffold `qa_dispositions.yaml` (e.g. via
+`python -m science_qa run`), and record analyst decisions on distribution flags there — this is what
+`science qa-audit` reads to tell genuine QC iteration from a one-shot run.
+
+### Additional guidance
+
+When planning computational pipelines:
+- Suggest a "dry run on small data" step before full execution
+- For each transformation, ask: "How would I know if this step silently produced wrong results?"
+- Include a final end-to-end sanity check that validates the complete output against known properties
+
+## review-pipeline
+
+### Additional rubric dimension: QA Coverage
+
+(insert after: Dimension 7: Scope Check)
+
+Evaluate QA discipline across the pipeline:
+
+- **Assertion coverage:** Does every `sci:Transformation` have input/output assertions? Score: PASS (all covered) / WARN (gaps) / FAIL (no assertions)
+- **Intermediate checkpoints:** Are there checks between stages, or is it black-box end-to-end? Score: PASS (intermediate checks) / WARN (only final check) / FAIL (no checks)
+- **Failure handling:** What happens when an assertion fails? Is it hard stop or silent? Score: PASS (hard stop default) / WARN (mixed) / FAIL (all silent)
+- **Dry run step:** Is there a "run on small/synthetic data" step before full execution? Score: PASS (present) / WARN (suggested but not planned) / FAIL (absent)
+- **Edge case coverage:** Are edge cases documented (empty inputs, missing values, extreme values)? Score: PASS (documented) / WARN (partial) / FAIL (not considered)
+- **Severity split:** Does the QA step distinguish build-fatal *structural* violations (bad key, illegal code, broken invariant) from surfaced-not-fatal *distribution* flags (extreme-but-possible values), per [`docs/conventions/pipeline-qa-checkpoints.md`](../../docs/conventions/pipeline-qa-checkpoints.md)? Score: PASS (both, structural fails the build) / WARN (single bucket) / FAIL (no QA step)
+- **Process iteration:** Did the analysis iterate in response to QA flags, or run once and record
+  the result? Run `science qa-audit`. Score: PASS (QA-RESPONSIVE) / WARN (PARTIAL or
+  RE-RAN-UNRELATED) / FAIL (SINGLE-RUN × IGNORED — ran once, flags unexamined).
+- **Program breadth:** Does the QA step use a named program (e.g. `qa.program: scrna-qc-table`)
+  selecting the appropriate baseline check library, with few `empty`/`blocked` invocations and no
+  large pool of declared-but-unconfigured families? Read from the `coverage` block in
+  `qa_report.json` and surfaced by `science qa-audit` as the `breadth` column (`ran/denominator`).
+  Score: PASS (broad program ran, few `empty`/`blocked`) / WARN (several `empty`/`blocked` or
+  unconfigured families — narrow coverage) / FAIL (no program or coverage block absent).
+
+Include QA Coverage as an additional row in the rubric results table.
+
+To audit and refactor an existing project's pipelines across QA, organization/code-quality, and data
+portability in one pass, follow [`docs/process/pipeline-audit-and-refactor.md`](../../docs/process/pipeline-audit-and-refactor.md).
+
+## Signal categories
+
+- **Descriptive** — structure observed but not statistically testable (e.g., UMAP clusters, NMF factors, visualization patterns)
+
+## Available commands
+
+(none)
+
+## Workflow Lifecycle
+
+Computational projects track work through a formal lifecycle:
+
+1. **Method definition** — conceptual approach documented as a `method` entity
+2. **Workflow registration** — executable pipeline registered as a `workflow` entity
+   with `sci:realizes` link to the method
+3. **Run execution** — each invocation creates a `workflow-run` entity with
+   `sci:executes` link to the workflow
+4. **Manifest generation** — run produces `datapackage.json` with resources,
+   entity cross-references, and provenance DAG
+5. **Interpretation** — results interpreted via `interpret-results` command,
+   linked back to the run via `workflow_run` field
+6. **Supersession** — when a run is re-executed with updated parameters, the new
+   run uses `sci:supersedes` to link to the prior run
+
+### QA Checkpoint: Manifest Validation
+
+After each workflow run, validate the manifest:
+- All output files listed as resources
+- Entity cross-references present and valid
+- Config snapshot matches actual config used
+- Provenance DAG covers all rules that executed

@@ -23,7 +23,7 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
-    "exempt": 120,
+    "exempt": 122,
     "deferred": 98,
 }
 
@@ -140,11 +140,17 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     topic-coverage`, so it grows with the project's topic count. `entity kinds` and
     `project spec-path` add two exempt leaves, taking the partition to 69/120/95 = 284.
 
+    The coding-agent support work then added two exempt leaves. `agents generate`
+    reports only the generated skill and OpenCode-command counts, while `agents
+    install` reports only installed and already-current link counts. Both counts are
+    bounded by the toolkit's shipped distribution rather than project size, taking the
+    partition to 69/122/95 = 286.
+
     The VCS storage boundary then adds three deferred
     leaves: `boundary check` emits one warning per unanchored unmanaged rule, `boundary
     init` emits one proposal entry per discovered candidate root, and `boundary sync
     --verify-current-tree` emits one row per changed filesystem or synthetic-probe ignore
-    decision. The live partition is therefore 69/120/98 = 287.
+    decision. The live partition is therefore 69/122/98 = 289.
     """
     actual = {
         "budgeted": len(BUDGETS),

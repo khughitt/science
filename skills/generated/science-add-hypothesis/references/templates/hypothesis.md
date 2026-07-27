@@ -1,0 +1,131 @@
+---
+id: "hypothesis:{{nn}}-{{slug}}"
+kind: "hypothesis"
+title: "{{title}}"
+status: "active"  # draft | active | complete | superseded | retired | archived. The LIFECYCLE. What the evidence SAYS is `verdict`, and it stays absent until the evidence speaks.
+# verdict: partially-supported | supported | weakened | refuted. The epistemic conclusion -- NEVER inferred from status, and required once status is `complete`.
+# closure_basis: required when status is `retired` (and for `archived`) -- why this stopped being worked. Prose, or a pre-registration ref.
+# aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
+source_refs: []
+# origins: known originators. Each entry is a RECORD, not a bare word:
+#   origins: [{type: literature, ref: paper:Smith2024}]
+# type is one of user | assistant | literature; a literature ref must be
+# paper:<key> or cite:<key>. A bare `[literature]` fails schema validation,
+# which drops the whole entity from the source load. Provenance only; does
+# not affect belief.
+origins: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    kind: { default: "hypothesis" }
+    title: { from: title }
+    status: { from: status, default: "active" }
+    source_refs: { from: source_refs }
+    origins: { from: origins, default: [] }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+  sections:
+    - { key: organizing-conjecture, name: "Organizing Conjecture", required: true }
+    - { key: proposition-bundle, name: "Proposition Bundle", required: true }
+    - { key: current-uncertainty, name: "Current Uncertainty", required: true }
+    - { key: predictions, name: "Predictions", required: true }
+    - { key: falsifiability, name: "Falsifiability", required: true }
+    - { key: promotion-criteria, name: "Promotion criteria", required: false }
+    - { key: supporting-evidence, name: "Supporting Evidence", required: true }
+    - { key: disputing-evidence, name: "Disputing Evidence", required: true }
+    - { key: evidence-needed-to-shift-belief, name: "Evidence Needed To Shift Belief", required: true }
+    - { key: related-work, name: "Related Work", required: true }
+---
+
+# Hypothesis: {{title}}
+
+## Organizing Conjecture
+
+<!--
+High-level research idea.
+State the overarching conjecture in plain language.
+This is the umbrella idea, not the final unit of evidence aggregation.
+-->
+
+## Proposition Bundle
+
+<!--
+List the key propositions that make up this hypothesis.
+Prefer explicit sub-propositions, especially those with explicit S-P-O structure:
+- subject
+- predicate
+- object
+-->
+
+### Core Propositions
+
+<!-- Propositions that must be roughly true for the hypothesis to survive. -->
+
+### Supporting Or Auxiliary Propositions
+
+<!-- Propositions that strengthen or elaborate the hypothesis but are not essential. -->
+
+## Current Uncertainty
+
+<!--
+What makes this hypothesis currently fragile, contested, or underspecified?
+Note whether support is sparse, single-source, indirect, literature-only, etc.
+-->
+
+## Predictions
+
+<!--
+What should we observe if the core claims are true?
+Distinguish strong discriminating predictions from weaker corollaries.
+-->
+
+## Falsifiability
+
+<!--
+What results would materially lower confidence in the core claims?
+Be specific about what would force revision.
+-->
+
+## Promotion criteria
+
+<!--
+Required prose when `status: draft`; omit when `status: active`.
+What evidence or analytic outcome would justify promoting this from
+candidate to active? Be concrete. This is a documentation convention,
+not a validator-enforced rule.
+-->
+
+## Supporting Evidence
+
+<!--
+Existing evidence that supports one or more propositions in this bundle.
+Note evidence type where possible:
+- literature
+- empirical-data
+- simulation
+- benchmark
+-->
+
+## Disputing Evidence
+
+<!--
+Existing evidence that weakens or contests one or more propositions.
+Include null or conflicting findings here.
+-->
+
+## Evidence Needed To Shift Belief
+
+<!--
+What evidence would most efficiently increase or decrease confidence?
+What is the most discriminating next test?
+-->
+
+## Related Work
+
+<!--
+Papers, topics, inquiries, and other hypotheses that bear on this hypothesis.
+-->

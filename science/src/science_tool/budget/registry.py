@@ -136,6 +136,8 @@ BUDGETS: dict[str, CommandBudget] = {
 }
 
 EXEMPTIONS: dict[str, str] = {
+    "agents generate": "single fixed-shape summary with two counts bounded by the toolkit's shipped command set",
+    "agents install": "single fixed-shape summary with two counts bounded by the toolkit's shipped distribution",
     "belief snapshot": "fixed-shape count summary after snapshot persistence",
     "bib add": "fixed-shape single-entry persistence result",
     "big-picture synthesis-path": "single resolved path",

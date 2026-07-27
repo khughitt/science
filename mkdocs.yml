@@ -87,7 +87,10 @@ nav:
   - Workflows & Tooling:
     - CLI And Workflows: cli-and-workflows.md
     - Agent Workflows: agent-workflows.md
+    - Coding Agents: coding-agents.md
     - Codex: codex.md
+    - Crush: crush.md
+    - OpenCode: opencode.md
     - Big-Picture Synthesis: big-picture-synthesis.md
     - Health And Validation: health-and-validation.md
     - Benchmarking: benchmarking.md

@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # Current agent- and user-facing surface only. Historical design/plan prose and
-# codex-skills/ (a generated mirror of commands/) are intentionally excluded.
+# skills/generated/ (the generated distribution) are intentionally excluded.
 _CURRENT_DOC_DIRS = (
     "commands",
     "skills",
@@ -164,6 +164,8 @@ def _raw_read_offenders(root: Path = ROOT) -> list[str]:
         if not base.is_dir():
             continue
         for md in sorted(base.rglob("*.md")):
+            if md.is_relative_to(root / "skills" / "generated"):
+                continue
             relpath = md.relative_to(root).as_posix()
             for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), start=1):
                 if _is_offender(relpath, line):
@@ -210,6 +212,8 @@ def _current_markdown_lines() -> list[tuple[str, int, str]]:
         if not base.is_dir():
             continue
         for md in sorted(base.rglob("*.md")):
+            if md.is_relative_to(ROOT / "skills" / "generated"):
+                continue
             relpath = md.relative_to(ROOT).as_posix()
             lines.extend(
                 (relpath, lineno, line)

@@ -5,7 +5,7 @@
 **Scope:** `science` tool (CLI, validation, migration) + downstream project layout convention
 
 > Paths in this document are relative to the repo root
-> (`/mnt/ssd/Dropbox/science`). The tool lives under `science/src/science_tool/`
+> (`~/d/science`). The tool lives under `science/src/science_tool/`
 > and the model under `science/model/src/science_model/`.
 
 ## Problem
