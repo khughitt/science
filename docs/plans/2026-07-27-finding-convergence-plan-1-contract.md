@@ -1,4 +1,4 @@
-# Finding Convergence — Plan 1: The Contract
+# AuditFinding Convergence — Plan 1: The Contract
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -32,9 +32,9 @@
 | `subjects.py` | The four subject variants and their normalization (§2). |
 | `evidence.py` | `LocationEvidence` / `TextEvidence` and bounds (§1). |
 | `fingerprint.py` | Canonical encoding, normalization, and the v1 digest (§3). |
-| `finding.py` | The `Finding` payload (§1). |
+| `finding.py` | The `AuditFinding` payload (§1). |
 | `rules.py` | `FindingRule`, `FindingSection`, declaration-time validation (§6). |
-| `record.py` | `FindingRecord`, `Occurrence`, `Transition`, `Review` (§4). |
+| `record.py` | `AuditFindingRecord`, `Occurrence`, `Transition`, `Review` (§4). |
 | `report.py` | `ReportedFinding`, `AcceptedFinding`, `AuditReport` (§11). |
 
 **`science/src/science_tool/findings/`** — new package, the tool-side machinery.
@@ -89,8 +89,17 @@ def test_path_subject_normalizes_separators_and_strips_trailing_slash():
     assert PathSubject(path="./science.yaml").path == "science.yaml"
 
 
-def test_path_subject_refuses_absolute_and_traversal():
-    for bad in ("/etc/passwd", "../outside.md", "entities/../../escape.md"):
+def test_path_subject_refuses_absolute_and_any_traversal_segment():
+    for bad in (
+        "/etc/passwd",
+        "../outside.md",
+        "entities/../../escape.md",
+        # Refused, NOT collapsed to "b": a traversal segment is rejected outright, so
+        # no path that mentions `..` is ever accepted on the strength of where it
+        # happens to land.
+        "a/../b",
+        "a/b/..",
+    ):
         with pytest.raises(ValidationError):
             PathSubject(path=bad)
 
@@ -151,7 +160,6 @@ degrading to a path, which would change a case's identity unnoticed.
 from __future__ import annotations
 
 import re
-from posixpath import normpath
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -168,14 +176,24 @@ class SubjectError(ValueError):
 
 
 def normalize_project_path(raw: str) -> str:
-    """Project-relative POSIX form: no backslashes, no `.`/`..`, no trailing slash."""
+    """Project-relative POSIX form.
+
+    A `..` segment is REFUSED, never collapsed. `a/../b` does not become `b`: the
+    design forbids traversal segments, and normalizing one away would accept a path
+    on the strength of where it happens to land rather than on what it says. `.` and
+    duplicate separators are collapsed, because neither is traversal.
+    """
     candidate = raw.replace("\\", "/")
     if candidate.startswith("/"):
         raise SubjectError(f"path must be project-relative, got {raw!r}")
-    collapsed = normpath(candidate)
-    if collapsed == "." or collapsed.startswith("../"):
-        raise SubjectError(f"path escapes the project root, got {raw!r}")
-    return collapsed.rstrip("/") or collapsed
+    segments = [s for s in candidate.split("/") if s not in ("", ".")]
+    if any(segment == ".." for segment in segments):
+        raise SubjectError(
+            f"path contains a `..` segment and is refused, not normalized: {raw!r}"
+        )
+    if not segments:
+        raise SubjectError(f"path names no file, got {raw!r}")
+    return "/".join(segments)
 
 
 class _Base(BaseModel):
@@ -492,16 +510,42 @@ from science_model.audit.subjects import (
     ProjectSubject,
 )
 
-# Golden vectors. These bytes are an API: they are persisted in case filenames and
-# in consumers' science.yaml. Changing normalization MUST break this test.
-GOLDEN = {
-    "entity": (
+# Golden vectors. These bytes are an API: they are persisted in case filenames and in
+# consumers' science.yaml. Changing normalization MUST break this test.
+#
+# Each entry pins BOTH the canonical byte string AND the digest. The digests were
+# produced by coreutils `sha256sum`, NOT by this implementation — see Step 4 for the
+# exact command. An implementation checked against its own output is its own oracle
+# and can only ever confirm that it is self-consistent.
+GOLDEN = (
+    (
+        "entity",
         "dataset.cached-field-drift",
         EntitySubject(ref="dataset:gtex-v8"),
         {"field": "year"},
-        "cd8ac3f7cbf85e39f4cd0d7d8bd0f2e6dc5b5cfa26f1f2e18f6a3a2d34cbb9a1",
+        '{"qualifiers":{"field":"year"},"rule_id":"dataset.cached-field-drift",'
+        '"subject":{"ref":"dataset:gtex-v8","type":"entity"}}',
+        "4c88cbe7b7951a0f68c084ab403a662440ab8432958501e2dc873a9a0469cf9f",
     ),
-}
+    (
+        "path-with-pointer",
+        "tags.lingering",
+        PathSubject(path="doc/x.md", pointer="frontmatter.tags"),
+        {},
+        '{"qualifiers":{},"rule_id":"tags.lingering","subject":{"path":"doc/x.md",'
+        '"pointer":"frontmatter.tags","type":"path"}}',
+        "e21c72e84b7f48fdca1ae72fafb38d92b1611d7f20e87223d0e3bfc03f1abc3f",
+    ),
+    (
+        "project-two-qualifiers",
+        "layered-claim.coverage-incomplete",
+        ProjectSubject(),
+        {"coverage": "proposition_claim_layer", "threshold": 1},
+        '{"qualifiers":{"coverage":"proposition_claim_layer","threshold":1},'
+        '"rule_id":"layered-claim.coverage-incomplete","subject":{"type":"project"}}',
+        "c0e10a4a0c9647f84c922addd40c7356ef6e78a2639b417d063d7d6926f9bd17",
+    ),
+)
 
 
 def test_canonical_json_sorts_keys_and_omits_whitespace():
@@ -573,15 +617,37 @@ def test_rule_slug_is_frozen():
     assert len(rule_slug("a" * 100)) == 60
 
 
-def test_golden_vectors_are_unchanged():
-    for name, (rule_id, subject, quals, expected) in GOLDEN.items():
-        actual = finding_fingerprint(
-            rule_id=rule_id, subject=subject, identity_qualifiers=quals
-        )
-        assert actual == expected, (
-            f"golden vector {name!r} changed: fingerprint v1 is frozen (design §3). "
-            f"If this change is intended, it requires a v2 domain prefix, not an edit."
-        )
+@pytest.mark.parametrize(
+    ("name", "rule_id", "subject", "quals", "expected_bytes", "expected_digest"), GOLDEN
+)
+def test_canonical_bytes_are_frozen(
+    name, rule_id, subject, quals, expected_bytes, expected_digest
+):
+    """Pin the ENCODING independently of the hash, so a break says which one moved."""
+    payload = {
+        "rule_id": rule_id,
+        "subject": subject.model_dump(mode="json", exclude_none=True),
+        "qualifiers": quals,
+    }
+    assert canonical_json(payload).decode("utf-8") == expected_bytes, (
+        f"golden vector {name!r}: canonical encoding changed. Fingerprint v1 is frozen "
+        "(design §3); a deliberate change requires a v2 domain prefix, not an edit."
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "rule_id", "subject", "quals", "expected_bytes", "expected_digest"), GOLDEN
+)
+def test_golden_digests_match_an_independent_oracle(
+    name, rule_id, subject, quals, expected_bytes, expected_digest
+):
+    """The expected digests came from coreutils `sha256sum`, not from this code."""
+    actual = finding_fingerprint(
+        rule_id=rule_id, subject=subject, identity_qualifiers=quals
+    )
+    assert actual == expected_digest, (
+        f"golden vector {name!r}: digest changed. Fingerprint v1 is frozen (design §3)."
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -649,17 +715,24 @@ def _normalize_scalar(value: Any) -> Any:
     )
 
 
+def _prune(value: object) -> object:
+    """Drop ``None`` members at EVERY level, never encode them as null (§3)."""
+    if isinstance(value, Mapping):
+        return {k: _prune(v) for k, v in value.items() if v is not None}
+    if isinstance(value, (list, tuple)):
+        return [_prune(item) for item in value]
+    return value
+
+
 def canonical_json(value: object) -> bytes:
     """UTF-8 JSON, keys sorted by code point, no insignificant whitespace.
 
-    Mapping members whose value is ``None`` are OMITTED, never encoded as null.
+    Pruning is RECURSIVE. A shallow prune would encode a nested absent field as null
+    while `model_dump(exclude_none=True)` omitted it, so the same logical value would
+    have two encodings depending on which path produced it.
     """
-    if isinstance(value, Mapping):
-        pruned = {k: v for k, v in value.items() if v is not None}
-    else:
-        pruned = value
     return json.dumps(
-        pruned,
+        _prune(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -694,20 +767,29 @@ def rule_slug(rule_id: str) -> str:
     return collapsed[:MAX_SLUG_LENGTH].rstrip("-")
 ```
 
-- [ ] **Step 4: Run tests, then pin the real golden digest**
+- [ ] **Step 4: Run tests to verify they pass against the independent oracle**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_fingerprint.py -v`
-Expected: all PASS except `test_golden_vectors_are_unchanged`, which FAILS with the actual digest in the assertion message.
+Expected: PASS, 15 tests (9 unparametrized + 2 × 3 golden vectors)
 
-Copy the actual digest from the failure output into `GOLDEN["entity"]`, replacing the placeholder. Add two more vectors the same way — one `PathSubject` with a `pointer`, one `ProjectSubject` with a two-key qualifier map — running the test after each to capture its digest.
+**Do not paste implementation output into the test.** The three digests in `GOLDEN`
+were produced by coreutils `sha256sum` over the pinned byte strings — a different
+implementation of SHA-256 than Python's `hashlib`. That independence is what lets the
+test detect a *wrong* implementation rather than merely a *changed* one.
 
-Re-run: `cd science/model && uv run --frozen pytest tests/test_audit_fingerprint.py -v`
-Expected: PASS, 10 tests
+To re-derive them yourself, or to add a fourth vector, run the byte string through
+`sha256sum` with the domain prefix and no trailing newline:
 
-> The placeholder digest is intentional: a hand-computed constant would be a second
-> implementation of the hash, and if it disagreed you could not tell which side was
-> wrong. Pinning the observed value once, deliberately, is what makes every later
-> change a visible break.
+```bash
+printf 'science.finding.v1\n%s' \
+  '{"qualifiers":{"field":"year"},"rule_id":"dataset.cached-field-drift","subject":{"ref":"dataset:gtex-v8","type":"entity"}}' \
+  | sha256sum
+# 4c88cbe7b7951a0f68c084ab403a662440ab8432958501e2dc873a9a0469cf9f  -
+```
+
+If `test_canonical_bytes_are_frozen` fails but `test_golden_digests_match_an_independent_oracle`
+also fails, the encoding moved. If only the digest test fails, the hashing step moved.
+Splitting them is what makes the failure diagnostic instead of merely red.
 
 - [ ] **Step 5: Commit**
 
@@ -718,7 +800,7 @@ git commit -m "feat(audit): freeze fingerprint v1 with golden vectors"
 
 ---
 
-### Task 4: `Finding` payload
+### Task 4: `AuditFinding` payload
 
 **Files:**
 - Create: `science/model/src/science_model/audit/finding.py`
@@ -726,7 +808,7 @@ git commit -m "feat(audit): freeze fingerprint v1 with golden vectors"
 
 **Interfaces:**
 - Consumes: `FindingSubject` (Task 1), `Evidence` / `MAX_EVIDENCE_ENTRIES` (Task 2).
-- Produces: `Finding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`.
+- Produces: `AuditFinding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`.
 
 `rule_id` is a **string** on the wire (§1); producer-side factories take a `FindingRule` object and derive it (Task 5).
 
@@ -738,7 +820,7 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.audit.evidence import LocationEvidence, TextEvidence
-from science_model.audit.finding import Finding, normalize_severity
+from science_model.audit.finding import AuditFinding, normalize_severity
 from science_model.audit.subjects import EntitySubject
 
 
@@ -751,7 +833,7 @@ def _finding(**overrides):
         message="cached year 2019 differs from source 2020",
         evidence=[],
     )
-    return Finding(**{**base, **overrides})
+    return AuditFinding(**{**base, **overrides})
 
 
 def test_rule_id_is_a_string_on_the_wire():
@@ -780,7 +862,7 @@ def test_evidence_round_trips_as_a_discriminated_union():
     finding = _finding(
         evidence=[LocationEvidence(path="a.py", line=3), TextEvidence(text="note")]
     )
-    reloaded = Finding.model_validate(finding.model_dump(mode="json"))
+    reloaded = AuditFinding.model_validate(finding.model_dump(mode="json"))
     assert reloaded == finding
 
 
@@ -801,7 +883,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_model.audit.fi
 """The shared emitted payload (design §1).
 
 What a producer SAYS on one observation. Not what is stored: the stored case is
-`FindingRecord`, which carries identity plus append-only history, and deliberately
+`AuditFindingRecord`, which carries identity plus append-only history, and deliberately
 does not keep a canonical payload.
 
 `message` and `evidence` are excluded from identity so that rewording a diagnostic
@@ -830,7 +912,7 @@ def normalize_severity(raw: str) -> str:
         raise ValueError(f"unknown severity {raw!r}") from None
 
 
-class Finding(BaseModel):
+class AuditFinding(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     rule_id: str
@@ -855,7 +937,7 @@ Expected: PASS, 6 tests
 
 ```bash
 git add science/model/src/science_model/audit/finding.py science/model/tests/test_audit_finding.py
-git commit -m "feat(audit): the Finding payload, with rule_id as its wire form"
+git commit -m "feat(audit): the AuditFinding payload, with rule_id as its wire form"
 ```
 
 ---
@@ -868,7 +950,7 @@ git commit -m "feat(audit): the Finding payload, with rule_id as its wire form"
 
 **Interfaces:**
 - Consumes: `Severity` (Task 4), `FingerprintError` (Task 3).
-- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, and `FindingRule.build(...) -> Finding` — the producer-side factory that makes emitting an undeclared rule impossible.
+- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, and `FindingRule.build(...) -> AuditFinding` — the producer-side factory that makes emitting an undeclared rule impossible.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -960,7 +1042,35 @@ def test_identity_qualifier_types_are_constrained_at_declaration():
 
 def test_rule_declaring_producer_remediation_needs_a_handler_name():
     with pytest.raises(RuleDeclarationError):
-        _rule(remediation="producer", remediator=None, requires_remediator=True)
+        _rule(remediation="producer", remediator=None)
+
+
+def test_there_is_no_opt_out_flag_for_the_remediator_check():
+    # A field that disables the check would be a bypass of the check.
+    assert "requires_remediator" not in FindingRule.model_fields
+
+
+def test_a_remediator_without_producer_remediation_is_refused():
+    with pytest.raises(RuleDeclarationError):
+        _rule(remediation="none", remediator="fix_it")
+
+
+def test_unordered_identity_qualifier_collections_are_refused():
+    class SetQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        tags: frozenset[str]
+
+    # frozenset is unordered; §3 encodes arrays in declaration order.
+    with pytest.raises(RuleDeclarationError):
+        _rule(qualifier_schema=SetQualifier, identity_qualifiers=("tags",))
+
+
+def test_ordered_identity_qualifier_collections_are_permitted():
+    class ListQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        tags: list[str]
+
+    _rule(qualifier_schema=ListQualifier, identity_qualifiers=("tags",))
 
 
 def test_section_order_is_declared_not_derived_from_the_name():
@@ -986,7 +1096,7 @@ that let `dataset_access_invalid` be emitted while `DATASET_ANOMALY_CODES` decla
 eleven codes.
 
 `build()` is why a producer cannot emit an undeclared rule: the only supported way
-to construct a `Finding` in production code is through a declaration object.
+to construct a `AuditFinding` in production code is through a declaration object.
 """
 
 from __future__ import annotations
@@ -997,7 +1107,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from science_model.audit.finding import Finding, Severity
+from science_model.audit.finding import AuditFinding, Severity
 from science_model.audit.subjects import FindingSubject
 
 _RULE_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$")
@@ -1045,7 +1155,6 @@ class FindingRule(BaseModel):
     identity_qualifiers: tuple[str, ...] = ()
     remediation: Remediation = "none"
     remediator: str | None = None
-    requires_remediator: bool = True
 
     # presentation metadata — so renderers stop hardcoding sections, order, visibility
     title: str
@@ -1085,13 +1194,15 @@ class FindingRule(BaseModel):
                     f"{self.id}: identity qualifier {name!r} has type {hints[name]!r}; "
                     "only str, bool, int, and lists of those may bear identity (§3)"
                 )
-        if (
-            self.remediation == "producer"
-            and self.requires_remediator
-            and not self.remediator
-        ):
+        if self.remediation == "producer" and not self.remediator:
             raise RuleDeclarationError(
-                f"{self.id}: remediation='producer' requires a registered remediator"
+                f"{self.id}: remediation='producer' requires a remediator name. There "
+                "is deliberately no opt-out flag: a switch that turns this check off "
+                "is a bypass of the check."
+            )
+        if self.remediation == "none" and self.remediator:
+            raise RuleDeclarationError(
+                f"{self.id}: names a remediator but declares remediation='none'"
             )
         return self
 
@@ -1103,9 +1214,9 @@ class FindingRule(BaseModel):
         qualifiers: dict[str, object],
         message: str,
         evidence: list[object] | None = None,
-    ) -> Finding:
-        """Construct a `Finding` that cannot violate this rule."""
-        finding = Finding(
+    ) -> AuditFinding:
+        """Construct a `AuditFinding` that cannot violate this rule."""
+        finding = AuditFinding(
             rule_id=self.id,
             subject=subject,
             severity=severity,
@@ -1140,11 +1251,18 @@ class FindingRule(BaseModel):
 
 
 def _identity_type_permitted(hint: object) -> bool:
+    """Only str / bool / int, and ORDERED sequences of those.
+
+    `set` and `frozenset` are deliberately absent: they are unordered, and §3 encodes
+    arrays in declaration order. An unordered collection would make the canonical
+    encoding depend on iteration order, which is exactly the kind of instability the
+    frozen fingerprint exists to exclude.
+    """
     if hint in _ALLOWED_IDENTITY_TYPES:
         return True
     origin = typing.get_origin(hint)
-    if origin in (list, tuple, frozenset, set):
-        args = typing.get_args(hint)
+    if origin in (list, tuple):
+        args = [a for a in typing.get_args(hint) if a is not Ellipsis]
         return bool(args) and all(a in _ALLOWED_IDENTITY_TYPES for a in args)
     return False
 ```
@@ -1163,7 +1281,7 @@ git commit -m "feat(audit): rule and section declarations with a build() that ca
 
 ---
 
-### Task 6: `FindingRecord`, occurrences, transitions, reviews
+### Task 6: `AuditFindingRecord`, occurrences, transitions, reviews
 
 **Files:**
 - Create: `science/model/src/science_model/audit/record.py`
@@ -1171,7 +1289,7 @@ git commit -m "feat(audit): rule and section declarations with a build() that ca
 
 **Interfaces:**
 - Consumes: Tasks 1–4.
-- Produces: `FindingRecord`, `Occurrence`, `Transition`, `Review`, `CaseStatus`, `RecordError`, `occurrence_key(...)`, `review_id(...)`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "finding-record"`.
+- Produces: `AuditFindingRecord` (frozen, with `with_occurrence` / `with_review` / `with_transition` / `current_severity` / `confirmation_count`), `Occurrence`, `Transition`, `Review`, `CaseStatus`, `RecordError`, `occurrence_key(...)`, `review_id(...)`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "audit-case"`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1183,7 +1301,7 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.audit.record import (
-    FindingRecord,
+    AuditFindingRecord,
     Occurrence,
     Review,
     Transition,
@@ -1197,19 +1315,44 @@ FID = "a" * 64
 
 
 def _occurrence(**overrides) -> Occurrence:
+    producer = overrides.pop("producer_id", "dataset_anomalies")
+    ingestion = overrides.pop("ingestion_ref", "run:2026-07-27-curation-sweep-a3f1")
     base = dict(
-        producer_id="dataset_anomalies",
-        ingestion_ref="run:2026-07-27-curation-sweep-a3f1",
+        idempotency_key=occurrence_key(
+            producer_id=producer, ingestion_ref=ingestion, finding_id=FID
+        ),
+        producer_id=producer,
+        ingestion_ref=ingestion,
         observed_at=NOW,
         severity="warn",
         message="drifted",
         qualifiers={"field": "year", "note": "non-identity"},
-        evidence=[],
+        evidence=(),
     )
     return Occurrence(**{**base, **overrides})
 
 
-def _record(**overrides) -> FindingRecord:
+def _review(**overrides) -> Review:
+    kind = overrides.pop("reviewer_kind", "human")
+    ref = overrides.pop("reviewer_ref", "keith")
+    lens = overrides.pop("lens", None)
+    run = overrides.pop("run_ref", "run:x")
+    base = dict(
+        review_id=review_id(
+            reviewer_kind=kind, reviewer_ref=ref, lens=lens, run_ref=run, finding_id=FID
+        ),
+        reviewer_kind=kind,
+        reviewer_ref=ref,
+        lens=lens,
+        run_ref=run,
+        at=NOW,
+        outcome="confirms",
+        note="checked",
+    )
+    return Review(**{**base, **overrides})
+
+
+def _record(**overrides) -> AuditFindingRecord:
     base = dict(
         finding_id=FID,
         fingerprint_version=1,
@@ -1225,7 +1368,7 @@ def _record(**overrides) -> FindingRecord:
         ],
         status="proposed",
     )
-    return FindingRecord(**{**base, **overrides})
+    return AuditFindingRecord(**{**base, **overrides})
 
 
 def test_genesis_transition_is_required():
@@ -1358,17 +1501,89 @@ def test_human_review_needs_neither_lens_nor_model():
 def test_confirmation_count_is_derived_from_distinct_confirming_reviews():
     record = _record(
         reviews=[
-            Review(
-                review_id="e" * 64, reviewer_kind="human", reviewer_ref="keith",
-                run_ref="run:x", at=NOW, outcome="confirms", note="yes",
-            ),
-            Review(
-                review_id="f" * 64, reviewer_kind="human", reviewer_ref="other",
-                run_ref="run:x", at=NOW, outcome="refutes", note="no",
-            ),
+            _review(reviewer_ref="keith", outcome="confirms"),
+            _review(reviewer_ref="other", outcome="refutes"),
         ]
     )
     assert record.confirmation_count() == 1
+
+
+def test_idempotency_key_is_required_and_must_match_its_own_fields():
+    with pytest.raises(ValidationError):
+        Occurrence(
+            producer_id="p", ingestion_ref="r", observed_at=NOW, severity="warn",
+            message="m",
+        )
+    with pytest.raises(ValidationError):
+        _record(occurrences=[_occurrence(idempotency_key="0" * 64)])
+
+
+def test_duplicate_occurrence_keys_are_rejected():
+    occ = _occurrence()
+    with pytest.raises(ValidationError):
+        _record(occurrences=[occ, occ])
+
+
+def test_review_id_must_match_its_own_fields():
+    with pytest.raises(ValidationError):
+        _record(reviews=[_review().model_copy(update={"review_id": "0" * 64})])
+
+
+def test_promoted_task_must_equal_the_promotion_transitions_task_ref():
+    genesis = Transition(
+        from_status=None, to_status="proposed", actor="ingest", at=NOW, reason="detected"
+    )
+    confirm = Transition(
+        from_status="proposed", to_status="confirmed", actor="k", at=NOW, reason="r"
+    )
+    promote = Transition(
+        from_status="confirmed", to_status="promoted", actor="k", at=NOW, reason="r",
+        task_ref="task:0042",
+    )
+    with pytest.raises(ValidationError):
+        _record(
+            transitions=[genesis, confirm, promote], status="promoted",
+            promoted_task="task:9999",
+        )
+
+
+def test_the_record_is_frozen():
+    record = _record()
+    with pytest.raises(ValidationError):
+        record.status = "confirmed"
+
+
+def test_appending_goes_through_validation():
+    record = _record()
+    grown = record.with_occurrence(_occurrence(ingestion_ref="ing:2"))
+    assert len(grown.occurrences) == 2
+    # A bad append is refused rather than silently stored, which model_copy would allow.
+    with pytest.raises(ValidationError):
+        record.with_occurrence(_occurrence(idempotency_key="0" * 64))
+
+
+def test_current_severity_uses_each_producers_most_recent_ingestion():
+    from datetime import timedelta
+
+    later = NOW + timedelta(hours=1)
+    record = _record(
+        occurrences=[
+            _occurrence(ingestion_ref="ing:1", severity="error"),
+            _occurrence(ingestion_ref="ing:2", severity="warn", observed_at=later),
+        ]
+    )
+    # The newer look from the same producer supersedes the older one.
+    assert record.current_severity() == "warn"
+
+
+def test_current_severity_takes_the_max_across_producers():
+    record = _record(
+        occurrences=[
+            _occurrence(producer_id="a", severity="warn"),
+            _occurrence(producer_id="b", severity="error"),
+        ]
+    )
+    assert record.current_severity() == "error"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1382,7 +1597,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_model.audit.re
 # science/model/src/science_model/audit/record.py
 """The canonical stored case (design §4).
 
-`FindingRecord` carries IMMUTABLE identity plus APPEND-ONLY history. It deliberately
+`AuditFindingRecord` carries IMMUTABLE identity plus APPEND-ONLY history. It deliberately
 does NOT store a canonical payload: whoever ingested first would otherwise own the
 message, severity, and evidence forever, and later observations would be discarded.
 
@@ -1402,7 +1617,7 @@ from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
 from science_model.audit.finding import Severity
 from science_model.audit.subjects import FindingSubject
 
-DOC_KIND = "finding-record"
+DOC_KIND = "audit-case"
 
 OCCURRENCE_DOMAIN = "science.occurrence.v1"
 REVIEW_DOMAIN = "science.review.v1"
@@ -1457,14 +1672,16 @@ class _Base(BaseModel):
 class Occurrence(_Base):
     """One COMPLETE observation. Nothing a producer said is discarded."""
 
-    idempotency_key: str | None = None
-    producer_id: str
-    ingestion_ref: str
+    #: REQUIRED, and validated against `occurrence_key(...)` by the owning record.
+    #: Optional would mean a stored key nobody ever checks.
+    idempotency_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    producer_id: str = Field(min_length=1)
+    ingestion_ref: str = Field(min_length=1)
     observed_at: datetime
     severity: Severity
     message: str
     qualifiers: dict[str, object] = Field(default_factory=dict)
-    evidence: list[Evidence] = Field(default_factory=list, max_length=MAX_EVIDENCE_ENTRIES)
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
     #: Present when the observation arrived on the report's `accepted` channel.
     acceptance_key: str | None = None
 
@@ -1534,8 +1751,23 @@ class Review(_Base):
         return self
 
 
-class FindingRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+#: Ordering for "the most severe observation", highest first.
+_SEVERITY_RANK: dict[str, int] = {"error": 3, "warn": 2, "info": 1}
+
+
+class AuditFindingRecord(BaseModel):
+    """FROZEN, with immutable history collections.
+
+    Every derived value stored here is RECOMPUTED and checked on construction:
+    occurrence keys, review ids, the status implied by the transition log, and the
+    promoted task. A stored derived value nobody validates is a value that can lie.
+
+    Appending goes through `with_occurrence` / `with_review` / `with_transition`,
+    which rebuild through the constructor. `model_copy(update=...)` is deliberately
+    NOT the append path: it bypasses every validator above.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     finding_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     fingerprint_version: int
@@ -1543,22 +1775,28 @@ class FindingRecord(BaseModel):
     subject: FindingSubject
     identity_qualifiers: dict[str, object] = Field(default_factory=dict)
 
-    occurrences: list[Occurrence] = Field(min_length=1)
-    reviews: list[Review] = Field(default_factory=list)
-    transitions: list[Transition] = Field(min_length=1)
+    occurrences: tuple[Occurrence, ...] = Field(min_length=1)
+    reviews: tuple[Review, ...] = ()
+    transitions: tuple[Transition, ...] = Field(min_length=1)
 
     status: CaseStatus
     promoted_task: str | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> "FindingRecord":
-        first = self.transitions[0]
-        if first.from_status is not None:
+    def _validate(self) -> "AuditFindingRecord":
+        self._validate_transitions()
+        self._validate_occurrences()
+        self._validate_reviews()
+        return self
+
+    def _validate_transitions(self) -> None:
+        if self.transitions[0].from_status is not None:
             raise RecordError(
                 "the first transition must be the genesis `None -> proposed`; the log "
                 "is never empty and status needs no special case"
             )
         expected: CaseStatus | None = None
+        promotion_task: str | None = None
         for transition in self.transitions:
             if transition.from_status != expected:
                 raise RecordError(
@@ -1566,6 +1804,8 @@ class FindingRecord(BaseModel):
                     f"{expected!r}, got {transition.from_status!r}"
                 )
             expected = transition.to_status
+            if transition.to_status == "promoted":
+                promotion_task = transition.task_ref
         if self.status != expected:
             raise RecordError(
                 f"status {self.status!r} disagrees with the transition log, which ends "
@@ -1575,12 +1815,98 @@ class FindingRecord(BaseModel):
             raise RecordError(
                 "promoted_task is present if and only if status is 'promoted'"
             )
+        if self.status == "promoted" and self.promoted_task != promotion_task:
+            raise RecordError(
+                f"promoted_task {self.promoted_task!r} does not match the task_ref "
+                f"{promotion_task!r} recorded on the promotion transition"
+            )
+
+    def _validate_occurrences(self) -> None:
+        seen: set[str] = set()
+        for occurrence in self.occurrences:
+            expected = occurrence_key(
+                producer_id=occurrence.producer_id,
+                ingestion_ref=occurrence.ingestion_ref,
+                finding_id=self.finding_id,
+            )
+            if occurrence.idempotency_key != expected:
+                raise RecordError(
+                    f"occurrence idempotency_key {occurrence.idempotency_key!r} is not "
+                    f"the key derived from its own fields ({expected!r})"
+                )
+            if occurrence.idempotency_key in seen:
+                raise RecordError(
+                    f"duplicate occurrence idempotency_key {occurrence.idempotency_key!r}"
+                )
+            seen.add(occurrence.idempotency_key)
+
+    def _validate_reviews(self) -> None:
         seen: set[str] = set()
         for review in self.reviews:
+            expected = review_id(
+                reviewer_kind=review.reviewer_kind,
+                reviewer_ref=review.reviewer_ref,
+                lens=review.lens,
+                run_ref=review.run_ref,
+                finding_id=self.finding_id,
+            )
+            if review.review_id != expected:
+                raise RecordError(
+                    f"review_id {review.review_id!r} is not the id derived from its own "
+                    f"fields ({expected!r})"
+                )
             if review.review_id in seen:
                 raise RecordError(f"duplicate review_id {review.review_id!r}")
             seen.add(review.review_id)
-        return self
+
+    def with_occurrence(self, occurrence: Occurrence) -> "AuditFindingRecord":
+        """Append through the constructor, so every validator above runs."""
+        return AuditFindingRecord.model_validate(
+            {
+                **self.model_dump(mode="python"),
+                "occurrences": (*self.occurrences, occurrence),
+            }
+        )
+
+    def with_review(self, review: Review) -> "AuditFindingRecord":
+        return AuditFindingRecord.model_validate(
+            {**self.model_dump(mode="python"), "reviews": (*self.reviews, review)}
+        )
+
+    def with_transition(
+        self, transition: Transition, *, promoted_task: str | None = None
+    ) -> "AuditFindingRecord":
+        return AuditFindingRecord.model_validate(
+            {
+                **self.model_dump(mode="python"),
+                "transitions": (*self.transitions, transition),
+                "status": transition.to_status,
+                "promoted_task": promoted_task,
+            }
+        )
+
+    def current_severity(self) -> Severity:
+        """Max severity over occurrences from EACH producer's MOST RECENT ingestion.
+
+        A defined function of the log (design §4), not a field anyone writes. An older
+        run that saw `error` does not keep a case at `error` after every producer's
+        latest look says `warn`.
+        """
+        latest: dict[str, tuple[datetime, str]] = {}
+        for occurrence in self.occurrences:
+            seen = latest.get(occurrence.producer_id)
+            if seen is None or occurrence.observed_at > seen[0]:
+                latest[occurrence.producer_id] = (
+                    occurrence.observed_at,
+                    occurrence.severity,
+                )
+            elif occurrence.observed_at == seen[0]:
+                if _SEVERITY_RANK[occurrence.severity] > _SEVERITY_RANK[seen[1]]:
+                    latest[occurrence.producer_id] = (seen[0], occurrence.severity)
+        return max(
+            (severity for _at, severity in latest.values()),
+            key=lambda s: _SEVERITY_RANK[s],
+        )
 
     def confirmation_count(self) -> int:
         """Distinct confirming reviews. NEVER a confidence, NEVER aggregated."""
@@ -1590,7 +1916,7 @@ class FindingRecord(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_record.py -v`
-Expected: PASS, 13 tests
+Expected: PASS, 21 tests
 
 Then: `cd science/model && uv run --frozen pytest tests/test_audit_*.py -q`
 Expected: PASS, all audit model tests
@@ -1599,7 +1925,7 @@ Expected: PASS, all audit model tests
 
 ```bash
 git add science/model/src/science_model/audit/record.py science/model/tests/test_audit_record.py
-git commit -m "feat(audit): FindingRecord with a genesis transition and a closed lifecycle graph"
+git commit -m "feat(audit): AuditFindingRecord with a genesis transition and a closed lifecycle graph"
 ```
 
 ---
@@ -1612,7 +1938,7 @@ git commit -m "feat(audit): FindingRecord with a genesis transition and a closed
 - Test: `science/model/tests/test_audit_report.py`
 
 **Interfaces:**
-- Consumes: `Finding` (Task 4).
+- Consumes: `AuditFinding` (Task 4).
 - Produces: `AuditReport`, `ReportedFinding`, `AcceptedFinding`, `ProducerMetrics`, `UnwiredProducer`, `ReportTotals`, `ReportMeta`, `REPORT_SCHEMA_VERSION = 2`, `MAX_REPORT_FINDINGS = 5000`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1622,7 +1948,7 @@ git commit -m "feat(audit): FindingRecord with a genesis transition and a closed
 import pytest
 from pydantic import ValidationError
 
-from science_model.audit.finding import Finding
+from science_model.audit.finding import AuditFinding
 from science_model.audit.report import (
     REPORT_SCHEMA_VERSION,
     AuditReport,
@@ -1631,8 +1957,8 @@ from science_model.audit.report import (
 from science_model.audit.subjects import EntitySubject
 
 
-def _finding(ref="dataset:a", rule="dataset.stale-review") -> Finding:
-    return Finding(
+def _finding(ref="dataset:a", rule="dataset.stale-review") -> AuditFinding:
+    return AuditFinding(
         rule_id=rule, subject=EntitySubject(ref=ref), severity="warn",
         qualifiers={}, message="m", evidence=[],
     )
@@ -1677,13 +2003,18 @@ def test_unknown_schema_version_is_refused():
         _report(schema_version=99)
 
 
-def test_duplicate_producer_and_finding_pair_is_refused():
+def test_the_report_does_not_try_to_dedup_by_identity():
+    # Identity is a fingerprint over the rule's DECLARED identity qualifiers, which
+    # this module cannot compute -- it does not know the registry. Enforcing the
+    # one-per-(producer, finding_id) rule here would have to key on the whole payload,
+    # which passes two observations with identical identity and different prose.
+    # Ingestion enforces it instead; see test_findings_ingest.py.
     dup = ReportedFinding(producer_id="p", finding=_finding())
-    with pytest.raises(ValidationError):
-        _report(findings=[dup, dup], totals={
-            "findings_total": 2, "findings_by_severity": {"warn": 2},
-            "accepted_total": 0, "unwired_total": 0,
-        })
+    report = _report(findings=[dup, dup], totals={
+        "findings_total": 2, "findings_by_severity": {"warn": 2},
+        "accepted_total": 0, "unwired_total": 0,
+    })
+    assert len(report.findings) == 2
 
 
 def test_two_producers_may_emit_the_same_finding():
@@ -1732,7 +2063,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_model.audit.re
 # science/model/src/science_model/audit/report.py
 """The public audit output contract (design §11).
 
-Findings are ENVELOPED with their producer. A bare `Finding` cannot populate an
+Findings are ENVELOPED with their producer. A bare `AuditFinding` cannot populate an
 occurrence's required `producer_id`, and rule ownership cannot supply it either —
 several producers must be able to emit one rule, which is the premise of
 cross-producer dedup.
@@ -1747,7 +2078,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from science_model.audit.finding import Finding
+from science_model.audit.finding import AuditFinding
 
 REPORT_SCHEMA_VERSION = 2
 MAX_REPORT_FINDINGS = 5000
@@ -1759,12 +2090,12 @@ class _Base(BaseModel):
 
 class ReportedFinding(_Base):
     producer_id: str = Field(min_length=1)
-    finding: Finding
+    finding: AuditFinding
 
 
 class AcceptedFinding(_Base):
     producer_id: str = Field(min_length=1)
-    finding: Finding
+    finding: AuditFinding
     acceptance_key: str = Field(pattern=r"^[0-9a-f]{32}$")
     reason: str = Field(min_length=1)
 
@@ -1816,19 +2147,13 @@ class AuditReport(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "AuditReport":
-        seen: set[tuple[str, str, str]] = set()
-        for reported in self.findings:
-            key = (
-                reported.producer_id,
-                reported.finding.rule_id,
-                reported.finding.model_dump_json(),
-            )
-            if key in seen:
-                raise ValueError(
-                    "a report carries at most one finding per (producer_id, finding); "
-                    "aggregate the evidence or declare an identity qualifier (design §1)"
-                )
-            seen.add(key)
+        # NOTE: the "at most one finding per (producer_id, finding_id)" rule is NOT
+        # enforced here. It cannot be: `finding_id` is a fingerprint over the rule's
+        # DECLARED identity qualifiers, and this module does not know the registry.
+        # Keying on the whole serialized payload instead would pass two observations
+        # with identical identity and different prose -- precisely the collision the
+        # rule exists to prevent. Ingestion enforces it after computing fingerprints
+        # (`science_tool.findings.ingest._plan`).
         if self.totals.findings_total != len(self.findings):
             raise ValueError(
                 f"totals.findings_total {self.totals.findings_total} != "
@@ -1845,7 +2170,7 @@ Add to `science/model/src/science_model/audit/__init__.py`:
 
 ```python
 from science_model.audit.evidence import Evidence, LocationEvidence, Span, TextEvidence
-from science_model.audit.finding import Finding, Severity, normalize_severity
+from science_model.audit.finding import AuditFinding, Severity, normalize_severity
 from science_model.audit.fingerprint import (
     FINGERPRINT_VERSION,
     finding_fingerprint,
@@ -1854,7 +2179,7 @@ from science_model.audit.fingerprint import (
 from science_model.audit.record import (
     DOC_KIND,
     CaseStatus,
-    FindingRecord,
+    AuditFindingRecord,
     Occurrence,
     Review,
     Transition,
@@ -1885,8 +2210,8 @@ __all__ = [
     "CaseStatus",
     "EntitySubject",
     "Evidence",
-    "Finding",
-    "FindingRecord",
+    "AuditFinding",
+    "AuditFindingRecord",
     "FindingRule",
     "FindingSection",
     "FindingSubject",
@@ -2063,6 +2388,16 @@ def test_metrics_are_validated_against_the_declared_schema():
         registry.validate_metrics("dataset_anomalies", {"scaned": 3})
 
 
+def test_the_registry_mappings_are_not_mutable():
+    registry = build_registry([_producer()])
+    with pytest.raises(TypeError):
+        registry.rules_by_id["injected"] = _rule("dataset.injected")
+    with pytest.raises(TypeError):
+        registry.sections_by_id["injected"] = SECTION
+    with pytest.raises(TypeError):
+        registry.producers_by_id["injected"] = _producer()
+
+
 def test_project_config_cannot_add_or_override_a_rule(tmp_path):
     # The registry reads nothing from the filesystem, environment, or project config.
     # This test is the assertion that it has no such input at all.
@@ -2113,6 +2448,10 @@ without making health the ontology owner.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
+
 from pydantic import BaseModel, ConfigDict, ValidationError
 from science_model.audit import FindingRule, FindingSection
 
@@ -2141,12 +2480,19 @@ class FindingProducer(BaseModel):
     remediators: frozenset[str] = frozenset()
 
 
-class FindingRegistry(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+@dataclass(frozen=True)
+class FindingRegistry:
+    """The one immutable lookup authority.
 
-    rules_by_id: dict[str, FindingRule]
-    sections_by_id: dict[str, FindingSection]
-    producers_by_id: dict[str, FindingProducer]
+    A frozen dataclass over `MappingProxyType`, not a Pydantic model over `dict`: a
+    "frozen" model whose fields are plain dicts is mutable through those dicts, so
+    `registry.rules_by_id[...] = ...` would silently work. The same idiom guards
+    `autonomy/policy.py`'s allowlists.
+    """
+
+    rules_by_id: Mapping[str, FindingRule]
+    sections_by_id: Mapping[str, FindingSection]
+    producers_by_id: Mapping[str, FindingProducer]
 
     def rule(self, rule_id: str) -> FindingRule:
         try:
@@ -2239,9 +2585,9 @@ def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
         order_claims[claim] = rule.id
 
     return FindingRegistry(
-        rules_by_id=rules_by_id,
-        sections_by_id=sections_by_id,
-        producers_by_id=producers_by_id,
+        rules_by_id=MappingProxyType(dict(rules_by_id)),
+        sections_by_id=MappingProxyType(dict(sections_by_id)),
+        producers_by_id=MappingProxyType(dict(producers_by_id)),
     )
 ```
 
@@ -2265,17 +2611,101 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 ### Task 9: Case storage
 
 **Files:**
+- Create: `science/src/science_tool/findings/paths.py`
 - Create: `science/src/science_tool/findings/storage.py`
 - Modify: `science/src/science_tool/graph/io.py:428-431` (add the exclude glob)
+- Test: `science/tests/test_findings_paths.py`
 - Test: `science/tests/test_findings_storage.py`
 
 **Interfaces:**
-- Consumes: `FindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
-- Produces: `CASES_DIRNAME = "doc/audits/cases"`, `case_path(project_root, record) -> Path`, `write_case(project_root, record) -> Path`, `load_case(path) -> FindingRecord`, `load_cases(project_root) -> list[FindingRecord]`, `CaseStorageError`.
+- Consumes: `AuditFindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
+- Produces (paths): `PathSafetyError`, `resolve_inside(project_root, rel_path) -> Path`, `open_read_bounded(path, max_bytes) -> str`, `open_write_nofollow(path) -> int`.
+- Produces (storage): `CASES_DIRNAME = "doc/audits/cases"`, `case_path(...)`, `write_case(...)`, `load_case(...)`, `load_cases(...)`, `CaseStorageError`.
 
-Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted** — occurrences accumulate. So the write is temp-file-plus-rename, with symlink refusal on both the directory and the target.
+Two reasons `paths.py` exists rather than inlining the checks:
 
-- [ ] **Step 1: Write the failing test**
+1. **Checking only the final component is not symlink refusal.** A link at `doc/` or
+   `doc/audits/` redirects the whole operation while `path.is_symlink()` on the leaf
+   returns `False`. `resolve_inside` walks **every** component from the project root.
+2. **`stat()`-then-`read()` is a race.** `open_read_bounded` opens once with
+   `O_NOFOLLOW`, then `fstat`s *that descriptor* and reads from it, so the file it
+   sized is the file it read.
+
+Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted** — occurrences accumulate — so the write is temp-file-plus-rename rather than exclusive-create.
+
+- [ ] **Step 1a: Write the failing path-safety test**
+
+```python
+# science/tests/test_findings_paths.py
+import pytest
+
+from science_tool.findings.paths import (
+    PathSafetyError,
+    open_read_bounded,
+    resolve_inside,
+)
+
+
+def test_resolve_inside_returns_the_path_when_every_component_is_real(tmp_path):
+    (tmp_path / "doc" / "audits" / "cases").mkdir(parents=True)
+    target = tmp_path / "doc" / "audits" / "cases" / "x.md"
+    target.write_text("hi", encoding="utf-8")
+    assert resolve_inside(tmp_path, "doc/audits/cases/x.md") == target
+
+
+def test_resolve_inside_refuses_a_symlinked_INTERMEDIATE_component(tmp_path):
+    # The leaf is a real file; `doc/audits` is the link. A check that only looked at
+    # the final component would pass this.
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "cases").mkdir(parents=True)
+    (elsewhere / "cases" / "x.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(tmp_path, "doc/audits/cases/x.md")
+
+
+def test_resolve_inside_refuses_a_symlinked_leaf(tmp_path):
+    (tmp_path / "real.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "link.md").symlink_to(tmp_path / "real.md")
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(tmp_path, "link.md")
+
+
+def test_resolve_inside_refuses_absolute_and_traversal(tmp_path):
+    for bad in ("/etc/passwd", "../outside.md", "a/../b"):
+        with pytest.raises(PathSafetyError):
+            resolve_inside(tmp_path, bad)
+
+
+def test_resolve_inside_tolerates_a_not_yet_existing_leaf(tmp_path):
+    (tmp_path / "doc" / "audits" / "cases").mkdir(parents=True)
+    assert resolve_inside(tmp_path, "doc/audits/cases/new.md").name == "new.md"
+
+
+def test_open_read_bounded_reads_a_small_file(tmp_path):
+    path = tmp_path / "a.json"
+    path.write_text("{}", encoding="utf-8")
+    assert open_read_bounded(path, 1024) == "{}"
+
+
+def test_open_read_bounded_refuses_an_oversize_file(tmp_path):
+    path = tmp_path / "a.json"
+    path.write_text("x" * 100, encoding="utf-8")
+    with pytest.raises(PathSafetyError, match="exceeds"):
+        open_read_bounded(path, 10)
+
+
+def test_open_read_bounded_refuses_a_symlink(tmp_path):
+    real = tmp_path / "real.json"
+    real.write_text("{}", encoding="utf-8")
+    link = tmp_path / "link.json"
+    link.symlink_to(real)
+    with pytest.raises(PathSafetyError, match="symlink"):
+        open_read_bounded(link, 1024)
+```
+
+- [ ] **Step 1b: Write the failing storage test**
 
 ```python
 # science/tests/test_findings_storage.py
@@ -2283,11 +2713,12 @@ from datetime import UTC, datetime
 
 import pytest
 from science_model.audit import (
+    AuditFindingRecord,
     EntitySubject,
-    FindingRecord,
     Occurrence,
     Transition,
     finding_fingerprint,
+    occurrence_key,
 )
 
 from science_tool.findings.storage import (
@@ -2305,25 +2736,39 @@ RULE = "dataset.cached-field-drift"
 QUALS = {"field": "year"}
 
 
-def _record() -> FindingRecord:
-    return FindingRecord(
-        finding_id=finding_fingerprint(
-            rule_id=RULE, subject=SUBJECT, identity_qualifiers=QUALS
+def _occurrence(finding_id: str, *, ingestion_ref: str = "ing:1") -> Occurrence:
+    return Occurrence(
+        idempotency_key=occurrence_key(
+            producer_id="dataset_anomalies",
+            ingestion_ref=ingestion_ref,
+            finding_id=finding_id,
         ),
+        producer_id="dataset_anomalies",
+        ingestion_ref=ingestion_ref,
+        observed_at=NOW,
+        severity="warn",
+        message="drifted",
+        qualifiers={"field": "year"},
+        evidence=(),
+    )
+
+
+def _record(quals: dict | None = None) -> AuditFindingRecord:
+    quals = QUALS if quals is None else quals
+    finding_id = finding_fingerprint(
+        rule_id=RULE, subject=SUBJECT, identity_qualifiers=quals
+    )
+    return AuditFindingRecord(
+        finding_id=finding_id,
         fingerprint_version=1,
         rule_id=RULE,
         subject=SUBJECT,
-        identity_qualifiers=QUALS,
-        occurrences=[
-            Occurrence(
-                producer_id="dataset_anomalies", ingestion_ref="ing:1", observed_at=NOW,
-                severity="warn", message="drifted", qualifiers=QUALS, evidence=[],
-            )
-        ],
-        transitions=[
+        identity_qualifiers=quals,
+        occurrences=(_occurrence(finding_id),),
+        transitions=(
             Transition(from_status=None, to_status="proposed", actor="ingest", at=NOW,
-                       reason="detected")
-        ],
+                       reason="detected"),
+        ),
         status="proposed",
     )
 
@@ -2344,18 +2789,14 @@ def test_write_then_load_round_trips(tmp_path):
 def test_write_is_an_upsert_not_a_write_once(tmp_path):
     record = _record()
     write_case(tmp_path, record)
-    grown = record.model_copy(
-        update={"occurrences": [*record.occurrences, record.occurrences[0].model_copy(
-            update={"ingestion_ref": "ing:2"}
-        )]}
-    )
+    grown = record.with_occurrence(_occurrence(record.finding_id, ingestion_ref="ing:2"))
     write_case(tmp_path, grown)
     assert len(load_case(case_path(tmp_path, record)).occurrences) == 2
 
 
 def test_frontmatter_carries_doc_kind_and_never_an_entity_kind(tmp_path):
     text = write_case(tmp_path, _record()).read_text(encoding="utf-8")
-    assert "doc_kind: finding-record" in text
+    assert "doc_kind: audit-case" in text
     assert "\nkind:" not in text
     assert "\nid:" not in text
 
@@ -2382,7 +2823,10 @@ def test_load_refuses_a_record_whose_finding_id_is_not_its_own_fingerprint(tmp_p
     record = _record()
     path = write_case(tmp_path, record)
     text = path.read_text(encoding="utf-8")
-    tampered = text.replace(QUALS["field"], "month")
+    # Edit only the identity qualifier, leaving finding_id alone: the recomputed
+    # fingerprint no longer matches what the file claims.
+    tampered = text.replace("field: year", "field: month")
+    assert tampered != text
     path.write_text(tampered, encoding="utf-8")
     with pytest.raises(CaseStorageError, match="recomputed fingerprint"):
         load_case(path)
@@ -2398,18 +2842,32 @@ def test_write_refuses_a_symlinked_cases_directory(tmp_path):
         write_case(tmp_path, _record())
 
 
+def test_write_refuses_a_symlinked_PARENT_of_the_cases_directory(tmp_path):
+    # `doc/audits` is the link, `cases/` under it is real. Checking only the final
+    # directory would miss this entirely.
+    real = tmp_path / "elsewhere"
+    (real / "cases").mkdir(parents=True)
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(real, target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink"):
+        write_case(tmp_path, _record())
+
+
+def test_load_refuses_a_case_reached_through_a_symlinked_parent(tmp_path):
+    write_case(tmp_path, _record())
+    real_cases = tmp_path / "doc" / "audits" / "cases"
+    moved = tmp_path / "moved-cases"
+    real_cases.rename(moved)
+    real_cases.symlink_to(moved, target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink"):
+        load_cases(tmp_path)
+
+
 def test_load_cases_returns_every_case_sorted_by_finding_id(tmp_path):
     write_case(tmp_path, _record())
-    other_quals = {"field": "url"}
-    other = _record().model_copy(
-        update={
-            "identity_qualifiers": other_quals,
-            "finding_id": finding_fingerprint(
-                rule_id=RULE, subject=SUBJECT, identity_qualifiers=other_quals
-            ),
-        }
-    )
-    write_case(tmp_path, other)
+    # Built through the constructor, not model_copy: the finding_id, the occurrence
+    # keys, and the identity qualifiers must agree, and only construction checks that.
+    write_case(tmp_path, _record(quals={"field": "url"}))
     loaded = load_cases(tmp_path)
     assert [r.finding_id for r in loaded] == sorted(r.finding_id for r in loaded)
     assert len(loaded) == 2
@@ -2419,12 +2877,94 @@ def test_load_cases_on_a_project_with_no_cases_returns_empty(tmp_path):
     assert load_cases(tmp_path) == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run both tests to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_findings_storage.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.findings.storage'`
+Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.findings.paths'`
 
 - [ ] **Step 3: Write minimal implementation**
+
+```python
+# science/src/science_tool/findings/paths.py
+"""One hardened path primitive, used for every filesystem touch in this package.
+
+Two failures this exists to prevent:
+
+1. **Partial symlink checks.** `path.is_symlink()` on a leaf says nothing about
+   `doc/` or `doc/audits/`. A link at any component redirects the whole operation
+   while the leaf check passes, so `resolve_inside` walks EVERY component.
+2. **stat-then-read races.** Sizing a path and then opening it are two lookups of a
+   name that can change in between. `open_read_bounded` opens ONCE with `O_NOFOLLOW`
+   and `fstat`s that descriptor, so the file it sized is the file it read.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+
+class PathSafetyError(ValueError):
+    """A path is absolute, escapes the project, or passes through a symlink."""
+
+
+def resolve_inside(project_root: Path, rel_path: str) -> Path:
+    """Return `project_root / rel_path`, refusing a symlink at ANY component.
+
+    The leaf need not exist -- callers create case files. Every component that DOES
+    exist, including the leaf, must be a real entry rather than a link.
+    """
+    candidate = rel_path.replace("\\", "/")
+    if candidate.startswith("/"):
+        raise PathSafetyError(f"path must be project-relative, got {rel_path!r}")
+    segments = [s for s in candidate.split("/") if s not in ("", ".")]
+    if any(segment == ".." for segment in segments):
+        raise PathSafetyError(f"path contains a `..` segment: {rel_path!r}")
+    if not segments:
+        raise PathSafetyError(f"path names no file, got {rel_path!r}")
+
+    root = project_root.resolve()
+    current = root
+    for segment in segments:
+        current = current / segment
+        if current.is_symlink():
+            raise PathSafetyError(
+                f"{current} is a symlink; every component of {rel_path!r} must be a "
+                "real entry inside the project"
+            )
+    return current
+
+
+def open_read_bounded(path: Path, max_bytes: int) -> str:
+    """Read at most `max_bytes`, refusing symlinks, with no stat/read race."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        # ELOOP is what O_NOFOLLOW raises on a symlinked final component.
+        raise PathSafetyError(
+            f"could not open {path} without following a symlink: {exc}"
+        ) from exc
+    try:
+        size = os.fstat(descriptor).st_size
+        if size > max_bytes:
+            raise PathSafetyError(f"{path} is {size} bytes, which exceeds {max_bytes}")
+        data = os.read(descriptor, max_bytes + 1)
+    finally:
+        os.close(descriptor)
+    if len(data) > max_bytes:
+        raise PathSafetyError(f"{path} exceeds {max_bytes} bytes")
+    return data.decode("utf-8")
+
+
+def open_write_nofollow(path: Path) -> int:
+    """Open for writing, refusing to follow a symlink at the final component."""
+    try:
+        return os.open(
+            path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644
+        )
+    except OSError as exc:
+        raise PathSafetyError(f"could not write {path} without following a link: {exc}") from exc
+```
 
 ```python
 # science/src/science_tool/findings/storage.py
@@ -2449,9 +2989,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
-from science_model.audit import DOC_KIND, FindingRecord, finding_fingerprint, rule_slug
+from science_model.audit import DOC_KIND, AuditFindingRecord, finding_fingerprint, rule_slug
 from science_model.frontmatter import parse_frontmatter, render_frontmatter
+
+from science_tool.findings.paths import (
+    PathSafetyError,
+    open_write_nofollow,
+    resolve_inside,
+)
 
 CASES_DIRNAME = "doc/audits/cases"
 
@@ -2471,43 +3016,45 @@ def cases_dir(project_root: Path) -> Path:
     return project_root / CASES_DIRNAME
 
 
-def case_filename(record: FindingRecord) -> str:
+def case_filename(record: AuditFindingRecord) -> str:
     return f"{rule_slug(record.rule_id)}--{record.finding_id}.md"
 
 
-def case_path(project_root: Path, record: FindingRecord) -> Path:
+def case_path(project_root: Path, record: AuditFindingRecord) -> Path:
     return cases_dir(project_root) / case_filename(record)
 
 
-def write_case(project_root: Path, record: FindingRecord) -> Path:
+def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
+    relative = f"{CASES_DIRNAME}/{case_filename(record)}"
     directory = cases_dir(project_root)
-    if directory.is_symlink():
-        raise CaseStorageError(
-            f"{directory} is a symlink; cases are written only into a real directory "
-            "inside the project"
-        )
-    path = case_path(project_root, record)
-    if path.is_symlink():
-        raise CaseStorageError(f"{path} is a symlink; refusing to write through a link")
+    try:
+        # Create the directory chain first, then verify EVERY component of the target
+        # -- including `doc/` and `doc/audits/` -- is real rather than a link.
+        directory.mkdir(parents=True, exist_ok=True)
+        path = resolve_inside(project_root, relative)
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+    except OSError as exc:
+        raise CaseStorageError(f"could not create {directory}: {exc}") from exc
 
     payload = {"doc_kind": DOC_KIND, **record.model_dump(mode="json", exclude_none=True)}
     text = render_frontmatter(payload, _BODY)
     temp = path.with_name(f".{path.name}.tmp")
     try:
-        directory.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644
-        )
+        descriptor = open_write_nofollow(temp)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(text)
         os.replace(temp, path)
+    except PathSafetyError as exc:
+        temp.unlink(missing_ok=True)
+        raise CaseStorageError(str(exc)) from exc
     except OSError as exc:
         temp.unlink(missing_ok=True)
         raise CaseStorageError(f"could not write case to {path}: {exc}") from exc
     return path
 
 
-def load_case(path: Path) -> FindingRecord:
+def load_case(path: Path) -> AuditFindingRecord:
     if path.is_symlink():
         raise CaseStorageError(f"{path} is a symlink; refusing to read through a link")
     parsed = parse_frontmatter(path)
@@ -2520,7 +3067,7 @@ def load_case(path: Path) -> FindingRecord:
         )
     fields = {k: v for k, v in frontmatter.items() if k != "doc_kind"}
     try:
-        record = FindingRecord.model_validate(fields)
+        record = AuditFindingRecord.model_validate(fields)
     except Exception as exc:  # pydantic ValidationError or RecordError
         raise CaseStorageError(f"{path} is not a valid case: {exc}") from exc
 
@@ -2552,9 +3099,18 @@ def load_case(path: Path) -> FindingRecord:
     return record
 
 
-def load_cases(project_root: Path) -> list[FindingRecord]:
+def load_cases(project_root: Path) -> list[AuditFindingRecord]:
     directory = cases_dir(project_root)
-    if not directory.is_dir() or directory.is_symlink():
+    if not directory.exists():
+        return []
+    # A redirected cases/ is an ERROR, not an empty result: silently returning [] would
+    # report "no findings" for a project whose cases were moved out from under it.
+    for relative in (CASES_DIRNAME, f"{CASES_DIRNAME}/."):
+        try:
+            resolve_inside(project_root, relative.rstrip("/."))
+        except PathSafetyError as exc:
+            raise CaseStorageError(str(exc)) from exc
+    if not directory.is_dir():
         return []
     records = [load_case(path) for path in sorted(directory.glob("*.md"))]
     return sorted(records, key=lambda r: r.finding_id)
@@ -2585,18 +3141,20 @@ DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_findings_storage.py -v`
-Expected: PASS, 10 tests
+Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
+Expected: PASS — 8 path tests, 13 storage tests
 
-Then run the manifest-exclude guards to confirm the new glob broke nothing:
-Run: `cd science && uv run --frozen pytest tests/test_graph_io.py tests/test_graph_revision.py -q`
-Expected: PASS. If either file does not exist, run `cd science && uv run --frozen pytest -k "revision_manifest or manifest_exclude" -q` instead.
+Then the manifest-exclude guard, to confirm the new glob broke nothing:
+Run: `cd science && uv run --frozen pytest tests/test_graph_io_revision_manifest.py tests/test_graph_io.py -q`
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science/src/science_tool/findings/storage.py science/tests/test_findings_storage.py science/src/science_tool/graph/io.py
-git commit -m "feat(findings): case storage under doc/audits/cases, bound to its filename"
+git add science/src/science_tool/findings/paths.py science/src/science_tool/findings/storage.py
+git add science/tests/test_findings_paths.py science/tests/test_findings_storage.py
+git add science/src/science_tool/graph/io.py
+git commit -m "feat(findings): hardened path handling and case storage bound to its filename"
 ```
 
 ---
@@ -2622,9 +3180,9 @@ import json
 import pytest
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import (
+    AuditFinding,
     AuditReport,
     EntitySubject,
-    Finding,
     FindingRule,
     FindingSection,
     ReportedFinding,
@@ -2632,7 +3190,10 @@ from science_model.audit import (
 
 from science_tool.findings.ingest import IngestError, ingest_report, load_report
 from science_tool.findings.producers import FindingProducer, build_registry
-from science_tool.findings.storage import case_path, load_cases
+from science_tool.findings.storage import load_cases
+
+#: Short local alias; the tests below construct many payloads.
+Finding = AuditFinding
 
 
 class Q(BaseModel):
@@ -2654,12 +3215,12 @@ REGISTRY = build_registry([
 ])
 
 
-def _finding(**overrides) -> Finding:
+def _finding(**overrides) -> AuditFinding:
     base = dict(
         rule_id="dataset.stale-review", subject=EntitySubject(ref="dataset:a"),
         severity="warn", qualifiers={"field": "year"}, message="stale", evidence=[],
     )
-    return Finding(**{**base, **overrides})
+    return AuditFinding(**{**base, **overrides})
 
 
 def _report(findings=None, accepted=None, **overrides) -> AuditReport:
@@ -2905,6 +3466,99 @@ def test_evidence_path_escaping_the_project_is_refused_at_the_model(tmp_path):
 
     with pytest.raises(ValidationError):
         LocationEvidence(path="../../etc/passwd")
+
+
+def test_one_producer_emitting_two_findings_with_one_identity_is_refused(tmp_path):
+    # Same rule, same subject, same identity qualifiers -- different prose. The model
+    # cannot catch this (it does not know which qualifiers bear identity); ingestion
+    # must, or the collision surfaces later as an idempotency conflict.
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies", finding=_finding(message="first")
+        ),
+        ReportedFinding(
+            producer_id="dataset_anomalies", finding=_finding(message="second")
+        ),
+    ])
+    with pytest.raises(IngestError, match="two findings with identity"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert load_cases(tmp_path) == []
+
+
+def test_a_non_identity_qualifier_difference_still_collides(tmp_path):
+    # `note` is not an identity qualifier, so these two share a fingerprint.
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(qualifiers={"field": "year"}),
+        ),
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(qualifiers={"field": "year"}, message="other"),
+        ),
+    ])
+    with pytest.raises(IngestError, match="two findings with identity"):
+        ingest_report(tmp_path, report, REGISTRY)
+
+
+def test_a_subject_path_through_a_symlink_is_refused(tmp_path):
+    from science_model.audit import PathSubject
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "doc").symlink_to(outside, target_is_directory=True)
+
+    path_rule = FindingRule(
+        id="tags.lingering", severities={"warn"}, subject_types={"path"},
+        qualifier_schema=Q, title="t", section="datasets", display_order=110,
+    )
+    registry = build_registry([
+        FindingProducer(
+            producer_id="dataset_anomalies", namespace="health_checks",
+            rules=(RULE, path_rule), sections=(SECTION,), metrics_schema=None,
+            remediators=frozenset(),
+        )
+    ])
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=Finding(
+                rule_id="tags.lingering", subject=PathSubject(path="doc/x.md"),
+                severity="warn", qualifiers={}, message="m", evidence=[],
+            ),
+        )
+    ])
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(tmp_path, report, registry)
+
+
+def test_an_evidence_path_through_a_symlink_is_refused(tmp_path):
+    from science_model.audit import LocationEvidence
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "doc").symlink_to(outside, target_is_directory=True)
+
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(evidence=[LocationEvidence(path="doc/x.md", line=1)]),
+        )
+    ])
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(tmp_path, report, REGISTRY)
+
+
+def test_a_symlinked_lock_file_is_refused(tmp_path):
+    cases = tmp_path / "doc" / "audits" / "cases"
+    cases.mkdir(parents=True)
+    outside = tmp_path / "outside.lock"
+    outside.write_text("", encoding="utf-8")
+    (cases / ".ingest.lock").symlink_to(outside)
+    with pytest.raises(IngestError, match="symlink|link"):
+        ingest_report(tmp_path, _report(), REGISTRY)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2934,6 +3588,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2943,8 +3598,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from science_model.audit import (
     REPORT_SCHEMA_VERSION,
     AuditReport,
-    Finding,
-    FindingRecord,
+    AuditFinding,
+    AuditFindingRecord,
     Occurrence,
     Transition,
     finding_fingerprint,
@@ -2952,8 +3607,15 @@ from science_model.audit import (
 )
 from science_model.audit.record import canonical_occurrence_content
 
+from science_tool.findings.paths import (
+    PathSafetyError,
+    open_read_bounded,
+    open_write_nofollow,
+    resolve_inside,
+)
 from science_tool.findings.producers import FindingRegistry, RegistryError
 from science_tool.findings.storage import (
+    CASES_DIRNAME,
     CaseStorageError,
     case_path,
     cases_dir,
@@ -2978,18 +3640,16 @@ class IngestOutcome(BaseModel):
 
 
 def load_report(path: Path) -> AuditReport:
-    if path.is_symlink():
-        raise IngestError(f"{path} is a symlink; refusing to read a report through a link")
+    # One open, sized and read from the SAME descriptor: `stat()` then `read_text()`
+    # are two lookups of a name that can change in between.
     try:
-        size = path.stat().st_size
-    except OSError as exc:
-        raise IngestError(f"could not stat {path}: {exc}") from exc
-    if size > MAX_REPORT_BYTES:
-        raise IngestError(f"{path} is {size} bytes, which exceeds {MAX_REPORT_BYTES}")
+        text = open_read_bounded(path, MAX_REPORT_BYTES)
+    except PathSafetyError as exc:
+        raise IngestError(str(exc)) from exc
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise IngestError(f"could not read {path}: {exc}") from exc
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise IngestError(f"could not parse {path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise IngestError(f"{path} is not a JSON object")
     if raw.get("schema_version") != REPORT_SCHEMA_VERSION:
@@ -3005,29 +3665,48 @@ def load_report(path: Path) -> AuditReport:
 
 @contextmanager
 def _project_lock(project_root: Path) -> Iterator[None]:
-    """Serialize ingestion per project; concurrent runs queue rather than interleave."""
+    """Serialize ingestion per project; concurrent runs queue rather than interleave.
+
+    The lock file is opened with `O_NOFOLLOW` like every other write here. A plain
+    `open(..., "w")` would happily follow a planted link and write outside the project.
+    """
     directory = cases_dir(project_root)
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        resolve_inside(project_root, f"{CASES_DIRNAME}/.ingest.lock")
+    except PathSafetyError as exc:
+        raise IngestError(str(exc)) from exc
+    except OSError as exc:
+        raise IngestError(f"could not create {directory}: {exc}") from exc
+
     lock_path = directory / ".ingest.lock"
-    with open(lock_path, "w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    try:
+        descriptor = open_write_nofollow(lock_path)
+    except PathSafetyError as exc:
+        raise IngestError(str(exc)) from exc
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
         try:
             yield
         finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
 
 
 class _Planned(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     finding_id: str
-    finding: Finding
+    finding: AuditFinding
     producer_id: str
     acceptance_key: str | None
     identity_qualifiers: dict[str, object]
 
 
-def _plan(report: AuditReport, registry: FindingRegistry) -> list[_Planned]:
+def _plan(
+    project_root: Path, report: AuditReport, registry: FindingRegistry
+) -> list[_Planned]:
     """Validate everything and compute every identity BEFORE writing anything."""
     if report.fingerprint_version not in SUPPORTED_FINGERPRINT_VERSIONS:
         raise IngestError(
@@ -3042,7 +3721,7 @@ def _plan(report: AuditReport, registry: FindingRegistry) -> list[_Planned]:
             raise IngestError(str(exc)) from exc
 
     planned: list[_Planned] = []
-    channels: list[tuple[str, Finding, str | None]] = [
+    channels: list[tuple[str, AuditFinding, str | None]] = [
         (r.producer_id, r.finding, None) for r in report.findings
     ] + [(a.producer_id, a.finding, a.acceptance_key) for a in report.accepted]
 
@@ -3074,6 +3753,8 @@ def _plan(report: AuditReport, registry: FindingRegistry) -> list[_Planned]:
         except ValidationError as exc:
             raise IngestError(f"{finding.rule_id}: qualifiers invalid: {exc}") from exc
 
+        _assert_paths_are_safe(project_root, finding)
+
         identity = rule.identity_subset(finding.qualifiers)
         planned.append(
             _Planned(
@@ -3088,7 +3769,42 @@ def _plan(report: AuditReport, registry: FindingRegistry) -> list[_Planned]:
                 identity_qualifiers=identity,
             )
         )
+
+    # The at-most-one-per-(producer, finding_id) rule of §1, enforced HERE because it
+    # needs the fingerprint, which needs the registry. `AuditReport` cannot do it:
+    # keying on the whole payload would pass two observations with identical identity
+    # and different prose, which is exactly the collision this rule prevents.
+    seen: set[tuple[str, str]] = set()
+    for item in planned:
+        key = (item.producer_id, item.finding_id)
+        if key in seen:
+            raise IngestError(
+                f"{item.producer_id!r} emitted two findings with identity "
+                f"{item.finding_id}: aggregate their evidence into one finding, or "
+                f"declare an identity qualifier on {item.finding.rule_id!r} that tells "
+                "them apart (design §1)"
+            )
+        seen.add(key)
     return planned
+
+
+def _assert_paths_are_safe(project_root: Path, finding: Finding) -> None:
+    """Every path the finding names must resolve inside the project without a link.
+
+    The model normalizes path SYNTAX; only the filesystem can answer whether a
+    component is a symlink, so the check lives here.
+    """
+    candidates: list[str] = []
+    if finding.subject.type == "path":
+        candidates.append(finding.subject.path)
+    candidates.extend(
+        item.path for item in finding.evidence if item.type == "location"
+    )
+    for candidate in candidates:
+        try:
+            resolve_inside(project_root, candidate)
+        except PathSafetyError as exc:
+            raise IngestError(f"{finding.rule_id}: {exc}") from exc
 
 
 def ingest_report(
@@ -3098,7 +3814,7 @@ def ingest_report(
     *,
     actor: str = "ingest",
 ) -> IngestOutcome:
-    planned = _plan(report, registry)
+    planned = _plan(project_root, report, registry)
     observed_at = datetime.fromisoformat(report.generated_at)
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
@@ -3118,25 +3834,25 @@ def ingest_report(
                 severity=item.finding.severity,
                 message=item.finding.message,
                 qualifiers=item.finding.qualifiers,
-                evidence=list(item.finding.evidence),
+                evidence=tuple(item.finding.evidence),
                 acceptance_key=item.acceptance_key,
             )
-            probe = FindingRecord(
+            probe = AuditFindingRecord(
                 finding_id=item.finding_id,
                 fingerprint_version=report.fingerprint_version,
                 rule_id=item.finding.rule_id,
                 subject=item.finding.subject,
                 identity_qualifiers=item.identity_qualifiers,
-                occurrences=[occurrence],
-                transitions=[
+                occurrences=(occurrence,),
+                transitions=(
                     Transition(
                         from_status=None,
                         to_status="proposed",
                         actor=actor,
                         at=observed_at,
                         reason=f"detected by {item.producer_id}",
-                    )
-                ],
+                    ),
+                ),
                 status="proposed",
             )
             path = case_path(project_root, probe)
@@ -3166,10 +3882,9 @@ def ingest_report(
                 skipped += 1
                 continue
 
-            grown = existing.model_copy(
-                update={"occurrences": [*existing.occurrences, occurrence]}
-            )
-            write_case(project_root, grown)
+            # `with_occurrence`, not `model_copy(update=...)`: the latter bypasses every
+            # validator, so a malformed append would reach disk unchecked.
+            write_case(project_root, existing.with_occurrence(occurrence))
             appended += 1
 
     return IngestOutcome(
@@ -3210,12 +3925,6 @@ git commit -m "feat(findings): trusted ingestion with idempotent retry as the re
 `science health` gains **no** persist flag. Ingestion is a separate explicit command; a diagnostic run never writes cases as a side effect (§8).
 
 - [ ] **Step 1: Write the failing test**
-
-First, find the registration pattern:
-
-Run: `cd science && grep -n "add_command" src/science_tool/cli.py | head -20`
-
-Use whatever pattern that file already uses. Then:
 
 ```python
 # science/tests/test_findings_cli.py
@@ -3394,12 +4103,16 @@ def list_command(project_root: Path, status: str | None, output_format: str) -> 
     sys.exit(0)
 ```
 
-Then register the group in `science/src/science_tool/cli.py`, matching the pattern the grep in Step 1 revealed. If it uses `cli.add_command(...)`:
+Then register the group in `science/src/science_tool/cli.py`. The root group is named
+`main` (`@click.group(cls=TelemetryGroup)` at `cli.py:170`, `def main(...)` at `:184`),
+and registrations are a run of `main.add_command(...)` calls beginning at `cli.py:194`.
+Add the import beside the other group imports and one line to that run, keeping it in
+the existing alphabetical-ish order:
 
 ```python
 from science_tool.findings.cli import findings_group
 
-cli.add_command(findings_group)
+main.add_command(findings_group)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -3439,15 +4152,21 @@ Every namespace contributing to the derived registry needs a **filesystem-derive
 
 ```python
 # science/tests/test_findings_producer_namespaces.py
-"""Every producer namespace must have a filesystem-derived completeness guard.
+"""Scope declarations for the producer namespaces.
 
-`test_check_registry_is_complete.py` states the rule this file obeys: "a guard that
-enumerates its own scope has a hole by construction". So each namespace declares
-WHERE its producers live, and the guard walks that directory rather than a list.
+**This file is NOT design test 29** (producer-namespace completeness), and does not
+pretend to be. Test 29 requires comparing filesystem-discovered producers against
+registered ones. Plan 1 registers ZERO producers, so that comparison would be
+`set() == set()` — a guard that passes because there is nothing to check. A green
+vacuous assertion is worse than an absent one: it reads as coverage it does not have,
+which is the failure mode this repo has already been bitten by.
 
-Plan 1 registers no producers. This guard therefore currently asserts that the
-namespace->directory mapping is TOTAL, so Plan 2 cannot add a producer in a
-namespace whose scope nobody defined.
+**Test 29 is therefore deferred to Plan 2**, where the first real producers exist and
+the comparison can fail.
+
+What this file does guard now is the precondition test 29 will need: every registered
+namespace declares WHERE its producers live. A namespace whose scope nobody defined
+cannot be walked, so Plan 2 could not write test 29 for it.
 """
 
 from __future__ import annotations
@@ -3485,6 +4204,22 @@ def test_no_namespace_is_declared_without_being_registered():
 def test_each_declared_scope_exists_on_disk(namespace: str):
     target = SRC / NAMESPACE_DIRS[namespace]
     assert target.exists(), f"{namespace}: declared scope {target} does not exist"
+
+
+def test_plan_1_registers_no_producers_so_test_29_cannot_be_written_here():
+    """Fails the moment Plan 2 adds a producer, as the reminder to write test 29.
+
+    Deleting this test is the correct response -- once producers exist, replace it
+    with the real discovery-versus-registration comparison.
+    """
+    from science_tool.findings.cli import _registry
+
+    assert not _registry().producers_by_id, (
+        "producers are now registered, so design test 29 (producer-namespace "
+        "completeness) can and must be written: compare the modules discovered under "
+        "each NAMESPACE_DIRS entry against the registered producers, and delete this "
+        "placeholder."
+    )
 ```
 
 ```python
@@ -3499,7 +4234,12 @@ from __future__ import annotations
 
 from science_model.autonomous_runs import RunTier
 
-from science_tool.autonomy.changes import PathChange, entity_kind_for_path
+from science_tool.autonomy.changes import (
+    ChangeSet,
+    ChangeType,
+    PathChange,
+    entity_kind_for_path,
+)
 from science_tool.autonomy.path_gate import evaluate
 from science_tool.findings.storage import CASES_DIRNAME
 from science_tool.graph.io import DEFAULT_REVISION_MANIFEST_EXCLUDES
@@ -3512,9 +4252,18 @@ def test_a_case_path_is_unclassified_and_therefore_denied():
 
 def test_the_path_gate_denies_an_actor_writing_a_case():
     rel = f"{CASES_DIRNAME}/dataset-stale-review--{'a' * 64}.md"
-    change_set = _change_set([
-        PathChange(path=rel, change_type="A", entity_kind=None, fields=())
-    ])
+    change_set = ChangeSet(
+        base_commit="a" * 40,
+        head_commit="b" * 40,
+        changes=(
+            PathChange(
+                path=rel,
+                change_type=ChangeType.ADDED,
+                entity_kind=None,
+                fields=(),
+            ),
+        ),
+    )
     verdict = evaluate(change_set, tier=RunTier.BELIEF_NEUTRAL, report_path=None)
     assert not verdict.allowed
     assert any(d.path == rel for d in verdict.denials)
@@ -3533,32 +4282,38 @@ def test_a_case_directory_is_not_an_entity_home():
     assert "audits" not in _DIR_TO_KIND
 
 
-def _change_set(changes):
-    """Build whatever container `evaluate` takes, using its real constructor."""
-    from science_tool.autonomy.extract import ChangeSet
-
-    return ChangeSet(base="a" * 40, head="b" * 40, changes=list(changes))
 ```
+
+Both `ChangeSet` and `PathChange` live in `science_tool/autonomy/changes.py` (`:44` and
+`:27`), both are `frozen=True, extra="forbid"`, and `ChangeSet.changes` is a
+**tuple**, not a list. `change_type` is a `ChangeType` StrEnum (`MODIFIED` / `ADDED` /
+`DELETED`), not a bare string. Do **not** modify `evaluate`, `PathChange`, or
+`ChangeSet` — the whole point of this guard is that the existing gate denies these
+paths untouched.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_producer_namespaces.py tests/test_findings_isolation.py -v`
-Expected: FAIL. The namespace test should pass immediately; the isolation test will fail on import if `ChangeSet` or `PathChange` has a different constructor signature.
+Expected: FAIL — `ModuleNotFoundError` on `science_tool.findings.storage` if Task 9 has not landed; otherwise the namespace tests pass and the isolation tests pass.
 
-- [ ] **Step 3: Fix the guard to match the real signatures**
+- [ ] **Step 3: No implementation needed**
 
-Run: `cd science && grep -n "class ChangeSet" -A 12 src/science_tool/autonomy/extract.py` and `grep -n "class PathChange" -A 10 src/science_tool/autonomy/changes.py`
-
-Adjust `_change_set` and the `PathChange(...)` construction to the actual field names and types. Do **not** change `evaluate`, `PathChange`, or `ChangeSet` themselves — the point of this guard is that the existing gate already denies these paths untouched.
+These are guards over behaviour that already exists. If any of them fails, that is a real
+finding — either the gate no longer denies unclassified paths, or `cases` has entered
+`_DIR_TO_KIND`, or the manifest exclude was dropped. Investigate rather than adjusting the
+assertion.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_producer_namespaces.py tests/test_findings_isolation.py -v`
 Expected: PASS
 
-Then the whole findings surface plus the autonomy suite it asserts against:
-Run: `cd science && uv run --frozen pytest tests/test_findings_*.py tests/test_autonomy_path_gate.py -q`
-Expected: PASS. If `tests/test_autonomy_path_gate.py` is named differently, run `uv run --frozen pytest -k autonomy -q`.
+Then the whole findings surface plus the autonomy gate suite it asserts against:
+Run: `cd science && uv run --frozen pytest tests/test_findings_*.py -q`
+Expected: PASS
+
+Run: `cd science && uv run --frozen pytest -k autonomy -q`
+Expected: PASS, unchanged from before this plan
 
 - [ ] **Step 5: Commit**
 
@@ -3625,18 +4380,18 @@ git commit -m "docs(plans): record that the finding contract landed"
 
 | Design section | Task | Note |
 |---|---|---|
-| §1 `Finding` payload | 4 | `rule_id` as wire form, severity normalization |
+| §1 `AuditFinding` payload | 4 | `rule_id` as wire form, severity normalization |
 | §1 evidence union | 2 | types frozen, `extra="forbid"`, bounds |
 | §1 one finding per (producer, finding) | 7 | enforced on `AuditReport` |
 | §2 subject union | 1 | four variants, no fallback |
 | §3 fingerprint v1 | 3 | normalization, canonical encoding, digest, slug, golden vectors |
-| §4 `FindingRecord` | 6 | identity + occurrences + transitions + reviews |
+| §4 `AuditFindingRecord` | 6 | identity + occurrences + transitions + reviews |
 | §4 genesis + closed graph | 6 | `PERMITTED_TRANSITIONS` |
 | §4 review record | 6 | lens in identity, agent `model` required |
 | §5 storage, filename binding | 9 | plus the manifest exclude |
 | §6 rule declarations | 5 | `build()`, identity-type constraints |
 | §6 derived registry, 7 failures | 8 | all seven conditions |
-| §6 namespace guards | 12 | filesystem-derived |
+| §6 namespace scope declarations | 12 | precondition for test 29; **test 29 itself deferred to Plan 2** |
 | §7 remediation | 5, 8 | capability declared; handler must be registered |
 | §8 ingestion | 10 | lock, prevalidation, atomic writes, idempotency |
 | §8 accepted channel ingested | 10 | `acceptance_key` on occurrence |
@@ -3645,8 +4400,21 @@ git commit -m "docs(plans): record that the finding contract landed"
 
 **Deferred to Plan 2, by design:** §9's migration ledger, §11's renderer rewrite and `totals` derivation from real producers, the uniform-channel ratchet enforcement, and removing `_drain_instrument_results`' passthrough. **Deferred to Plan 3:** all of §10.
 
-**Design tests not yet coverable.** Tests 1 (uniform-channel ratchet), 5 (renderer clean-refusal), 23 (presentation order vs today's `HEALTH_CHECKS`), 26 (count ledger), 28 (metrics are not findings), and 30 (twelve dataset rules) all require converted producers. They belong to Plan 2 and are listed there, not silently dropped.
+**Design tests not yet coverable — deferred to Plan 2.** Tests **1** (uniform-channel ratchet), **5** (renderer clean-refusal), **26** (count ledger), **27** (presentation order vs today's `HEALTH_CHECKS`), **28** (metrics are not findings), **29** (producer-namespace completeness), and **30** (twelve dataset rules) all require converted producers. They belong to Plan 2 and are listed there, not silently dropped.
+
+Test **23** (graph isolation) is *not* in that set — it is covered here, in Task 12.
+
+Test **29** is the one deferral that needed a decision rather than a schedule: with zero registered producers, a discovery-versus-registration comparison is `set() == set()`, which passes vacuously. Task 12 ships the *precondition* (every namespace declares its scope) plus a placeholder that fails the moment Plan 2 registers a producer, so the deferral cannot be forgotten.
 
 **Type consistency check.** `finding_fingerprint(rule_id=, subject=, identity_qualifiers=)` is called with those exact keywords in Tasks 3, 9, and 10. `occurrence_key(producer_id=, ingestion_ref=, finding_id=)` matches between Tasks 6 and 10. `rule.identity_subset(qualifiers)` defined in Task 5 is consumed in Task 10. `registry.rule()` raising `RegistryError` in Task 8 is caught and re-raised as `IngestError` in Task 10. `CASES_DIRNAME` is `"doc/audits/cases"` in Task 9 and asserted with that value in Task 12.
 
-**Known signature risks the plan flags rather than guesses.** Task 12 Step 3 explicitly grep-verifies `ChangeSet` / `PathChange` constructors instead of assuming them, and Task 11 Step 1 greps `cli.py` for its registration idiom. Task 9 Step 4 names a fallback `-k` selection in case the manifest test file is named differently. These are the three places I could not confirm from reading alone.
+**Signatures, all resolved against the tree — no grep-and-adjust steps remain.**
+
+| Thing | Resolved form |
+|---|---|
+| `PathChange` | `science_tool/autonomy/changes.py:27`, frozen; `PathChange(path=..., change_type=ChangeType.ADDED, entity_kind=None, fields=())` |
+| `ChangeSet` | **`changes.py:44`, not `extract.py`**; `ChangeSet(base_commit=..., head_commit=..., changes=(...))`, `changes` is a tuple |
+| CLI registration | root group is `main` (`cli.py:170,184`); `main.add_command(findings_group)`, joining the run at `cli.py:194` |
+| Manifest test | `science/tests/test_graph_io_revision_manifest.py` |
+
+**Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py`: `resolve_inside` walks *every* component and refuses a symlink at any of them; `open_read_bounded` opens once with `O_NOFOLLOW` and sizes the descriptor it read; `open_write_nofollow` refuses a symlinked final component. That covers the report, the lock file, case reads and writes, and every `PathSubject` and `LocationEvidence` path in an ingested report. Checking only the final component would let a link at `doc/` or `doc/audits/` redirect the whole operation.
