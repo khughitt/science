@@ -610,3 +610,171 @@ def test_nondurable_state_is_silent_when_the_tracked_query_fails(
     monkeypatch.setattr(prereg_vehicles, "_git_query", fake_query)
 
     assert prereg_vehicles._nondurable_state(project, "inputs/a.json") is None
+
+
+def test_frozen_prereg_naming_an_ignored_path_in_prose_warns(project: Path) -> None:
+    """The `fb-2026-07-11-024` shape, in a bullet instead of frontmatter."""
+    project.joinpath(".gitignore").write_text("pipeline/**/data/\n", encoding="utf-8")
+    _write_vehicle(project, "pipeline/graph-analysis/data/graph-export.json")
+    vehicle = _write_vehicle(project, "inputs/ok.json")
+    _git(project, "add", "inputs/ok.json")
+    _git(project, "commit", "-qm", "add vehicle")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("inputs/ok.json", _sha256(vehicle)),
+        body="- **Source:** `pipeline/graph-analysis/data/graph-export.json`\n",
+    )
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.prose-path-nondurable"]
+    assert results[0].severity.value == "warn"
+    assert "pipeline/graph-analysis/data/graph-export.json" in results[0].message
+
+
+def test_frozen_prereg_naming_an_untracked_path_in_prose_warns(project: Path) -> None:
+    """Not ignored, but never committed -- still not preserved."""
+    _write_vehicle(project, "data/processed/frame.parquet")
+    _write_prereg(project, body="built from `data/processed/frame.parquet`\n")
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.vehicle-undeclared", "prereg.prose-path-nondurable"]
+    assert "not tracked by git" in results[1].message
+
+
+def test_the_prose_message_does_not_assert_the_path_is_a_substrate(project: Path) -> None:
+    """The rule proves a durability fact, not that the path is load-bearing.
+
+    Selecting by rule matters: `vehicle-undeclared` is yielded first for this
+    document, so `results[0]` is not the finding under test.
+    """
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/out.json")
+    _write_prereg(project, body="results land in `build/out.json`\n")
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+    prose = [r for r in results if r.rule == "prereg.prose-path-nondurable"]
+
+    assert len(prose) == 1
+    message = prose[0].message
+    # The remedy legitimately names the `vehicles:` FIELD, so a blanket ban on
+    # the word would be wrong. What is forbidden is calling the PATH one, and
+    # asserting a consequence git does not establish.
+    assert "substrate" not in message
+    assert f"vehicle {'build/out.json'!r}" not in message
+    # Git proves non-preservation. It does NOT prove that regenerating the file
+    # changes any bytes, or that no copy exists elsewhere, so the consequence
+    # must stay hedged and conditional.
+    assert "irrecoverably" not in message
+    assert "would leave" not in message
+    assert "could leave" in message
+    assert "git will not preserve it" in message
+    assert "if this document's claims depend on" in message.lower()
+
+
+def test_a_tracked_prose_path_is_silent(project: Path) -> None:
+    _write_vehicle(project, "workflows/breadth/config.yaml")
+    _git(project, "add", "workflows/breadth/config.yaml")
+    _git(project, "commit", "-qm", "add config")
+    _write_prereg(project, body="settings from `workflows/breadth/config.yaml`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_a_prose_path_that_does_not_resolve_is_silent(project: Path) -> None:
+    """"Destroyed", "illustrative" and "renamed" are indistinguishable."""
+    _write_prereg(project, body="once lived at `pipeline/gone/export.json`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_a_declared_vehicle_is_not_also_reported_as_a_prose_path(project: Path) -> None:
+    """One file, one rule. Exact normalized match, including `./` forms."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    vehicle = _write_vehicle(project, "build/a.json")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("build/a.json", _sha256(vehicle)),
+        body="the vehicle is `./build/a.json`\n",
+    )
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-gitignored"]
+
+
+def test_an_ignored_directory_holding_a_defective_declared_vehicle_is_reported(
+    project: Path,
+) -> None:
+    """No parent-directory suppression: the containing root is real information.
+
+    The directory must be NESTED. A bare `build` has no `/` and is out of scope
+    by the root-level rule, so it would never be a candidate at all.
+    """
+    project.joinpath(".gitignore").write_text("artifacts/build/\n", encoding="utf-8")
+    vehicle = _write_vehicle(project, "artifacts/build/a.json")
+    _write_prereg(
+        project,
+        vehicles=_vehicle_block("artifacts/build/a.json", _sha256(vehicle)),
+        body="under `artifacts/build`\n",
+    )
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == [
+        "prereg.vehicle-gitignored",
+        "prereg.prose-path-nondurable",
+    ]
+
+
+def test_a_prose_path_named_five_times_is_one_finding(project: Path) -> None:
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    body = "".join(f"line {n} mentions `build/a.json`\n" for n in range(5))
+    _write_prereg(project, body=body)
+
+    results = list(check_prereg_vehicles(_ctx(project)))
+
+    assert _rules(results) == ["prereg.vehicle-undeclared", "prereg.prose-path-nondurable"]
+
+
+def test_an_unfrozen_prereg_naming_an_ignored_path_is_silent(project: Path) -> None:
+    """A prose path is an inferred commitment; before freezing it is normal work."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(project, status="active", body="working from `build/a.json`\n")
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_a_data_gated_prereg_naming_an_ignored_path_is_silent(project: Path) -> None:
+    """Data-gated mode legitimately discusses candidate paths."""
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(
+        project,
+        body="## Vehicle-Admissibility Gate (data-gated mode)\n\ncandidate `build/a.json`\n",
+    )
+
+    assert list(check_prereg_vehicles(_ctx(project))) == []
+
+
+def test_prose_paths_outside_a_git_repository_are_silent(tmp_path: Path) -> None:
+    """Never claim non-durability when git has not answered."""
+    tmp_path.joinpath("science.yaml").write_text("name: f\nprofile: research\n", encoding="utf-8")
+    tmp_path.joinpath("entities", "pre-registrations").mkdir(parents=True)
+    _write_vehicle(tmp_path, "build/a.json")
+    _write_prereg(tmp_path, body="from `build/a.json`\n")
+
+    assert _rules(list(check_prereg_vehicles(_ctx(tmp_path)))) == ["prereg.vehicle-undeclared"]
+
+
+def test_the_rule_is_silent_when_git_cannot_answer(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller's half of the tri-state contract."""
+    from science_tool.validate.checks import prereg_vehicles
+
+    project.joinpath(".gitignore").write_text("build/\n", encoding="utf-8")
+    _write_vehicle(project, "build/a.json")
+    _write_prereg(project, body="from `build/a.json`\n")
+    monkeypatch.setattr(prereg_vehicles, "_git_query", lambda *args, **kwargs: None)
+
+    assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]

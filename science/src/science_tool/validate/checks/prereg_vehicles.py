@@ -212,6 +212,54 @@ def _nondurable_state(root: Path, relative: str) -> str | None:
     return "untracked"
 
 
+def _prose_message(relative: str, candidate: str, state: str) -> str:
+    """State only what git proves; make every consequence conditional.
+
+    Git establishes that the path is ignored or untracked -- that it will not
+    be preserved. It does NOT establish that regenerating the file destroys
+    anything: a frozen pre-registration may legitimately name a future OUTPUT
+    directory. So the loss language sits behind the author's "if", and the
+    message never calls the path a substrate or a vehicle.
+    """
+    state_text = "gitignored" if state == "ignored" else "not tracked by git"
+    return (
+        f"{relative} is frozen and names {candidate!r} in prose, which is {state_text}, "
+        f"so git will not preserve it. If this document's claims depend on {candidate!r}, "
+        f"it is frozen by path rather than by content: git holds no copy to compare "
+        f"against, so nothing here can detect a change to the file, and regenerating or "
+        f"overwriting it could leave the document certifying content that no longer exists. "
+        f"Commit the file, commit and register its descriptor, or declare it as a "
+        f"content-addressed dataset entity and add it to 'vehicles:'. If the document does "
+        f"not depend on it -- an output location, an illustration -- record that and accept "
+        f"this finding."
+    )
+
+
+def _check_prose_paths(
+    ctx: ValidateContext,
+    relative: str,
+    body: str,
+    entries: list[Any],
+) -> Iterator[Result]:
+    declared: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("path"):
+            continue
+        normalized = _normalize(str(entry["path"]))
+        if normalized is not None:
+            declared.add(normalized)
+
+    for candidate in _candidate_paths(body):
+        if candidate in declared:
+            continue
+        if not (ctx.project_root / candidate).exists():
+            continue
+        state = _nondurable_state(ctx.project_root, candidate)
+        if state is None:
+            continue
+        yield _result(Severity.WARN, relative, _prose_message(relative, candidate, state), _RULE_PROSE)
+
+
 @Check(section="discussion documents...", order=13)
 def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
     entities_root = ctx.project_root / resolve_path_policy("pre-registration").root
@@ -227,10 +275,17 @@ def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
             continue
         relative = path.relative_to(ctx.project_root).as_posix()
         entries = _vehicle_entries(frontmatter)
+        freeze_reason = frozen_because(frontmatter)
+        body = ctx.body(path)
+        data_gated = _DATA_GATED_MARKER in body
 
+        # `continue` became `elif` so the prose scan below runs for BOTH the
+        # declared and the undeclared branch. A document that declares one
+        # vehicle is exactly where the prose gap hides: declaring the
+        # recoverable substrate silences `vehicle-undeclared` while a
+        # non-durable path named in prose goes unexamined.
         if not entries:
-            freeze_reason = frozen_because(frontmatter)
-            if freeze_reason is not None and _DATA_GATED_MARKER not in ctx.body(path):
+            if freeze_reason is not None and not data_gated:
                 yield _result(
                     Severity.WARN,
                     relative,
@@ -240,9 +295,7 @@ def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
                     f"'{_DATA_GATED_MARKER} (data-gated mode)' section if no vehicle is admissible yet.",
                     "prereg.vehicle-undeclared",
                 )
-            continue
-
-        if not is_repo:
+        elif not is_repo:
             yield _result(
                 Severity.WARN,
                 relative,
@@ -250,10 +303,12 @@ def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
                 f"their durability cannot be verified.",
                 "prereg.vehicle-unverifiable",
             )
-            continue
+        else:
+            for entry in entries:
+                yield from _check_vehicle(ctx, relative, entry)
 
-        for entry in entries:
-            yield from _check_vehicle(ctx, relative, entry)
+        if is_repo and freeze_reason is not None and not data_gated:
+            yield from _check_prose_paths(ctx, relative, body, entries)
 
 
 def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[Result]:
