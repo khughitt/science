@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,85 @@ def test_command_support_skill_is_non_invocable_and_resource_only(
         "hypothesis-testing",
         "software-development",
     ]
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "resource"),
+    (
+        ("science-health", "references/docs/user-guide/evidence-lines.md"),
+        ("science-create-graph", "references/docs/process/entity-creation-cookbook.md"),
+        ("science-research-topic", "references/templates/background-topic.md"),
+        ("science-create-project", "references/references/project-structure.md"),
+    ),
+)
+def test_command_resources_are_bundled_inside_their_package(
+    generated: GenerationResult,
+    skill_name: str,
+    resource: str,
+) -> None:
+    skill_path = generated.skill_paths[skill_name]
+    assert (skill_path.parent / resource).is_file()
+    assert resource in skill_path.read_text(encoding="utf-8")
+
+
+def test_command_markdown_links_do_not_escape_their_package(
+    generated: GenerationResult,
+) -> None:
+    command_names = {command_to_skill_name(path) for path in sorted((ROOT / "commands").glob("*.md"))}
+    for name in sorted(command_names):
+        skill_path = generated.skill_paths[name]
+        package_root = skill_path.parent.resolve()
+        for markdown in sorted(package_root.rglob("*.md")):
+            text = markdown.read_text(encoding="utf-8")
+            for raw in re.findall(r"]\(([^)]+)\)", text):
+                target = raw.split("#", 1)[0]
+                if not target or target.startswith("/") or re.match(r"^[a-z]+:", target):
+                    continue
+                resolved = (markdown.parent / target).resolve()
+                source = markdown.relative_to(package_root)
+                assert resolved.is_relative_to(package_root), f"{name}/{source}: {raw}"
+                assert resolved.exists(), f"{name}/{source}: {raw}"
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "emitted_dependency", "canonical_reference"),
+    (
+        (
+            "science-plan-analysis",
+            "science-study-design",
+            "skills/study-design/estimator-certification.md",
+        ),
+        (
+            "science-find-datasets",
+            "science-data-management",
+            "skills/data-management/",
+        ),
+        (
+            "science-search-literature",
+            "science-literature",
+            "skills/literature/",
+        ),
+    ),
+)
+def test_canonical_skill_references_become_emitted_sibling_skill_loads(
+    generated: GenerationResult,
+    skill_name: str,
+    emitted_dependency: str,
+    canonical_reference: str,
+) -> None:
+    skill_path = generated.skill_paths[skill_name]
+    text = skill_path.read_text(encoding="utf-8")
+    assert f"`{emitted_dependency}` skill" in text
+    assert canonical_reference not in text
+    assert not (skill_path.parent / "references" / "skills").exists()
+
+
+def test_command_methodology_index_reference_is_package_local(
+    generated: GenerationResult,
+) -> None:
+    text = generated.skill_paths["science-plan-analysis"].read_text(encoding="utf-8")
+    assert "the `science-command-preamble` skill's `references/methodology-index.md`" in text
+    assert "skills/INDEX.md" not in text
 
 
 @pytest.mark.parametrize(
@@ -239,7 +319,7 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness(
 
     expected_strings = (
         "name: science-plan-analysis",
-        "skills/INDEX.md",
+        "references/methodology-index.md",
         "entities/plans/<NNNN>-<slug>-analysis-plan.md",
         "Readiness Decision",
         "science feedback add",

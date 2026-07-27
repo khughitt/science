@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from posixpath import relpath
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,18 @@ _COMMAND_PREAMBLE_INSTRUCTION_RE = re.compile(
     r"[^\n]*(?:\n`?(?:research-assistant|discussant)`?[^\n]*)?\n?",
     re.MULTILINE,
 )
+_PLUGIN_SKILL_PATH_RE = re.compile(r"`?\$\{CLAUDE_PLUGIN_ROOT\}/(skills/[A-Za-z0-9._/-]+\.md)`?")
+_PLUGIN_RESOURCE_PATH_RE = re.compile(
+    r"`?\$\{CLAUDE_PLUGIN_ROOT\}/"
+    r"((?:docs|references|templates)/[A-Za-z0-9._/-]+\.md)`?"
+)
+_BARE_SKILL_PATH_RE = re.compile(r"`(skills/[A-Za-z0-9._/-]+\.md)`")
+_BARE_RESOURCE_PATH_RE = re.compile(r"`((?:docs|references|templates)/[A-Za-z0-9._/-]+\.md)`")
+_RELATIVE_MARKDOWN_LINK_RE = re.compile(
+    r"\[([^\]]+)\]\((\.\./(?:docs|references|skills|templates)/[^)#]+)"
+    r"(#[^)]+)?\)"
+)
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
 @dataclass(frozen=True)
@@ -116,6 +129,8 @@ def _generate_command_skills(
         skill_path = skill_dir / "SKILL.md"
         skill_path.write_text(
             _render_command_skill(
+                repo_root=repo_root,
+                skill_dir=skill_dir,
                 name=name,
                 title=title,
                 description=description,
@@ -161,6 +176,10 @@ def _load_command_preamble(repo_root: Path) -> str:
         "`${CLAUDE_PLUGIN_ROOT}/aspects/`",
         "the `science-command-preamble` skill's `references/aspects/`",
     )
+    text = text.replace(
+        "`${CLAUDE_PLUGIN_ROOT}/templates/<name>.md`",
+        "`references/templates/<name>.md`",
+    )
     return _rewrite_agent_specific_text(text)
 
 
@@ -200,6 +219,8 @@ def _command_role(body: str) -> str:
 
 def _render_command_skill(
     *,
+    repo_root: Path,
+    skill_dir: Path,
     name: str,
     title: str,
     description: str,
@@ -209,8 +230,12 @@ def _render_command_skill(
 ) -> str:
     rewritten_preamble = preamble.replace("<role>", role)
     rewritten_body = _COMMAND_PREAMBLE_INSTRUCTION_RE.sub("", body)
+    rewritten_body = _rewrite_command_toolkit_references(
+        rewritten_body,
+        repo_root,
+        skill_dir,
+    )
     rewritten_body = _rewrite_agent_specific_text(rewritten_body)
-    rewritten_body = _rebase_command_body_links(rewritten_body)
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
     escaped_description = description.replace('"', '\\"')
@@ -235,11 +260,177 @@ def _render_command_skill(
     return "\n".join(header + sections)
 
 
+def _rewrite_command_toolkit_references(
+    text: str,
+    repo_root: Path,
+    skill_dir: Path,
+) -> str:
+    bundled: set[Path] = set()
+
+    def replace_relative_link(match: re.Match[str]) -> str:
+        label = match.group(1)
+        canonical_path = Path(match.group(2)).relative_to("..")
+        anchor = match.group(3) or ""
+        if canonical_path.parts[0] == "skills":
+            dependency = _methodology_skill_name(repo_root, canonical_path)
+            return f"`{label}` guidance from the `{dependency}` skill"
+        reference = _bundle_command_resource(
+            repo_root,
+            skill_dir,
+            canonical_path,
+            bundled,
+        )
+        return f"[{label}]({reference}{anchor})"
+
+    def replace_plugin_skill(match: re.Match[str]) -> str:
+        dependency = _methodology_skill_name(repo_root, Path(match.group(1)))
+        return f"the `{dependency}` skill"
+
+    def replace_bare_skill(match: re.Match[str]) -> str:
+        canonical_path = Path(match.group(1))
+        if canonical_path == Path("skills/INDEX.md"):
+            return "the `science-command-preamble` skill's `references/methodology-index.md`"
+        dependency = _methodology_skill_name(repo_root, canonical_path)
+        return f"the `{dependency}` skill"
+
+    def replace_plugin_resource(match: re.Match[str]) -> str:
+        reference = _bundle_command_resource(
+            repo_root,
+            skill_dir,
+            Path(match.group(1)),
+            bundled,
+        )
+        return f"`{reference}`"
+
+    def replace_bare_resource(match: re.Match[str]) -> str:
+        reference = _bundle_command_resource(
+            repo_root,
+            skill_dir,
+            Path(match.group(1)),
+            bundled,
+        )
+        return f"`{reference}`"
+
+    text = _BARE_RESOURCE_PATH_RE.sub(replace_bare_resource, text)
+    text = text.replace(
+        "`${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md`",
+        "the Science Command Preamble above",
+    )
+    text = text.replace(
+        "`${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md`",
+        "the `science-command-preamble` skill's `references/methodology-index.md`",
+    )
+    text = _RELATIVE_MARKDOWN_LINK_RE.sub(replace_relative_link, text)
+    text = _PLUGIN_SKILL_PATH_RE.sub(replace_plugin_skill, text)
+    text = _BARE_SKILL_PATH_RE.sub(replace_bare_skill, text)
+    return _PLUGIN_RESOURCE_PATH_RE.sub(replace_plugin_resource, text)
+
+
+def _methodology_skill_name(repo_root: Path, canonical_path: Path) -> str:
+    if canonical_path == Path("skills/writing/scientific-writing.md"):
+        return "science-scientific-writing"
+    if len(canonical_path.parts) < 3 or canonical_path.parts[0] != "skills":
+        raise ValueError(f"canonical skill reference has no generated owner: {canonical_path}")
+
+    router = repo_root / "skills" / canonical_path.parts[1] / "SKILL.md"
+    if not router.is_file():
+        raise ValueError(f"canonical skill reference has no generated owner: {canonical_path}")
+    match = re.search(
+        r"^name:\s*['\"]?([^'\"\n]+)['\"]?\s*$",
+        router.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if match is None:
+        raise ValueError(f"generated methodology router is missing a name: {router}")
+    return f"science-{match.group(1)}"
+
+
+def _bundle_command_resource(
+    repo_root: Path,
+    skill_dir: Path,
+    canonical_path: Path,
+    bundled: set[Path],
+) -> str:
+    source = (repo_root / canonical_path).resolve()
+    try:
+        relative = source.relative_to(repo_root)
+    except ValueError as error:
+        raise ValueError(f"command resource escapes Science toolkit root: {canonical_path}") from error
+    if relative.parts[0] == "skills":
+        raise ValueError(f"canonical skill resource must be a sibling-skill load: {relative}")
+    if not source.is_file():
+        raise ValueError(f"command resource is not a file: {source}")
+
+    reference = Path("references") / relative
+    if relative in bundled:
+        return reference.as_posix()
+    bundled.add(relative)
+
+    target = skill_dir / reference
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.suffix != ".md":
+        shutil.copy2(source, target)
+        return reference.as_posix()
+
+    text = source.read_text(encoding="utf-8")
+    text = _rewrite_bundled_resource_links(
+        text,
+        source,
+        relative,
+        repo_root,
+        skill_dir,
+        bundled,
+    )
+    target.write_text(text, encoding="utf-8")
+    return reference.as_posix()
+
+
+def _rewrite_bundled_resource_links(
+    text: str,
+    source: Path,
+    source_relative: Path,
+    repo_root: Path,
+    skill_dir: Path,
+    bundled: set[Path],
+) -> str:
+    source_target = skill_dir / "references" / source_relative
+
+    def replace_link(match: re.Match[str]) -> str:
+        label, raw_target = match.groups()
+        target_path, separator, anchor = raw_target.partition("#")
+        if not target_path or target_path.startswith("/") or "://" in target_path or target_path.startswith("mailto:"):
+            return match.group(0)
+
+        candidate = (source.parent / target_path).resolve()
+        try:
+            relative = candidate.relative_to(repo_root)
+        except ValueError:
+            return label
+        if not candidate.is_file():
+            return label
+        if relative.parts[0] == "skills":
+            dependency = _methodology_skill_name(repo_root, relative)
+            return f"`{label}` guidance from the `{dependency}` skill"
+
+        _bundle_command_resource(
+            repo_root,
+            skill_dir,
+            relative,
+            bundled,
+        )
+        target = skill_dir / "references" / relative
+        rewritten = relpath(target, start=source_target.parent)
+        if separator:
+            rewritten = f"{rewritten}#{anchor}"
+        return f"[{label}]({rewritten})"
+
+    return _MARKDOWN_LINK_RE.sub(replace_link, text)
+
+
 def _rewrite_agent_specific_text(text: str) -> str:
     replacements = (
-        ("${CLAUDE_PLUGIN_ROOT}/science", "<science-toolkit-root>/science"),
-        ("${CLAUDE_PLUGIN_ROOT}/", ""),
-        ("${CLAUDE_PLUGIN_ROOT}", "<science-toolkit-root>"),
+        ("`${CLAUDE_PLUGIN_ROOT}`", "the Science toolkit"),
+        ("${CLAUDE_PLUGIN_ROOT}", "the Science toolkit"),
         (
             "Write a structured background synthesis on the topic specified by `$ARGUMENTS`.",
             "Write a structured background synthesis on the topic specified by the user.",
@@ -270,10 +461,6 @@ def _rewrite_agent_specific_text(text: str) -> str:
     for source, target in replacements:
         text = text.replace(source, target)
     return re.sub(r"/science:([a-z0-9-]+)", r"science-\1", text)
-
-
-def _rebase_command_body_links(body: str) -> str:
-    return re.sub(r"]\(\.\./", "](../../", body)
 
 
 def _generate_command_support_skill(repo_root: Path, output_root: Path) -> Path:
