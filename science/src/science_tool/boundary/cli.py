@@ -9,7 +9,7 @@ import click
 import yaml
 
 from science_tool.boundary.config import BoundaryConfigError
-from science_tool.boundary.gitio import tracked_ignored, unmanaged_rules
+from science_tool.boundary.gitio import BoundaryGitError, tracked_ignored, unmanaged_rules
 from science_tool.boundary.init import propose_declaration
 from science_tool.boundary.sync import BoundaryDirtyError, has_drift, sync, verify_current_tree
 
@@ -40,9 +40,13 @@ def check_command(project_root: Path) -> None:
     """
     from science_tool.validate.checks.boundary import load_boundary_state, unanchored_findings
 
-    hits = tracked_ignored(project_root)
-    _cfg, allowed, _error = load_boundary_state(project_root)
-    warnings = unanchored_findings(unmanaged_rules(project_root), allowed)
+    try:
+        hits = tracked_ignored(project_root)
+        _cfg, allowed, _error = load_boundary_state(project_root)
+        warnings = unanchored_findings(unmanaged_rules(project_root), allowed)
+    except BoundaryGitError as exc:
+        click.echo(f"boundary: {exc}", err=True)
+        sys.exit(2)
     for rule in warnings:
         click.echo(f"warn  {rule.source}:{rule.line}: unanchored pattern {rule.pattern!r}", err=True)
     if not hits:
@@ -80,10 +84,7 @@ def sync_command(project_root: Path, check_only: bool, verify: bool) -> None:
             return
         result = sync(project_root)
         click.echo("boundary: managed block updated" if result.changed else "boundary: already current")
-    except BoundaryDirtyError as exc:
-        click.echo(f"boundary: {exc}", err=True)
-        sys.exit(2)
-    except BoundaryConfigError as exc:
+    except (BoundaryDirtyError, BoundaryConfigError, BoundaryGitError) as exc:
         click.echo(f"boundary: {exc}", err=True)
         sys.exit(2)
 

@@ -42,6 +42,12 @@ def test_check_exits_one_and_names_the_rule(tmp_path: Path):
     assert ".gitignore:1" in result.output
 
 
+def test_check_renders_git_failure(tmp_path: Path):
+    result = CliRunner().invoke(boundary_group, ["check", "--project-root", str(tmp_path)])
+    assert result.exit_code == 2
+    assert "boundary: git ls-files -z failed" in result.output
+
+
 def test_sync_writes_the_block(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     result = CliRunner().invoke(boundary_group, ["sync", "--project-root", str(repo)])
@@ -55,6 +61,15 @@ def test_sync_check_flag_reports_drift_without_writing(tmp_path: Path):
     result = CliRunner().invoke(boundary_group, ["sync", "--check", "--project-root", str(repo)])
     assert result.exit_code == 1
     assert (repo / ".gitignore").read_text() == ""
+
+
+def test_sync_renders_unsafe_gitignore_failure(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / "ignore-target").write_text("")
+    (repo / ".gitignore").symlink_to("ignore-target")
+    result = CliRunner().invoke(boundary_group, ["sync", "--project-root", str(repo)])
+    assert result.exit_code == 2
+    assert "boundary: cannot manage root .gitignore: root .gitignore is a symlink" in result.output
 
 
 def test_init_discovers_an_already_ignored_payload_root(tmp_path: Path):
