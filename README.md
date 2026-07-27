@@ -3,11 +3,12 @@
 ![Science](extra/Science.webp)
 
 Science is an agent workflow package and local project tooling for research
-work. Claude and Codex workflows are the primary interface; the `science` CLI
-handles validation, source-authored entities, graph materialization, evidence
-and belief summaries, cross-project sync, and project health. Its job is not to
-turn every claim green, but to keep support, dispute, fragility, and missing
-evidence honest and inspectable.
+work. Claude Code plugin workflows and generated Agent Skills for Codex, Crush,
+and OpenCode are the primary agent interfaces; the `science` CLI handles
+validation, source-authored entities, graph materialization, evidence and
+belief summaries, cross-project sync, and project health. Its job is not to turn
+every claim green, but to keep support, dispute, fragility, and missing evidence
+honest and inspectable.
 
 ## Philosophy
 
@@ -104,14 +105,15 @@ installer rather than copying its files.
 
 | Host | Start here |
 |---|---|
-| Claude | [Agent Workflows](docs/user-guide/agent-workflows.md) |
+| Claude Code | [Agent Workflows](docs/user-guide/agent-workflows.md) |
 | Codex | [Codex](docs/user-guide/codex.md) |
 | Crush | [Crush](docs/user-guide/crush.md) |
 | OpenCode | [OpenCode](docs/user-guide/opencode.md) |
 
-The common [coding-agent guide](docs/user-guide/coding-agents.md) covers
-`science agents install`, project and user scope, generated assets, and safe
-updates. The main manual is the [user guide](docs/user-guide/index.md).
+The shared [Agent Skills guide](docs/user-guide/coding-agents.md) for Codex,
+Crush, and OpenCode covers `science agents install`, project and user scope,
+generated assets, and safe updates. The main manual is the
+[user guide](docs/user-guide/index.md).
 
 ## Development
 

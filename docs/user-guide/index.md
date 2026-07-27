@@ -36,8 +36,8 @@ that order:
 | [Big-Picture Synthesis](big-picture-synthesis.md) | Generated per-project synthesis reports, question resolution, and topic-coverage knowledge gaps (distinct from the conceptual Big Picture chapter above). |
 | [Health And Validation](health-and-validation.md) | Validation, health checks, needs-review, freshness, and honest warning states. |
 | [CLI And Workflows](cli-and-workflows.md) | Command families, write classes, canonical vs migration surfaces, and shared CLI behavior. |
-| [Agent Workflows](agent-workflows.md) | Command map for Claude slash commands, Codex skills, and core CLI commands. |
-| [Coding Agents](coding-agents.md) | Shared generated-skill distribution, installation, updates, collision handling, and Windows guidance for Codex, Crush, and OpenCode. |
+| [Agent Workflows](agent-workflows.md) | Command map for Claude Code slash commands, shared Agent Skills, and core CLI commands. |
+| [Coding Agents](coding-agents.md) | Shared generated-skill distribution, installation, updates, collision handling, and Windows guidance for Codex, Crush, and OpenCode; Claude Code uses the native plugin workflow. |
 | [Codex](codex.md) | Codex skill discovery and explicit Science skill selection. |
 | [Crush](crush.md) | Crush skill discovery and the Science command palette. |
 | [OpenCode](opencode.md) | OpenCode skills, `/science-*` commands, and permission policy. |

@@ -51,6 +51,48 @@ def test_coding_agent_pages_are_in_user_guide_navigation() -> None:
         assert page in mkdocs
 
 
+def test_coding_agent_docs_distinguish_claude_code_support() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_introduction = readme.split("## Philosophy", 1)[0]
+
+    guide = (
+        ROOT / "docs" / "user-guide" / "coding-agents.md"
+    ).read_text(encoding="utf-8")
+    introduction = guide.split("## Distribution", 1)[0]
+
+    user_guide_introduction = (
+        ROOT / "docs" / "user-guide" / "introduction.md"
+    ).read_text(encoding="utf-8")
+    user_guide_overview = user_guide_introduction.split(
+        "## One Possible Research Loop", 1
+    )[0]
+
+    for host in ("Claude Code", "Codex", "Crush", "OpenCode"):
+        assert host in readme_introduction
+        assert host in introduction
+        assert host in user_guide_overview
+
+    index = (ROOT / "docs" / "user-guide" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    coding_agents_row = next(
+        line
+        for line in index.splitlines()
+        if line.startswith("| [Coding Agents]")
+    )
+    assert "Claude Code" in coding_agents_row
+
+    workflows = (
+        ROOT / "docs" / "user-guide" / "agent-workflows.md"
+    ).read_text(encoding="utf-8")
+    workflows_introduction = workflows.split(
+        "For command-family semantics", 1
+    )[0]
+    for host in ("Claude Code", "Codex", "Crush", "OpenCode"):
+        assert host in workflows_introduction
+    assert "| Intent | Claude Code | Agent Skill | CLI |" in workflows
+
+
 @pytest.fixture
 def generated(tmp_path: Path) -> GenerationResult:
     return generate_agent_assets(

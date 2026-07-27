@@ -1,9 +1,10 @@
 # Introduction
 
 Science is both an agent workflow package and local project tooling for research
-work. Claude and Codex workflows are the primary user interface; the `science`
-CLI supports durable file creation, validation, graph materialization, evidence
-summaries, synchronization, and project health.
+work. Claude Code plugin workflows and generated Agent Skills for Codex, Crush,
+and OpenCode are the primary agent interfaces; the `science` CLI supports
+durable file creation, validation, graph materialization, evidence summaries,
+synchronization, and project health.
 
 Science is skeptical by default:
 
@@ -15,16 +16,23 @@ Science is skeptical by default:
 
 ## How Users Enter The System
 
-Claude users invoke Science as slash commands:
+Claude Code users invoke Science plugin slash commands:
 
 ```text
 /science:<command>
 ```
 
-Codex users invoke generated skills:
+Codex and Crush users invoke generated skills:
 
 ```text
 science-<command>
+```
+
+OpenCode users can invoke the same generated skills or their generated slash
+command adapters:
+
+```text
+/science-<command>
 ```
 
 The CLI form is:

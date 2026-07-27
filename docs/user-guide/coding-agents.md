@@ -1,9 +1,10 @@
 # Coding Agents
 
-Science supports Codex, Crush, and OpenCode with one generated Agent Skills
-distribution. This page covers installation shared by all three hosts; use the
-host pages for [Codex](codex.md), [Crush](crush.md), and [OpenCode](opencode.md)
-behavior.
+Science supports Claude Code through its native plugin surface. Codex, Crush,
+and OpenCode share a separate generated Agent Skills distribution. This page
+covers installation for those three Agent Skills hosts; use the host pages for
+[Codex](codex.md), [Crush](crush.md), and [OpenCode](opencode.md) behavior. For
+Claude Code commands and workflows, see [Agent Workflows](agent-workflows.md).
 
 ## Distribution
 

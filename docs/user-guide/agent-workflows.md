@@ -1,6 +1,7 @@
 # Agent Workflows
 
-Claude and Codex workflows are the main user interface. The CLI is the durable
+Claude Code plugin workflows and the generated Agent Skills used by Codex,
+Crush, and OpenCode are the main agent interfaces. The CLI is the durable
 tooling layer that creates files, validates structure, builds graphs, and reads
 project state.
 
@@ -8,7 +9,7 @@ For command-family semantics, write classes, and canonical vs migration-only
 surfaces, see [CLI And Workflows](cli-and-workflows.md). This chapter maps user
 intent to agent workflows and representative CLI commands.
 
-| Intent | Claude | Codex | CLI |
+| Intent | Claude Code | Agent Skill | CLI |
 |---|---|---|---|
 | Start a project | `/science:create-project` | `science-create-project` | project scaffold workflows |
 | Adopt a project | `/science:import-project` | `science-import-project` | project scaffold workflows |
