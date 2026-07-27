@@ -1,4 +1,4 @@
-# `prereg.vehicle-prose-nondurable` — the prose half of the vehicle doctrine
+# `prereg.prose-path-nondurable` — the prose half of the vehicle doctrine
 
 Branch `prereg-prose-durability`, cut from `f2f5c5e3`.
 
@@ -79,11 +79,27 @@ thing to do, and it still left the document mis-certified.
 
 ## The rule
 
-**`prereg.vehicle-prose-nondurable`**, WARN, in
+**`prereg.prose-path-nondurable`**, WARN, in
 `validate/checks/prereg_vehicles.py` beside the rules it completes.
 
-> A frozen pre-registration names a repo-relative path in prose that resolves
-> to a real file or directory which git will not preserve.
+> A frozen pre-registration names a slash-containing repo-relative path in
+> prose that resolves to a real file or directory which git will not preserve.
+
+**Not `prereg.vehicle-*`.** The rule name is a public contract — it appears in
+JSON output, in suppression and acceptance entries, and in downstream
+documentation — and `vehicle-` would assert in the identifier the very
+inference the rule is forbidden from making. It lives in
+`prereg_vehicles.py` because that is where the durability doctrine is
+readable, not because a finding is about a vehicle.
+
+**Root-level paths are out of scope.** The grammar requires a `/`, so a path
+naming a file at the repository root — `input.parquet` — is never a candidate.
+This is a deliberate limit, not an oversight: the anchored grammar is what
+keeps ordinary backticked prose (`beta_1`, `README.md`, a bare filename) from
+becoming a candidate, and admitting bare filenames would make existence
+checking, not the grammar, the primary filter. Widening it would require
+re-running and re-certifying the corpus count below, so it is left for a
+separate change if the gap is ever observed to matter.
 
 ### Predicate
 
@@ -205,9 +221,9 @@ change with its own corpus story and is out of scope here.
 This is the rule's most important boundary, and an earlier draft overstated it.
 
 **What the rule proves, mechanically:** a frozen pre-registration names, in
-prose, a repo-relative path that resolves to a real file or directory which git
-will not preserve. Every term there is decided by the filesystem and by git,
-never by the checker's judgment.
+prose, a slash-containing repo-relative path that resolves to a real file or
+directory which git will not preserve. Every term there is decided by the
+filesystem and by git, never by the checker's judgment.
 
 **What the rule does not prove:** that the path is a substrate, that its
 contents were meant to be frozen, or that the document is self-contradictory.
