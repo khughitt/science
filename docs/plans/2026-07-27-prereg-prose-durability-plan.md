@@ -252,14 +252,21 @@ because the corpus count depends on it.
 
 Two subtleties carry their own tests because both are silent when wrong:
 
-- **Root-level paths must be re-checked after normalization.** `./input.parquet`
-  and `input.parquet/` both satisfy the grammar — the `/` is there when it is
-  matched — and both normalize to `input.parquet`, which the design puts out of
-  scope. The grammar alone does not enforce the scope; the post-normalization
-  check does.
-- **A fence is closed only by its own delimiter.** A `~~~` line inside a
-  ``` ``` ``` block is content. Toggling on any fence marker would end the block
-  early and expose every path in the rest of it.
+- **Normalization must be fully lexical, and the scope re-checked after it.**
+  `./input.parquet` and `input.parquet/` both satisfy the grammar — the `/` is
+  there when it is matched — and both denote a root-level path, which the design
+  puts out of scope. Ad-hoc string surgery is not enough: a single `./` strip
+  leaves `././input.parquet` as `./input.parquet` (still root-level), turns
+  `.//etc/passwd` into the absolute `/etc/passwd` (violating the function's own
+  contract), and leaves `build/./` as `build/.`. Use `PurePosixPath` for the
+  normalization, then reject absolute paths, `..` segments, and any result with
+  no `/`.
+- **A fence is closed only by its own delimiter, with nothing after it.** A
+  `~~~` line inside a ``` ``` ``` block is content, and per CommonMark a
+  *closing* fence may be followed only by whitespace — so ```` ```not-a-close ````
+  is content too. An opening fence may carry an info string (```` ```python ````),
+  which is why the trailing-text check applies only when a block is already open.
+  Either mistake ends the block early and exposes every path in the rest of it.
 
 **Files:**
 - Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py`
@@ -298,15 +305,37 @@ def test_candidate_paths_rejects_urls() -> None:
 def test_candidate_paths_rejects_root_level_names_in_every_normalized_form() -> None:
     """Root-level paths are out of scope, and the GRAMMAR does not enforce it.
 
-    `./input.parquet` and `input.parquet/` both contain a `/` when the grammar
-    matches them, and both normalize to a slash-free path. Only a re-check
-    after normalization keeps them out.
+    Every form here contains a `/` when the grammar matches it and denotes a
+    root-level path once normalized. `././input.parquet` and `build/./` are the
+    forms a single `./`-strip and `rstrip('/')` would let through, which is why
+    normalization must be fully lexical.
     """
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
 
-    body = "`input.parquet` and `./input.parquet` and `input.parquet/`"
+    body = (
+        "`input.parquet` and `./input.parquet` and `input.parquet/` "
+        "and `././input.parquet` and `build/./`"
+    )
 
     assert _candidate_paths(body) == []
+
+
+def test_candidate_paths_rejects_absolute_paths_however_they_are_spelled() -> None:
+    """`//etc/passwd` is POSIX-absolute too, and `PurePosixPath` knows it."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`/etc/passwd` and `//etc/passwd` and `../secrets/x`") == []
+
+
+def test_candidate_paths_collapses_redundant_separators() -> None:
+    """`.//etc/passwd` is relative `etc/passwd` in POSIX, not the absolute path.
+
+    A naive two-character `./` strip would emit `/etc/passwd` and break the
+    function's own repo-relative contract.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`.//etc/passwd` and `a//b/c`") == ["etc/passwd", "a/b/c"]
 
 
 def test_candidate_paths_ignores_fenced_blocks() -> None:
@@ -326,6 +355,24 @@ def test_candidate_paths_respects_fence_delimiters() -> None:
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
 
     body = "```\n`a/one.json`\n~~~\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_does_not_close_a_fence_on_a_marker_with_trailing_text() -> None:
+    """Per CommonMark a CLOSING fence may be followed only by whitespace."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```\n`a/one.json`\n```not-a-close\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_allows_an_opening_info_string() -> None:
+    """The trailing-text rule applies to CLOSERS only; ```python still opens."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```python\n`a/one.json`\n```\n\nafter `c/three.json`\n"
 
     assert _candidate_paths(body) == ["c/three.json"]
 
@@ -353,13 +400,6 @@ def test_candidate_paths_normalizes_leading_dot_slash_and_trailing_slash() -> No
     assert _candidate_paths("`./data/raw/` and `data/raw`") == ["data/raw"]
 
 
-def test_candidate_paths_rejects_absolute_and_parent_traversal() -> None:
-    """The `..` rejection is load-bearing: `.` is in the grammar's leading class."""
-    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
-
-    assert _candidate_paths("`/etc/passwd` and `../secrets/x`") == []
-
-
 def test_candidate_paths_deduplicates_preserving_first_appearance() -> None:
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
 
@@ -378,7 +418,9 @@ Expected: FAIL — `ImportError: cannot import name '_candidate_paths'`.
 
 Add `import re` to the imports in
 `science/src/science_tool/validate/checks/prereg_vehicles.py` (alphabetically
-after `hashlib`), then add these module constants below `_DATA_GATED_MARKER`:
+after `hashlib`), and extend the existing `pathlib` import to
+`from pathlib import Path, PurePosixPath`. Then add these module constants below
+`_DATA_GATED_MARKER`:
 
 ```python
 _RULE_PROSE = "prereg.prose-path-nondurable"
@@ -403,10 +445,13 @@ Then add the functions, after `_vehicle_entries`:
 def _strip_fenced_blocks(body: str) -> str:
     """Blank every line inside a fenced code block, delimiters included.
 
-    Tracks the OPENING delimiter. A fence is closed only by a run of the same
-    character at least as long, per CommonMark; a naive toggle on any fence
-    marker would treat a `~~~` line inside a ``` block as the closer and expose
-    every path in the remainder of the block.
+    Tracks the OPENING delimiter, because CommonMark closes a fence only with a
+    run of the SAME character, at least as long, followed by nothing but
+    whitespace. Two distinct mistakes both end a block early and expose every
+    path in its remainder: toggling on a `~~~` line inside a ``` block, and
+    closing on ```` ```not-a-close ````. The trailing-text rule applies only
+    when a block is already open -- an OPENING fence may carry an info string,
+    so ```` ```python ```` must still open.
     """
     lines: list[str] = []
     opener: str | None = None
@@ -417,7 +462,11 @@ def _strip_fenced_blocks(body: str) -> str:
             if opener is None:
                 opener = marker
                 continue
-            if marker[0] == opener[0] and len(marker) >= len(opener):
+            if (
+                marker[0] == opener[0]
+                and len(marker) >= len(opener)
+                and not line[match.end(1) :].strip()
+            ):
                 opener = None
                 continue
             # Neither an opener nor a valid closer: content inside the block.
@@ -428,29 +477,36 @@ def _strip_fenced_blocks(body: str) -> str:
 def _normalize(token: str) -> str | None:
     """A slash-containing, lexically repo-relative path, or None.
 
-    The `..` rejection is load-bearing: `.` is in the grammar's leading
-    character class, so `../secrets/x` matches the grammar and is stopped only
-    here. The absolute-path rejection is belt and braces -- a leading `/`
-    already fails the grammar -- and is kept so the guarantee does not depend
-    on one regex's first character class.
+    Normalization is delegated to `PurePosixPath` rather than done with string
+    surgery, because the ad-hoc version is wrong in three ways that all look
+    fine in isolation: stripping one leading `./` leaves `././input.parquet` as
+    `./input.parquet`, turns `.//etc/passwd` into the ABSOLUTE `/etc/passwd`
+    -- breaking this function's own contract -- and `rstrip('/')` leaves
+    `build/./` as `build/.`. `PurePosixPath` collapses `.` segments and
+    redundant separators, and knows that a leading `//` is POSIX-absolute.
 
-    The final `/` check is NOT redundant with the grammar. `./input.parquet`
-    and `input.parquet/` both satisfy the grammar, because the `/` is present
-    when it is matched, and both normalize to a root-level path. Root-level
-    paths are out of scope by design, so the scope is enforced here, after
-    normalization, rather than by the grammar alone.
+    Three rejections then apply, and none is redundant:
+
+    * absolute -- `PurePosixPath.is_absolute()` covers `/x` and `//x`.
+    * `..` -- load-bearing, since `.` is in the grammar's leading character
+      class, so `../secrets/x` matches the grammar and is stopped only here.
+    * no `/` after normalization -- the design puts root-level paths out of
+      scope, and the GRAMMAR CANNOT ENFORCE THAT: `./input.parquet` contains a
+      `/` when it is matched and denotes a root-level path once normalized.
     """
     candidate = token.strip()
-    if candidate.startswith("/"):
+    if not candidate:
         return None
-    if candidate.startswith("./"):
-        candidate = candidate[2:]
-    candidate = candidate.rstrip("/")
-    if not candidate or ".." in candidate.split("/"):
+    pure = PurePosixPath(candidate)
+    if pure.is_absolute():
         return None
-    if "/" not in candidate:
+    parts = [part for part in pure.parts if part != "."]
+    if not parts or any(part == ".." for part in parts):
         return None
-    return candidate
+    normalized = "/".join(parts)
+    if "/" not in normalized:
+        return None
+    return normalized
 
 
 def _candidate_paths(body: str) -> list[str]:
@@ -479,7 +535,7 @@ def _candidate_paths(body: str) -> list[str]:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 35 tests.
+Expected: PASS, 38 tests (21 existing + 3 + 14).
 
 - [ ] **Step 5: Commit**
 
@@ -655,7 +711,7 @@ def _nondurable_state(root: Path, relative: str) -> str | None:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 43 tests.
+Expected: PASS, 46 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -760,7 +816,12 @@ def test_the_prose_message_does_not_assert_the_path_is_a_substrate(project: Path
     # asserting a consequence git does not establish.
     assert "substrate" not in message
     assert f"vehicle {'build/out.json'!r}" not in message
+    # Git proves non-preservation. It does NOT prove that regenerating the file
+    # changes any bytes, or that no copy exists elsewhere, so the consequence
+    # must stay hedged and conditional.
     assert "irrecoverably" not in message
+    assert "would leave" not in message
+    assert "could leave" in message
     assert "git will not preserve it" in message
     assert "if this document's claims depend on" in message.lower()
 
@@ -876,7 +937,7 @@ def test_the_rule_is_silent_when_git_cannot_answer(
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: **exactly five failures**, matching the table above. The 43 earlier
+Expected: **exactly five failures**, matching the table above. The 46 earlier
 tests and the seven regression pins PASS. If a *different* count fails, stop and
 reconcile before implementing — a pin failing now means the current behaviour is
 not what this plan assumes.
@@ -900,11 +961,13 @@ def _prose_message(relative: str, candidate: str, state: str) -> str:
     return (
         f"{relative} is frozen and names {candidate!r} in prose, which is {state_text}, "
         f"so git will not preserve it. If this document's claims depend on {candidate!r}, "
-        f"it is frozen by path rather than by content, and regenerating or overwriting the "
-        f"file would leave the document certifying content that no longer exists: commit "
-        f"the file, commit and register its descriptor, or declare it as a content-addressed "
-        f"dataset entity and add it to 'vehicles:'. If the document does not depend on it -- "
-        f"an output location, an illustration -- record that and accept this finding."
+        f"it is frozen by path rather than by content: git holds no copy to compare "
+        f"against, so nothing here can detect a change to the file, and regenerating or "
+        f"overwriting it could leave the document certifying content that no longer exists. "
+        f"Commit the file, commit and register its descriptor, or declare it as a "
+        f"content-addressed dataset entity and add it to 'vehicles:'. If the document does "
+        f"not depend on it -- an output location, an illustration -- record that and accept "
+        f"this finding."
     )
 
 
@@ -980,7 +1043,7 @@ through the closing `yield from _check_vehicle(ctx, relative, entry)` with:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 55 tests. If an *existing* test now fails, the restructure
+Expected: PASS, 58 tests. If an *existing* test now fails, the restructure
 changed behaviour — revert Step 4 and redo it, do not edit the existing test.
 
 - [ ] **Step 6: Run the whole validate suite and typecheck**
@@ -1097,8 +1160,14 @@ scratch-directory variable — this must work in a bare shell.
 
 From `.worktrees/prereg-prose-durability/science`:
 
+The directory is **removed and recreated** so no report from an earlier run can
+be mistaken for this one, and the loop is **fail-fast** so a validator error
+stops certification rather than leaving a project silently unmeasured.
+
 ```bash
+set -euo pipefail
 CERT_DIR=/tmp/prose-path-nondurable-cert
+rm -rf "$CERT_DIR"
 mkdir -p "$CERT_DIR"
 for p in ~/d/natural-systems ~/d/protein-landscape ~/d/seq-feats \
          ~/d/3d-attention-bias ~/d/multiple-myeloma; do
@@ -1107,12 +1176,28 @@ for p in ~/d/natural-systems ~/d/protein-landscape ~/d/seq-feats \
 done
 ```
 
+If `science validate` exits non-zero for a project because that project has
+findings, capture the exit code explicitly rather than dropping `set -e` — the
+report is still written, and what must not be tolerated is a *missing* report.
+Confirm all five exist before continuing:
+
+```bash
+ls -1 "$CERT_DIR" | sort
+```
+
+Expected: exactly five `.json` files.
+
 - [ ] **Step 3: Measure findings AND pre-registration totals**
 
 Selecting by exact `rule` equality — substring counting on rendered output
 silently miscounts. The script also counts pre-registrations per project,
 because the results table's first column needs them and the JSON report does not
 carry that number.
+
+**It fails hard on a missing report.** An earlier draft treated an absent file
+as zero findings, which would have "certified" a project that was never
+validated — the certification would read identically whether `multiple-myeloma`
+has no findings or was skipped entirely.
 
 ```bash
 uv run --frozen python - <<'PY'
@@ -1136,9 +1221,12 @@ for name in PROJECTS:
     prereg_dir = ROOT / name / "entities" / "pre-registrations"
     preregs = sorted(prereg_dir.glob("*.md")) if prereg_dir.is_dir() else []
     report = CERT_DIR / f"{name}.json"
-    hits = []
-    if report.is_file():
-        hits = [r for r in json.loads(report.read_text())["results"] if r.get("rule") == RULE]
+    if not report.is_file():
+        raise SystemExit(
+            f"MISSING REPORT: {report}. Certification is invalid -- a project that was "
+            f"never validated must not be recorded as zero findings. Re-run Step 2."
+        )
+    hits = [r for r in json.loads(report.read_text())["results"] if r.get("rule") == RULE]
     docs = collections.Counter(r.get("path") for r in hits)
     note = "" if prereg_dir.is_dir() else "   (no entities/pre-registrations/ directory)"
     print(f"=== {name}: {len(preregs)} pre-registrations, {len(docs)} documents, {len(hits)} findings{note}")
@@ -1205,8 +1293,12 @@ directory, so `-m snapshot` produced no diff, as predicted.
 ## Filing
 
 `«fb-id»` against `check:prereg.vehicle-undeclared`, filed before
-implementation, closed as `addressed` — see the resolution recorded on the entry.
+implementation. **Status: open — closed in Task 8, which rewrites this section.**
 ```
+
+Write it as `open`. Task 8 closes the entry and then updates this section; a
+results document that claims a closure which has not happened is the same class
+of defect this whole branch is about.
 
 If the measured total differs from the design's, record the measured numbers
 here and investigate before merging. Do not edit the design to match a surprise —
@@ -1228,6 +1320,7 @@ Runs last, because the resolution cites what certification measured.
 
 **Files:**
 - Modify: `~/.config/science/feedback/«fb-id».yaml` (via CLI)
+- Modify: `docs/plans/2026-07-27-prereg-prose-durability-results.md` (`## Filing`)
 
 **Interfaces:**
 - Consumes: the `fb-` id from Task 1 and the measured numbers from Task 7.
@@ -1243,23 +1336,39 @@ uv run --frozen --directory science science feedback update «fb-id» \
   --resolution "Shipped prereg.prose-path-nondurable (WARN, ungated): a frozen pre-registration naming a slash-containing repo-relative path in prose that git will not preserve is now reported. Certified against the corpus at «n» findings across «n» documents. ADVISORY by construction -- it proves the durability fact and leaves the load-bearing question to the author, since a frozen document may legitimately name an ignored output directory -- so it is deliberately absent from every gate tier and the general completeness gap in vehicle-undeclared remains open by design."
 ```
 
-- [ ] **Step 2: Verify**
+- [ ] **Step 2: Verify the closure actually took**
 
 ```bash
 uv run --frozen --directory science science feedback show «fb-id»
 ```
 
-Expected: status `addressed`, resolution present, original detail intact.
+Expected: status `addressed`, resolution present, original detail intact. **Do
+not proceed to Step 3 unless this shows `addressed`** — Step 3 records the
+closure as fact, and recording an unverified state is the defect this branch
+exists to prevent.
 
-- [ ] **Step 3: No commit**
+- [ ] **Step 3: Update the results document to record the closure**
 
-The feedback store is outside the repository. `git status` must still be clean.
+In `docs/plans/2026-07-27-prereg-prose-durability-results.md`, replace the
+`## Filing` section's `Status: open — closed in Task 8, which rewrites this
+section.` with the confirmed state: `addressed`, plus the resolution's first
+sentence.
+
+- [ ] **Step 4: Commit the results-document update**
+
+```bash
+git add docs/plans/2026-07-27-prereg-prose-durability-results.md
+git commit -m "docs(feedback): close the prereg vehicle-completeness filing"
+```
+
+The feedback store itself is outside the repository, so this commit contains
+only the results-document change; `git status` must be clean afterwards.
 
 ---
 
 ## Final verification
 
-- [ ] `uv run --frozen pytest -q` from `science/` — full suite green, 55 tests
+- [ ] `uv run --frozen pytest -q` from `science/` — full suite green, 58 tests
       in `tests/validate/test_checks_prereg_vehicles.py`.
 - [ ] `uv run --frozen pytest -q -m snapshot` — no snapshot diff.
 - [ ] `git diff --check` — clean.

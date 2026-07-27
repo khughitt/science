@@ -92,14 +92,19 @@ inference the rule is forbidden from making. It lives in
 `prereg_vehicles.py` because that is where the durability doctrine is
 readable, not because a finding is about a vehicle.
 
-**Root-level paths are out of scope.** The grammar requires a `/`, so a path
-naming a file at the repository root — `input.parquet` — is never a candidate.
-This is a deliberate limit, not an oversight: the anchored grammar is what
-keeps ordinary backticked prose (`beta_1`, `README.md`, a bare filename) from
-becoming a candidate, and admitting bare filenames would make existence
-checking, not the grammar, the primary filter. Widening it would require
-re-running and re-certifying the corpus count below, so it is left for a
-separate change if the gap is ever observed to matter.
+**Root-level paths are out of scope**, enforced **after normalization** rather
+than by the grammar. The grammar requires a `/`, which is necessary but not
+sufficient: `./input.parquet`, `input.parquet/` and `././input.parquet` all
+contain one when the grammar matches them, and all denote a file at the
+repository root once normalized. Step 5 therefore re-checks for a `/` on the
+normalized value, and that check — not the grammar — is what defines the scope.
+
+The limit is deliberate. The `/` requirement is what keeps ordinary backticked
+prose (`beta_1`, `README.md`, a bare filename) from becoming a candidate at all,
+and admitting bare filenames would make existence checking rather than the
+grammar the primary filter. Widening it would require re-running and
+re-certifying the corpus count below, so it is left for a separate change if the
+gap is ever observed to matter.
 
 ### Predicate
 
@@ -134,16 +139,26 @@ For each pre-registration whose `frozen_because(...)` is not `None`:
    Existence filtering would in fact reject most of the extra candidates, but
    the survey count would then depend on what happens to be on disk, and the
    rule's grammar would be defined by its own false-positive filter.
-5. **Require a lexically repo-relative path.** Reject absolute paths, reject
-   any path with a `..` segment, and normalize a leading `./` away. Normalize
-   before both deduplication and comparison against `vehicles[].path`, so
-   `./data/x`, `data/x`, and `data/x/` are one path.
+5. **Normalize lexically, then require a slash-containing repo-relative path.**
+   Normalization is a full lexical resolution — `PurePosixPath` — not a leading
+   `./` strip and a trailing `/` strip. It runs before both deduplication and
+   comparison against `vehicles[].path`, so `./data/x`, `data/x`, and `data/x/`
+   are one path.
 
-   The `..` rejection is load-bearing, not belt and braces: `.` is in the
-   grammar's leading character class, so `../secrets/x` matches step 4 and is
-   stopped only here. The absolute-path rejection *is* belt and braces — a
-   leading `/` already fails step 4 — and is kept because the guarantee should
-   not depend on one regex's first character class.
+   Ad-hoc string surgery is wrong here in three ways that each look fine alone:
+   stripping one leading `./` leaves `././input.parquet` as `./input.parquet`,
+   still root-level; it turns `.//etc/passwd` into the **absolute**
+   `/etc/passwd`, violating the step's own contract; and `rstrip('/')` leaves
+   `build/./` as `build/.`. Lexical resolution also collapses redundant
+   separators, so `.//etc/passwd` correctly becomes relative `etc/passwd`.
+
+   Three rejections then apply to the normalized value, none redundant:
+
+   - **absolute** — covers `/x` and the POSIX `//x` form.
+   - **`..` segment** — load-bearing, since `.` is in the grammar's leading
+     character class, so `../secrets/x` matches step 4 and is stopped only here.
+   - **no `/`** — the root-level scope limit above, which the grammar cannot
+     enforce on its own.
 6. **Require existence.** Drop every token that does not resolve under the
    project root. This is the step that turns a heuristic extraction into a
    statement about a real file, so that whatever is reported afterwards is
@@ -390,10 +405,16 @@ the open `fb-2026-07-27-001`/`-002` MM30 boundary cluster; any migration of the
 | frozen doc, tracked prose path | silent |
 | frozen doc, path that does not resolve | silent |
 | frozen doc, path only inside a fenced block | silent |
+| frozen doc, fence closed by a different delimiter (`~~~` inside ```` ``` ````) | silent — the block has not ended |
+| frozen doc, fence marker with trailing text (```` ```not-a-close ````) | silent — a closer may carry only whitespace |
+| frozen doc, opening fence with an info string (```` ```python ````) | silent — the block still opens |
 | frozen doc, path only inside an HTML comment | silent |
 | frozen doc, span containing a command with a path argument | silent |
 | frozen doc, span containing a URL | silent — `:` is outside the grammar |
-| frozen doc, absolute path / path containing `..` | silent |
+| frozen doc, path containing `..` | silent |
+| frozen doc, absolute path as `/x` or `//x` | silent — both are POSIX-absolute |
+| frozen doc, root-level path as `x`, `./x`, `x/`, `././x`, `d/./` | silent — the post-normalization `/` check |
+| frozen doc, `.//a/b` | reported as `a/b` — redundant separators collapse |
 | frozen doc, path equal to a declared `vehicles[].path` | silent, and not double-reported |
 | frozen doc, `./data/x` where `data/x` is declared | silent — normalization before comparison |
 | frozen doc, ignored dir containing a declared *gitignored* vehicle | **one finding** — no parent-directory suppression |
