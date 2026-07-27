@@ -114,6 +114,37 @@ def test_build_input_manifest_excludes_curation_ledgers_by_default(tmp_path: Pat
     assert "doc/curations/curation-sweep-2026-07-16.md" not in manifest
 
 
+def test_build_input_manifest_excludes_case_store_final_and_operational_leaves(
+    tmp_path: Path,
+) -> None:
+    """Cases, their lock, and writer temps are generated state, not graph inputs.
+
+    The patterns stay leaf-specific: an unrelated document in the same directory and
+    ordinary project prose remain visible to graph freshness.
+    """
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    cases = tmp_path / "doc" / "audits" / "cases"
+    cases.mkdir(parents=True)
+    digest = "a" * 64
+    final_name = f"dataset-cached-field-drift--{digest}.md"
+    temp_name = f".{final_name}.0123456789abcdef0123456789abcdef.tmp"
+    (cases / final_name).write_text("---\ndoc_kind: audit-case\n---\n", encoding="utf-8")
+    (cases / ".ingest.lock").write_text("", encoding="utf-8")
+    (cases / temp_name).write_text("partial", encoding="utf-8")
+    (cases / "operator-notes.txt").write_text("durable note\n", encoding="utf-8")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")["files"]
+
+    generated = {
+        f"doc/audits/cases/{final_name}",
+        "doc/audits/cases/.ingest.lock",
+        f"doc/audits/cases/{temp_name}",
+    }
+    assert generated.isdisjoint(manifest), generated & manifest.keys()
+    assert "doc/audits/cases/operator-notes.txt" in manifest
+    assert "doc/notes.md" in manifest
+
+
 def test_build_input_manifest_excludes_next_steps_ledgers_but_keeps_durable_meta(tmp_path: Path) -> None:
     """The transient/durable split is NOT directory-aligned: `doc/meta/` mixes
     transient `*-next-steps.md` ledgers with durable crosswalks/memos, so the default
