@@ -68,6 +68,18 @@ def _copy_audit_fixture_without_retired_yaml(source: Path, target: Path) -> Path
     return target
 
 
+def _snapshot_task_store(project: Path) -> tuple[tuple[str, str, bytes], ...]:
+    tasks_dir = project / "tasks"
+    return tuple(
+        (
+            path.relative_to(tasks_dir).as_posix(),
+            "directory" if path.is_dir() else "file",
+            b"" if path.is_dir() else path.read_bytes(),
+        )
+        for path in sorted(tasks_dir.rglob("*"))
+    )
+
+
 def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     """Minimal project layout with one proposition-backed DOT edge + supporting tasks."""
     (tmp_path / "science.yaml").write_text("profile: research\n", encoding="utf-8")
@@ -78,7 +90,7 @@ def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     _write_proposition(tmp_path, "h1-prognosis-1", "a", "b")
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text("")
+    (tasks_dir / "active").mkdir()
     done_dir = tasks_dir / "done"
     done_dir.mkdir()
     blocks = [
@@ -116,12 +128,11 @@ def _build_project_without_propositions(tmp_path: Path) -> DagPaths:
 def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
     """Audit must not mutate tasks/ or create retired edge YAML."""
     paths = _build_project(tmp_path, with_drift=True)
-    active_before = (tmp_path / "tasks/active.md").read_text()
+    tasks_before = _snapshot_task_store(tmp_path)
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
 
-    active_after = (tmp_path / "tasks/active.md").read_text()
-    assert active_before == active_after, "active.md mutated under read-only audit"
+    assert _snapshot_task_store(tmp_path) == tasks_before, "task store mutated under read-only audit"
     assert not (paths.dag_dir / "h1-prognosis.edges.yaml").exists()
     assert isinstance(report, AuditReport)
     assert report.mutations == (), "read-only audit must not emit mutations"
@@ -130,12 +141,12 @@ def test_audit_is_read_only_by_default(tmp_path: Path) -> None:
 def test_audit_fix_is_noop_when_validation_passes(tmp_path: Path) -> None:
     """--fix remains validation-gated but has no retired-YAML mutation path."""
     paths = _build_project(tmp_path, with_drift=True)
-    active_before = (tmp_path / "tasks/active.md").read_text()
+    tasks_before = _snapshot_task_store(tmp_path)
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=True)
 
     assert report.mutations == ()
-    assert (tmp_path / "tasks/active.md").read_text() == active_before
+    assert _snapshot_task_store(tmp_path) == tasks_before
     assert not list(paths.dag_dir.glob(".audit-unpropagated-*.md"))
 
 
