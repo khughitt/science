@@ -251,19 +251,16 @@ def _title_end(text: str, start: int, stop: int) -> int | None:
         else:
             return None
     elif delimiter == "(":
-        depth = 1
         cursor += 1
         while cursor < stop:
             if text[cursor] == "\\":
                 cursor = _after_escape(cursor, stop)
                 continue
             if text[cursor] == "(":
-                depth += 1
-            elif text[cursor] == ")":
-                depth -= 1
-                if depth == 0:
-                    cursor += 1
-                    break
+                return None
+            if text[cursor] == ")":
+                cursor += 1
+                break
             cursor += 1
         else:
             return None
@@ -442,8 +439,10 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
     Reference uses are not resolved because their definition is scanned
     directly. A reference tail is consumed only when it is whitespace or one
     syntactically closed double-quoted, single-quoted, or parenthesized title
-    followed by whitespace. Continuation-line reference titles, autolinks, and
-    raw HTML are outside this interface. Malformed live syntax yields any safely
+    followed by whitespace; parentheses inside the last form must be escaped.
+    Label openers remain scan territory, while parsed destination and valid-title
+    ranges are skipped. Continuation-line reference titles, autolinks, and raw
+    HTML are outside this interface. Malformed live syntax yields any safely
     readable destination prefix so callers can fail closed.
     """
     for span_start, span_stop in prose_spans(text):
@@ -452,8 +451,14 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
             span_start,
             span_stop,
         )
+        suppressed_ranges: dict[int, int] = {}
         cursor = span_start
         while cursor < span_stop:
+            suppressed_until = suppressed_ranges.get(cursor)
+            if suppressed_until is not None:
+                cursor = max(cursor + 1, suppressed_until)
+                continue
+
             end = bracket_pairs.get(cursor)
             if end is None:
                 cursor += 1
@@ -475,4 +480,12 @@ def iter_markdown_destinations(text: str) -> Iterator[str]:
                 continue
             destination, next_cursor = parsed
             yield destination
-            cursor = max(after_label + 1, next_cursor)
+            suppressed_ranges[after_label] = max(
+                suppressed_ranges.get(after_label, after_label + 1),
+                next_cursor,
+            )
+            # Labels remain active scan territory: in CommonMark an inner link
+            # makes an enclosing link opener inactive, and the migration gate
+            # must still see that inner destination. The registered range begins
+            # only after this label, covering parsed syntax/destination/title.
+            cursor += 1

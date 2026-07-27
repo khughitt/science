@@ -175,7 +175,7 @@ def test_invalid_reference_tail_does_not_hide_later_inline_destination(
     [
         '"title [literal](double-quoted.md)"',
         "'title [literal](single-quoted.md)'",
-        "(title [literal](parenthesized.md))",
+        r"(title \(escaped\) [literal]\(hidden.md\))",
     ],
 )
 def test_valid_reference_title_hides_link_like_title_text(title: str) -> None:
@@ -183,6 +183,52 @@ def test_valid_reference_title_hides_link_like_title_text(title: str) -> None:
 
     assert list(markdown_scan.iter_markdown_destinations(text)) == [
         "https://example.test",
+    ]
+
+
+def test_nested_parentheses_invalidate_reference_title_and_expose_inner_link() -> None:
+    text = (
+        "[ref]: https://example.test "
+        "(title [literal](parenthesized.md))\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "https://example.test",
+        "parenthesized.md",
+    ]
+
+
+@pytest.mark.parametrize("outer_prefix", ["", "!"])
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_nested_link_in_outer_label_is_scanned(
+    outer_prefix: str,
+    outer_destination: str,
+) -> None:
+    text = (
+        f"{outer_prefix}[outer [inner](nested.md)]"
+        f"({outer_destination})"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "nested.md",
+    ]
+
+
+def test_nested_label_scan_excludes_outer_destination_and_valid_title() -> None:
+    outer_destination = "https://example.test/[destination](hidden.md)"
+    text = (
+        "[outer [inner](nested.md)]"
+        f"(<{outer_destination}> "
+        '"title [literal](hidden-title.md)")'
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        outer_destination,
+        "nested.md",
     ]
 
 
@@ -238,6 +284,19 @@ def test_deeply_nested_non_link_brackets_have_linear_scanner_work() -> None:
 
     assert list(markdown_scan.iter_markdown_destinations(text)) == []
     assert text.indexed_reads <= 4 * len(text)
+
+
+def test_deeply_nested_link_labels_preserve_linear_work_and_inner_detection() -> None:
+    value = "[inner](nested.md)"
+    for _ in range(128):
+        value = f"[outer {value}](https://example.test)"
+    text = _CountingText(value)
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        *(["https://example.test"] * 128),
+        "nested.md",
+    ]
+    assert text.indexed_reads <= 8 * len(text)
 
 
 def test_scans_this_repositorys_own_plan_corpus() -> None:

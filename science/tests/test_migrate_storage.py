@@ -359,7 +359,7 @@ def test_apply_refuses_live_link_after_invalid_reference_tail_without_writing(
     [
         '"title [literal](double-quoted.md)"',
         "'title [literal](single-quoted.md)'",
-        "(title [literal](parenthesized.md))",
+        r"(title \(escaped\) [literal]\(hidden.md\))",
     ],
 )
 def test_plan_ignores_link_like_text_in_valid_reference_title_without_writing(
@@ -383,6 +383,79 @@ def test_plan_ignores_link_like_text_in_valid_reference_title_without_writing(
     plan = migrate.plan_migration(tasks_dir, today=TODAY)
 
     assert plan.refusals == []
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+def test_apply_refuses_link_inside_invalid_parenthesized_reference_title_without_writing(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Invalid reference title",
+                description=(
+                    "[ref]: https://example.test "
+                    "(title [literal](parenthesized.md))"
+                ),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*parenthesized\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert "https://example.test" not in str(exc_info.value)
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+@pytest.mark.parametrize("outer_prefix", ["", "!"])
+@pytest.mark.parametrize(
+    "outer_destination",
+    ["https://example.test", "/root.md", "#anchor"],
+)
+def test_apply_refuses_nested_link_inside_exempt_outer_label_without_writing(
+    tmp_path: Path,
+    outer_prefix: str,
+    outer_destination: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Nested link",
+                description=(
+                    f"{outer_prefix}[outer [inner](nested.md)]"
+                    f"({outer_destination})"
+                ),
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*nested\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert outer_destination not in str(exc_info.value)
     assert source.read_bytes() == before
     assert not (tasks_dir / "active").exists()
     assert not (tasks_dir / "done").exists()
