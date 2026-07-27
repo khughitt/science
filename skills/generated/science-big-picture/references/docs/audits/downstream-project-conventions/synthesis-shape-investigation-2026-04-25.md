@@ -24,7 +24,7 @@ Catalog of every synthesis-area file across the four projects. Frontmatter sampl
 
 > **Post-cycle correction (2026-04-25, after Task 2 execution):** The catalog below highlights `orphan_question_count: 23` only on protein-landscape's rollup and is silent on mm30/NS rollups — readers may infer PL was the only project with orphan counts on rollup. Phase 3 migration showed otherwise: mm30 carried `orphan_question_count: 6` and natural-systems carried `orphan_question_count: 56` on their rollups too. Q1=C migration moved orphan counts rollup→threads atomically across all three. The shape-driven `synthesis-type-and-id-emergent-threads` rule handled all cases correctly. Gap A.5 below should read "all three projects with synthesis areas carry orphan counts on rollup, not just PL."
 
-### natural-systems (`/home/keith/d/natural-systems`)
+### natural-systems (`~/d/natural-systems`)
 
 Audit said: no synthesis files. **Wrong.** NS has a complete synthesis area:
 
@@ -39,7 +39,7 @@ Audit said: no synthesis files. **Wrong.** NS has a complete synthesis area:
 
 Per-hyp files are **partially** Plan-#4 canonical (`type: synthesis` + `synthesis:<slug>` id), missing only `report_kind:`. Rollup + emergent-threads use the legacy `type: report` shape.
 
-### mm30 (`/home/keith/d/r/mm30`)
+### mm30 (`~/d/r/mm30`)
 
 | File | `id:` | `type:` | `report_kind:` |
 |---|---|---|---|
@@ -49,7 +49,7 @@ Per-hyp files are **partially** Plan-#4 canonical (`type: synthesis` + `synthesi
 
 mm30 is **uniformly drifted** — every file is `type: report` with `report_kind` already present. The `id:` form for the emergent-threads file (`report:synthesis-emergent-threads`) was **not cataloged in the audit** and is not handled by any current rule.
 
-### protein-landscape (`/home/keith/d/protein-landscape`)
+### protein-landscape (`~/d/protein-landscape`)
 
 | File | `id:` | `type:` | `report_kind:` | Notes |
 |---|---|---|---|---|

@@ -5,8 +5,8 @@
 **Scope:** `science` tool (model, validation, graph attention) + a new epistemic-entity `review` skill + a downstream authoring convention (`operationalized_by:`)
 **Anchor question:** `science-meta:question:15-claim-operationalization-drift`
 
-> Paths are relative to the repo root (`~/d/science`, canonically
-> `/mnt/ssd/Dropbox/science`). The tool lives under `science/src/science_tool/`
+> Paths are relative to the repo root (`~/d/science`). The tool lives under
+> `science/src/science_tool/`
 > and the model under `science/model/src/science_model/`.
 > Source-authored entities now live under `entities/` after the Plan 3 hard cutover;
 > the graph loader still explicitly scans `research/packages`, `doc/datasets`,

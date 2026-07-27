@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import science_tool.agent_assets as agent_assets
+import yaml
 from click.testing import CliRunner
 
 from science_tool.agent_assets import (
@@ -53,11 +54,7 @@ def _norm(text: str) -> str:
 
 
 def _file_bytes(root: Path) -> dict[str, bytes]:
-    return {
-        path.relative_to(root).as_posix(): path.read_bytes()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
 
 
 def _frontmatter_name(path: Path) -> str:
@@ -74,6 +71,16 @@ def _methodology_names() -> set[str]:
     expected = {f"science-{_frontmatter_name(path)}" for path in sorted((ROOT / "skills").glob("*/SKILL.md"))}
     expected.add("science-scientific-writing")
     return expected
+
+
+def _canonical_skill_names() -> set[str]:
+    return set(
+        re.findall(
+            r"^- `([a-z0-9-]+)`: `skills/[A-Za-z0-9._/-]+\.md`$",
+            (ROOT / "skills" / "INDEX.md").read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+    )
 
 
 def _write_minimal_generation_repo(
@@ -627,10 +634,7 @@ def test_generate_agent_assets_emits_all_commands_support_and_methodology(
 def test_opencode_adapters_are_thin_and_namespaced(
     generated: GenerationResult,
 ) -> None:
-    expected = {
-        f"science-{path.stem}"
-        for path in sorted((ROOT / "commands").glob("*.md"))
-    }
+    expected = {f"science-{path.stem}" for path in sorted((ROOT / "commands").glob("*.md"))}
     assert set(generated.opencode_command_paths) == expected
     for name, path in generated.opencode_command_paths.items():
         text = path.read_text(encoding="utf-8")
@@ -638,6 +642,50 @@ def test_opencode_adapters_are_thin_and_namespaced(
         assert f"Load and execute the `{name}` skill" in text
         assert "$ARGUMENTS" in text
         assert "## Science Command Preamble" not in text
+
+
+def test_opencode_adapter_frontmatter_is_valid_yaml(
+    generated: GenerationResult,
+) -> None:
+    canonical_descriptions = {
+        f"science-{path.stem}": agent_assets._parse_command(path)[1]
+        for path in sorted((ROOT / "commands").glob("*.md"))
+    }
+
+    for name, path in generated.opencode_command_paths.items():
+        frontmatter = path.read_text(encoding="utf-8").split("---\n", 2)[1]
+        assert yaml.safe_load(frontmatter) == {"description": canonical_descriptions[name]}
+
+
+def test_generated_command_skill_loads_name_emitted_packages(
+    generated: GenerationResult,
+) -> None:
+    emitted_names = set(generated.skill_paths)
+    canonical_names = _canonical_skill_names()
+    command_names = {command_to_skill_name(path) for path in sorted((ROOT / "commands").glob("*.md"))}
+    for command_name in sorted(command_names):
+        text = generated.skill_paths[command_name].read_text(encoding="utf-8")
+        explicit_loads = set(re.findall(r"`([a-z][a-z0-9-]+)` skill", text))
+        assert explicit_loads <= emitted_names, command_name
+        unresolved = {name for name in canonical_names if f"`{name}`" in text}
+        assert unresolved == set(), command_name
+
+
+def test_generated_tree_has_no_toolkit_checkout_file_references(
+    generated: GenerationResult,
+) -> None:
+    checkout_file = re.compile(
+        r"(?:~/d/science|/home/keith/d/science|/mnt/ssd/Dropbox/science)"
+        r"/(?:docs|references|templates|skills)/[A-Za-z0-9._/-]+"
+    )
+    machine_path = re.compile(r"(?:/home/keith/d/|/mnt/ssd/Dropbox/science)")
+    root = next(iter(generated.skill_paths.values())).parent.parent
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert checkout_file.search(text) is None, path.relative_to(root)
+        assert machine_path.search(text) is None, path.relative_to(root)
 
 
 def test_generation_prunes_stale_generated_skills_and_adapters(
@@ -674,6 +722,89 @@ def test_generation_rejects_undeclared_files_in_output_roots(
         generate_agent_assets(ROOT, skills_output, commands_output)
 
     assert undeclared.read_text(encoding="utf-8") == "Static content\n"
+
+
+def test_generation_rejects_nested_undeclared_file_without_mutation(
+    tmp_path: Path,
+) -> None:
+    skills_output = tmp_path / "skills"
+    commands_output = tmp_path / "commands"
+    generate_agent_assets(ROOT, skills_output, commands_output)
+    undeclared = skills_output / "science-status" / "notes.txt"
+    undeclared.write_text("User content\n", encoding="utf-8")
+    before_skills = _file_bytes(skills_output)
+    before_commands = _file_bytes(commands_output)
+
+    with pytest.raises(ValueError, match="undeclared generated output file"):
+        generate_agent_assets(ROOT, skills_output, commands_output)
+
+    assert _file_bytes(skills_output) == before_skills
+    assert _file_bytes(commands_output) == before_commands
+
+
+def test_generation_rejects_symlinked_index_without_overwriting_target(
+    tmp_path: Path,
+) -> None:
+    skills_output = tmp_path / "skills"
+    commands_output = tmp_path / "commands"
+    generate_agent_assets(ROOT, skills_output, commands_output)
+    target = tmp_path / "index-target.md"
+    target.write_text("User index\n", encoding="utf-8")
+    index = skills_output / "INDEX.md"
+    index.unlink()
+    index.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        generate_agent_assets(ROOT, skills_output, commands_output)
+
+    assert index.is_symlink()
+    assert target.read_text(encoding="utf-8") == "User index\n"
+
+
+@pytest.mark.parametrize("output_kind", ("skills", "commands"))
+def test_generation_rejects_symlinked_output_root_without_overwriting_target(
+    tmp_path: Path,
+    output_kind: str,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+    target = tmp_path / f"{output_kind}-target"
+    target.mkdir()
+    marker = target / "marker.txt"
+    marker.write_text("User content\n", encoding="utf-8")
+    linked_output = tmp_path / f"{output_kind}-output"
+    linked_output.symlink_to(target, target_is_directory=True)
+    skills_output = linked_output if output_kind == "skills" else tmp_path / "skills-output"
+    commands_output = linked_output if output_kind == "commands" else tmp_path / "commands-output"
+
+    with pytest.raises(ValueError, match="symlink"):
+        generate_agent_assets(repo_root, skills_output, commands_output)
+
+    assert linked_output.is_symlink()
+    assert marker.read_text(encoding="utf-8") == "User content\n"
+
+
+def test_generation_rejects_symlinked_adapter_without_overwriting_target(
+    tmp_path: Path,
+) -> None:
+    skills_output = tmp_path / "skills"
+    commands_output = tmp_path / "commands"
+    generate_agent_assets(ROOT, skills_output, commands_output)
+    target = tmp_path / "adapter-target.md"
+    target.write_text("User adapter\n", encoding="utf-8")
+    adapter = commands_output / "science-status.md"
+    adapter.unlink()
+    adapter.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        generate_agent_assets(ROOT, skills_output, commands_output)
+
+    assert adapter.is_symlink()
+    assert target.read_text(encoding="utf-8") == "User adapter\n"
 
 
 def test_generated_distribution_index_is_neutral(
@@ -755,9 +886,10 @@ def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(
 
     expected_strings = (
         "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
-        "`proteomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration`",
+        "`science-bio`",
+        "`science-study-design`",
         "Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling",
-        "`statistics-time-series-and-longitudinal-models`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration`",
+        "`science-statistics`",
     )
     for expected in expected_strings:
         assert expected in text
@@ -771,7 +903,7 @@ def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs
 
     expected_strings = (
         "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
-        "`study-design-power-floor-acknowledgement`, `study-design-replicate-count-justification`, `study-design-sensitivity-arbitration`",
+        "`science-study-design`",
         "treat dyads as dependent observations",
     )
     for expected in expected_strings:

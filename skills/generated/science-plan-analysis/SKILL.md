@@ -16,7 +16,7 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load the `science-command-preamble` skill. Use its
    `references/role-prompts/research-assistant.md` role prompt and its aspect definitions.
-3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `science-literature`, `science-literature`, `science-epistemics`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -149,7 +149,7 @@ HARKing. Instead, focus the plan on the *implementation* gates the pre-reg did
 not enumerate: data access and provenance, common-time-axis / unit conversions,
 numerical-precision audits, and leakage checks. If you believe a locked
 criterion is actually wrong, treat it as an amendment question rather than a
-planning decision — load `study-design-prereg-amendment-vs-fresh` to decide
+planning decision — load `science-study-design` to decide
 whether the change warrants a formal amendment or a fresh pre-registration, and
 route it there instead of silently re-planning around it.
 
@@ -178,24 +178,24 @@ reason.
 
 | Trigger phrase / data signal | Required leaves |
 |---|---|
-| RNA-seq DE, count matrix, TPM/FPKM, GEO expression cohort | `transcriptomics`, matching expression sub-leaf (`transcriptomics-bulk-rnaseq-qa`, `transcriptomics-microarray-qa`, or `transcriptomics-scrna-qa`), `study-design-power-floor-acknowledgement`, `study-design-bias-vs-variance-decomposition` |
-| Single-cell RNA-seq, h5ad, pseudobulk, per-cell model | `transcriptomics`, `transcriptomics-scrna-qa`, `study-design-power-floor-acknowledgement`, `study-design-bias-vs-variance-decomposition` |
-| Cell-type proportions, deconvolution, mixture fractions | `transcriptomics-scrna-qa` when scRNA-derived, `statistics-compositional-data`, `study-design-power-floor-acknowledgement` |
-| Microarray, probe IDs, Affymetrix/Agilent/Illumina | `transcriptomics`, `transcriptomics-microarray-qa`, `study-design-bias-vs-variance-decomposition` |
-| Targeted-panel mutation frequency, cBioPortal, GENIE, MAF | `genomics-somatic-mutation-qa`, `study-design-power-floor-acknowledgement`, `study-design-bias-vs-variance-decomposition` |
-| SBS signatures, TMB, dN/dS, dNdScv, driver ranking | `genomics-somatic-mutation-qa`, `genomics-mutational-signatures-qa`, `genomics-driver-selection`, `study-design-power-floor-acknowledgement`, `study-design-sensitivity-arbitration` |
-| CN segments, scWGS/DLP+ per-cell CN, SV/breakpoints, AmpliconArchitect/AmpliconClassifier, ecDNA | `genomics-copy-number-sv-qa`, `study-design-power-floor-acknowledgement`, `study-design-sensitivity-arbitration` |
-| Likelihood model fit, AIC/BIC/LRT, Wright-Fisher/Moran/binomial-segregation, selection-vs-neutral | `statistics-likelihood-model-comparison`, `statistics-population-genetics-likelihood`, `study-design-sensitivity-arbitration` |
-| CRISPR/RNAi, DepMap, LINCS/L1000, drug response | `functional-genomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration` |
-| Survival, Cox, Weibull, censored outcomes across cohorts | `statistics-survival-and-hierarchical-models`, `study-design-power-floor-acknowledgement`, `study-design-sensitivity-arbitration` |
-| Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ | `proteomics-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration` |
-| Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling | `statistics-time-series-and-longitudinal-models`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration` |
-| Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP | `study-design-power-floor-acknowledgement`, `study-design-replicate-count-justification`, `study-design-sensitivity-arbitration`; treat dyads as dependent observations and do not use iid pair tests as the confirmatory inference |
-| Fractions/proportions constrained to sum to one | `statistics-compositional-data`, `study-design-bias-vs-variance-decomposition` |
-| Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `ml-embeddings-manifold-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration` |
-| Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `proteomics-protein-sequence-structure-qa`; add `ml-embeddings-manifold-qa` when embeddings/manifolds are analyzed |
-| Manual/LLM annotation, claim extraction, taxonomy labels | `epistemics-annotation-curation-qa`, `literature-evaluation`, `literature-citation-discipline` |
-| Profile likelihood, nuisance parameters, optimiser choice, ODE / numerical integration, parameter recovery, synthetic-recovery gate | `study-design-estimator-certification` |
+| RNA-seq DE, count matrix, TPM/FPKM, GEO expression cohort | `science-bio`, matching expression sub-leaf (`science-bio`, `science-bio`, or `science-bio`), `science-study-design`, `science-study-design` |
+| Single-cell RNA-seq, h5ad, pseudobulk, per-cell model | `science-bio`, `science-bio`, `science-study-design`, `science-study-design` |
+| Cell-type proportions, deconvolution, mixture fractions | `science-bio` when scRNA-derived, `science-statistics`, `science-study-design` |
+| Microarray, probe IDs, Affymetrix/Agilent/Illumina | `science-bio`, `science-bio`, `science-study-design` |
+| Targeted-panel mutation frequency, cBioPortal, GENIE, MAF | `science-bio`, `science-study-design`, `science-study-design` |
+| SBS signatures, TMB, dN/dS, dNdScv, driver ranking | `science-bio`, `science-bio`, `science-bio`, `science-study-design`, `science-study-design` |
+| CN segments, scWGS/DLP+ per-cell CN, SV/breakpoints, AmpliconArchitect/AmpliconClassifier, ecDNA | `science-bio`, `science-study-design`, `science-study-design` |
+| Likelihood model fit, AIC/BIC/LRT, Wright-Fisher/Moran/binomial-segregation, selection-vs-neutral | `science-statistics`, `science-statistics`, `science-study-design` |
+| CRISPR/RNAi, DepMap, LINCS/L1000, drug response | `science-bio`, `science-study-design`, `science-study-design` |
+| Survival, Cox, Weibull, censored outcomes across cohorts | `science-statistics`, `science-study-design`, `science-study-design` |
+| Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ | `science-bio`, `science-study-design`, `science-study-design` |
+| Wearable, behavioral, actigraphy, EMA, symptom diary, sensor time series, sleep/activity rhythms, or cross-lag coupling | `science-statistics`, `science-study-design`, `science-study-design`, and `science-study-design` |
+| Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP | `science-study-design`, `science-study-design`, `science-study-design`; treat dyads as dependent observations and do not use iid pair tests as the confirmatory inference |
+| Fractions/proportions constrained to sum to one | `science-statistics`, `science-study-design` |
+| Embedding clustering, UMAP, HDBSCAN, Mapper, CKA, Moran's I | `science-ml`, `science-study-design`, `science-study-design` |
+| Protein PLM, UniProt/Pfam/CATH/Foldseek/MMseqs labels | `science-bio`; add `science-ml` when embeddings/manifolds are analyzed |
+| Manual/LLM annotation, claim extraction, taxonomy labels | `science-epistemics`, `science-literature`, `science-literature` |
+| Profile likelihood, nuisance parameters, optimiser choice, ODE / numerical integration, parameter recovery, synthetic-recovery gate | `science-study-design` |
 
 ## Workflow
 
@@ -293,7 +293,7 @@ the profile's smoothness structure.
 For **every validation probe** you plan, write the answer to: *what result would make this probe
 fail?* A probe with no such answer is evidence-shaped ceremony — it will discharge the obligation
 without ever having tested it. See
-``study-design-estimator-certification`` guidance from the `science-study-design` skill.
+``science-study-design`` guidance from the `science-study-design` skill.
 
 In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
 
@@ -317,14 +317,14 @@ gate by name rather than restating it, so the two artifacts share one gate defin
 
 Use these as spot checks when applying the command:
 
-1. **MM30 scRNA pseudobulk / entropy analysis** - include `transcriptomics`, `transcriptomics-scrna-qa`, `study-design-replicate-count-justification`, `study-design-power-floor-acknowledgement`, `study-design-bias-vs-variance-decomposition`, `study-design-sensitivity-arbitration`, and `statistics-compositional-data` if cell fractions enter the analysis.
-2. **cBioPortal targeted-panel mutation frequency or dN/dS analysis** - include `genomics-somatic-mutation-qa`, `genomics-mutational-signatures-qa` for TMB and signatures, `genomics-driver-selection` for dN/dS and driver ranking, `study-design-power-floor-acknowledgement`, `study-design-bias-vs-variance-decomposition`, and `study-design-sensitivity-arbitration`.
-3. **Natural-systems annotation/curation agreement analysis** - include `epistemics-annotation-curation-qa`, `literature-evaluation`, `literature-citation-discipline`, `scientific-writing`, plus `study-design-bias-vs-variance-decomposition` and `study-design-power-floor-acknowledgement` when agreement statistics are verdict-bearing.
-4. **Protein-landscape heldout benchmark or embedding-manifold analysis** - include `proteomics-protein-sequence-structure-qa`, `ml-embeddings-manifold-qa`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration`.
-5. **ecDNA selection-vs-neutral on per-cell scWGS (e.g. Bafna-style binomial segregation on DLP+)** - include `genomics-copy-number-sv-qa` for the per-cell CN calls, `statistics-population-genetics-likelihood` for the WF/Moran/segregation likelihoods, `statistics-likelihood-model-comparison` for the AIC/BIC/LRT comparison, plus `study-design-power-floor-acknowledgement` and `study-design-sensitivity-arbitration`. A single-cohort selection signal is cohort-scoped pending independent replication.
-6. **Proteomics or phosphoproteomics cohort contrast** - include `proteomics-qa`, `study-design-bias-vs-variance-decomposition`, and `study-design-sensitivity-arbitration`; add `study-design-power-floor-acknowledgement` when null or weak effects are verdict-bearing.
-7. **Wearable/sensor or symptom-diary time-series analysis** - include `statistics-time-series-and-longitudinal-models`, `study-design-bias-vs-variance-decomposition`, `study-design-power-floor-acknowledgement`, and `study-design-sensitivity-arbitration`.
-8. **Disease graph edge-prediction or dyadic network analysis** - include `study-design-power-floor-acknowledgement`, `study-design-replicate-count-justification`, and `study-design-sensitivity-arbitration`; require a permutation design such as QAP/MRQAP or node-label permutation when edges share nodes.
+1. **MM30 scRNA pseudobulk / entropy analysis** - include `science-bio`, `science-bio`, `science-study-design`, `science-study-design`, `science-study-design`, `science-study-design`, and `science-statistics` if cell fractions enter the analysis.
+2. **cBioPortal targeted-panel mutation frequency or dN/dS analysis** - include `science-bio`, `science-bio` for TMB and signatures, `science-bio` for dN/dS and driver ranking, `science-study-design`, `science-study-design`, and `science-study-design`.
+3. **Natural-systems annotation/curation agreement analysis** - include `science-epistemics`, `science-literature`, `science-literature`, `science-scientific-writing`, plus `science-study-design` and `science-study-design` when agreement statistics are verdict-bearing.
+4. **Protein-landscape heldout benchmark or embedding-manifold analysis** - include `science-bio`, `science-ml`, `science-study-design`, `science-study-design`, and `science-study-design`.
+5. **ecDNA selection-vs-neutral on per-cell scWGS (e.g. Bafna-style binomial segregation on DLP+)** - include `science-bio` for the per-cell CN calls, `science-statistics` for the WF/Moran/segregation likelihoods, `science-statistics` for the AIC/BIC/LRT comparison, plus `science-study-design` and `science-study-design`. A single-cohort selection signal is cohort-scoped pending independent replication.
+6. **Proteomics or phosphoproteomics cohort contrast** - include `science-bio`, `science-study-design`, and `science-study-design`; add `science-study-design` when null or weak effects are verdict-bearing.
+7. **Wearable/sensor or symptom-diary time-series analysis** - include `science-statistics`, `science-study-design`, `science-study-design`, and `science-study-design`.
+8. **Disease graph edge-prediction or dyadic network analysis** - include `science-study-design`, `science-study-design`, and `science-study-design`; require a permutation design such as QAP/MRQAP or node-label permutation when edges share nodes.
 
 ## Process Reflection
 

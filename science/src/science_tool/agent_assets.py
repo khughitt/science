@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -39,6 +41,15 @@ _RELATIVE_MARKDOWN_LINK_RE = re.compile(
 )
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 _AGENT_COMMAND_RE = re.compile(r"`?/science:([a-z0-9-]+)`?")
+_CANONICAL_SKILL_ENTRY_RE = re.compile(
+    r"^- `([a-z0-9-]+)`: `(skills/[A-Za-z0-9._/-]+\.md)`$",
+    re.MULTILINE,
+)
+_BACKTICKED_NAME_RE = re.compile(r"`([a-z][a-z0-9-]+)`")
+_TOOLKIT_CHECKOUT_RESOURCE_RE = re.compile(
+    r"`(?:~/d/science|/home/keith/d/science|/mnt/ssd/Dropbox/science)"
+    r"/((?:docs|references|templates|skills)/[A-Za-z0-9._/-]+\.md)`"
+)
 
 
 @dataclass(frozen=True)
@@ -86,21 +97,58 @@ def generate_agent_assets(
     command_paths = sorted((repo_root / "commands").glob("*.md"))
     methodology_packages = _methodology_packages(repo_root)
     _validate_generated_skill_namespace(command_paths, methodology_packages)
-    expected_skill_names = {
-        *(command_to_skill_name(path) for path in command_paths),
-        *(package.name for package in methodology_packages),
-        COMMAND_SUPPORT_SKILL,
-    }
-    expected_adapter_names = {
-        command_to_skill_name(path) for path in command_paths
-    }
-    _prepare_output_roots(
-        skills_output_root,
-        expected_skill_names,
-        opencode_commands_output_root,
-        expected_adapter_names,
-    )
     skill_owners = _skill_owner_map(methodology_packages, repo_root)
+    canonical_skill_owners = _canonical_skill_owner_names(
+        repo_root,
+        skill_owners,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="science-agent-assets-") as temporary:
+        staging_root = Path(temporary)
+        staging_skills = staging_root / "skills"
+        staging_commands = staging_root / "commands"
+        staged = _generate_agent_assets_into(
+            repo_root,
+            staging_skills,
+            staging_commands,
+            command_paths,
+            methodology_packages,
+            skill_owners,
+            canonical_skill_owners,
+        )
+        _prepare_output_roots(
+            skills_output_root,
+            _output_plan(staging_skills),
+            opencode_commands_output_root,
+            _output_plan(staging_commands),
+        )
+        _replace_output_from_staging(staging_skills, skills_output_root)
+        _replace_output_from_staging(
+            staging_commands,
+            opencode_commands_output_root,
+        )
+        return GenerationResult(
+            skill_paths={
+                name: skills_output_root / path.relative_to(staging_skills) for name, path in staged.skill_paths.items()
+            },
+            opencode_command_paths={
+                name: opencode_commands_output_root / path.relative_to(staging_commands)
+                for name, path in staged.opencode_command_paths.items()
+            },
+        )
+
+
+def _generate_agent_assets_into(
+    repo_root: Path,
+    skills_output_root: Path,
+    opencode_commands_output_root: Path,
+    command_paths: list[Path],
+    methodology_packages: tuple[MethodologyPackage, ...],
+    skill_owners: Mapping[Path, str],
+    canonical_skill_owners: Mapping[str, str],
+) -> GenerationResult:
+    skills_output_root.mkdir(parents=True)
+    opencode_commands_output_root.mkdir(parents=True)
     dependencies: dict[str, set[str]] = {}
 
     skill_paths = _generate_command_skills(
@@ -108,6 +156,7 @@ def generate_agent_assets(
         skills_output_root,
         command_paths,
         skill_owners,
+        canonical_skill_owners,
         dependencies,
     )
     skill_paths.update(
@@ -225,6 +274,25 @@ def _skill_owner_map(
     return owners
 
 
+def _canonical_skill_owner_names(
+    repo_root: Path,
+    skill_owners: Mapping[Path, str],
+) -> dict[str, str]:
+    index = (repo_root / "skills" / "INDEX.md").read_text(encoding="utf-8")
+    owners: dict[str, str] = {}
+    for name, raw_path in _CANONICAL_SKILL_ENTRY_RE.findall(index):
+        owner = _methodology_skill_name(
+            repo_root,
+            Path(raw_path),
+            skill_owners,
+        )
+        previous = owners.get(name)
+        if previous is not None and previous != owner:
+            raise ValueError(f"canonical skill identity has multiple generated owners for {name}: {previous}, {owner}")
+        owners[name] = owner
+    return owners
+
+
 def _validate_dependencies(
     dependencies: Mapping[str, set[str]],
     emitted_names: set[str],
@@ -271,62 +339,100 @@ def _validate_output_root(
 
 def _prepare_output_roots(
     skills_output_root: Path,
-    expected_skill_names: set[str],
+    expected_skills: Mapping[Path, str],
     opencode_commands_output_root: Path,
-    expected_adapter_names: set[str],
+    expected_commands: Mapping[Path, str],
 ) -> None:
-    _validate_skills_output_entries(skills_output_root)
-    _validate_opencode_output_entries(opencode_commands_output_root)
+    _validate_skills_output_entries(skills_output_root, expected_skills)
+    _validate_opencode_output_entries(
+        opencode_commands_output_root,
+        expected_commands,
+    )
     skills_output_root.mkdir(parents=True, exist_ok=True)
     opencode_commands_output_root.mkdir(parents=True, exist_ok=True)
-    for entry in skills_output_root.iterdir():
-        if (
-            entry.name.startswith("science-")
-            and entry.is_dir()
-            and entry.name not in expected_skill_names
-        ):
+
+
+def _output_plan(output_root: Path) -> dict[Path, str]:
+    return {
+        path.relative_to(output_root): ("directory" if path.is_dir() else "file")
+        for path in sorted(output_root.rglob("*"))
+    }
+
+
+def _validate_skills_output_entries(
+    output_root: Path,
+    expected: Mapping[Path, str],
+) -> None:
+    _validate_output_root_type(output_root)
+    if not output_root.exists():
+        return
+    expected_packages = {relative.parts[0] for relative in expected if relative.parts[0].startswith("science-")}
+    for entry in sorted(output_root.rglob("*")):
+        relative = entry.relative_to(output_root)
+        _reject_symlink(entry)
+        top_level = relative.parts[0]
+        if top_level.startswith("science-") and top_level not in expected_packages:
+            package_root = output_root / top_level
+            if not package_root.is_dir():
+                raise ValueError(f"undeclared generated output file: {package_root}")
+            continue
+        _validate_expected_output_entry(entry, relative, expected)
+
+
+def _validate_opencode_output_entries(
+    output_root: Path,
+    expected: Mapping[Path, str],
+) -> None:
+    _validate_output_root_type(output_root)
+    if not output_root.exists():
+        return
+    for entry in sorted(output_root.rglob("*")):
+        relative = entry.relative_to(output_root)
+        _reject_symlink(entry)
+        stale_adapter = (
+            len(relative.parts) == 1
+            and relative.name.startswith("science-")
+            and relative.suffix == ".md"
+            and relative not in expected
+            and entry.is_file()
+        )
+        if stale_adapter:
+            continue
+        _validate_expected_output_entry(entry, relative, expected)
+
+
+def _validate_output_root_type(output_root: Path) -> None:
+    _reject_symlink(output_root)
+    if output_root.exists() and not output_root.is_dir():
+        raise ValueError(f"generated output root is not a directory: {output_root}")
+
+
+def _reject_symlink(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"generated output contains symlink: {path}")
+
+
+def _validate_expected_output_entry(
+    entry: Path,
+    relative: Path,
+    expected: Mapping[Path, str],
+) -> None:
+    expected_kind = expected.get(relative)
+    actual_kind = "directory" if entry.is_dir() else "file"
+    if expected_kind != actual_kind:
+        raise ValueError(f"undeclared generated output file: {entry}")
+
+
+def _replace_output_from_staging(
+    staging_root: Path,
+    output_root: Path,
+) -> None:
+    for entry in output_root.iterdir():
+        if entry.is_dir():
             shutil.rmtree(entry)
-    for entry in opencode_commands_output_root.iterdir():
-        if (
-            entry.name.startswith("science-")
-            and entry.suffix == ".md"
-            and entry.is_file()
-            and entry.stem not in expected_adapter_names
-        ):
+        else:
             entry.unlink()
-
-
-def _validate_skills_output_entries(output_root: Path) -> None:
-    if not output_root.exists():
-        return
-    if not output_root.is_dir():
-        raise ValueError(f"generated output root is not a directory: {output_root}")
-    for entry in output_root.iterdir():
-        declared = (
-            entry.name == "INDEX.md"
-            and entry.is_file()
-            or entry.name.startswith("science-")
-            and entry.is_dir()
-            and not entry.is_symlink()
-        )
-        if not declared:
-            raise ValueError(f"undeclared generated output file: {entry}")
-
-
-def _validate_opencode_output_entries(output_root: Path) -> None:
-    if not output_root.exists():
-        return
-    if not output_root.is_dir():
-        raise ValueError(f"generated output root is not a directory: {output_root}")
-    for entry in output_root.iterdir():
-        declared = (
-            entry.name.startswith("science-")
-            and entry.suffix == ".md"
-            and entry.is_file()
-            and not entry.is_symlink()
-        )
-        if not declared:
-            raise ValueError(f"undeclared generated output file: {entry}")
+    shutil.copytree(staging_root, output_root, dirs_exist_ok=True)
 
 
 def _generate_command_skills(
@@ -334,6 +440,7 @@ def _generate_command_skills(
     output_root: Path,
     command_paths: list[Path],
     skill_owners: Mapping[Path, str],
+    canonical_skill_owners: Mapping[str, str],
     dependencies: dict[str, set[str]],
 ) -> dict[str, Path]:
     preamble = _load_command_preamble(repo_root)
@@ -360,6 +467,7 @@ def _generate_command_skills(
                 preamble=preamble,
                 role=role,
                 skill_owners=skill_owners,
+                canonical_skill_owners=canonical_skill_owners,
                 dependencies=dependencies[name],
             ),
             encoding="utf-8",
@@ -378,9 +486,7 @@ def _generate_opencode_adapters(
     for command_path in command_paths:
         name = command_to_skill_name(command_path)
         if name not in skill_paths:
-            raise ValueError(
-                f"missing generated skill dependency for OpenCode adapter {name}: {name}"
-            )
+            raise ValueError(f"missing generated skill dependency for OpenCode adapter {name}: {name}")
         _, description, _ = _parse_command(command_path)
         path = output_root / f"{name}.md"
         path.write_text(
@@ -393,10 +499,11 @@ def _generate_opencode_adapters(
 
 
 def _render_opencode_adapter(name: str, description: str) -> str:
+    quoted_description = json.dumps(description, ensure_ascii=False)
     return "\n".join(
         (
             "---",
-            f"description: {description}",
+            f"description: {quoted_description}",
             "---",
             "",
             f"Load and execute the `{name}` skill using this input:",
@@ -523,15 +630,21 @@ def _render_command_skill(
     preamble: str,
     role: str,
     skill_owners: Mapping[Path, str],
+    canonical_skill_owners: Mapping[str, str],
     dependencies: set[str],
 ) -> str:
-    rewritten_preamble = preamble.replace("<role>", role)
+    rewritten_preamble = _rewrite_canonical_skill_names(
+        preamble.replace("<role>", role),
+        canonical_skill_owners,
+        dependencies,
+    )
     rewritten_body = _COMMAND_PREAMBLE_INSTRUCTION_RE.sub("", body)
     rewritten_body = _rewrite_command_toolkit_references(
         rewritten_body,
         repo_root,
         skill_dir,
         skill_owners,
+        canonical_skill_owners,
         dependencies,
     )
     rewritten_body = _rewrite_agent_specific_text(rewritten_body)
@@ -564,6 +677,7 @@ def _rewrite_command_toolkit_references(
     repo_root: Path,
     skill_dir: Path,
     skill_owners: Mapping[Path, str],
+    canonical_skill_owners: Mapping[str, str],
     dependencies: set[str],
 ) -> str:
     bundled: set[Path] = set()
@@ -633,7 +747,31 @@ def _rewrite_command_toolkit_references(
         )
         return f"`{reference}`"
 
+    def replace_checkout_resource(match: re.Match[str]) -> str:
+        canonical_path = Path(match.group(1))
+        if canonical_path.parts[0] == "skills":
+            dependency = _methodology_skill_name(
+                repo_root,
+                canonical_path,
+                skill_owners,
+            )
+            dependencies.add(dependency)
+            return f"the `{dependency}` skill"
+        reference = _bundle_command_resource(
+            repo_root,
+            skill_dir,
+            canonical_path,
+            bundled,
+            skill_owners,
+            dependencies,
+        )
+        return f"`{reference}`"
+
     text = _BARE_RESOURCE_PATH_RE.sub(replace_bare_resource, text)
+    text = _TOOLKIT_CHECKOUT_RESOURCE_RE.sub(
+        replace_checkout_resource,
+        text,
+    )
     text = text.replace(
         "`${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md`",
         "the Science Command Preamble above",
@@ -645,7 +783,28 @@ def _rewrite_command_toolkit_references(
     text = _RELATIVE_MARKDOWN_LINK_RE.sub(replace_relative_link, text)
     text = _PLUGIN_SKILL_PATH_RE.sub(replace_plugin_skill, text)
     text = _BARE_SKILL_PATH_RE.sub(replace_bare_skill, text)
-    return _PLUGIN_RESOURCE_PATH_RE.sub(replace_plugin_resource, text)
+    text = _PLUGIN_RESOURCE_PATH_RE.sub(replace_plugin_resource, text)
+    return _rewrite_canonical_skill_names(
+        text,
+        canonical_skill_owners,
+        dependencies,
+    )
+
+
+def _rewrite_canonical_skill_names(
+    text: str,
+    canonical_skill_owners: Mapping[str, str],
+    dependencies: set[str],
+) -> str:
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        dependency = canonical_skill_owners.get(name)
+        if dependency is None:
+            return match.group(0)
+        dependencies.add(dependency)
+        return f"`{dependency}`"
+
+    return _BACKTICKED_NAME_RE.sub(replace, text)
 
 
 def _methodology_skill_name(

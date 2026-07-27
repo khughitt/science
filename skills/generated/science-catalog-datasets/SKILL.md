@@ -16,7 +16,7 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load the `science-command-preamble` skill. Use its
    `references/role-prompts/research-assistant.md` role prompt and its aspect definitions.
-3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `science-literature`, `science-literature`, `science-epistemics`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -123,7 +123,7 @@ allows any `click>=8.1`, so a freshly locked consumer can emit either form. The
 root `--version` probe is the permanent bootstrap surface; do not replace it with
 a preflight subcommand, which an older CLI could not recognize either.
 
-> This command is the front half of the dataset arc. Current dataset lifecycle, reach, QA, and prioritization semantics are documented in `~/d/science/docs/user-guide/entities.md`. Operationalization is `plan-pipeline`; commons promotion is deferred and gated on `access.verified`.
+> This command is the front half of the dataset arc. Current dataset lifecycle, reach, QA, and prioritization semantics are documented in `references/docs/user-guide/entities.md`. Operationalization is `plan-pipeline`; commons promotion is deferred and gated on `access.verified`.
 
 Catalog datasets for the user input.
 If no argument is provided, run the full gap-driven loop against the project's active questions and hypotheses.

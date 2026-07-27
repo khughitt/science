@@ -16,7 +16,7 @@ Before executing any research command:
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load the `science-command-preamble` skill. Use its
    `references/role-prompts/research-assistant.md` role prompt and its aspect definitions.
-3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `literature-evaluation`, `literature-citation-discipline`, `epistemics-proposition-graph-reasoning`).
+3. Load the `science-scientific-writing` skill. For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant generated methodology router skills (e.g. `science-literature`, `science-literature`, `science-epistemics`).
 4. Read project context from current entity roots:
    - `entities/questions/` for active research questions.
    - `entities/hypotheses/` for hypotheses.
@@ -144,7 +144,7 @@ Do not create belief-test plans, benchmark outcomes, graph edges, or benchmark g
 Read:
 
 1. the `science-data-management` skill
-2. `~/d/science/docs/user-guide/benchmarking.md`
+2. `references/docs/user-guide/benchmarking.md`
 3. `entities/datasets/`, if present
 4. `entities/questions/`, `entities/hypotheses/`, and `entities/propositions/`, if present
 
