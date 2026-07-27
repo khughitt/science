@@ -11,11 +11,18 @@
 > `report-only` tier) and Spec 3 (second-pass validation, confirmation counts,
 > promotion to task) are out of scope here and consume this contract.
 >
-> **Revision 2** closes seven contract gaps found in review of revision 1: arrival-order
+> **Revision 2** closed seven contract gaps found in review of revision 1: arrival-order
 > dependence in `FindingRecord` (§4), an unserializable `rule` field and an unfrozen
 > fingerprint (§1, §3), the missing producer enumeration (§9), an incomplete acceptance
 > migration contract (§10), an unspecified output schema (§11), an overbroad
 > producer-completeness claim (§Grounding, §6), and a lifecycle left open (§4, §8).
+>
+> **Revision 3** closes the consequences of making those contracts concrete: report
+> provenance (§11), non-identity qualifiers on occurrences (§4), the transition graph and
+> review record (§4), `--apply` abort semantics (§10), a transaction mechanism that
+> matches its guarantee (§8), section ordering (§6, §11), the `dataset.anomaly.*`
+> enumeration (§9), fingerprint type constraints and filename validation (§3), and two
+> internal contradictions (§Out of scope, §Open questions).
 
 ## Motivation
 
@@ -100,12 +107,28 @@ Verified against the tree at `8db7aad9`.
   `causal_leaning_identification_coverage` whose `denominator > 0 and numerator <
   denominator`, and the total adds `(1 if lag_total else 0)`.
 
-- **Two producers emit rows that count as zero.** `legacy_task_type` and
-  `invalid_entity_aspects` appear in `count_issues`'s `row_sections` — so their shape is
-  strictly validated — but are **absent from the return expression**, alongside the two
-  deliberate exclusions (`accepted_validation`, `unwired_checks`). Whether that is intent
-  or a defect is a semantic question a generic ratchet cannot answer, which is why §9
-  enumerates.
+- **Two producers emit rows that count as zero, and it is an omission.**
+  `legacy_task_type` and `invalid_entity_aspects` appear in `count_issues`'s
+  `row_sections` — so their shape is strictly validated — but are **absent from the
+  return expression**, alongside the two deliberate exclusions (`accepted_validation`,
+  `unwired_checks`). Both producers return `InstrumentResult[…Finding]`
+  (`legacy_task_type.py:18`, `invalid_entity_aspects.py:18`): they emit findings, not
+  informational measurements. There is no third exclusion class; §9 counts them.
+
+- **`unresolved_refs` already groups by target.** `collect_unresolved_refs`
+  (`unresolved_refs.py:70`) builds `by_target` and emits one `UnresolvedRef` row per
+  unresolved reference, carrying `mention_count` and a sorted `sources` list. Moving
+  citing files to occurrence evidence is therefore a representation change with **no
+  count effect**.
+
+- **A declared code table has already drifted from what is emitted.**
+  `dataset_anomalies.py` emits twelve distinct codes but `DATASET_ANOMALY_CODES` (`:13`)
+  declares eleven — `dataset_access_invalid` (`:197`) is emitted, is asserted by
+  `tests/test_health.py:1868`, and is undeclared. The guard at `test_health.py:1804` is
+  `expected.issubset(set(DATASET_ANOMALY_CODES))`, a subset assertion that by
+  construction cannot catch an emitted-but-undeclared code. This is registry failure
+  condition #2 of §6 occurring in the tree today, and it is the concrete argument for
+  deriving the registry from declarations that producers must construct findings *from*.
 
 - **Four streams are genuinely mixed and must be split, not classified wholesale.**
   `layered_claims` carries two finding lists (`migration_issues`,
@@ -248,6 +271,13 @@ prose, `message`, `severity`, `evidence`, line numbers, and list positions.
 - qualifiers: only rule-declared identity keys, others dropped
 - absent optional fields are omitted, never encoded as null
 
+**Identity-qualifier value types are constrained** to `str`, `bool`, `int`, and arrays
+of those. Floats, nulls, and nested objects are rejected at rule declaration, so no
+identity ever depends on float formatting or on a nested key order. Arrays are encoded in
+**declaration order, not sorted** — order is meaningful where a rule declares a sequence —
+and integers are encoded as bare decimal digits with no sign for zero and no leading
+zeros.
+
 **Canonical encoding:** UTF-8 JSON, object keys sorted lexicographically by code point,
 no insignificant whitespace, no non-ASCII escaping.
 
@@ -260,9 +290,19 @@ stored on every record; ingestion refuses a record whose fingerprint version it 
 implement.
 
 **Filename mapping:** `doc/audits/cases/<rule-slug>--<digest>.md`, carrying the **full**
-digest. `<rule-slug>` is derived from `rule_id`, which is itself a digest input, so the
-prefix can never disagree with the record; it exists purely so the directory is
-browsable. No truncation, and therefore no collision handling to design.
+digest. No truncation, and therefore no collision handling to design.
+
+`<rule-slug>` is a frozen transformation of `rule_id`: lowercase, `.` and `_` replaced by
+`-`, any character outside `[a-z0-9-]` replaced by `-`, runs of `-` collapsed, leading and
+trailing `-` stripped, truncated to 60 characters. The slug exists purely so the directory
+is browsable; it is derived from a digest input, so it can never carry information the
+record does not.
+
+**Loaders validate the filename against the contents.** A case whose filename slug does
+not equal `slug(record.rule_id)`, or whose filename digest does not equal
+`record.finding_id`, or whose `finding_id` does not equal the fingerprint recomputed from
+its own immutable fields, is a **load error** — never a silent repair or rename. A renamed
+or hand-edited case file must fail loudly rather than acquire a new identity.
 
 ### 4. `FindingRecord` — the canonical stored case
 
@@ -295,38 +335,71 @@ discarded, and a severity change would have no defined effect.
 | `observed_at` | Timestamp. |
 | `severity` | Severity **as observed**. Severity is not identity, so it varies per occurrence legitimately. |
 | `message` | As emitted. |
+| `qualifiers` | The **complete** observed qualifier object, not only the identity subset. Non-identity qualifiers are recorded here or they are not recorded at all. |
 | `evidence` | As emitted, including locations and line numbers. |
 
 Current severity for display and for acceptance scoping is the **maximum severity over
 occurrences from the most recent ingestion of each producer** — a defined function of the
 log, not a field anyone writes.
 
-**Transitions** — append-only, one per explicit lifecycle act:
+**Transitions** — append-only, one per lifecycle act:
 
 | Field | Meaning |
 |---|---|
-| `from_status`, `to_status` | The transition. |
+| `from_status` | The prior status. `None` **only** on the genesis transition. |
+| `to_status` | The new status. |
 | `actor` | Human identity, or a trusted producer id. |
 | `at` | Timestamp. |
 | `reason` | Required free text. |
 | `task_ref` | Required on a transition to `promoted`, forbidden otherwise. |
 
-**Lifecycle rulings** (revision 1 left these open):
+**Every record opens with a genesis transition `None → proposed`**, written by ingestion
+when the record is created. The log is therefore never empty and `status` needs no
+special case for "no transitions yet".
+
+**The transition graph is closed.** Any pair not in this table is rejected:
+
+| From | Permitted to |
+|---|---|
+| *(genesis)* | `proposed` |
+| `proposed` | `confirmed`, `dismissed` |
+| `confirmed` | `dismissed`, `promoted` |
+| `dismissed` | `proposed` *(reopen)* |
+| `promoted` | `dismissed` |
+
+**Lifecycle rulings:**
 
 - Dismissed cases are **retained indefinitely** in Spec 1. Nothing is deleted.
 - **Re-detection appends an occurrence and never changes status.** A dismissed case that
-  reappears stays dismissed, with a new occurrence recording that it reappeared.
-- **Reopening, dismissal, confirmation, and promotion are explicit transitions**, each
-  written to the log by a human or a trusted actor.
-- `status` is **derived from the last transition** and validated against the stored
-  value; disagreement is a load error, not a repair.
+  reappears stays dismissed, with a new occurrence recording that it reappeared. Reopening
+  is an explicit `dismissed → proposed` transition by an actor, never a side effect of
+  detection.
+- `status` is **derived from the last transition** and validated against the stored value;
+  disagreement is a load error, not a repair.
 - `promoted_task` is present **if and only if** `status == "promoted"`, enforced by a
   model validator.
 
-Confirmation counts are derived from distinct eligible reviews and retain their notes.
-**They are never a confidence, never aggregated, never a belief input.** Review
-eligibility and the promotion threshold are Spec 3's subject; Spec 1 fixes only the
-storage shape so Spec 3 cannot reopen the schema.
+**Review** — the record Spec 3's confirmation counts are derived from. A note alone cannot
+support a count, so the shape is fixed here rather than in Spec 3:
+
+| Field | Meaning |
+|---|---|
+| `review_id` | Stable id, `sha256("science.review.v1\n" + reviewer_ref + "\0" + run_ref + "\0" + finding_id)`. |
+| `reviewer_kind` | `human` \| `agent` \| `deterministic`. |
+| `reviewer_ref` | Human identity, or the agent role. Never a bare model name. |
+| `lens` | The analytical lens, where the reviewer had one. Required when `reviewer_kind == "agent"`. |
+| `model` | Model provenance, where applicable. Recorded, never an eligibility input on its own. |
+| `run_ref` | The run this review was produced in. |
+| `at` | Timestamp. |
+| `outcome` | `confirms` \| `refutes` \| `abstains`. |
+| `note` | Required concise reasoning. |
+
+Confirmation counts are derived from **distinct eligible reviews** and retain their notes.
+**They are never a confidence, never aggregated, never a belief input.** What makes a
+review *eligible* — and the promotion threshold — is Spec 3's subject; Spec 1 fixes the
+storage shape so Spec 3 cannot reopen the schema. `lens` and `reviewer_ref` are required
+fields precisely so Spec 3 can define eligibility over lens diversity rather than raw
+count.
 
 A standing caution for Spec 3, recorded here because it constrains that threshold: *N
 reviewers drawn from the same model family are strongly correlated.* Lens diversity buys
@@ -378,6 +451,18 @@ FindingRule(
 )
 ```
 
+Sections are themselves declared, with an explicit order — sorting by section *name* would
+alphabetize and destroy the order `HEALTH_CHECKS` encodes today:
+
+```python
+FindingSection(id="datasets", title="Datasets", section_order=300)
+```
+
+**Producer registration carries a metrics schema.** A producer that emits metrics declares
+their type at registration, and the derived registry validates each producer's metrics
+object against it. Without this, §11's `ProducerMetrics` would be an untyped escape hatch —
+which is the same defect as `dataset_anomalies: list[dict]`, reintroduced one layer up.
+
 - **`severities` is a permitted set, not a single default.** Existing rules legitimately
   vary by context.
 - **`identity_qualifiers`** names the identity-bearing subset consumed by §3. Qualifiers
@@ -406,7 +491,8 @@ The derived registry **fails early** on:
 4. A rule declaring producer remediation without a registered trusted handler.
 5. A registered producer returning anything except the uniform result channel.
 6. Project configuration attempting to add or override a toolkit rule.
-7. Two rules claiming the same `display_order` within a `section`.
+7. Two rules claiming the same `display_order` within a `section`, or two sections
+   claiming the same `section_order`.
 
 **Completeness guards, one per producer namespace.** The existing guards cover two
 namespaces by two different tests (`test_check_registry_is_complete.py` for
@@ -463,11 +549,25 @@ Because this is a trust boundary crossed by untrusted output, ingestion enforces
   refused.
 - **Symlink refusal.** Any path resolving through a symlink is refused, including the
   report path itself.
-- **Transactional application.** The whole report is validated before anything is
-  written; on any failure nothing is written. Each case file is then written atomically
-  (temp file plus rename).
-- **Idempotency.** Re-ingesting an identical report is a no-op, enforced by occurrence
-  idempotency keys (§4), not by inspecting timestamps.
+- **Serialized application under a project-scoped lock.** Ingestion takes an exclusive
+  lock on the project's case directory for its duration; concurrent ingestions queue
+  rather than interleave.
+- **Full prevalidation, then atomic per-record writes.** The whole report is validated
+  before anything is written; on a *validation* failure nothing is written. Each case file
+  is then written atomically (temp file plus rename).
+
+  **This is not a multi-file transaction, and the spec does not claim one.** A crash after
+  three renames leaves three committed cases. That is acceptable **only because recovery
+  is idempotent**: re-running the same ingestion re-applies the whole report, and every
+  already-written record is a no-op by occurrence idempotency key. Partial I/O failure is
+  therefore recoverable by retry, and retry is the documented procedure. A journal or
+  directory-level commit protocol is deliberately not built; it would buy atomicity this
+  design does not need.
+- **Idempotency, and idempotency conflicts.** Re-ingesting an identical report is a no-op,
+  enforced by occurrence idempotency keys (§4), never by inspecting timestamps. An
+  incoming occurrence whose idempotency key already exists **with different observation
+  content is an error**, not a silent retry — identical keys must mean identical
+  observations, or the key means nothing.
 
 ### 9. Migration ledger
 
@@ -479,7 +579,7 @@ intentional observable difference.
 
 | Producer / report key | Count today | Findings after | Metrics retained | Change |
 |---|---|---|---|---|
-| `unresolved_refs` | `len(rows)` | `refs.unresolved`, subject = the unresolved ref as `IdentifierSubject(namespace="reference")`; citing files are occurrence locations | — | dedup: N files citing one broken ref become **1** case, not N |
+| `unresolved_refs` | `len(rows)` | `refs.unresolved`, subject = the unresolved ref as `IdentifierSubject(namespace="reference")` | — | net unchanged; the producer already groups by target (`unresolved_refs.py:70`), so citing files simply become evidence locations |
 | `unregistered_ref_kinds` | `len(rows)` | `refs.unregistered-kind`, `IdentifierSubject(namespace="reference-kind")` | — | — |
 | `lingering_tags_lines` | `len(rows)` | `tags.lingering`, `PathSubject` + semantic pointer | — | line numbers move to occurrence metadata |
 | `agent_context` | `len(rows)` | `agent-context.*` | — | — |
@@ -487,7 +587,7 @@ intentional observable difference.
 | `entity_identity` | `len(rows)` | `identity.entity` | — | — |
 | `legacy_task_type` | **0** (validated, never summed) | `task.legacy-type`, `EntitySubject` | — | **counts change: rows now count.** Approved — the current zero is undocumented and inconsistent with every sibling row section |
 | `invalid_entity_aspects` | **0** (validated, never summed) | `entity.invalid-aspects`, `EntitySubject` | — | **counts change: rows now count.** Same approval |
-| `dataset_anomalies` | `len(rows)` | `dataset.anomaly.*` — typed for the first time | — | untyped `list[dict]` gains a schema; sub-rules enumerated during the plan |
+| `dataset_anomalies` | `len(rows)` | twelve declared rules, enumerated below | — | untyped `list[dict]` gains a schema; the undeclared twelfth code is regularized |
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
@@ -503,9 +603,35 @@ intentional observable difference.
 | `data_audit` `Violation` | not in health | `data.violation.*`, subject per violation quadrant | — | `proposed_target` stays producer-internal (§7) |
 | `data_audit` warning `AuditNote` | not in health | `data.audit-note` | non-warning notes stay notes | only warning-bearing notes convert |
 
-Two entries are net-new count changes (`legacy_task_type`, `invalid_entity_aspects`);
-two are net-neutral reclassifications (`archive_lag`, coverage); one is a dedup
-reduction (`unresolved_refs`). Everything else preserves observable counts.
+**Dataset anomaly rules.** `DATASET_ANOMALY_CODES` declares eleven codes while the
+producer emits twelve; `dataset_access_invalid` is emitted at `dataset_anomalies.py:197`
+and declared nowhere. All twelve become declared rules, and the drift is closed by
+construction because producers must build findings from declaration objects (§6).
+
+| Rule id | Subject | Identity qualifiers |
+|---|---|---|
+| `dataset.consumed-but-unverified` | `EntitySubject` (dataset) | — |
+| `dataset.stale-review` | `EntitySubject` | — |
+| `dataset.missing-source-url` | `EntitySubject` | — |
+| `dataset.cached-field-drift` | `EntitySubject` | `field` |
+| `dataset.invariant-violation` | `EntitySubject` | `invariant` |
+| `dataset.derived-missing-workflow-run` | `EntitySubject` | — |
+| `dataset.derived-asymmetric-edge` | `EntitySubject` | `counterpart` |
+| `dataset.derived-input-chain-broken` | `EntitySubject` | `counterpart` |
+| `dataset.origin-block-mismatch` | `EntitySubject` | `field` |
+| `dataset.verified-but-unstageable` | `EntitySubject` | — |
+| `dataset.research-package-asymmetric` | `EntitySubject` | `counterpart` |
+| `dataset.access-invalid` | `EntitySubject` | — |
+
+Rules taking a `counterpart` or `field` identity qualifier are those the producer can emit
+more than once per dataset; without the qualifier those emissions would collapse into one
+case. The mapping from each emission site to its qualifier value is a plan-writing detail;
+the rule set and its identity keys are fixed here.
+
+**Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
+`invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
+class. Two are net-neutral reclassifications (`archive_lag`, layered-claim coverage).
+**No entry reduces counts.** Everything else preserves observable counts exactly.
 
 ### 10. Acceptance migration
 
@@ -524,19 +650,31 @@ Acceptance is re-keyed from `message_contains` prose onto fingerprints. Spec 1 s
 - **Refuse to migrate unless every relevant producer ran.** "No finding matches" while
   the owning producer was skipped or `unwired` is **indeterminate, not stale** — this is
   the fourth outcome, and it aborts rather than rewriting.
-- **`--apply` is atomic**: `science.yaml` is rewritten once, wholly, or not at all.
+- **`--apply` is all-or-nothing across entries, not merely atomic on the file.** Atomic
+  rewriting says how `science.yaml` is written; it does not say what happens when some
+  entries are stale or ambiguous. **Any non-unique outcome aborts the whole migration
+  with no mutation.** The operator resolves the reported entries and reruns. A partial
+  migration that drops unresolved entries would delete acceptance decisions as a side
+  effect of a rewrite, which is exactly the silent-suppression direction §10 exists to
+  prevent.
+- **Duplicate `(finding_id, severity_scope)` entries are rejected** after rewriting —
+  two prose acceptances can legitimately collapse onto one fingerprint, and a silently
+  deduplicated pair hides that one of them was never doing anything.
 - **`accepted-validation.stale` and `accepted-validation.ambiguous` are declared
   unsuppressible** — an acceptance-hygiene rule that could itself be accepted is a
   silencer for the silencer.
 
 **Outcomes:**
 
-| Outcome | Action |
-|---|---|
-| Exactly one current finding matches, producers all ran | Rewrite to `{fingerprint, severity_scope}`. |
-| No finding matches, producers all ran | Emit `accepted-validation.stale`. |
-| More than one matches | Emit `accepted-validation.ambiguous`. |
-| Any relevant producer skipped or `unwired` | **Indeterminate** — abort; migrate nothing. |
+| Outcome | Action | Mutates? |
+|---|---|---|
+| **Every** entry matches exactly one finding, all producers ran | Rewrite all entries to `{finding_id, severity_scope}`. | yes, wholly |
+| Any entry matches no finding, all producers ran | Emit `accepted-validation.stale` for it; **abort**. | no |
+| Any entry matches more than one | Emit `accepted-validation.ambiguous` for it; **abort**. | no |
+| Any relevant producer skipped or `unwired` | **Indeterminate** — abort before matching. | no |
+
+Under dry-run every entry is classified and reported, so one pass shows the operator the
+complete set of problems rather than the first one.
 
 **No failure case suppresses anything.** An acceptance matching nothing becomes a finding
 in its own right, never a silent no-op — the fail-loud direction required by the standing
@@ -554,11 +692,20 @@ health:
       accepted_on: "<ISO-8601 date>"
 ```
 
-`rule` and `message_contains` are removed, not retained alongside. An acceptance entry's
-own subject, when it becomes a finding, is
-`IdentifierSubject(namespace="accepted-validation", value=<content-derived key>)` — never
-a `PathSubject` pointer into `health.accepted_validation`, which is a bare positional
-list (`validate/acceptance.py:26`) whose indices move when any earlier entry is deleted.
+`rule` and `message_contains` are removed, not retained alongside.
+
+An acceptance entry's own subject, when it becomes a hygiene finding, is
+`IdentifierSubject(namespace="accepted-validation", value=<acceptance key>)` — never a
+`PathSubject` pointer into `health.accepted_validation`, which is a bare positional list
+(`validate/acceptance.py:26`) whose indices move when any earlier entry is deleted.
+
+**The acceptance key is frozen** as
+`sha256("science.acceptance.v1\n" + canonical_json(entry))[:32]`, over the entry's own
+content under the §3 canonical encoding — for a pre-migration entry that is
+`{rule, severity, message_contains}`, for a migrated one `{finding_id, severity_scope}`.
+Content-derived, so it survives reordering and deletion of siblings; truncated to 32 hex
+characters because it names a config entry rather than identifying a stored record, and
+nothing resolves by scanning it.
 
 ### 11. The output contract
 
@@ -566,24 +713,47 @@ The public schema changes **once**; no compatibility adapter preserves the heter
 report.
 
 ```python
+class ReportedFinding(TypedDict):
+    producer_id: str                 # which producer observed it
+    finding: Finding
+
+class AcceptedFinding(TypedDict):
+    producer_id: str
+    finding: Finding
+    acceptance_key: str              # §10 — the accepting entry's frozen key
+    reason: str                      # the acceptance's own recorded reason
+
 class AuditReport(TypedDict):
     schema_version: int              # 2
     fingerprint_version: int         # 1
-    findings: list[Finding]          # unsuppressed, ordered (below)
-    accepted: list[AcceptedFinding]  # {finding, acceptance_ref, reason}
-    metrics: dict[str, ProducerMetrics]   # keyed by producer_id
+    ingestion_ref: str               # trusted, report-level; run ref or ingestion id
+    generated_at: str                # ISO-8601, report-level
+    findings: list[ReportedFinding]  # unsuppressed, ordered (below)
+    accepted: list[AcceptedFinding]
+    metrics: dict[str, ProducerMetrics]   # keyed by producer_id, validated per §6
     unwired: list[UnwiredProducer]   # {producer_id, code, reason}
     totals: ReportTotals
     meta: ReportMeta                 # timings, duration, producers_run
 ```
 
+- **Findings are enveloped with their producer.** A bare `Finding` cannot populate an
+  occurrence's required `producer_id`, and rule ownership cannot supply it either, because
+  multiple producers must be able to emit the same rule — that is the premise of
+  cross-producer dedup. `ingestion_ref` and `generated_at` are **report-level and
+  trusted**: supplied by the supervisor or the ingesting command, never by the finding.
+  Accepted findings carry the same provenance, plus the key of the entry that accepted
+  them.
+- **`ProducerMetrics` is validated, not free-form** — against the metrics schema the
+  producer declared at registration (§6).
 - **`totals`** carries `findings_by_severity`, `findings_total`, `accepted_total`, and
   `unwired_total`. `accepted` and `unwired` are **not** in `findings_total`, preserving
   today's exclusions. `total_issues` is replaced by `totals.findings_total`; §9
   enumerates every case where that number differs from today's.
-- **Ordering is deterministic and derived from the registry**, never from import order:
-  `(section, display_order, severity rank, subject canonical form, finding_id)`. This is
-  what preserves the display order `HEALTH_CHECKS`'s hand-ordered tuple encodes today.
+- **Ordering is deterministic and derived from the registry**, never from import order and
+  never from a section's name:
+  `(section_order, display_order, severity rank, subject canonical form, finding_id)`.
+  Sorting on the section *identifier* would alphabetize, discarding the order
+  `HEALTH_CHECKS`'s hand-ordered tuple encodes today; `section_order` (§6) carries it.
 - **Visibility comes from `default_visibility`**, retiring
   `validate/cli.py:25`'s hardcoded rule set.
 - **The unwired invariant survives the rewrite**: a non-empty `unwired` forbids any
@@ -605,45 +775,80 @@ class AuditReport(TypedDict):
    rewritten, and this is the guard-in-one-reader failure shape.
 6. **Fingerprint v1 is frozen** — a golden-vector test pinning canonical encoding,
    normalization, and digest for each subject variant. Changing normalization must break
-   this test.
-7. **Identity stability** — rewording a `message`, adding an occurrence, adding evidence,
+   this test. A rule declaring a float, null, or nested-object identity qualifier fails at
+   declaration.
+7. **Filename binds to contents** — a case whose filename slug, filename digest, or
+   stored `finding_id` disagrees with the fingerprint recomputed from its immutable fields
+   fails to load, with no repair and no rename.
+8. **Identity stability** — rewording a `message`, adding an occurrence, adding evidence,
    changing a line number, changing observed severity, or deleting an earlier
    `accepted_validation` entry changes no fingerprint.
-8. **Occurrence idempotency** — re-ingesting an identical report appends nothing.
-9. **No arrival-order dependence** — ingesting producer A then B, and B then A, yields
-   byte-identical records modulo occurrence order.
-10. **Cross-producer dedup** — two producers reporting the same rule + subject + identity
-    qualifiers upsert **one** record with two occurrences.
-11. **Subject discrimination is total and strict** — an invalid entity ref fails rather
+9. **Occurrence idempotency, and conflict** — re-ingesting an identical report appends
+   nothing; an occurrence reusing an existing idempotency key with different observation
+   content is an error, not a retry.
+10. **Partial-failure recovery** — an ingestion interrupted after some records are written
+    is fully repaired by rerunning the same report, with no duplicate occurrences.
+11. **No arrival-order dependence** — ingesting producer A then B, and B then A, yields
+    byte-identical records modulo occurrence order.
+12. **Non-identity qualifiers survive** — a qualifier outside `identity_qualifiers` is
+    present on the occurrence and absent from the fingerprint.
+13. **Cross-producer dedup** — two producers reporting the same rule + subject + identity
+    qualifiers upsert **one** record with two occurrences, each carrying its own
+    `producer_id` from the report envelope.
+14. **Report provenance is required** — a report whose finding lacks a `producer_id`, or
+    which omits `ingestion_ref` or `generated_at`, is refused; a `producer_id` naming an
+    unregistered producer is refused.
+15. **Producer metrics are validated** — a metrics object violating the schema the
+    producer declared at registration fails.
+16. **Subject discrimination is total and strict** — an invalid entity ref fails rather
     than degrading to a path subject.
-12. **Lifecycle** — re-detection of a dismissed case appends an occurrence and leaves
-    status `dismissed`; `promoted_task` present without `promoted` status fails, and vice
-    versa; a `status` disagreeing with the transition log fails to load.
-13. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
-    `schema_version`, unimplemented `fingerprint_version`, oversize report, and
-    excess finding count are each refused, and a mid-report failure writes nothing.
-14. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
+17. **Lifecycle** — every record opens with a `None → proposed` genesis transition; a
+    transition pair outside the §4 graph is rejected; re-detection of a dismissed case
+    appends an occurrence and leaves status `dismissed`; `promoted_task` present without
+    `promoted` status fails, and vice versa; a `status` disagreeing with the transition
+    log fails to load.
+18. **Review record** — a review missing `lens` when `reviewer_kind == "agent"` fails;
+    two reviews from the same `(reviewer_ref, run_ref)` on one finding collapse to one
+    `review_id`.
+19. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
+    `schema_version`, unimplemented `fingerprint_version`, oversize report, and excess
+    finding count are each refused, and a *validation* failure writes nothing.
+20. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
-15. **Graph isolation** — no finding triple appears in any named graph; cases are absent
+21. **Graph isolation** — no finding triple appears in any named graph; cases are absent
     from attention candidates; ingesting cases does not stale the revision manifest.
-16. **Acceptance migration** — all four outcomes, the severity-scope invariant, the
-    unsuppressibility of the two hygiene rules, `--apply` atomicity, and the rule that no
-    failure case suppresses anything.
-17. **Count ledger** — a test asserting the §9 table: for a fixture project, each
+22. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
+    accepted warning does not suppress a later error at the same fingerprint); the
+    unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
+    aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
+    `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
+    problem entry rather than the first.
+23. **Count ledger** — a test asserting the §9 table: for a fixture project, each
     producer's contribution to `totals.findings_total` matches the enumerated
     expectation. This is what makes the count changes approved rather than absorbed.
-18. **Metrics are not findings** — coverage, counts, and nested summaries survive as
+24. **Presentation order is preserved** — rendering order matches the current
+    `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
+    a section identifier.
+25. **Metrics are not findings** — coverage, counts, and nested summaries survive as
     metrics and are absent from the finding stream.
-19. **Producer-namespace completeness** — every namespace contributing to the derived
+26. **Producer-namespace completeness** — every namespace contributing to the derived
     registry has a filesystem-derived guard.
+27. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
+    the declared-rule set, asserted as equality rather than as a subset, which is the
+    assertion shape that let `dataset_access_invalid` drift.
 
 ## Out of scope
 
 - Any agent, lens, harness, or unattended execution (Spec 2).
 - Review eligibility rules, the confirmation threshold, and promotion authority
   (Spec 3). Spec 1 fixes only the storage shape these use.
-- Converting metrics or coverage holes into findings. Doing so would make the shared type
-  broad enough to mean nothing.
+- **Converting measurements themselves into findings.** A coverage fraction, a lag count,
+  or a corpus tally stays a metric; making the shared type carry measurements would make
+  it broad enough to mean nothing. This does **not** exclude the enumerated
+  policy-violation findings of R3 — `layered-claim.coverage-incomplete` and
+  `tasks.archive-lag` are findings *about* a measurement crossing a policy threshold, and
+  the measurement is retained alongside. §9 is the exhaustive list; no producer may add
+  another without a ledger row.
 - Retiring `doc/curations/` ledgers. The curation sweep's narrative output is a Spec 2
   question; Spec 1 only removes the reason it needs prose carry-over parsing.
 
@@ -652,8 +857,9 @@ class AuditReport(TypedDict):
 - Whether `dismissed` cases are archived on a cadence once volume is known. Spec 1
   retains them indefinitely; this is a volume question to revisit with data, not a
   contract gap.
-- The `dataset.anomaly.*` sub-rule enumeration. `dataset_anomalies` is untyped today, so
-  its rule set can only be established by reading the producer during plan writing.
+- Which emission site inside `dataset_anomalies.py` supplies each `counterpart` /
+  `field` identity-qualifier value. The rule set and its identity keys are fixed in §9;
+  only the per-site mapping is plan-writing work.
 - **Acceptance migration scope, surveyed.** Four locally available projects carry 50
   `accepted_validation` entries: post-acute-infection (21), multiple-myeloma (24),
   `meta/` (2), natural-systems (3). Repositories outside the local checkout set remain
