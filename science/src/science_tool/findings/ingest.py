@@ -42,8 +42,11 @@ from science_model.audit.record import (
 )
 from science_model.profiles import CORE_PROFILE, ProfileManifest
 
+from science_tool.entities import derive_local_entity_policies
+from science_tool.entity_scan import entity_directory_path_is_discoverable
 from science_tool.findings.paths import (
     PathSafetyError,
+    entry_type_at,
     exists_at,
     list_names_at,
     open_child_dir_at_if_present,
@@ -61,6 +64,13 @@ from science_tool.findings.storage import (
     case_store,
     serialize_case,
 )
+from science_tool.graph.markdown_discovery import (
+    DEFAULT_MARKDOWN_SCAN_ROOTS,
+    ENTITY_MARKDOWN_SCAN_ROOT,
+    is_discoverable_markdown_leaf,
+    uses_entity_directory_policy,
+)
+from science_tool.project_config import selected_local_profile_name
 from science_tool.tasks import strict_task_ids_in_text
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
@@ -79,13 +89,6 @@ _ENTITY_MARKDOWN_HOMES: tuple[str, ...] = tuple(
             )
         }
     )
-)
-_CORE_ENTITY_NAMES = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
-_CORE_HOME_NAMES = frozenset(
-    PurePosixPath(home).name for home in _ENTITY_MARKDOWN_HOMES
-)
-_LOCAL_MARKDOWN_STRATEGIES = frozenset(
-    {"numeric", "citekey", "slug", "id-local"}
 )
 
 
@@ -341,8 +344,8 @@ def _plan(
 def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
     """Exact declared-home frontmatter IDs plus active/done task IDs.
 
-    Every read stays relative to a held directory descriptor. No recursive scanner,
-    pathname reopen, alias, archive, or `graph.trig` participates.
+    Every recursive read stays relative to a held directory descriptor. No pathname
+    reopen, alias, archive, or `graph.trig` participates.
     """
     try:
         refs = _declared_entity_ids(project_root)
@@ -374,6 +377,15 @@ def _declared_entity_ids(project_root: Path) -> set[str]:
         )
     for home in _local_entity_homes(project_root):
         _add_ids_from_home(project_root, refs, home, singleton=False)
+    for scan_root in DEFAULT_MARKDOWN_SCAN_ROOTS:
+        if scan_root == ENTITY_MARKDOWN_SCAN_ROOT:
+            continue
+        _add_ids_from_tree(
+            project_root,
+            refs,
+            scan_root,
+            use_entity_directory_policy=uses_entity_directory_policy(scan_root),
+        )
     return refs
 
 
@@ -386,6 +398,8 @@ def _add_ids_from_home(
 ) -> None:
     path = PurePosixPath(home)
     if singleton:
+        if not is_discoverable_markdown_leaf(path.name):
+            return
         with open_dir_inside_if_present(
             project_root,
             path.parent.as_posix(),
@@ -400,18 +414,71 @@ def _add_ids_from_home(
             _add_frontmatter_id(refs, text, home)
         return
 
-    with open_dir_inside_if_present(project_root, home) as dir_fd:
+    _add_ids_from_tree(
+        project_root,
+        refs,
+        home,
+        use_entity_directory_policy=uses_entity_directory_policy(home),
+    )
+
+
+def _add_ids_from_tree(
+    project_root: Path,
+    refs: set[str],
+    root: str,
+    *,
+    use_entity_directory_policy: bool,
+) -> None:
+    with open_dir_inside_if_present(project_root, root) as dir_fd:
         if dir_fd is None:
             return
-        for name in list_names_at(dir_fd):
-            if not name.endswith(".md"):
+        _add_ids_from_tree_at(
+            dir_fd,
+            refs,
+            root,
+            relative_directory_parts=(),
+            use_entity_directory_policy=use_entity_directory_policy,
+        )
+
+
+def _add_ids_from_tree_at(
+    dir_fd: int,
+    refs: set[str],
+    source_dir: str,
+    *,
+    relative_directory_parts: tuple[str, ...],
+    use_entity_directory_policy: bool,
+) -> None:
+    for name in list_names_at(dir_fd):
+        entry_type = entry_type_at(dir_fd, name)
+        source = f"{source_dir}/{name}"
+        if entry_type == "directory":
+            child_parts = (*relative_directory_parts, name)
+            if use_entity_directory_policy and not (
+                entity_directory_path_is_discoverable(child_parts)
+            ):
                 continue
-            text = read_regular_file_at(
-                dir_fd,
-                name,
-                MAX_SUBJECT_RECORD_BYTES,
-            )
-            _add_frontmatter_id(refs, text, f"{home}/{name}")
+            with open_child_dir_at_if_present(dir_fd, name) as child_fd:
+                if child_fd is None:
+                    raise PathSafetyError(
+                        f"{source!r} disappeared during anchored traversal"
+                    )
+                _add_ids_from_tree_at(
+                    child_fd,
+                    refs,
+                    source,
+                    relative_directory_parts=child_parts,
+                    use_entity_directory_policy=use_entity_directory_policy,
+                )
+            continue
+        if entry_type != "regular" or not is_discoverable_markdown_leaf(name):
+            continue
+        text = read_regular_file_at(
+            dir_fd,
+            name,
+            MAX_SUBJECT_RECORD_BYTES,
+        )
+        _add_frontmatter_id(refs, text, source)
 
 
 def _local_entity_homes(project_root: Path) -> tuple[str, ...]:
@@ -431,29 +498,8 @@ def _local_entity_homes(project_root: Path) -> tuple[str, ...]:
             f"{manifest_parent}/manifest.yaml: profile manifest must be a mapping"
         )
     manifest = ProfileManifest.model_validate(loaded)
-
-    homes: set[str] = set()
-    for kind in manifest.entity_kinds:
-        if kind.name != kind.canonical_prefix or kind.name in _CORE_ENTITY_NAMES:
-            continue
-        if (
-            kind.strategy is not None
-            and kind.strategy not in _LOCAL_MARKDOWN_STRATEGIES
-        ):
-            continue
-        home = kind.home or f"entities/{kind.name}"
-        candidate = PurePosixPath(home)
-        if (
-            candidate.is_absolute()
-            or ".." in candidate.parts
-            or len(candidate.parts) < 2
-            or candidate.parts[0] != "entities"
-            or any(part.startswith("_") for part in candidate.parts)
-            or candidate.name in _CORE_HOME_NAMES
-        ):
-            continue
-        homes.add(candidate.as_posix())
-    return tuple(sorted(homes))
+    policies, _warnings = derive_local_entity_policies(manifest)
+    return tuple(sorted(policy.root.as_posix() for policy in policies.values()))
 
 
 def _local_profile_name(project_root: Path) -> str:
@@ -468,22 +514,10 @@ def _local_profile_name(project_root: Path) -> str:
     loaded = yaml.safe_load(text)
     if not isinstance(loaded, dict):
         raise IngestError("science.yaml must be a mapping")
-    profiles = loaded.get("knowledge_profiles")
-    raw_name = profiles.get("local") if isinstance(profiles, dict) else "local"
-    profile_name = str(raw_name) if raw_name is not None else "local"
-    normalized = profile_name.replace("\\", "/")
-    candidate = PurePosixPath(normalized)
-    if (
-        not normalized
-        or candidate.is_absolute()
-        or ".." in candidate.parts
-        or any(part in ("", ".") for part in candidate.parts)
-    ):
-        raise IngestError(
-            f"science.yaml knowledge_profiles.local is not a safe relative "
-            f"profile name: {profile_name!r}"
-        )
-    return candidate.as_posix()
+    try:
+        return selected_local_profile_name(loaded)
+    except ValueError as exc:
+        raise IngestError(str(exc)) from exc
 
 
 def _add_frontmatter_id(refs: set[str], text: str, source: str) -> None:

@@ -56,7 +56,10 @@ from science_tool.entity_profiles import (
     ProjectSchema,
     load_project_schema,
 )
-from science_tool.project_config import validated_entity_schema_version
+from science_tool.project_config import (
+    selected_local_profile_name,
+    validated_entity_schema_version,
+)
 from science_tool.graph.autonomous_runs import load_run_records
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
@@ -405,7 +408,6 @@ def load_project_sources(
         # the legacy doc/ scan roots have been removed (owners no longer live there).
         # See docs/user-guide/project-layout.md.
         MarkdownAdapter(
-            scan_roots=["entities", "research/packages"],
             virtual_files=markdown_overrides,
         ),
         BibAdapter(),
@@ -1360,12 +1362,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     # reachable by one transposed letter or one stray quote.
     pinned_version = validated_entity_schema_version(data)
 
-    if "profiles" in data and "knowledge_profiles" not in data:
-        raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
-
-    knowledge_profiles = data.get("knowledge_profiles") or {}
-    if not isinstance(knowledge_profiles, dict):
-        knowledge_profiles = {}
+    local_profile = selected_local_profile_name(data)
 
     raw_ontologies = data.get("ontologies") or []
     if not isinstance(raw_ontologies, list):
@@ -1393,7 +1390,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     config: dict[str, object] = {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
-            "local": str(knowledge_profiles.get("local") or "local"),
+            "local": local_profile,
         },
         "ontologies": [str(o) for o in raw_ontologies],
         "freshness": raw_freshness,
@@ -1416,11 +1413,7 @@ def resolve_local_profile_name(project_root: Path) -> str:
     ``"local"`` when it is absent.
     """
     config = _read_project_config(project_root)
-    knowledge_profiles = config.get("knowledge_profiles")
-    if not isinstance(knowledge_profiles, dict):
-        return "local"
-    local_profile = knowledge_profiles.get("local")
-    return str(local_profile) if local_profile is not None else "local"
+    return selected_local_profile_name(config)
 
 
 def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:

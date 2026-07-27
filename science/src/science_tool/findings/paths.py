@@ -39,6 +39,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Literal
 
 
 class PathSafetyError(ValueError):
@@ -274,6 +275,29 @@ def list_names_at(dir_fd: int) -> tuple[str, ...]:
         return tuple(sorted(os.listdir(dir_fd)))
     except OSError as exc:
         raise PathSafetyError(f"could not list anchored directory: {exc}") from exc
+
+
+EntryType = Literal["directory", "regular", "other"]
+
+
+def entry_type_at(dir_fd: int, name: str) -> EntryType:
+    """Classify one anchored entry without following a symlink.
+
+    Symlinks are never a usable entry type for trusted ingestion: a directory
+    link redirects traversal and a leaf link redirects the read. Both fail loud.
+    """
+    name = _leaf_name(name)
+    try:
+        info = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise PathSafetyError(f"could not inspect {name!r}: {exc}") from exc
+    if stat.S_ISLNK(info.st_mode):
+        raise PathSafetyError(f"{name!r} is a symlink; refusing anchored traversal")
+    if stat.S_ISDIR(info.st_mode):
+        return "directory"
+    if stat.S_ISREG(info.st_mode):
+        return "regular"
+    return "other"
 
 
 @contextmanager

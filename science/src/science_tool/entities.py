@@ -128,6 +128,19 @@ def _load_local_policies_and_warnings(
     if cached is not None:
         return cached
     manifest = load_profile_manifest(manifest_path)
+    result = derive_local_entity_policies(manifest)
+    _LOCAL_POLICY_CACHE[cache_key] = result
+    return result
+
+
+def derive_local_entity_policies(
+    manifest: ProfileManifest | None,
+) -> tuple[dict[str, EntityPathPolicy], list[tuple[str, str]]]:
+    """Derive admissible local markdown policies from a parsed manifest.
+
+    The function performs no filesystem I/O. Pathname loaders and descriptor-safe
+    readers pass the same validated model through this one policy authority.
+    """
     policies: dict[str, EntityPathPolicy] = {}
     kind_warnings: list[tuple[str, str]] = []
     if manifest is not None:
@@ -156,9 +169,7 @@ def _load_local_policies_and_warnings(
                 continue
             strategy = cast(EntityFilenameStrategy, ek.strategy or "numeric")
             policies[ek.name] = EntityPathPolicy(root, strategy)
-    result = (policies, kind_warnings)
-    _LOCAL_POLICY_CACHE[cache_key] = result
-    return result
+    return policies, kind_warnings
 
 
 def load_local_entity_policies(project_root: Path) -> dict[str, EntityPathPolicy]:

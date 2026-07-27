@@ -272,6 +272,181 @@ def test_entity_subject_does_not_resolve_aliases_or_short_prefixes(tmp_path):
             )
 
 
+def test_entity_subject_resolution_excludes_source_markdown_sidecars(tmp_path):
+    sidecar = tmp_path / "entities" / "papers" / "x.source.md"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(
+        "---\nid: paper:sidecar\nkind: paper\ntitle: Not an entity\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="paper:sidecar")
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_accepts_a_nested_research_package(tmp_path):
+    package = (
+        tmp_path
+        / "research"
+        / "packages"
+        / "lens"
+        / "section"
+        / "research-package.md"
+    )
+    package.parent.mkdir(parents=True)
+    package.write_text(
+        "---\n"
+        "id: research-package:deep\n"
+        "kind: research-package\n"
+        "title: Deep package\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="research-package:deep")
+                ),
+            )
+        ]
+    )
+
+    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+
+
+@pytest.mark.parametrize("link_site", ["nested-directory", "leaf"])
+def test_entity_subject_resolution_refuses_symlinked_research_packages(
+    tmp_path,
+    link_site,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    packages = project / "research" / "packages"
+    packages.mkdir(parents=True)
+    outside = tmp_path / "outside-package"
+    outside.mkdir()
+    outside_record = outside / "research-package.md"
+    outside_record.write_text(
+        "---\n"
+        "id: research-package:outside\n"
+        "kind: research-package\n"
+        "title: Outside\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    if link_site == "nested-directory":
+        (packages / "lens").symlink_to(outside, target_is_directory=True)
+    else:
+        lens = packages / "lens"
+        lens.mkdir()
+        (lens / "research-package.md").symlink_to(outside_record)
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="research-package:outside")
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_accepts_a_nested_declared_entity_home_record(tmp_path):
+    record = tmp_path / "entities" / "reports" / "year" / "deep.md"
+    record.parent.mkdir(parents=True)
+    record.write_text(
+        "---\nid: report:deep\nkind: report\ntitle: Deep report\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="report:deep")),
+            )
+        ]
+    )
+
+    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+
+
+@pytest.mark.parametrize("link_site", ["nested-directory", "leaf"])
+def test_entity_subject_resolution_refuses_symlinked_nested_entity_records(
+    tmp_path,
+    link_site,
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    reports = project / "entities" / "reports"
+    reports.mkdir(parents=True)
+    outside = tmp_path / "outside-report"
+    outside.mkdir()
+    outside_record = outside / "deep.md"
+    outside_record.write_text(
+        "---\nid: report:outside\nkind: report\ntitle: Outside\n---\n",
+        encoding="utf-8",
+    )
+    if link_site == "nested-directory":
+        (reports / "year").symlink_to(outside, target_is_directory=True)
+    else:
+        year = reports / "year"
+        year.mkdir()
+        (year / "deep.md").symlink_to(outside_record)
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="report:outside")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(project, report, REGISTRY)
+    assert not (project / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_resolution_skips_nested_reserved_entity_directories(
+    tmp_path,
+):
+    archived = tmp_path / "entities" / "reports" / "_archive" / "old.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text(
+        "---\nid: report:archived\nkind: report\ntitle: Archived\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="report:archived")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
 @pytest.mark.parametrize("link_site", ["entity-file", "entity-home"])
 def test_entity_subject_resolution_refuses_symlinked_entity_records(
     tmp_path,
@@ -410,6 +585,50 @@ def test_entity_subject_accepts_an_exact_project_declared_local_kind(tmp_path):
     )
 
     assert ingest_report(project, _local_kind_report(), REGISTRY).records_written == 1
+
+
+def test_entity_subject_resolution_rejects_removed_top_level_profiles(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: removed-profile\nprofiles:\n  local: old-local\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(IngestError, match="removed top-level profiles"):
+        ingest_report(tmp_path, _report(), REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+@pytest.mark.parametrize(
+    "falsy_local",
+    ["''", "null", "false", "0", "[]"],
+    ids=["empty-string", "null", "false", "zero", "empty-list"],
+)
+def test_entity_subject_resolution_uses_canonical_falsy_local_profile_default(
+    tmp_path,
+    falsy_local,
+):
+    local_manifest = (
+        tmp_path / "knowledge" / "sources" / "local" / "manifest.yaml"
+    )
+    _seed_local_kind_profile(tmp_path, manifest_path=local_manifest)
+    (tmp_path / "science.yaml").write_text(
+        "name: local-kind-project\n"
+        "knowledge_profiles:\n"
+        f"  local: {falsy_local}\n",
+        encoding="utf-8",
+    )
+    record = tmp_path / "entities" / "design-notes" / "0001-local.md"
+    record.parent.mkdir(parents=True)
+    record.write_text(
+        "---\n"
+        "id: design-note:0001-local\n"
+        "kind: design-note\n"
+        "title: Local\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    assert ingest_report(tmp_path, _local_kind_report(), REGISTRY).records_written == 1
 
 
 def test_entity_subject_resolution_refuses_a_symlinked_local_profile_manifest(

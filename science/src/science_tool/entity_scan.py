@@ -10,10 +10,27 @@ guard test). Stdlib-only leaf module (no science_tool imports) to avoid cycles.
 """
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 ARCHIVE_SEGMENT = "_archive"
+
+
+def entity_directory_path_is_discoverable(
+    relative_parts: Sequence[str],
+    *,
+    include_archived: bool = False,
+) -> bool:
+    """Whether a directory path belongs to the canonical entity scan.
+
+    The relative parts name directories below the entity scan root. By default,
+    any ``_``-prefixed segment excludes the subtree. Archive-inclusive callers
+    unskip exactly one ``_archive`` segment, matching the historical scanner.
+    """
+    hidden = [segment for segment in relative_parts if segment.startswith("_")]
+    if not hidden:
+        return True
+    return include_archived and hidden == [ARCHIVE_SEGMENT]
 
 
 def iter_entity_markdown(entities_root: Path, *, include_archived: bool = False) -> Iterator[Path]:
@@ -26,9 +43,8 @@ def iter_entity_markdown(entities_root: Path, *, include_archived: bool = False)
         return
     for path in sorted(entities_root.rglob("*.md")):
         rel_parts = path.relative_to(entities_root).parts[:-1]  # exclude filename
-        hidden = [seg for seg in rel_parts if seg.startswith("_")]
-        if not hidden:
-            yield path
-            continue
-        if include_archived and hidden == [ARCHIVE_SEGMENT]:
+        if entity_directory_path_is_discoverable(
+            rel_parts,
+            include_archived=include_archived,
+        ):
             yield path
