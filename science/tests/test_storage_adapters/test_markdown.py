@@ -62,6 +62,25 @@ def test_custom_scan_roots_honored(tmp_path: Path) -> None:
     assert refs[0].path == "custom/c.md"
 
 
+def test_custom_entities_subroot_scans_archive_while_default_root_excludes_it(
+    tmp_path: Path,
+) -> None:
+    archived = tmp_path / "entities" / "reports" / "_archive" / "old.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text(
+        '---\nid: "report:old"\nkind: "report"\ntitle: "Old"\n---\n',
+        encoding="utf-8",
+    )
+
+    assert MarkdownAdapter().discover(tmp_path) == []
+    assert [
+        ref.path
+        for ref in MarkdownAdapter(scan_roots=["entities/reports"]).discover(
+            tmp_path
+        )
+    ] == ["entities/reports/_archive/old.md"]
+
+
 def test_returns_empty_when_no_markdown_files(tmp_path: Path) -> None:
     refs = MarkdownAdapter().discover(tmp_path)
     assert refs == []

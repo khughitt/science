@@ -25,6 +25,8 @@ from typing import Iterator
 from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic_core import PydanticSerializationError
 import yaml
+from science_model.entity_schema import filename_for, parse_component
+from science_model.ontologies import load_catalogs_for_names
 from science_model.audit import (
     REPORT_SCHEMA_VERSION,
     AuditFinding,
@@ -40,10 +42,19 @@ from science_model.audit.record import (
     canonical_occurrence_content,
     normalized_instant,
 )
-from science_model.profiles import CORE_PROFILE, ProfileManifest
+from science_model.profiles import (
+    CORE_PROFILE,
+    LOCAL_PROFILE,
+    ProfileManifest,
+    load_shared_profile,
+)
 
 from science_tool.entities import derive_local_entity_policies
 from science_tool.entity_scan import entity_directory_path_is_discoverable
+from science_tool.entity_profiles import (
+    ARMED_SCHEMA_GENERATIONS,
+    project_schema_from_documents,
+)
 from science_tool.findings.paths import (
     PathSafetyError,
     entry_type_at,
@@ -70,7 +81,18 @@ from science_tool.graph.markdown_discovery import (
     is_discoverable_markdown_leaf,
     uses_entity_directory_policy,
 )
-from science_tool.project_config import selected_local_profile_name
+from science_tool.graph.sources import (
+    ActiveProfiles,
+    CanonicalMarkdownContext,
+    build_entity_registry,
+    known_kinds,
+    validate_canonical_markdown_record,
+)
+from science_tool.project_config import (
+    ProjectConfig,
+    selected_local_profile_name,
+    validated_entity_schema_version,
+)
 from science_tool.tasks import strict_task_ids_in_text
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
@@ -342,13 +364,14 @@ def _plan(
 
 
 def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
-    """Exact declared-home frontmatter IDs plus active/done task IDs.
+    """Validated declared-home entity IDs plus active/done task IDs.
 
     Every recursive read stays relative to a held directory descriptor. No pathname
     reopen, alias, archive, or `graph.trig` participates.
     """
     try:
-        refs = _declared_entity_ids(project_root)
+        context, local_manifest = _canonical_markdown_context(project_root)
+        refs = _declared_entity_ids(project_root, context, local_manifest)
         refs.update(_live_task_refs(project_root))
     except IngestError:
         raise
@@ -357,6 +380,7 @@ def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
         ValidationError,
         OSError,
         UnicodeError,
+        ValueError,
         yaml.YAMLError,
     ) as exc:
         raise IngestError(
@@ -365,7 +389,11 @@ def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
     return frozenset(refs)
 
 
-def _declared_entity_ids(project_root: Path) -> set[str]:
+def _declared_entity_ids(
+    project_root: Path,
+    context: CanonicalMarkdownContext,
+    local_manifest: ProfileManifest | None,
+) -> set[str]:
     refs: set[str] = set()
     for home in _ENTITY_MARKDOWN_HOMES:
         path = PurePosixPath(home)
@@ -373,10 +401,17 @@ def _declared_entity_ids(project_root: Path) -> set[str]:
             project_root,
             refs,
             home,
+            context=context,
             singleton=path.suffix == ".md",
         )
-    for home in _local_entity_homes(project_root):
-        _add_ids_from_home(project_root, refs, home, singleton=False)
+    for home in _local_entity_homes(local_manifest):
+        _add_ids_from_home(
+            project_root,
+            refs,
+            home,
+            context=context,
+            singleton=False,
+        )
     for scan_root in DEFAULT_MARKDOWN_SCAN_ROOTS:
         if scan_root == ENTITY_MARKDOWN_SCAN_ROOT:
             continue
@@ -384,6 +419,7 @@ def _declared_entity_ids(project_root: Path) -> set[str]:
             project_root,
             refs,
             scan_root,
+            context=context,
             use_entity_directory_policy=uses_entity_directory_policy(scan_root),
         )
     return refs
@@ -394,6 +430,7 @@ def _add_ids_from_home(
     refs: set[str],
     home: str,
     *,
+    context: CanonicalMarkdownContext,
     singleton: bool,
 ) -> None:
     path = PurePosixPath(home)
@@ -411,14 +448,17 @@ def _add_ids_from_home(
                 path.name,
                 MAX_SUBJECT_RECORD_BYTES,
             )
-            _add_frontmatter_id(refs, text, home)
+            _add_frontmatter_id(refs, text, home, context)
         return
 
     _add_ids_from_tree(
         project_root,
         refs,
         home,
-        use_entity_directory_policy=uses_entity_directory_policy(home),
+        context=context,
+        # These subroots are pieces of the default canonical ``entities`` scan,
+        # not caller-supplied custom adapter roots.
+        use_entity_directory_policy=True,
     )
 
 
@@ -427,6 +467,7 @@ def _add_ids_from_tree(
     refs: set[str],
     root: str,
     *,
+    context: CanonicalMarkdownContext,
     use_entity_directory_policy: bool,
 ) -> None:
     with open_dir_inside_if_present(project_root, root) as dir_fd:
@@ -436,6 +477,7 @@ def _add_ids_from_tree(
             dir_fd,
             refs,
             root,
+            context=context,
             relative_directory_parts=(),
             use_entity_directory_policy=use_entity_directory_policy,
         )
@@ -446,6 +488,7 @@ def _add_ids_from_tree_at(
     refs: set[str],
     source_dir: str,
     *,
+    context: CanonicalMarkdownContext,
     relative_directory_parts: tuple[str, ...],
     use_entity_directory_policy: bool,
 ) -> None:
@@ -467,6 +510,7 @@ def _add_ids_from_tree_at(
                     child_fd,
                     refs,
                     source,
+                    context=context,
                     relative_directory_parts=child_parts,
                     use_entity_directory_policy=use_entity_directory_policy,
                 )
@@ -478,15 +522,34 @@ def _add_ids_from_tree_at(
             name,
             MAX_SUBJECT_RECORD_BYTES,
         )
-        _add_frontmatter_id(refs, text, source)
+        _add_frontmatter_id(refs, text, source, context)
 
 
-def _local_entity_homes(project_root: Path) -> tuple[str, ...]:
-    profile_name = _local_profile_name(project_root)
+def _project_config_data(project_root: Path) -> dict[str, object]:
+    with open_dir_inside(project_root, "") as root_fd:
+        if not exists_at(root_fd, "science.yaml"):
+            return {}
+        text = read_regular_file_at(
+            root_fd,
+            "science.yaml",
+            MAX_SUBJECT_RECORD_BYTES,
+        )
+    loaded = yaml.safe_load(text)
+    if not isinstance(loaded, dict):
+        raise IngestError("science.yaml must be a mapping")
+    if not all(isinstance(key, str) for key in loaded):
+        raise IngestError("science.yaml keys must be strings")
+    return loaded
+
+
+def _local_profile_manifest(
+    project_root: Path,
+    profile_name: str,
+) -> ProfileManifest | None:
     manifest_parent = f"knowledge/sources/{profile_name}"
     with open_dir_inside_if_present(project_root, manifest_parent) as dir_fd:
         if dir_fd is None or not exists_at(dir_fd, "manifest.yaml"):
-            return ()
+            return None
         text = read_regular_file_at(
             dir_fd,
             "manifest.yaml",
@@ -497,37 +560,134 @@ def _local_entity_homes(project_root: Path) -> tuple[str, ...]:
         raise IngestError(
             f"{manifest_parent}/manifest.yaml: profile manifest must be a mapping"
         )
-    manifest = ProfileManifest.model_validate(loaded)
+    return ProfileManifest.model_validate(loaded)
+
+
+def _local_entity_homes(
+    manifest: ProfileManifest | None,
+) -> tuple[str, ...]:
+    if manifest is None:
+        return ()
     policies, _warnings = derive_local_entity_policies(manifest)
     return tuple(sorted(policy.root.as_posix() for policy in policies.values()))
 
 
-def _local_profile_name(project_root: Path) -> str:
-    with open_dir_inside(project_root, "") as root_fd:
-        if not exists_at(root_fd, "science.yaml"):
-            return "local"
-        text = read_regular_file_at(
-            root_fd,
-            "science.yaml",
-            MAX_SUBJECT_RECORD_BYTES,
-        )
-    loaded = yaml.safe_load(text)
-    if not isinstance(loaded, dict):
-        raise IngestError("science.yaml must be a mapping")
-    try:
-        return selected_local_profile_name(loaded)
-    except ValueError as exc:
-        raise IngestError(str(exc)) from exc
+def _canonical_markdown_context(
+    project_root: Path,
+) -> tuple[CanonicalMarkdownContext, ProfileManifest | None]:
+    config = _project_config_data(project_root)
+    local_profile = selected_local_profile_name(config)
+    local_manifest = _local_profile_manifest(project_root, local_profile)
+
+    raw_ontologies = config.get("ontologies") or []
+    ontology_names = (
+        [str(name) for name in raw_ontologies]
+        if isinstance(raw_ontologies, list)
+        else []
+    )
+    ontology_catalogs = load_catalogs_for_names(ontology_names)
+
+    profile_manifests = [LOCAL_PROFILE]
+    shared = load_shared_profile()
+    if shared is not None:
+        profile_manifests.append(shared)
+    resolved = ActiveProfiles(
+        profile_manifests=profile_manifests,
+        local_profile_manifest=local_manifest,
+        ontology_catalogs=ontology_catalogs,
+        local_profile=local_profile,
+        local_manifest_rel=(
+            f"knowledge/sources/{local_profile}/manifest.yaml"
+        ),
+    )
+    registry, _graduated_kind_skips = build_entity_registry(resolved)
+    active_profiles = list(profile_manifests)
+    if local_manifest is not None:
+        active_profiles.append(local_manifest)
+
+    generation = validated_entity_schema_version(config)
+    project_schema = _descriptor_project_schema(
+        project_root,
+        config,
+        generation=generation,
+    )
+    return (
+        CanonicalMarkdownContext(
+            project_slug=project_root.name,
+            local_profile=local_profile,
+            active_kinds=known_kinds(
+                extra_profiles=active_profiles,
+                ontology_catalogs=ontology_catalogs,
+            ),
+            ontology_catalogs=ontology_catalogs,
+            registry=registry,
+            project_schema=project_schema,
+        ),
+        local_manifest,
+    )
 
 
-def _add_frontmatter_id(refs: set[str], text: str, source: str) -> None:
+def _descriptor_project_schema(
+    project_root: Path,
+    raw_config: dict[str, object],
+    *,
+    generation: int | None,
+):
+    if generation not in ARMED_SCHEMA_GENERATIONS:
+        return None
+    config = ProjectConfig.model_validate(raw_config)
+    documents: dict[str, dict[str, object]] = {}
+    filenames = {
+        filename_for(parse_component(component))
+        for components in config.entity_extensions.values()
+        for component in components
+    }
+    if filenames:
+        with open_dir_inside_if_present(project_root, "schemas") as schemas_fd:
+            if schemas_fd is not None:
+                for filename in sorted(filenames):
+                    if not exists_at(schemas_fd, filename):
+                        continue
+                    text = read_regular_file_at(
+                        schemas_fd,
+                        filename,
+                        MAX_SUBJECT_RECORD_BYTES,
+                    )
+                    loaded = json.loads(text)
+                    if not isinstance(loaded, dict):
+                        raise IngestError(
+                            f"schemas/{filename}: JSON schema must be an object"
+                        )
+                    documents[filename] = loaded
+    return project_schema_from_documents(
+        extensions=config.entity_extensions,
+        schema_documents=documents,
+        generation=generation,
+    )
+
+
+def _add_frontmatter_id(
+    refs: set[str],
+    text: str,
+    source: str,
+    context: CanonicalMarkdownContext,
+) -> None:
     frontmatter = _entity_frontmatter(text, source)
-    entity_id = frontmatter.get("id")
-    if isinstance(entity_id, str):
-        refs.add(entity_id)
+    raw = dict(frontmatter)
+    raw["content"] = ""
+    raw["file_path"] = source
+    if "canonical_id" not in raw and "id" in raw:
+        raw["canonical_id"] = raw["id"]
+    validation = validate_canonical_markdown_record(
+        raw,
+        path=source,
+        context=context,
+    )
+    if validation.entity is not None:
+        refs.add(validation.entity.id)
 
 
-def _entity_frontmatter(text: str, source: str) -> dict[object, object]:
+def _entity_frontmatter(text: str, source: str) -> dict[str, object]:
     """Parse raw frontmatter without hiding a list/scalar behind an empty mapping."""
     if text.startswith("---\r\n"):
         newline = "\r\n"
@@ -548,6 +708,8 @@ def _entity_frontmatter(text: str, source: str) -> dict[object, object]:
             f"{source}: entity frontmatter must be a mapping, got "
             f"{type(loaded).__name__}"
         )
+    if not all(isinstance(key, str) for key in loaded):
+        raise IngestError(f"{source}: entity frontmatter keys must be strings")
     return loaded
 
 

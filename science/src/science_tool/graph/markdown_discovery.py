@@ -27,7 +27,10 @@ def is_discoverable_markdown_leaf(name: str) -> bool:
 
 
 def uses_entity_directory_policy(scan_root: str) -> bool:
-    """Whether a scan root sits under ``entities/`` and uses its skip policy."""
+    """Whether this is the default exact ``entities`` scan root.
+
+    A caller-supplied subroot such as ``entities/reports`` is an explicit
+    traversal boundary and recursively scans everything below that boundary.
+    """
     normalized = scan_root.replace("\\", "/")
-    parts = PurePosixPath(normalized).parts
-    return bool(parts) and parts[0] == ENTITY_MARKDOWN_SCAN_ROOT
+    return PurePosixPath(normalized) == PurePosixPath(ENTITY_MARKDOWN_SCAN_ROOT)

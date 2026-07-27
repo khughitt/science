@@ -78,6 +78,19 @@ def test_identity_qualifiers_must_exist_in_the_schema():
         _rule(identity_qualifiers=("nonexistent",))
 
 
+def test_annotated_private_attribute_is_not_an_identity_qualifier_field():
+    class PrivateQualifier(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        field: str
+        _private: str
+
+    with pytest.raises(ValidationError, match="is not a field"):
+        _rule(
+            qualifier_schema=PrivateQualifier,
+            identity_qualifiers=("_private",),
+        )
+
+
 def test_identity_qualifier_types_are_constrained_at_declaration():
     class FloatQualifier(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -120,6 +133,26 @@ def test_a_remediator_without_producer_remediation_is_refused():
         _rule(remediation="none", remediator="fix_it")
 
 
+@pytest.mark.parametrize(
+    ("remediation", "remediator"),
+    [
+        ("producer", ""),
+        ("producer", "   "),
+        ("producer", " fix_it"),
+        ("producer", "fix_it "),
+        ("none", ""),
+        ("none", "   "),
+        ("none", "fix_it"),
+    ],
+)
+def test_remediation_and_remediator_must_form_an_exact_pair(
+    remediation,
+    remediator,
+):
+    with pytest.raises(ValidationError, match="remediat"):
+        _rule(remediation=remediation, remediator=remediator)
+
+
 def test_unordered_identity_qualifier_collections_are_refused():
     class SetQualifier(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -141,6 +174,13 @@ def test_ordered_identity_qualifier_collections_are_permitted():
 def test_section_order_is_declared_not_derived_from_the_name():
     section = FindingSection(id="datasets", title="Datasets", section_order=300)
     assert section.section_order == 300
+
+
+def test_rule_and_section_ids_reject_trailing_newlines():
+    with pytest.raises(ValidationError, match="dotted kebab-case"):
+        _rule(id="dataset.cached-field-drift\n")
+    with pytest.raises(ValidationError, match="kebab-case"):
+        FindingSection(id="datasets\n", title="Datasets", section_order=300)
 
 
 def test_a_qualifier_of_the_wrong_type_is_refused_not_quietly_coerced():

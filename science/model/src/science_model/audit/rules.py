@@ -60,7 +60,7 @@ class FindingSection(BaseModel):
 
     @model_validator(mode="after")
     def _valid_id(self) -> "FindingSection":
-        if not _SECTION_ID_RE.match(self.id):
+        if not _SECTION_ID_RE.fullmatch(self.id):
             raise RuleDeclarationError(f"section id must be kebab-case, got {self.id!r}")
         return self
 
@@ -101,7 +101,7 @@ class FindingRule(BaseModel):
 
     @model_validator(mode="after")
     def _validate_declaration(self) -> "FindingRule":
-        if not _RULE_ID_RE.match(self.id):
+        if not _RULE_ID_RE.fullmatch(self.id):
             raise RuleDeclarationError(
                 f"rule id must be dotted kebab-case, got {self.id!r}"
             )
@@ -125,25 +125,30 @@ class FindingRule(BaseModel):
                 "model_config extra='forbid'"
             )
 
-        hints = typing.get_type_hints(self.qualifier_schema)
         for name in self.identity_qualifiers:
-            if name not in hints:
+            field = self.qualifier_schema.model_fields.get(name)
+            if field is None:
                 raise RuleDeclarationError(
                     f"{self.id}: identity qualifier {name!r} is not a field of "
                     f"{self.qualifier_schema.__name__}"
                 )
-            if not _identity_type_permitted(hints[name]):
+            if not _identity_type_permitted(field.annotation):
                 raise RuleDeclarationError(
-                    f"{self.id}: identity qualifier {name!r} has type {hints[name]!r}; "
+                    f"{self.id}: identity qualifier {name!r} has type "
+                    f"{field.annotation!r}; "
                     "only str, bool, int, and lists of those may bear identity (§3)"
                 )
-        if self.remediation == "producer" and not self.remediator:
+        if self.remediation == "producer" and (
+            self.remediator is None
+            or not self.remediator
+            or self.remediator != self.remediator.strip()
+        ):
             raise RuleDeclarationError(
-                f"{self.id}: remediation='producer' requires a remediator name. There "
-                "is deliberately no opt-out flag: a switch that turns this check off "
-                "is a bypass of the check."
+                f"{self.id}: remediation='producer' requires a remediator name that "
+                "is trimmed and nonblank. There is deliberately no opt-out flag: a "
+                "switch that turns this check off is a bypass of the check."
             )
-        if self.remediation == "none" and self.remediator:
+        if self.remediation == "none" and self.remediator is not None:
             raise RuleDeclarationError(
                 f"{self.id}: names a remediator but declares remediation='none'"
             )

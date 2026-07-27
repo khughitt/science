@@ -14,9 +14,15 @@ from science_model.audit import (
     finding_fingerprint,
 )
 
-from science_tool.findings.ingest import IngestError, ingest_report, load_report
+from science_tool.findings.ingest import (
+    IngestError,
+    _known_canonical_entity_refs,
+    ingest_report,
+    load_report,
+)
 from science_tool.findings.producers import FindingProducer, build_registry
 from science_tool.findings.storage import CASES_DIRNAME, MAX_CASE_BYTES, load_cases
+from science_tool.graph.sources import load_project_sources
 
 
 class Q(BaseModel):
@@ -386,6 +392,236 @@ def test_entity_subject_accepts_a_nested_declared_entity_home_record(tmp_path):
     )
 
     assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "kind_line"),
+    [
+        ("entities/reports/id-only.md", ""),
+        ("research/packages/id-only.md", ""),
+        ("entities/design-notes/id-only.md", ""),
+        ("entities/reports/blank-kind.md", "kind: '   '\n"),
+    ],
+    ids=[
+        "core-home-missing",
+        "research-package-missing",
+        "local-home-missing",
+        "blank",
+    ],
+)
+def test_entity_subject_rejects_id_bearing_records_without_nonblank_kind(
+    tmp_path,
+    relative_path,
+    kind_line,
+):
+    _seed_local_kind_profile(tmp_path)
+    record = tmp_path / relative_path
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(
+        "---\nid: report:id-only\n"
+        f"{kind_line}"
+        "title: Has an id\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="report:id-only")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_rejects_an_id_bearing_unknown_kind(tmp_path):
+    record = tmp_path / "entities" / "reports" / "unknown.md"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(
+        "---\nid: mystery:unknown\nkind: mystery\ntitle: Unknown\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="mystery:unknown")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_rejects_a_known_kind_invalid_under_its_model(tmp_path):
+    record = tmp_path / "entities" / "reports" / "invalid.md"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(
+        "---\nid: report:invalid\nkind: report\n---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="report:invalid")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_rejects_a_project_schema_invalid_record(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: pinned\nentity_schema_version: 2\n",
+        encoding="utf-8",
+    )
+    record = tmp_path / "entities" / "hypotheses" / "invalid.md"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(
+        "---\n"
+        "id: hypothesis:invalid\n"
+        "kind: hypothesis\n"
+        "title: Invalid\n"
+        "status: active\n"
+        "created: 2026-07-27\n"
+        "updated: 2026-07-27\n"
+        "related: []\n"
+        "source_refs: []\n"
+        "source_stated_evidenc: typo\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="hypothesis:invalid")
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_entity_subject_uses_descriptor_loaded_project_extension_schema(
+    tmp_path,
+):
+    (tmp_path / "science.yaml").write_text(
+        "name: pinned\n"
+        "entity_schema_version: 2\n"
+        "entity_extensions:\n"
+        "  hypothesis: [acme.note/1.0]\n",
+        encoding="utf-8",
+    )
+    schema = tmp_path / "schemas" / "extension-acme-note-1.0.json"
+    schema.parent.mkdir()
+    schema.write_text(
+        json.dumps(
+            {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": "https://schemas.science/extension-acme-note-1.0.json",
+                "type": "object",
+                "properties": {"local_note": {"type": "string"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    record = tmp_path / "entities" / "hypotheses" / "invalid-extension.md"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(
+        "---\n"
+        "id: hypothesis:invalid-extension\n"
+        "kind: hypothesis\n"
+        "title: Invalid extension\n"
+        "status: active\n"
+        "created: 2026-07-27\n"
+        "updated: 2026-07-27\n"
+        "related: []\n"
+        "source_refs: []\n"
+        "local_note: 4\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(
+                    subject=EntitySubject(ref="hypothesis:invalid-extension")
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_safe_entity_resolver_agrees_with_graph_loader_for_mixed_records(
+    tmp_path,
+):
+    project = tmp_path / "mixed"
+    project.mkdir()
+    _seed_local_kind_profile(project)
+    records = {
+        "entities/datasets/valid.md": (
+            "id: dataset:valid\nkind: dataset\ntitle: Valid dataset\n"
+        ),
+        "research/packages/deep/package.md": (
+            "id: research-package:valid\n"
+            "kind: research-package\n"
+            "title: Valid package\n"
+        ),
+        "entities/design-notes/valid.md": (
+            "id: design-note:valid\nkind: design-note\ntitle: Valid local\n"
+        ),
+        "entities/reports/missing-kind.md": (
+            "id: report:missing-kind\ntitle: Missing kind\n"
+        ),
+        "entities/reports/unknown-kind.md": (
+            "id: mystery:unknown\nkind: mystery\ntitle: Unknown\n"
+        ),
+        "entities/reports/invalid-model.md": (
+            "id: report:invalid-model\nkind: report\n"
+        ),
+    }
+    for relative_path, frontmatter in records.items():
+        path = project / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"---\n{frontmatter}---\n",
+            encoding="utf-8",
+        )
+
+    safe_refs = _known_canonical_entity_refs(project)
+    graph_refs = {
+        entity.id
+        for entity in load_project_sources(
+            project,
+            include_commons=False,
+            strict_core_schema=False,
+        ).entities
+    }
+
+    assert safe_refs == graph_refs == {
+        "dataset:valid",
+        "design-note:valid",
+        "research-package:valid",
+    }
 
 
 @pytest.mark.parametrize("link_site", ["nested-directory", "leaf"])
