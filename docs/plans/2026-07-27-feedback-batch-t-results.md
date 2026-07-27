@@ -83,7 +83,11 @@ power-curve value of theta: **1607–3392 effective draws out of 10,000**. That 
 the evidence the rule asks for, expressed in a pre-Cost-Gate table.
 
 Certification stopped at this ruling. The instrument was not accepted with a
-known false positive.
+known false positive. Later review established that prose alone cannot prove
+that those diagnostics completed successfully on the same substrate and
+authorize the particular schedule the rule found. The owning project therefore
+migrated `0025` to an explicit canonical Cost Gate rather than teaching the
+validator to infer those relations from prose.
 
 #### `0026` — substantively right
 
@@ -115,69 +119,99 @@ thinning increase with target ESS about 800, but records no accepted run at
 that schedule. The failed achieved diagnostics must not become an escape hatch.
 The finding is right.
 
-### Corpus-derived RED/GREEN refinement
+### Rejected heuristics and structural resolution
 
-The root cause was that the antecedent treated every schedule token as
-prospective and could not recognize completed same-document calibration.
-The first refinement, in `4c9511ea`, treated a numeric markdown
-`ESS (of N)` row as sufficient evidence. Review rejected that property: the
-same row can state a prospective target, report a failed run, or belong to an
-unrelated analysis, and the early skip could hide a malformed canonical Cost
-Gate.
+Two attempted prose exemptions were rejected.
 
-The shipped property is a conjunction over one same-document record, not an
-ESS-row shortcut. A pre-Cost-Gate document is exempt only when all of these
-mechanical facts hold:
+The first, in `4c9511ea`, treated a numeric markdown `ESS (of N)` row as
+sufficient evidence. The same row can state a prospective target, report a
+failed run, or belong to an unrelated analysis.
 
-1. an `## Outcome ... EXECUTED` heading records completed execution;
-2. a `## Power ...` section scopes the evidence to the schedule-bearing power
-   analysis;
-3. that section contains an explicit `MCMC diagnostics` declaration;
-4. the same section contains numeric result rows for power, 95% CI,
-   acceptance, and `ESS (of N)`;
-5. the section explicitly concludes that “The design has ... power ... CI”;
-6. the section does not say mixing/calibration/schedule failed or that it is
-   not calibrated.
+The second, in `d32adf98`, required an executed Outcome heading, a Power
+section, MCMC-diagnostics prose, numeric power/CI/acceptance/ESS rows, an
+achieved-power conclusion, and the absence of several failure phrases. That
+conjunction was still unsound. It could not distinguish:
 
-This recognizes `0025`'s explicit completed power-calibration record. It does
-not infer success from an ESS magnitude, and it remains a deliberately narrow
-prose heuristic. If a canonical Cost Gate is present, its required rows are
-always validated first; completed diagnostics cannot suppress a malformed
-gate.
+1. a prospective Power target after an unrelated executed outcome;
+2. completed pilot diagnostics from a different substrate;
+3. a failed calibration described with a failure phrase outside the blacklist;
+4. completed Power calibration plus a separate future schedule elsewhere in
+   the same document.
 
-The original positive fixture was added first and failed RED:
+No document-level prose pattern can mechanically bind calibration completion,
+diagnostic success, substrate/geometry identity, and authorization of the
+specific schedule the rule detected. The final validator therefore recognizes
+no prose exemption: only a present canonical
+`## Cost Gate (execution geometry)` with filled `Target geometry` and
+`Calibration domain` rows discharges the obligation. A present malformed gate
+continues to warn.
+
+#### Owning-project migration
+
+The human authorized a transparent owning-project amendment. In the isolated
+natural-systems worktree on branch `fix/prereg-0025-cost-gate`, commit
+`621c7ca81` (`pre-registration: backfill 0025 cost gate`) changes only
+`entities/pre-registrations/0025-tractability-filter-confound.md`.
+
+The amendment:
+
+- is marked POST-EXECUTION in frontmatter, the document header, the Cost Gate,
+  and the Amendment Record;
+- says it records already-achieved evidence for validator readability, changes
+  no registered quantity, schedule, or verdict, and does not retroactively
+  create precommitment;
+- records the executed seven-target, four-chain geometry, 20,000 valid-move
+  burn-in, 2,500 retained draws per chain spaced every 40 valid moves, and the
+  actual 246-node/20-stratum/152-cross-edge/385-within-edge calibration domain;
+- records the achieved acceptance/ESS/MCSE evidence and explicitly limits
+  transfer and invalidation claims where hardware, library, concurrency, and
+  wall-time evidence were not recorded.
+
+The source facts come from the already-committed
+`pipeline/t823/calibrate_null.py`, `null-calibration.json`, and
+`exact-bounds.json`; no analysis was rerun and no unrecorded execution detail
+was invented.
+
+#### Final toolkit RED/GREEN
+
+The `0025`-shaped test was changed first to require a warning when achieved
+diagnostics prose has no Cost Gate:
 
 ```bash
 cd ~/d/science/.worktrees/feedback-batch-t/science
 uv run --frozen pytest \
-  tests/validate/test_checks_prereg_schedule.py::test_schedule_with_achieved_ess_table_passes_without_cost_gate \
+  tests/validate/test_checks_prereg_schedule.py::test_achieved_diagnostics_without_cost_gate_warns \
   -q
 ```
 
-The test failed with one
-`prereg.schedule-calibration-domain` warning, for the expected reason. After
-review found the row-only property unsafe, four negative regressions were added
-before the corrective implementation:
+RED was observed under the conjunction heuristic:
 
-```bash
-uv run --frozen pytest \
-  tests/validate/test_checks_prereg_schedule.py::test_prospective_numeric_ess_table_without_cost_gate_warns \
-  tests/validate/test_checks_prereg_schedule.py::test_failed_numeric_ess_table_without_cost_gate_warns \
-  tests/validate/test_checks_prereg_schedule.py::test_unrelated_numeric_ess_table_without_cost_gate_warns \
-  tests/validate/test_checks_prereg_schedule.py::test_achieved_diagnostics_do_not_hide_malformed_cost_gate \
-  -q
+```text
+FAILED ...test_achieved_diagnostics_without_cost_gate_warns
+E assert 0 == 1
+E  + where 0 = len([])
 ```
 
-All four failed RED because the row-only implementation emitted no warning.
-The scoped conjunction and Cost-Gate-first ordering then made those four tests
-and the positive `0025`-shaped regression pass GREEN. The corrective commit is
-`d32adf98`:
-`fix(validate): require completed schedule calibration evidence`.
+The implementation then removed both rejected exemptions and all
+power-result/failure-phrase machinery. The same command passed GREEN. The
+focused module passed 14 tests, including the achieved-prose warning, the
+filled canonical gate, and malformed required-row boundaries. The final
+toolkit code commit is `06e3b4bc`:
+`fix(validate): require explicit schedule cost gates`.
+
+The same implementation produced this direct before/after audit:
+
+```text
+unamended 5 [0007, 0025, 0026, 0032, 0034]
+amended   4 [0007,       0026, 0032, 0034]
+```
+
+The unamended source was the untouched natural-systems main checkout; the
+amended source was the isolated worktree at commit `621c7ca81`.
 
 ### Re-verification and final measured findings
 
-The required code, validator, lint, and type checks passed after the corrective
-refinement:
+Commands:
 
 ```bash
 cd ~/d/science/.worktrees/feedback-batch-t/science
@@ -185,17 +219,34 @@ uv run --frozen pytest \
   tests/validate/test_checks_prereg_schedule.py \
   tests/validate/test_checks_prereg_vehicles.py -q
 uv run --frozen pytest tests/validate -q
-uv run --frozen ruff check \
-  src/science_tool/validate/checks/prereg_schedule.py \
-  tests/validate/test_checks_prereg_schedule.py
+uv run --frozen ruff check
 uv run --frozen pyright
 ```
 
-Results: **38 focused tests passed**, **951 validator tests passed**, focused
-ruff was clean, and pyright reported **0 errors, 0 warnings**. The validator
-suite emitted only the existing rdflib deprecation warnings.
+Results: **35 focused tests passed**, the **948-test validator suite exited
+zero**, full Ruff was clean, and Pyright reported **0 errors, 0 warnings**. The
+validator suite emitted only the existing rdflib deprecation warnings.
 
-The exact four-project JSON command above was then rerun. Final counts:
+Final JSON certification used the isolated amended natural-systems worktree:
+
+```bash
+cd ~/d/science/.worktrees/feedback-batch-t/science
+uv run --frozen science validate \
+  --project-root ~/d/natural-systems/.worktrees/feedback-batch-t-0025 \
+  --format json --output /tmp/batch-t-final-natural-systems.json
+uv run --frozen science validate \
+  --project-root ~/d/3d-attention-bias \
+  --format json --output /tmp/batch-t-final-3d-attention-bias.json
+uv run --frozen science validate \
+  --project-root ~/d/protein-landscape \
+  --format json --output /tmp/batch-t-final-protein-landscape.json
+uv run --frozen science validate \
+  --project-root ~/d/seq-feats \
+  --format json --output /tmp/batch-t-final-seq-feats.json
+```
+
+Findings were selected from those four artifacts by exact
+`rule == "prereg.schedule-calibration-domain"` equality. Final counts:
 
 | project | expected after adjudication | actual |
 |---|---:|---:|
@@ -206,7 +257,8 @@ The exact four-project JSON command above was then rerun. Final counts:
 
 The surviving paths are `0007`, `0026`, `0032`, and `0034`, each with the same
 path-specific message recorded above. `0025` is absent. In particular, the
-refinement did **not** silence `0034`.
+migration did **not** silence `0034`, and no prose inference is capable of
+silencing any document.
 
 ### Certification domain
 
