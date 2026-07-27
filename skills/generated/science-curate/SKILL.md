@@ -205,7 +205,7 @@ commands this phase already runs:
   reference-resolution machinery is internal only, so treat this as
   unavailable.
 - **stale-task evidence** — semantic and out of the inventory's scope; defer
-  to `science-review-tasks` skill (source-ref / result-manifest / recent-commit
+  to the `science-review-tasks` skill (source-ref / result-manifest / recent-commit
   judgement). No deterministic stale-task surface exists yet.
 
 `candidate_signals.no_frontmatter_files` lists only Markdown under
@@ -345,7 +345,7 @@ Suggested body:
 - **Actioned Fixes** - exact files changed, with rationale.
 - **Pending Decisions** - items that need user judgement. Each entry must distinguish *new* decisions (first surfaced this sweep) from *carry-overs* extracted in Phase 1 from the most recent prior ledger; tag carry-overs with the originating sweep date, e.g. `Carry-over from 2026-04-28 sweep`.
 - **Suggested Follow-Ups** - tasks, commands, or synthesis updates to queue next.
-- **Self-Reflection** - improvements noticed for `science-curate` skill, the skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
+- **Self-Reflection** - improvements noticed for the `science-curate` skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
 
 If a same-day ledger already exists, append a timestamped update section rather than overwriting prior observations.
 
@@ -366,7 +366,7 @@ If the run is docs-only and no Python files changed, note that format/type check
 
 At the end of the sweep, answer this prompt in the ledger's **Self-Reflection** section:
 
-> What did this curation sweep make harder than it should have been? Note any improvements to `science-curate` skill, the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
+> What did this curation sweep make harder than it should have been? Note any improvements to the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
 
 Be concrete. Name the friction, where it appeared, and the smallest improvement that would help next time.
 
@@ -381,9 +381,9 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 
 | Command | Relationship |
 |---|---|
-| `science-big-picture` skill | Uses curated project memory as input to synthesis; `science-curate` skill repairs the memory layer. |
-| `science-next-steps` skill | Consumes curation findings as one input to future priorities. |
-| `science-review-tasks` skill | Overlaps on stale tasks, but `science-curate` skill is broader and semantic. |
-| `science-health` skill | Supplies structural health signals during inventory. |
-| `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
-| `science-dag-audit` skill | Handles detailed DAG drift; `science-curate` skill can surface candidates and defer to DAG audit. |
+| the `science-big-picture` skill | Uses curated project memory as input to synthesis; the `science-curate` skill repairs the memory layer. |
+| the `science-next-steps` skill | Consumes curation findings as one input to future priorities. |
+| the `science-review-tasks` skill | Overlaps on stale tasks, but the `science-curate` skill is broader and semantic. |
+| the `science-health` skill | Supplies structural health signals during inventory. |
+| the `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
+| the `science-dag-audit` skill | Handles detailed DAG drift; the `science-curate` skill can surface candidates and defer to DAG audit. |

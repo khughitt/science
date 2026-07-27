@@ -241,7 +241,7 @@ keep the union of matched facets and reason notes.
 
 ## Cataloging Workflow
 
-The `science-catalog-benchmarks` skill and `science-catalog-benchmarks` skill
+The `science-catalog-benchmarks` skill
 should keep v1 cataloging descriptive:
 
 - discover benchmark-capable datasets;

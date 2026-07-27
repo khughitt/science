@@ -148,7 +148,7 @@ For brevity, the examples below write just `science <command>` — **always expa
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
 - **MUST** write the plan to the project's plan filename convention. Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems; in those projects, use `entities/plans/<NNNN>-<slug>.md` with the next unused sequence number. Date-prefixed plans are only appropriate when the project already uses date-prefixed plan entity stems.
-- **MUST** check whether methodological readiness is already documented by an analysis-plan file under `entities/plans/*-analysis-plan.md` (a `kind: plan` entity with `plan_kind: analysis-plan`, referenced as `plan:<stem>`). If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` skill before finalizing the pipeline plan.
+- **MUST** check whether methodological readiness is already documented by an analysis-plan file under `entities/plans/*-analysis-plan.md` (a `kind: plan` entity with `plan_kind: analysis-plan`, referenced as `plan:<stem>`). If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend the `science-plan-analysis` skill before finalizing the pipeline plan.
 - **SHOULD** include frontmatter linking the plan to its hypotheses / questions / tasks via `related: [hypothesis:..., rq:..., plan:..., task:..., paper:...]`. Core-log decisions are not graph refs: if the decision only exists as a section in `core/decisions.md`, reference it in prose or in a non-graph header note instead of `related:`. Use `decision:<id>` in `related:` only when that ID resolves to a real owner file under `entities/decision/*.md`.
 - **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
 - **SHOULD** add `sci:Transformation` graph nodes ONLY when the project uses formal inquiries (Step 3 below). Skip in `design` / `implementation` modes — the plan document is the canonical artifact and graph annotations are not load-bearing.
@@ -190,9 +190,9 @@ science inquiry show "<slug>" --format table
 science inquiry validate "<slug>" --format json
 ```
 
-Verify status is `specified`. If it's `sketch`, warn the user and suggest `science-specify-model` skill first.
+Verify status is `specified`. If it's `sketch`, warn the user and suggest the `science-specify-model` skill first.
 
-If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `science-critique-approach` skill <slug>` first. Proceeding anyway."
+If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running the `science-critique-approach` skill with input `<slug>` first. Proceeding anyway."
 
 **Fallback:** If `science inquiry show` fails or times out, read the graph-backed inquiry source directly from `entities/patches/<slug>.md`. If the project only has `entities/inquiries/<slug>.md`, treat it as prose context rather than a compiled inquiry source.
 
@@ -244,7 +244,7 @@ If the user says no, continue with the normal planning flow.
 For each input data source identified in Step 2:
 
 1. Resolve to a `dataset:<slug>` entity. If no entity exists:
-   - For external sources: invoke `science-find-datasets` skill. Do not proceed
+   - For external sources: invoke the `science-find-datasets` skill. Do not proceed
      with a URL alone.
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
@@ -527,10 +527,10 @@ the compiled graph and revision metadata from authored sources.
 ### Step 6: Suggest next steps
 
 1. **Track plan tasks:** For each task in the plan that isn't tracked in the task queue (`science tasks list --all`), offer to create one via `science tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
-2. If no pre-registration exists for the target hypothesis, suggest: `science-pre-register` skill — to formalize expectations before running the analysis
-3. `science-review-pipeline` skill <slug>` — get critical review before implementation
+2. If no pre-registration exists for the target hypothesis, suggest: the `science-pre-register` skill — to formalize expectations before running the analysis
+3. the `science-review-pipeline` skill with input `<slug>` — get critical review before implementation
 4. Execute the plan using `superpowers:executing-plans`
-5. `science-discuss` skill — discuss specific aspects of the plan
+5. the `science-discuss` skill — discuss specific aspects of the plan
 
 ## Important Notes
 

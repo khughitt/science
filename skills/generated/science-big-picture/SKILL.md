@@ -165,7 +165,7 @@ that as a clean empty state only when the reason is expected for the project
 surface; rerun with the current CLI or report feedback because it does not
 distinguish clean-empty from unwired.
 
-For `software` profile projects, skip `graph project-summary` (follows `science-status` skill precedent).
+For `software` profile projects, skip `graph project-summary` (follows the `science-status` skill precedent).
 Use `graph attention-sample` to choose which epistemic entities receive close
 reading in this synthesis pass. Do not narrow the synthesis solely by
 deterministic top-N priority rows.
@@ -413,7 +413,7 @@ After any `--hypothesis <id>` invocation, the rollup's `synthesized_from` frontm
 for each entry in synthesized_from:
   current_sha = git hash-object <entry.file>
   if current_sha != entry.sha:
-    print warning: "Rollup is stale relative to <entry.file>. Run `science-big-picture` skill without --hypothesis to refresh."
+    print warning: "Rollup is stale relative to <entry.file>. Run the `science-big-picture` skill without --hypothesis to refresh."
 ```
 
 The staleness warning is informational — do not block execution.

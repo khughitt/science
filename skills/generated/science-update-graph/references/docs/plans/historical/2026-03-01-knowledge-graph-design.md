@@ -844,7 +844,7 @@ Required evidence artifact for the exemplar:
 
 ## 7. Research Project File Structure
 
-When a project is scaffolded via `science-create-project` skill, the `knowledge/` directory has this structure:
+When a project is scaffolded via the `science-create-project` skill, the `knowledge/` directory has this structure:
 
 ```
 my-research-project/
@@ -893,7 +893,7 @@ GRAPH :graph/datasets {
 
 ### 7.1 Prose Annotation Conventions
 
-Research documents gain two annotation layers that serve as the bridge between narrative prose and the knowledge graph. These are added by the agent during `science-create-graph` skill and `science-update-graph` skill.
+Research documents gain two annotation layers that serve as the bridge between narrative prose and the knowledge graph. These are added by the agent during the `science-create-graph` skill and the `science-update-graph` skill.
 
 **Frontmatter metadata** — an `ontology_terms:` list of CURIEs relevant to the document:
 

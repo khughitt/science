@@ -267,7 +267,7 @@ uv run science tasks <action> [args...]
 
 When working through tasks, follow these principles:
 
-- **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run `science-tasks` skill list --status=active` to see what's actionable overall.
+- **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run the `science-tasks` skill with input `list --status=active` to see what's actionable overall.
 - **Don't parallelize tasks that share environment state.** Tasks that install/change packages, modify shared config, or compete for GPU memory must run sequentially. Only parallelize truly independent work (e.g., two literature reviews).
 - **Log failures into the task.** If a task fails, update its description with what went wrong: `science tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
 - **Check `AGENTS.md` before executing.** The project's operational guide may document known issues, environment constraints, or workarounds discovered in previous sessions.

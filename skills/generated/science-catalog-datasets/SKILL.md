@@ -202,7 +202,7 @@ Use the `--coverage` output as the per-question/per-hypothesis source of truth; 
 
 ## Step 2: Discover
 
-For each gap Q/H, invoke `science-find-datasets` skill to surface public candidate datasets.
+For each gap Q/H, invoke the `science-find-datasets` skill to surface public candidate datasets.
 Focus on obtainable omics (GEO, SRA, Zenodo) for under-covered Q/H triggers; prefer datasets with a direct accession or DOI that can be verified without credentialing.
 
 Before creating any local dataset entity, check existing project datasets and commons-backed datasets/overlays by accession, DOI, title, and normalized slug. If a canonical commons dataset already exists (for example TCGA PanCanAtlas or METABRIC), link to the existing `dataset:<slug>` or create a project overlay when the project needs local annotations. Do not create a duplicate local dataset entity for the same artefact.
@@ -369,7 +369,7 @@ If the graph was stale, the prioritizer will warn on stderr — run `science gra
 
 ## Step 6: Handoff
 
-Route the top obtainable datasets to `science-plan-pipeline` skill for per-dataset download, QA, and preprocessing.
+Route the top obtainable datasets to the `science-plan-pipeline` skill for per-dataset download, QA, and preprocessing.
 
 **Authorization precondition — access-verified is NOT authorized-to-analyze.** Before
 any handoff, check the project's scope gate: `core/decisions.md` (or the profile's
@@ -384,12 +384,12 @@ project authorized.
 For each top-ranked dataset where `access.verified: true` (or Branch A has just been
 confirmed) **and** which is within the authorized analysis scope:
 
-1. Invoke `science-plan-pipeline` skill for that dataset, providing:
+1. Invoke the `science-plan-pipeline` skill for that dataset, providing:
    - The `dataset:<slug>` entity as the primary data source.
    - The target Q/H as the inquiry context.
 2. Let `plan-pipeline` handle its own data-access gate (Step 2b) — at this point the entity's `access` block should already satisfy the PASS condition.
 
-**Per-dataset QA and download are out of scope for this command.** The handoff is the front/back boundary; this command ends once `science-plan-pipeline` skill has been invoked for each **authorized** top candidate (and ready-but-unauthorized datasets have been recorded for a scope decision).
+**Per-dataset QA and download are out of scope for this command.** The handoff is the front/back boundary; this command ends once the `science-plan-pipeline` skill has been invoked for each **authorized** top candidate (and ready-but-unauthorized datasets have been recorded for a scope decision).
 
 ## Commons Promotion Follow-Up
 

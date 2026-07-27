@@ -262,7 +262,7 @@ committed as one document, but interpretability and standing verdicts are per an
 - Is there a pipeline plan? (Reference by slug if one exists in `entities/plans/`)
 
 If this is a data-analysis pre-registration and no linked `plan:<stem>` analysis
-plan exists, recommend `science-plan-analysis` skill when any of these are underspecified:
+plan exists, recommend the `science-plan-analysis` skill when any of these are underspecified:
 input QA, preprocessing/normalization checks, independent unit, estimand,
 power/resolution limit, or sensitivity-arbitration rule. The recommendation is
 advisory, not a hard dependency.
@@ -421,9 +421,9 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 1. Save to `entities/pre-registrations/<slug>.md`. The frontmatter must declare `kind: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 2. If relevant hypotheses exist, note in the output that pre-registration is now on record.
 3. Suggest next steps:
-   - `science-plan-pipeline` skill — if no pipeline plan exists yet
-   - `science-bias-audit` skill — to check for blind spots before running the analysis
-   - `science-discuss` skill — to stress-test the expectations themselves
+   - the `science-plan-pipeline` skill — if no pipeline plan exists yet
+   - the `science-bias-audit` skill — to check for blind spots before running the analysis
+   - the `science-discuss` skill — to stress-test the expectations themselves
 4. Commit: `git add -A && git commit -m "doc: pre-register expectations for <slug>"`
 
 ## Process Reflection

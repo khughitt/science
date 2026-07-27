@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -142,6 +143,19 @@ def _replace_test_router_frontmatter(repo_root: Path, frontmatter: str) -> None:
     router = repo_root / "skills" / "test" / "SKILL.md"
     body = router.read_text(encoding="utf-8").split("---\n", 2)[-1]
     router.write_text(f"---\n{frontmatter}\n---\n{body}", encoding="utf-8")
+
+
+def _replace_test_command_frontmatter(
+    repo_root: Path,
+    command_name: str,
+    frontmatter: str,
+) -> None:
+    command = repo_root / "commands" / f"{command_name}.md"
+    body = command.read_text(encoding="utf-8").split("---\n", 2)[-1]
+    command.write_text(
+        f"---\n{frontmatter}\n---\n{body}",
+        encoding="utf-8",
+    )
 
 
 def test_command_to_skill_name_uses_science_namespace() -> None:
@@ -823,6 +837,62 @@ def test_invalid_agent_skill_description_fails_before_output_mutation(
     assert not (tmp_path / "commands-output").exists()
 
 
+@pytest.mark.parametrize(
+    "frontmatter",
+    (
+        "description: [unterminated",
+        "description: [not, a, string]",
+        "description: 42",
+        "name: ignored",
+        "description: ''",
+        f"description: {'x' * 1025}",
+    ),
+    ids=("malformed-yaml", "list", "numeric", "missing", "empty", "overlong"),
+)
+def test_invalid_command_frontmatter_fails_before_output_mutation(
+    tmp_path: Path,
+    frontmatter: str,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+    _replace_test_command_frontmatter(repo_root, "demo", frontmatter)
+
+    with pytest.raises(
+        ValueError,
+        match="invalid command frontmatter|command description",
+    ):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+    assert not (tmp_path / "skills-output").exists()
+    assert not (tmp_path / "commands-output").exists()
+
+
+def test_overlong_skill_description_fails_before_output_mutation(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(repo_root, router_name="test")
+    _replace_test_router_frontmatter(
+        repo_root,
+        f"name: test\ndescription: {'x' * 1025}",
+    )
+
+    with pytest.raises(ValueError, match="Agent Skill description"):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+
 def test_generated_output_path_must_be_strictly_contained(tmp_path: Path) -> None:
     output_root = tmp_path / "output"
     output_root.mkdir()
@@ -890,6 +960,108 @@ def test_opencode_adapter_frontmatter_is_valid_yaml(
         assert yaml.safe_load(frontmatter) == {"description": canonical_descriptions[name]}
 
 
+def test_generated_frontmatter_round_trips_tricky_description(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+    description = 'Quote "this", keep C:\\work\\file, and retain # markers.'
+    _replace_test_command_frontmatter(
+        repo_root,
+        "demo",
+        f"description: {json.dumps(description)}",
+    )
+
+    generated = generate_agent_assets(
+        repo_root,
+        tmp_path / "skills-output",
+        tmp_path / "commands-output",
+    )
+
+    skill_frontmatter = (
+        generated.skill_paths["science-demo"]
+        .read_text(encoding="utf-8")
+        .split("---\n", 2)[1]
+    )
+    adapter_frontmatter = (
+        generated.opencode_command_paths["science-demo"]
+        .read_text(encoding="utf-8")
+        .split("---\n", 2)[1]
+    )
+    assert yaml.safe_load(skill_frontmatter)["description"] == description
+    assert yaml.safe_load(adapter_frontmatter)["description"] == description
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "dependency"),
+    (
+        (
+            "Run `/science:critique-approach <slug>` next.",
+            "Run the `science-critique-approach` skill with input `<slug>` next.",
+            "science-critique-approach",
+        ),
+        (
+            'Invoke `/science:tasks add --title "A B"`.',
+            'Invoke the `science-tasks` skill with input `add --title "A B"`.',
+            "science-tasks",
+        ),
+        (
+            "Use /science:status.",
+            "Use the `science-status` skill.",
+            "science-status",
+        ),
+        (
+            "The `/science:catalog-benchmarks` command is available.",
+            "The `science-catalog-benchmarks` skill is available.",
+            "science-catalog-benchmarks",
+        ),
+    ),
+)
+def test_slash_invocation_rewrite_preserves_arguments_and_punctuation(
+    source: str,
+    expected: str,
+    dependency: str,
+) -> None:
+    dependencies: set[str] = set()
+
+    rewritten = agent_assets._rewrite_methodology_command_references(
+        source,
+        dependencies,
+    )
+
+    assert rewritten == expected
+    assert dependencies == {dependency}
+
+
+def test_slash_rewrite_collapses_duplicate_skill_prose() -> None:
+    dependencies: set[str] = set()
+    source = (
+        "The `/science:catalog-benchmarks` command and "
+        "`science-catalog-benchmarks` skill should stay descriptive. "
+        "Improve `/science:curate`, the `science-curate` skill. "
+        "Also improve `/science:curate`, the skill."
+    )
+
+    rewritten = agent_assets._rewrite_methodology_command_references(
+        source,
+        dependencies,
+    )
+
+    assert rewritten == (
+        "The `science-catalog-benchmarks` skill should stay descriptive. "
+        "Improve the `science-curate` skill. "
+        "Also improve the `science-curate` skill."
+    )
+    assert dependencies == {
+        "science-catalog-benchmarks",
+        "science-curate",
+    }
+
+
 def test_generated_command_skill_loads_name_emitted_packages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -950,14 +1122,42 @@ def test_generated_distribution_has_no_rewrite_corruption_or_slash_commands(
     )
     corrupt = re.compile(
         r"\b(?:see\s+Load|the\s+the|skill\s+skill)\b"
-        r"|`the\s+`science-|``science-",
+        r"|`the\s+`science-|``science-"
+        r"|`science-[a-z0-9-]+` skill "
+        r"(?:<[^>\n]+>|[a-z][^`\n]*--[^`\n]*)`",
         re.IGNORECASE,
+    )
+    duplicate = re.compile(
+        r"`(?P<name>science-[a-z0-9-]+)` skill"
+        r"(?:\s+and|,\s+the)\s+`(?P=name)` skill",
     )
     for root in roots:
         for path in sorted(root.rglob("*.md")):
             text = path.read_text(encoding="utf-8")
             assert "/science:" not in text, path.relative_to(root)
             assert corrupt.search(text) is None, path.relative_to(root)
+            assert duplicate.search(text) is None, path.relative_to(root)
+
+
+def test_cited_generated_prose_has_no_command_skill_duplicates(
+    generated: GenerationResult,
+) -> None:
+    benchmarking = (
+        generated.skill_paths["science-catalog-benchmarks"].parent
+        / "references"
+        / "docs"
+        / "user-guide"
+        / "benchmarking.md"
+    ).read_text(encoding="utf-8")
+    curate = generated.skill_paths["science-curate"].read_text(encoding="utf-8")
+
+    assert (
+        "The `science-catalog-benchmarks` skill should keep v1 cataloging "
+        "descriptive"
+    ) in _norm(benchmarking)
+    assert (
+        "improvements noticed for the `science-curate` skill, prompts"
+    ) in curate
 
 
 def test_project_agents_md_scaffolds_use_neutral_skill_names(

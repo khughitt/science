@@ -10,7 +10,7 @@ This document describes the standard directory layouts for Science-managed proje
 | `.env` | API keys (gitignored) | User |
 | `.gitignore` | Git ignore rules | Agent on project creation |
 | `CLAUDE.md` | Single-line pointer to `AGENTS.md` | Agent on project creation |
-| `AGENTS.md` | Operational guide (tools, validation, conventions, managed load-bearing-constraints digest) | Agent during loops; digest section managed by `science-curate` skill |
+| `AGENTS.md` | Operational guide (tools, validation, conventions, managed load-bearing-constraints digest) | Agent during loops; digest section managed by the `science-curate` skill |
 | `pyproject.toml` | Root tool manifest for project-local Science tooling | Agent on project creation / import |
 | `README.md` | Canonical high-level project context and strategy | User + agent |
 | `validate.sh` | Structural validation script | Copied from plugin |
@@ -47,7 +47,7 @@ The canonical root for Science-managed written output.
 - `meta/skill-feedback.md` — process reflection log
 - `reports/` — audits and structured reports
 - `plans/` — project plans and design docs; generated `*-plan-review.md` scratch files are gitignored unless promoted
-- `meta/next-steps-*.md` — gap analysis and prioritization scratch output (written by `science-next-steps` skill; gitignored unless promoted)
+- `meta/next-steps-*.md` — gap analysis and prioritization scratch output (written by the `science-next-steps` skill; gitignored unless promoted)
 
 ### `papers/` — Reference Management
 
@@ -84,7 +84,7 @@ and tests in root `tests/`. Do not nest the package under `code/`.
 ### `core/` — Curated Project Orientation (optional)
 
 Short, human-edited orientation docs loaded at session start via `AGENTS.md`.
-Complement to dynamic outputs from `science-status` skill and `science-next-steps` skill:
+Complement to dynamic outputs from the `science-status` skill and the `science-next-steps` skill:
 those tools regenerate every session; `core/` is the stable institutional
 knowledge an agent (or new collaborator) needs to be useful in five minutes.
 
@@ -100,7 +100,7 @@ Recommended files (each capped at ~100-150 lines):
 `AGENTS.md` references `core/` via its Pointers section and carries a managed
 digest of load-bearing constraints between `<!-- BEGIN: load-bearing-constraints -->`
 and `<!-- END: load-bearing-constraints -->` markers. The digest is refreshed
-by `science-curate` skill from `core/decisions.md` (active decisions only). AGENTS.md
+by the `science-curate` skill from `core/decisions.md` (active decisions only). AGENTS.md
 does **not** `@`-include `core/*.md` — those files routinely run into the
 hundreds of lines and would inflate every turn's context.
 

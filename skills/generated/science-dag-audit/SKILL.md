@@ -236,14 +236,14 @@ Run this skill:
   retroactively change the status of multiple edges. Running the audit right
   after a verdict write-up captures the propagation before it becomes stale.
 - **Before writing a synthesis report** — ensures the DAG figures the report
-  references are current. `science-big-picture` skill invokes this skill
+  references are current. the `science-big-picture` skill invokes this skill
   read-only as part of its Phase 3 rollup.
 
 ## Non-goals
 
 - Do NOT use this skill to **reorganize** DAG topology (add/remove nodes/edges).
-  That is a design-level activity; use `science-sketch-model` skill or
-  `science-critique-approach` skill instead. This skill only reconciles existing
+  That is a design-level activity; use the `science-sketch-model` skill or
+  the `science-critique-approach` skill instead. This skill only reconciles existing
   edges with new evidence.
 - Do NOT use `--fix` unattended. The mutations include opening tasks and
   editing YAML — both need human judgement on each specific proposal.

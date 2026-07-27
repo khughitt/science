@@ -13,6 +13,7 @@ import yaml
 
 COMMAND_PREAMBLE_HEADING = "## Science Command Preamble"
 COMMAND_SUPPORT_SKILL = "science-command-preamble"
+DESCRIPTION_MAX_LENGTH = 1024
 _AGENT_SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 COMMAND_ROLE_RE = re.compile(
     r"Follow `(?:\$\{CLAUDE_PLUGIN_ROOT\}/)?references/command-preamble\.md`"
@@ -48,9 +49,23 @@ _RELATIVE_MARKDOWN_LINK_RE = re.compile(
     r"(#[^)]+)?\)"
 )
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-_AGENT_COMMAND_RE = re.compile(
-    r"`?/science:([a-z0-9-]+)`?"
+_INLINE_AGENT_INVOCATION_RE = re.compile(
+    r"(?P<article>\b[Tt]he\s+)?"
+    r"`/science:(?P<name>[a-z0-9-]+)"
+    r"(?:\s+(?P<arguments>[^`\n]+))?`"
     r"(?:\s+(?:slash\s+)?(?:command|skill))?"
+)
+_BARE_AGENT_INVOCATION_RE = re.compile(
+    r"(?P<article>\b[Tt]he\s+)?"
+    r"(?<![`\w])/science:(?P<name>[a-z0-9-]+)"
+    r"(?:\s+(?:slash\s+)?(?:command|skill))?"
+)
+_DUPLICATE_SKILL_REFERENCE_RE = re.compile(
+    r"(?P<first>(?:[Tt]he\s+)?`(?P<name>science-[a-z0-9-]+)` skill)"
+    r"(?:\s+and|,\s+the)\s+`(?P=name)` skill"
+)
+_REDUNDANT_GENERIC_SKILL_RE = re.compile(
+    r"(?P<reference>[Tt]he\s+`science-[a-z0-9-]+` skill),\s+the skill\b"
 )
 _CANONICAL_SKILL_ENTRY_RE = re.compile(
     r"^- `([a-z0-9-]+)`: `(skills/[A-Za-z0-9._/-]+\.md)`$",
@@ -586,11 +601,10 @@ def _generate_opencode_adapters(
 
 
 def _render_opencode_adapter(name: str, description: str) -> str:
-    quoted_description = json.dumps(description, ensure_ascii=False)
     return "\n".join(
         (
             "---",
-            f"description: {quoted_description}",
+            f"description: {_yaml_scalar(description)}",
             "---",
             "",
             f"Load and execute the `{name}` skill using this input:",
@@ -599,6 +613,10 @@ def _render_opencode_adapter(name: str, description: str) -> str:
             "",
         )
     )
+
+
+def _yaml_scalar(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _load_command_preamble(repo_root: Path) -> str:
@@ -637,46 +655,21 @@ def _load_command_preamble(repo_root: Path) -> str:
 
 
 def _parse_command(command_path: Path) -> tuple[str, str, str]:
-    text = command_path.read_text(encoding="utf-8")
-    frontmatter_match = re.match(r"^---\n(.*?)\n---\n\n?", text, re.DOTALL)
-    if frontmatter_match is None:
-        raise ValueError(f"Command file is missing frontmatter: {command_path}")
-
-    frontmatter = frontmatter_match.group(1)
-    description_match = re.search(
-        r"^description:\s*(.+)$",
-        frontmatter,
-        re.MULTILINE,
+    frontmatter, body = _parse_frontmatter(command_path, "command")
+    description = _validate_description(
+        frontmatter.get("description"),
+        command_path,
+        "command",
     )
-    if description_match is None:
-        raise ValueError(f"Command file is missing description: {command_path}")
-
-    body = text[frontmatter_match.end() :].strip()
     title_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
     if title_match is None:
         raise ValueError(f"Command file is missing a top-level heading: {command_path}")
 
-    return title_match.group(1).strip(), description_match.group(1).strip(), body
+    return title_match.group(1).strip(), description, body
 
 
 def _parse_skill(skill_path: Path) -> tuple[str, str, str]:
-    text = skill_path.read_text(encoding="utf-8")
-    frontmatter_match = re.match(r"^---\n(.*?)\n---\n\n?", text, re.DOTALL)
-    if frontmatter_match is None:
-        raise ValueError(f"skill file is missing frontmatter: {skill_path}")
-
-    try:
-        frontmatter = yaml.safe_load(frontmatter_match.group(1))
-    except yaml.YAMLError as error:
-        raise ValueError(
-            f"invalid skill frontmatter YAML: {skill_path}: {error}"
-        ) from error
-    if not isinstance(frontmatter, dict):
-        raise ValueError(
-            f"invalid skill frontmatter mapping: {skill_path}"
-        )
-
-    body = text[frontmatter_match.end() :].strip()
+    frontmatter, body = _parse_frontmatter(skill_path, "skill")
     name = frontmatter.get("name")
     description = frontmatter.get("description")
     name, description = _validate_agent_skill_metadata(
@@ -687,17 +680,55 @@ def _parse_skill(skill_path: Path) -> tuple[str, str, str]:
     return name, description, body
 
 
+def _parse_frontmatter(
+    path: Path,
+    kind: str,
+) -> tuple[dict[object, object], str]:
+    text = path.read_text(encoding="utf-8")
+    frontmatter_match = re.match(r"^---\n(.*?)\n---\n\n?", text, re.DOTALL)
+    if frontmatter_match is None:
+        raise ValueError(f"{kind} file is missing frontmatter: {path}")
+
+    try:
+        frontmatter = yaml.safe_load(frontmatter_match.group(1))
+    except yaml.YAMLError as error:
+        raise ValueError(
+            f"invalid {kind} frontmatter YAML: {path}: {error}"
+        ) from error
+    if not isinstance(frontmatter, dict):
+        raise ValueError(f"invalid {kind} frontmatter mapping: {path}")
+    body = text[frontmatter_match.end() :].strip()
+    return frontmatter, body
+
+
+def _validate_description(
+    description: object,
+    source: Path,
+    kind: str,
+) -> str:
+    if (
+        not isinstance(description, str)
+        or not description.strip()
+        or len(description) > DESCRIPTION_MAX_LENGTH
+    ):
+        raise ValueError(
+            f"invalid {kind} description in {source}: expected a nonempty "
+            f"string of at most {DESCRIPTION_MAX_LENGTH} characters"
+        )
+    return description
+
+
 def _validate_agent_skill_metadata(
     name: object,
     description: object,
     source: Path,
 ) -> tuple[str, str]:
     _validate_agent_skill_name(name, source)
-    if not isinstance(description, str) or not description.strip():
-        raise ValueError(
-            f"invalid Agent Skill description in {source}: "
-            "expected a nonempty string"
-        )
+    description = _validate_description(
+        description,
+        source,
+        "Agent Skill",
+    )
     assert isinstance(name, str)
     return name, description
 
@@ -779,11 +810,10 @@ def _render_command_skill(
     )
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
-    escaped_description = description.replace('"', '\\"')
     header = [
         "---",
         f"name: {name}",
-        f'description: "{escaped_description}"',
+        f"description: {_yaml_scalar(description)}",
         "user-invocable: true",
         "---",
         "",
@@ -1171,14 +1201,13 @@ def _generate_methodology_skills(
             package_dependencies,
             bundled,
         )
-        escaped_description = description.replace('"', '\\"')
         skill_path = skill_dir / "SKILL.md"
         skill_path.write_text(
             "\n".join(
                 (
                     "---",
                     f"name: {package.name}",
-                    f'description: "{escaped_description}"',
+                    f"description: {_yaml_scalar(description)}",
                     "---",
                     "",
                     rewritten_body,
@@ -1324,12 +1353,26 @@ def _rewrite_methodology_command_references(
     text: str,
     dependencies: set[str],
 ) -> str:
-    def replace_command(match: re.Match[str]) -> str:
-        dependency = f"science-{match.group(1)}"
+    def replace_invocation(match: re.Match[str]) -> str:
+        dependency = f"science-{match.group('name')}"
         dependencies.add(dependency)
-        return f"`{dependency}` skill"
+        article = match.group("article") or "the "
+        arguments = match.groupdict().get("arguments")
+        rendered = f"{article}`{dependency}` skill"
+        if arguments is not None:
+            rendered += f" with input `{arguments.strip()}`"
+        return rendered
 
-    return _AGENT_COMMAND_RE.sub(replace_command, text)
+    text = _INLINE_AGENT_INVOCATION_RE.sub(replace_invocation, text)
+    text = _BARE_AGENT_INVOCATION_RE.sub(replace_invocation, text)
+    text = _DUPLICATE_SKILL_REFERENCE_RE.sub(
+        lambda match: match.group("first"),
+        text,
+    )
+    return _REDUNDANT_GENERIC_SKILL_RE.sub(
+        lambda match: match.group("reference"),
+        text,
+    )
 
 
 def _resolve_methodology_reference(

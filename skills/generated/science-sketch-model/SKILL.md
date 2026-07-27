@@ -142,7 +142,7 @@ At sketch time:
 - edges are tentative
 - candidate propositions are more important than polished formalism
 
-The output is an inquiry subgraph plus a rough set of candidate propositions that can later be formalized with `science-specify-model` skill.
+The output is an inquiry subgraph plus a rough set of candidate propositions that can later be formalized with the `science-specify-model` skill.
 
 ## Causal Mode Detection
 
@@ -371,10 +371,10 @@ No separate revision-stamping command is needed. `science graph build` already
 writes the compiled graph and revision metadata from authored sources.
 
 Suggest next steps:
-1. `science-specify-model` skill <slug>` to formalize claims and attach evidence
-2. `science-critique-approach` skill <slug>` if causal structure needs skeptical review
-3. `science-add-hypothesis` skill if the sketch revealed a new organizing conjecture
-4. `science-research-topic` skill or `science-search-literature` skill if the main gap is background evidence
+1. the `science-specify-model` skill with input `<slug>` to formalize claims and attach evidence
+2. the `science-critique-approach` skill with input `<slug>` if causal structure needs skeptical review
+3. the `science-add-hypothesis` skill if the sketch revealed a new organizing conjecture
+4. the `science-research-topic` skill or the `science-search-literature` skill if the main gap is background evidence
 
 ## Important Notes
 

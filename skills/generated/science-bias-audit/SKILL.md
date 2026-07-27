@@ -194,7 +194,7 @@ For each cognitive bias, assess based on the evidence you've read:
 
 **HARKing (Hypothesizing After Results are Known):**
 - If pre-registration documents exist, compare current hypotheses against them. Flag any drift.
-- If no pre-registration exists, flag this as a risk and suggest `science-pre-register` skill.
+- If no pre-registration exists, flag this as a risk and suggest the `science-pre-register` skill.
 
 **Multiple comparisons / p-hacking risk:**
 - How many analyses are planned or have been run?
@@ -263,9 +263,9 @@ precedent for it, prefer that home and set the frontmatter `kind`/`id` to match.
 ## After Writing
 
 1. Save to `entities/reports/<NNNN>-bias-audit-<slug>.md` (or `entities/review/` per the note above).
-2. If HARKing risk is detected and no pre-registration exists, suggest `science-pre-register` skill.
-3. If confirmation bias is detected, suggest `science-compare-hypotheses` skill to force consideration of alternatives.
-4. If confounding is detected and no causal DAG exists, suggest `science-sketch-model` skill.
+2. If HARKing risk is detected and no pre-registration exists, suggest the `science-pre-register` skill.
+3. If confirmation bias is detected, suggest the `science-compare-hypotheses` skill to force consideration of alternatives.
+4. If confounding is detected and no causal DAG exists, suggest the `science-sketch-model` skill.
 5. Offer to create tasks for the recommended mitigations via `science tasks add`.
 6. Only commit if the user explicitly requested a commit or the session has commit approval.
    Otherwise, report the changed files and leave the workspace uncommitted.

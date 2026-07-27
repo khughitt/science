@@ -234,11 +234,11 @@ Save to `entities/discussions/<NNNN>-comparison-<slug>.md` with frontmatter `id:
 
 1. Save the comparison document.
 2. If discriminating evidence suggests concrete work, offer to create tasks.
-3. If the comparison suggests a synthesis hypothesis, suggest `science-add-hypothesis` skill.
+3. If the comparison suggests a synthesis hypothesis, suggest the `science-add-hypothesis` skill.
 4. Suggest next steps:
-   - `science-pre-register` skill
-   - `science-discuss` skill
-   - `science-interpret-results` skill
+   - the `science-pre-register` skill
+   - the `science-discuss` skill
+   - the `science-interpret-results` skill
 
 ## Process Reflection
 

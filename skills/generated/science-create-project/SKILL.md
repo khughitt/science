@@ -139,7 +139,7 @@ If it does, warn the user they appear to be inside an existing Science project a
 - create a new project in a subdirectory
 - cancel
 
-If the user is adopting Science for an existing repository, use `science-import-project` skill instead.
+If the user is adopting Science for an existing repository, use the `science-import-project` skill instead.
 
 ## Step 1: Gather Project Context
 
@@ -426,14 +426,14 @@ Conventions, Task execution, Known issues) from the conversation in Step 1.
 Do **not** insert `@core/overview.md` or `@core/decisions.md` directives. The
 `core/` files are referenced from the Pointers section instead. The
 "Load-bearing constraints" section between the BEGIN/END markers is left empty
-on initial scaffold; `science-curate` skill populates it once `core/decisions.md`
+on initial scaffold; the `science-curate` skill populates it once `core/decisions.md`
 has entries. See `core/` in
 `references/references/project-structure.md` for the conventions.
 
 This scaffold is written once, at create/import time, from the canonical
 template. Ongoing edits to `references/templates/agents-md.md` do not propagate to
 already-scaffolded projects — there is no push-to-existing mechanism for the
-boilerplate. After creation, `science-curate` skill manages only the
+boilerplate. After creation, the `science-curate` skill manages only the
 load-bearing-constraints digest between the BEGIN/END markers (refreshed from
 that project's `core/decisions.md`); everything else in the project's
 `AGENTS.md` is that project's own file to edit directly.
@@ -462,7 +462,7 @@ For `software` projects, use `README.md` for high-level context and `entities/pl
 Create:
 
 ```md
-<!-- Task queue. Use `science-tasks` skill to manage. -->
+<!-- Task queue. Use the `science-tasks` skill to manage. -->
 ```
 
 ### `entities/specs/`

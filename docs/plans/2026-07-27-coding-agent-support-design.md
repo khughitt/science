@@ -229,6 +229,13 @@ Generated command skills:
 - contain no relative path that escapes the generated skill package;
 - omit "Converted from Claude command ..." and equivalent conversion notes.
 
+Canonical command and skill frontmatter is parsed as YAML, must be a mapping,
+and is validated before any generated-output mutation. Every command requires
+a nonempty string `description`; every skill requires its validated Agent
+Skills `name` plus a nonempty string `description`. Descriptions are limited to
+1024 characters. Generated descriptions use deterministic JSON-compatible YAML
+scalar serialization rather than manual quote escaping.
+
 The shared `user-invocable` field is the one host extension in the common
 tree. OpenCode documents that unknown skill-frontmatter fields are ignored;
 Codex requires `name` and `description` and consumes Agent Skills packages.
@@ -265,6 +272,10 @@ phrase such as “the `science-study-design` skill” when the reference occurs 
 running prose. It preserves or introduces imperative “Load ...” wording only
 when rendering a complete load instruction. Replacements do not carry their
 own duplicated article or `skill` suffix into the surrounding sentence.
+Inline-code slash invocations are parsed through their closing backtick, so
+arguments are retained as an explicit generated-skill input rather than left
+outside an unmatched delimiter. Bare slash tokens are rewritten separately and
+do not consume surrounding punctuation.
 
 Generated methodology bodies omit "Adapted from canonical Science skill ..."
 notes. The generated index remains the provenance map. Generation fails if two

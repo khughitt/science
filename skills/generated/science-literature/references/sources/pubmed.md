@@ -1,6 +1,6 @@
 ---
 name: literature-source-pubmed
-description: PubMed E-utilities source guidance for literature search and metadata normalization. Use when running `science-search-literature` skill for biomedical topics or validating biomedical identifiers.
+description: PubMed E-utilities source guidance for literature search and metadata normalization. Use when running the `science-search-literature` skill for biomedical topics or validating biomedical identifiers.
 archetype: tool-guide
 sources: [ncbi-eutilities]
 ---
@@ -16,7 +16,7 @@ Use it for high-recall biomedical retrieval, PMID resolution, and biomedical met
 
 ## When To Use
 
-- Running `science-search-literature` skill on biomedical topics.
+- Running the `science-search-literature` skill on biomedical topics.
 - Resolving PMID/PMCID identifiers.
 - Verifying publication metadata for biomedical papers.
 - Filling gaps when OpenAlex misses biomedical indexing details.

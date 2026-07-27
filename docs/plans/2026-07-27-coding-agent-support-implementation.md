@@ -506,13 +506,16 @@ rewritten preamble body inline, but replace:
 - canonical aspect paths with support-package aspect references;
 - Claude `$ARGUMENTS` prose with agent-neutral “user input” wording.
 
-Emit frontmatter in this form:
+Parse command and skill frontmatter with `yaml.safe_load`; require a mapping,
+the appropriate Agent Skills name, and a nonempty string description of at most
+1024 characters before creating staging output. Emit dynamic scalar values
+with deterministic JSON-compatible YAML serialization:
 
 ```python
 header = [
     "---",
     f"name: {skill_name}",
-    f'description: "{escaped_description}"',
+    f"description: {json.dumps(description, ensure_ascii=False)}",
     "user-invocable: true",
     "---",
     "",

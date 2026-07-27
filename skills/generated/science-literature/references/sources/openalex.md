@@ -1,6 +1,6 @@
 ---
 name: literature-source-openalex
-description: OpenAlex source guidance for literature search and metadata normalization. Use when running `science-search-literature` skill, collecting paper metadata, or reconciling identifiers across sources.
+description: OpenAlex source guidance for literature search and metadata normalization. Use when running the `science-search-literature` skill, collecting paper metadata, or reconciling identifiers across sources.
 archetype: tool-guide
 sources: [openalex]
 ---
@@ -16,7 +16,7 @@ Use it to expand candidate sets, recover identifiers, and support relevance rank
 
 ## When To Use
 
-- Running `science-search-literature` skill.
+- Running the `science-search-literature` skill.
 - Expanding topic coverage beyond a seed paper list.
 - Recovering canonical metadata for DOI/title matches.
 - Collecting citation and concept context for ranking.

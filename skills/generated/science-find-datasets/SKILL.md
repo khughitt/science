@@ -331,8 +331,8 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 
 1. Download selected datasets
 2. Create Frictionless Data Package descriptors
-3. Run `science-plan-pipeline` skill to build computational workflow
-4. Run `science-discuss` skill to evaluate dataset choices
+3. Run the `science-plan-pipeline` skill to build computational workflow
+4. Run the `science-discuss` skill to evaluate dataset choices
 
 ### Emission rules (rev 2.1)
 

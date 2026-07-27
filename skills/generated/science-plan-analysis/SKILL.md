@@ -134,8 +134,8 @@ data modality classification, input QA, independent-unit checks, estimand and
 metric clarity, power/resolution limits, bias-vs-variance risks, sensitivity
 arbitration, and required output artifacts.
 
-Use `science-plan-pipeline` skill after this command when execution orchestration is
-non-trivial. Use `science-pre-register` skill after this command when the plan is
+Use the `science-plan-pipeline` skill after this command when execution orchestration is
+non-trivial. Use the `science-pre-register` skill after this command when the plan is
 `ready` or `ready-with-caveats` and confirmatory criteria should be locked.
 
 ## When a Pre-Registration Already Exists
@@ -160,7 +160,7 @@ route it there instead of silently re-planning around it.
 3. Read relevant hypotheses, inquiries, tasks, prior pre-registrations, and existing plans named by the user.
 4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/`; do not assume absence just because no task mentions one.
 5. If an inquiry slug is provided, read the inquiry/model state and reuse captured estimand, variables, independent unit, and model/test fields.
-6. If the task is literature synthesis or theory without a data-analysis component, route to `science-research-topic` skill or `science-research-papers` skill unless the user explicitly wants an analysis plan.
+6. If the task is literature synthesis or theory without a data-analysis component, route to the `science-research-topic` skill or the `science-research-papers` skill unless the user explicitly wants an analysis plan.
 7. Before drafting the plan, run a data-availability / metric-feasibility pre-check:
    - Are the needed inputs already represented by `dataset:<slug>` entities?
    - Is each input available now, explicitly acquisition-gated, or absent?

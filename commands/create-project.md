@@ -1,5 +1,5 @@
 ---
-description: Scaffold a new Science-managed project using one of the two supported profiles: `research` or `software`. Use when starting a brand-new project from scratch.
+description: "Scaffold a new Science-managed project using one of the two supported profiles: `research` or `software`. Use when starting a brand-new project from scratch."
 ---
 
 # Create A New Science Project

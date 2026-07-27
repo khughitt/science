@@ -72,7 +72,7 @@ three different things:
   computes those same backdoor adjustment sets *when you run it*. Use it to inspect
   or extend the computation; the command emits the script, it does not run it. (Author
   the DAG first via `science inquiry` / `sketch-model` / `specify-model`.)
-- **`science-critique-approach` skill** — an *agentic* adversarial pass over the DAG for
+- **the `science-critique-approach` skill** — an *agentic* adversarial pass over the DAG for
   missing confounders, colliders, M-bias, and over-adjustment. It critiques the
   model's assumptions; it does not compute identifiability.
 - **Caveat:** the in-process identifiability checks (`inquiry validate`) require

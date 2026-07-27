@@ -272,7 +272,7 @@ Flag:
   is reflected once a feedback entry references it; cross-check with
   `science feedback list --project <project-id> --format json`. For each unreflected
   failure, prompt:
-  > No lesson filed for `<failure>`. Run `science-post-mortem` skill <failure>` before the fix-and-move-on pull loses it.
+  > No lesson filed for `<failure>`. Run the `science-post-mortem` skill with input `<failure>` before the fix-and-move-on pull loses it.
 - **unconsumed positives**: run `science feedback regression-candidates --format json`.
   Each open `positive` is a validated property with no consumption path; surface it as
   a regression-test seed (`science feedback scaffold-test <id>`) or a guidance-doc update.
@@ -294,7 +294,7 @@ The list comes from the `managed_artifacts` field of the health report.
 Run `science sync status` to check when the last cross-project sync was performed.
 If sync is stale (over the configured threshold), mention it:
 
-> Cross-project sync is N days stale. Run `science-sync` skill to align with N other registered projects.
+> Cross-project sync is N days stale. Run the `science-sync` skill to align with N other registered projects.
 
 If the current project has new entities since last sync, also mention:
 
@@ -322,7 +322,7 @@ From tasks, graph uncertainty, and recent activity, show:
 - which follow-up actions should be added under `tasks/`
 - If active hypothesis, inquiry, or task work implies a data analysis but no
   linked `plan:<stem>` analysis plan or `entities/plans/*-analysis-plan.md`
-  exists, suggest `science-plan-analysis` skill before pre-registration or pipeline
+  exists, suggest the `science-plan-analysis` skill before pre-registration or pipeline
   planning.
 
 ## Output Format

@@ -256,8 +256,8 @@ Use optional layered-claim fields only when they reduce ambiguity, by editing th
 2. If the hypothesis naturally decomposes into graph-native propositions, note the likely propositions the user may want to formalize later.
 3. Suggest 2-3 papers that may be relevant to testing this hypothesis.
 Source-check titles and authors via web search before presenting them.
-4. If the hypothesis is ready to be formalized in the graph, suggest `science-specify-model` skill.
-5. If the user wants to design a test before running it, suggest `science-pre-register` skill.
+4. If the hypothesis is ready to be formalized in the graph, suggest the `science-specify-model` skill.
+5. If the user wants to design a test before running it, suggest the `science-pre-register` skill.
 6. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
 
 ## Process Reflection
