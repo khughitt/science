@@ -1,8 +1,8 @@
 # Feedback Batch T — certification results
 
 Measured against `docs/plans/2026-07-26-feedback-batch-t-design.md` and
-`docs/plans/2026-07-27-feedback-batch-t-plan.md`. This section records the
-Task 6 corpus certification. Task 7 adds the filing closures and branch-wide
+`docs/plans/2026-07-27-feedback-batch-t-plan.md`. This document records the
+Task 6 corpus certification, the Task 7 filing closures, and branch-wide
 verification.
 
 ## `prereg.schedule-calibration-domain` corpus certification
@@ -175,6 +175,12 @@ The source facts come from the already-committed
 `exact-bounds.json`; no analysis was rerun and no unrecorded execution detail
 was invented.
 
+The isolated worktree was initialized against natural-systems' pinned Science
+0.5.2 before the amendment. Its clean-base `bash validate.sh --verbose`
+produced **574 errors and 102 warnings** (985 findings, first 40 displayed).
+Those findings pre-dated this amendment, and the human explicitly authorized
+them as out of scope. They were neither repaired nor absorbed into Batch T.
+
 #### Final toolkit RED/GREEN
 
 The `0025`-shaped test was changed first to require a warning when achieved
@@ -276,3 +282,127 @@ schedule family. The other three projects contribute 12 pre-registrations but
 declare no such schedules and produce zero findings. The result certifies the
 instrument only over that measured domain; it does not claim coverage of other
 schedule families or project conventions.
+
+## Design corrections and deferred rule
+
+The design correctly identified `0025` as the honest risk but its proposed
+response was incomplete. It said that, if the warning was substantively wrong,
+the check should learn a narrow mechanical exemption from the corpus. Two such
+exemptions were implemented and rejected during certification. Neither could
+bind achieved diagnostics to the schedule, substrate, geometry, and
+authorization relation that the rule needs. The corrected ruling is
+structural: a frozen pre-registration that declares a schedule must carry the
+canonical Cost Gate with filled `Target geometry` and `Calibration domain`
+rows. Completed-diagnostics prose is not an exemption.
+
+That correction did not convert a false positive into accepted validator
+noise. The owning project made the already-achieved calibration evidence
+explicit in post-execution Amendment 4 (`d4112f545`), and the deterministic
+committed-base control proves that this structural change removes only `0025`.
+The surviving `0034` incident remains visible.
+
+The design's other correction remains load-bearing: execution-geometry mismatch
+has **no fixed direction**. Compile-dominated pilots can overstate per-unit
+cost, while batched measurements can understate sequential cost. Favourable
+probe selection creates the reliably optimistic bias in the reported
+incidents; mismatch alone only invalidates authorization.
+
+`prereg.cost-geometry-undeclared` is deliberately **deferred**, not silently
+dropped. Only **1 of 46** surveyed pre-registrations carried the Estimator
+Certification Gate and only one mentioned a compute budget. A rule over that
+surface would certify only the fixtures that teach it its own convention.
+Batch T instead ships the schedule-calibration rule, for which the corpus
+contained five real candidate findings. Reconsider the broader rule only after
+the corpus has materially adopted Cost Gates and can falsify it.
+
+## Downstream behavior changes
+
+Downstream toolkit consumers will see these changes:
+
+- `study-design-cost-gate-certification` is a registered skill and generated
+  Codex skill. It teaches frozen geometry, the monotonicity tell, p90 over at
+  least five repeats at one geometry, steady-state/target-concurrency
+  measurement, schedule calibration domains, bottleneck-first remedy ladders,
+  and the positive verdict-blind-gate pattern.
+- `skills/study-design/estimator-certification.md` now routes its “price the
+  design” step to the cost doctrine, and `skills/pipelines/SKILL.md` routes
+  compile/contention work there without duplicating the doctrine.
+- Both pre-registration template copies expose the optional
+  `cost-gate` section, headed `Cost Gate (execution geometry)`. It is
+  `required: false`: analyses with no cost or schedule decision may delete it.
+  Users who keep it get explicit rows for target geometry, calibration domain,
+  statistic, repeats, steady state/concurrency, transfer, invalidation, and the
+  resulting budget or schedule decision.
+- `science validate` now loads `prereg.schedule-calibration-domain`. For a
+  frozen pre-registration whose content declares burn-in, thinning, R-hat, or
+  ESS, it emits an ungated **WARN** when the canonical Cost Gate is absent or
+  either load-bearing row is absent, empty, or still a placeholder. Filled
+  canonical rows discharge the warning. Unfrozen pre-registrations and
+  documents without schedule tokens are unchanged.
+- The validator accepts no document-level prose shortcut. Achieved ESS,
+  acceptance-rate, power, or Outcome prose does not silence the warning,
+  because it cannot prove the required authorization relation. A malformed
+  present gate still warns rather than becoming cheaper than a filled gate.
+- The frozen-pre-registration predicate moved into
+  `science_tool.validate.prereg_frozen` and is shared by the vehicle and
+  schedule checks; the vehicle-check verdicts did not change.
+
+The renderer-unblocking fix described as D0 was shipped separately as
+`a3611ed2` and merged to main as `c6a57e70`; Batch T does not claim it again as
+a branch-local behavior change.
+
+## Filing closures
+
+All six records were closed through `science feedback update` in the canonical
+feedback store at `~/.config/science/feedback/`. Each was then read back through
+`science feedback show` with `status: addressed` and a non-empty detailed
+resolution.
+
+| filing | terminal resolution |
+|---|---|
+| `fb-2026-07-13-001` | Exact execution geometry and the monotonicity tell are now doctrine; the template freezes target geometry and calibration domain. |
+| `fb-2026-07-13-002` | The doctrine requires p90 wall time over `R >= 5` repeats at one executing geometry and forbids a best-across-sweep cost. |
+| `fb-2026-07-12-014` | The doctrine and pipelines route name compile amortisation, require steady-state target-concurrency measurement, and record thread pinning. |
+| `fb-2026-07-25-009` | Doctrine, template, and the certified WARN rule now require a schedule calibration domain; final corpus result is 4/0/0/0 and `0034` remains visible. |
+| `fb-2026-07-25-010` | The doctrine requires profiling first, ordering remedies by the measured bottleneck, and presenting the cost split with options. |
+| `fb-2026-07-25-011` | The positive verdict-blind pre-exposure gate pattern is recorded under “What Works,” preserving it as reusable doctrine. |
+
+The canonical filing paths are:
+
+```text
+~/.config/science/feedback/fb-2026-07-13-001.yaml
+~/.config/science/feedback/fb-2026-07-13-002.yaml
+~/.config/science/feedback/fb-2026-07-12-014.yaml
+~/.config/science/feedback/fb-2026-07-25-009.yaml
+~/.config/science/feedback/fb-2026-07-25-010.yaml
+~/.config/science/feedback/fb-2026-07-25-011.yaml
+```
+
+## Final verification
+
+Task 7 ran the required commands sequentially from the package directories:
+
+```bash
+cd ~/d/science/.worktrees/feedback-batch-t/science
+uv run --frozen pytest
+
+cd ~/d/science/.worktrees/feedback-batch-t/science/model
+uv run --frozen pytest
+
+cd ~/d/science/.worktrees/feedback-batch-t/science
+uv run --frozen ruff check
+uv run --frozen pyright
+```
+
+| check | result |
+|---|---|
+| Science pytest | **11,603 passed, 7 skipped, 8 deselected**, exit 0 |
+| science-model pytest | **1,468 passed**, exit 0 |
+| Ruff | **All checks passed**, exit 0 |
+| Pyright | **0 errors, 0 warnings, 0 informations**, exit 0 |
+
+The Science suite reported only warnings and completed in 529.34 seconds.
+No snapshot was updated and no failure was dismissed. The external
+natural-systems amendment remains isolated on
+`fix/prereg-0025-cost-gate` at `d4112f545`, based on `f733755b3`; neither that
+branch nor `feedback-batch-t` was merged.
