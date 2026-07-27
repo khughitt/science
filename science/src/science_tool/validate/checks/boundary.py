@@ -29,6 +29,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+import yaml
+from pydantic import ValidationError
+
 from science_tool.boundary.config import (
     DEFAULT_UNMANAGED_ALLOW,
     BoundaryConfig,
@@ -83,7 +86,7 @@ def load_boundary_state(
     defaults = {(".gitignore", p) for p in DEFAULT_UNMANAGED_ALLOW}
     try:
         cfg = load_project_config(project_root).boundary
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, UnicodeDecodeError, ValidationError, yaml.YAMLError) as exc:
         return None, defaults, exc
     if cfg is None:
         return None, defaults, None

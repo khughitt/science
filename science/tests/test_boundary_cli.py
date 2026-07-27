@@ -3,10 +3,12 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
 from science_tool.boundary.cli import boundary_group
+from science_tool.boundary.generate import MANAGED_BEGIN
 
 
 def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
@@ -21,6 +23,44 @@ def _repo(tmp_path: Path, boundary: dict | None = None) -> Path:
 
 
 DECL = {"roots": [{"path": "data/external", "class": "manifest", "tracked": ["datapackage.json"]}]}
+_COMMANDS = (
+    ("check",),
+    ("sync",),
+    ("sync", "--check"),
+    ("sync", "--verify-current-tree"),
+    ("init",),
+)
+_SYNC_COMMANDS = _COMMANDS[1:4]
+
+
+def _invoke(repo: Path, command: tuple[str, ...]):
+    return CliRunner().invoke(boundary_group, [*command, "--project-root", str(repo)])
+
+
+def _assert_boundary_error(result) -> None:
+    assert result.exit_code == 2
+    assert "boundary:" in result.output
+    assert "Traceback" not in result.output
+
+
+def _break_config(repo: Path, kind: str) -> None:
+    config = repo / "science.yaml"
+    if kind == "malformed-yaml":
+        config.write_text("name: [\n")
+    elif kind == "invalid-schema":
+        config.write_text("name: D\nid: d\nboundary: not-a-mapping\n")
+    elif kind == "missing":
+        config.unlink()
+    elif kind == "unreadable":
+        config.unlink()
+        config.mkdir()
+    else:
+        raise AssertionError(f"unknown config failure kind {kind!r}")
+
+
+def _commit(repo: Path, *paths: str) -> None:
+    subprocess.run(["git", "-C", str(repo), "add", *paths], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fixture"], check=True)
 
 
 def test_check_exits_zero_on_clean_repo(tmp_path: Path):
@@ -48,6 +88,21 @@ def test_check_renders_git_failure(tmp_path: Path):
     assert "boundary: git ls-files -z failed" in result.output
 
 
+@pytest.mark.parametrize("command", _COMMANDS)
+@pytest.mark.parametrize("kind", ("malformed-yaml", "invalid-schema", "missing", "unreadable"))
+def test_commands_render_project_config_failures(tmp_path: Path, command: tuple[str, ...], kind: str):
+    repo = _repo(tmp_path, DECL)
+    _break_config(repo, kind)
+    _assert_boundary_error(_invoke(repo, command))
+
+
+def test_check_renders_malformed_managed_block(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").write_text(f"{MANAGED_BEGIN}\n")
+    _commit(repo, ".gitignore")
+    _assert_boundary_error(_invoke(repo, ("check",)))
+
+
 def test_sync_writes_the_block(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     result = CliRunner().invoke(boundary_group, ["sync", "--project-root", str(repo)])
@@ -70,6 +125,26 @@ def test_sync_renders_unsafe_gitignore_failure(tmp_path: Path):
     result = CliRunner().invoke(boundary_group, ["sync", "--project-root", str(repo)])
     assert result.exit_code == 2
     assert "boundary: cannot manage root .gitignore: root .gitignore is a symlink" in result.output
+
+
+@pytest.mark.parametrize("command", _SYNC_COMMANDS)
+def test_sync_branches_render_malformed_managed_block(tmp_path: Path, command: tuple[str, ...]):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").write_text(f"{MANAGED_BEGIN}\n")
+    _commit(repo, ".gitignore")
+    _assert_boundary_error(_invoke(repo, command))
+
+
+@pytest.mark.parametrize("command", _SYNC_COMMANDS)
+def test_sync_branches_render_empty_boundary_declaration(tmp_path: Path, command: tuple[str, ...]):
+    repo = _repo(tmp_path, {"roots": []})
+    _assert_boundary_error(_invoke(repo, command))
+
+
+def test_sync_verify_renders_dirty_gitignore(tmp_path: Path):
+    repo = _repo(tmp_path, DECL)
+    (repo / ".gitignore").write_text("dirty\n")
+    _assert_boundary_error(_invoke(repo, ("sync", "--verify-current-tree")))
 
 
 def test_init_discovers_an_already_ignored_payload_root(tmp_path: Path):

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import click
 import yaml
+from pydantic import ValidationError
 
 from science_tool.boundary.config import BoundaryConfigError
+from science_tool.boundary.generate import ManagedBlockError
 from science_tool.boundary.gitio import BoundaryGitError, tracked_ignored, unmanaged_rules
 from science_tool.boundary.init import propose_declaration
 from science_tool.boundary.sync import BoundaryDirtyError, has_drift, sync, verify_current_tree
@@ -19,6 +22,21 @@ _ROOT_OPTION = click.option(
     default=Path("."),
     help="Project root (default: current directory).",
 )
+_BOUNDARY_COMMAND_ERRORS = (
+    BoundaryConfigError,
+    BoundaryDirtyError,
+    BoundaryGitError,
+    ManagedBlockError,
+    OSError,
+    UnicodeDecodeError,
+    ValidationError,
+    yaml.YAMLError,
+)
+
+
+def _exit_boundary_error(exc: Exception) -> NoReturn:
+    click.echo(f"boundary: {exc}", err=True)
+    sys.exit(2)
 
 
 @click.group("boundary")
@@ -44,11 +62,12 @@ def check_command(project_root: Path) -> None:
         hits = tracked_ignored(project_root)
         _cfg, allowed, _error = load_boundary_state(project_root)
         warnings = unanchored_findings(unmanaged_rules(project_root), allowed)
-    except BoundaryGitError as exc:
-        click.echo(f"boundary: {exc}", err=True)
-        sys.exit(2)
+    except (BoundaryGitError, ManagedBlockError) as exc:
+        _exit_boundary_error(exc)
     for rule in warnings:
         click.echo(f"warn  {rule.source}:{rule.line}: unanchored pattern {rule.pattern!r}", err=True)
+    if _error is not None:
+        _exit_boundary_error(_error)
     if not hits:
         click.echo("vcs-boundary: clean (no tracked file matches an ignore rule)")
         return
@@ -84,16 +103,18 @@ def sync_command(project_root: Path, check_only: bool, verify: bool) -> None:
             return
         result = sync(project_root)
         click.echo("boundary: managed block updated" if result.changed else "boundary: already current")
-    except (BoundaryDirtyError, BoundaryConfigError, BoundaryGitError) as exc:
-        click.echo(f"boundary: {exc}", err=True)
-        sys.exit(2)
+    except _BOUNDARY_COMMAND_ERRORS as exc:
+        _exit_boundary_error(exc)
 
 
 @boundary_group.command("init")
 @_ROOT_OPTION
 def init_command(project_root: Path) -> None:
     """Propose a boundary declaration for review. Writes nothing."""
-    proposal = propose_declaration(project_root)
+    try:
+        proposal = propose_declaration(project_root)
+    except _BOUNDARY_COMMAND_ERRORS as exc:
+        _exit_boundary_error(exc)
     if not proposal["roots"]:
         click.echo("boundary: no candidate roots found; declare them by hand in science.yaml")
         return
