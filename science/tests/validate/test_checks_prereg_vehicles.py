@@ -357,3 +357,151 @@ def test_git_query_maps_any_other_exit_to_none(project: Path) -> None:
 
     assert _git_query(project, "check-ignore", "-q", "--", "../outside") is None
     assert _git_query(project, "ls-files", "--error-unmatch", "--", "../outside") is None
+
+
+def test_candidate_paths_accepts_a_bare_backticked_path() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("uses `data/raw/foo.json` as input") == ["data/raw/foo.json"]
+
+
+def test_candidate_paths_rejects_a_span_that_is_not_only_a_path() -> None:
+    """Path-shaped arguments are not mined out of commands."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("run `python x.py --in data/raw/foo`") == []
+
+
+def test_candidate_paths_rejects_urls() -> None:
+    """`:` is outside the grammar."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("see `https://example.com/x`") == []
+
+
+def test_candidate_paths_rejects_root_level_names_in_every_normalized_form() -> None:
+    """Root-level paths are out of scope, and the GRAMMAR does not enforce it.
+
+    Every form here contains a `/` when the grammar matches it and denotes a
+    root-level path once normalized. `././input.parquet` and `build/./` are the
+    forms a single `./`-strip and `rstrip('/')` would let through, which is why
+    normalization must be fully lexical.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = (
+        "`input.parquet` and `./input.parquet` and `input.parquet/` "
+        "and `././input.parquet` and `build/./`"
+    )
+
+    assert _candidate_paths(body) == []
+
+
+def test_candidate_paths_rejects_absolute_paths_however_they_are_spelled() -> None:
+    """`//etc/passwd` is POSIX-absolute too, and `PurePosixPath` knows it."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`/etc/passwd` and `//etc/passwd` and `../secrets/x`") == []
+
+
+def test_candidate_paths_collapses_redundant_separators() -> None:
+    """`.//etc/passwd` is relative `etc/passwd` in POSIX, not the absolute path.
+
+    A naive two-character `./` strip would emit `/etc/passwd` and break the
+    function's own repo-relative contract.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`.//etc/passwd` and `a//b/c`") == ["etc/passwd", "a/b/c"]
+
+
+def test_candidate_paths_ignores_fenced_blocks() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "before\n\n```\n`data/raw/foo.json`\n```\n\nafter\n"
+
+    assert _candidate_paths(body) == []
+
+
+def test_candidate_paths_respects_fence_delimiters() -> None:
+    """A `~~~` line inside a backtick fence is content, not the closer.
+
+    Toggling on any fence marker would end the block at `~~~` and expose
+    `b/two.json`, which is still inside fenced Markdown.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```\n`a/one.json`\n~~~\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_does_not_close_a_fence_on_a_marker_with_trailing_text() -> None:
+    """Per CommonMark a CLOSING fence may be followed only by whitespace."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```\n`a/one.json`\n```not-a-close\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_does_not_close_a_fence_on_an_over_indented_marker() -> None:
+    """Four spaces makes it an indented code block, not a fence delimiter.
+
+    Verified against the alternative: with an unbounded `^[ \\t]*` this returns
+    `['b/two.json']` -- a path that is still inside fenced Markdown.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```\n`a/one.json`\n    ```\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_accepts_a_three_space_indented_fence() -> None:
+    """0-3 spaces is still a fence; the cap must not break ordinary indentation."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "   ```\n`a/one.json`\n   ```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_allows_an_opening_info_string() -> None:
+    """The trailing-text rule applies to CLOSERS only; ```python still opens."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```python\n`a/one.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_ignores_html_comments() -> None:
+    """A commented-out path is body text but is not something the document says."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("<!-- was `data/raw/foo.json` -->") == []
+
+
+def test_candidate_paths_ignores_a_fence_inside_an_html_comment() -> None:
+    """Comments are stripped first, so a commented fence cannot desynchronise
+    the fence state and swallow the rest of the document."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "<!--\n```\n-->\n\nuses `data/raw/foo.json`\n"
+
+    assert _candidate_paths(body) == ["data/raw/foo.json"]
+
+
+def test_candidate_paths_normalizes_leading_dot_slash_and_trailing_slash() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    assert _candidate_paths("`./data/raw/` and `data/raw`") == ["data/raw"]
+
+
+def test_candidate_paths_deduplicates_preserving_first_appearance() -> None:
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "`b/two.json` then `a/one.json` then `b/two.json`"
+
+    assert _candidate_paths(body) == ["b/two.json", "a/one.json"]

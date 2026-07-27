@@ -22,9 +22,10 @@ there must be declared as a content-addressed dataset entity instead.
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from science_tool.entities import resolve_path_policy
@@ -36,6 +37,24 @@ from science_tool.validate.result import Result, Severity
 # Data-gated mode commits the decision rule before any vehicle is admissible,
 # so it legitimately names none. The template section is the declaration.
 _DATA_GATED_MARKER = "## Vehicle-Admissibility Gate"
+
+_RULE_PROSE = "prereg.prose-path-nondurable"
+
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# Captures the delimiter run so a fence is closed only by its OWN character, at
+# least as long -- a `~~~` line inside a ``` block is content, not the closer.
+# Indentation is capped at three spaces per CommonMark: at four it is an indented
+# code block, so a 4-space ``` inside an open fence is CONTENT. An unbounded
+# `^[ \t]*` closes on it and exposes the rest of the block.
+_FENCE_LINE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_INLINE_CODE = re.compile(r"`([^`\n]+)`")
+# The exact grammar behind the design's 16-finding corpus survey. Anchored at
+# both ends: a span containing a command, flag, argument or prose fails as a
+# whole, so path-shaped arguments are never mined out of a command example. The
+# closed class also excludes URLs, since `:` is not in it. It requires a `/`,
+# but that is NOT sufficient to keep root-level paths out of scope -- see
+# `_normalize`.
+_PATH_GRAMMAR = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_./+-]*/[A-Za-z0-9_./+-]*$")
 
 
 def _result(severity: Severity, relative: str, message: str, rule: str) -> Result:
@@ -81,6 +100,95 @@ def _vehicle_entries(frontmatter: dict[str, Any]) -> list[Any]:
     if not isinstance(declared, list):
         return [declared]
     return declared
+
+
+def _strip_fenced_blocks(body: str) -> str:
+    """Blank every line inside a fenced code block, delimiters included.
+
+    Tracks the OPENING delimiter, because CommonMark closes a fence only with a
+    run of the SAME character, at least as long, followed by nothing but
+    whitespace. Two distinct mistakes both end a block early and expose every
+    path in its remainder: toggling on a `~~~` line inside a ``` block, and
+    closing on ```` ```not-a-close ````. The trailing-text rule applies only
+    when a block is already open -- an OPENING fence may carry an info string,
+    so ```` ```python ```` must still open.
+    """
+    lines: list[str] = []
+    opener: str | None = None
+    for line in body.splitlines():
+        match = _FENCE_LINE.match(line)
+        if match is not None:
+            marker = match.group(1)
+            if opener is None:
+                opener = marker
+                continue
+            if (
+                marker[0] == opener[0]
+                and len(marker) >= len(opener)
+                and not line[match.end(1) :].strip()
+            ):
+                opener = None
+                continue
+            # Neither an opener nor a valid closer: content inside the block.
+        lines.append("" if opener is not None else line)
+    return "\n".join(lines)
+
+
+def _normalize(token: str) -> str | None:
+    """A slash-containing, lexically repo-relative path, or None.
+
+    Normalization is delegated to `PurePosixPath` rather than done with string
+    surgery, because the ad-hoc version is wrong in three ways that all look
+    fine in isolation: stripping one leading `./` leaves `././input.parquet` as
+    `./input.parquet`, turns `.//etc/passwd` into the ABSOLUTE `/etc/passwd`
+    -- breaking this function's own contract -- and `rstrip('/')` leaves
+    `build/./` as `build/.`. `PurePosixPath` collapses `.` segments and
+    redundant separators, and knows that a leading `//` is POSIX-absolute.
+
+    Three rejections then apply, and none is redundant:
+
+    * absolute -- `PurePosixPath.is_absolute()` covers `/x` and `//x`.
+    * `..` -- load-bearing, since `.` is in the grammar's leading character
+      class, so `../secrets/x` matches the grammar and is stopped only here.
+    * no `/` after normalization -- the design puts root-level paths out of
+      scope, and the GRAMMAR CANNOT ENFORCE THAT: `./input.parquet` contains a
+      `/` when it is matched and denotes a root-level path once normalized.
+    """
+    candidate = token.strip()
+    if not candidate:
+        return None
+    pure = PurePosixPath(candidate)
+    if pure.is_absolute():
+        return None
+    parts = [part for part in pure.parts if part != "."]
+    if not parts or any(part == ".." for part in parts):
+        return None
+    normalized = "/".join(parts)
+    if "/" not in normalized:
+        return None
+    return normalized
+
+
+def _candidate_paths(body: str) -> list[str]:
+    """Normalized repo-relative paths this document names in prose.
+
+    HTML comments are stripped BEFORE fences: a comment may contain a fence
+    marker, and opening on it would desynchronise the fence state and swallow
+    the rest of the document.
+    """
+    text = _strip_fenced_blocks(_HTML_COMMENT.sub("", body))
+    found: list[str] = []
+    seen: set[str] = set()
+    for span in _INLINE_CODE.findall(text):
+        stripped = span.strip()
+        if not _PATH_GRAMMAR.match(stripped):
+            continue
+        candidate = _normalize(stripped)
+        if candidate is None or candidate in seen:
+            continue
+        seen.add(candidate)
+        found.append(candidate)
+    return found
 
 
 @Check(section="discussion documents...", order=13)
