@@ -18,6 +18,8 @@
 - **Lint and types from `science/`:** `uv run ruff check` and `uv run pyright`. Pyright is configured once by `pyrightconfig.json` at the repo root and covers all three source trees; test directories are not type-checked.
 - **Fingerprint domain prefix is exactly `science.finding.v1\n`** (§3). Occurrence keys use `science.occurrence.v1\n`, reviews `science.review.v1\n`, acceptance keys `science.acceptance.v1\n`.
 - **Digests are 64 lowercase hex characters.** The acceptance key alone is truncated to 32 (§10).
+- **Schema validation of qualifiers and metrics is `strict=True`.** These are typed wire contracts, and the validated model is discarded — the input mapping is what gets stored and fingerprinted. Lax validation does not check a value, it replaces it somewhere the caller never looks: `{"count": "1"}` passes an `int` field, reports `1`, and leaves `"1"` on disk, so `1` and `"1"` become two identities for one finding.
+- **No string that reaches an occurrence or review hash may contain a NUL.** `\0` is the field separator of those two frozen encodings, so a NUL inside a component makes them ambiguous. `HashComponent` (Task 4) applies the refusal on both the wire form and the stored form.
 - **All new Pydantic models set `model_config = ConfigDict(extra="forbid", frozen=True)`** unless a task says otherwise. `Entity` uses `extra="ignore"`, which is why a hand-written `phase:` could never reach the graph; audit records must not repeat that.
 - **Conventional commits.** No AI-attribution trailer or footer on any commit.
 - **No "legacy" or "compatibility" shims**, and no `Unified` prefix on any component name.
@@ -816,7 +818,7 @@ git commit -m "feat(audit): freeze fingerprint v1 with golden vectors"
 
 **Interfaces:**
 - Consumes: `FindingSubject` (Task 1), `Evidence` / `MAX_EVIDENCE_ENTRIES` (Task 2).
-- Produces: `AuditFinding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`, `QualifierMap` (the frozen-mapping annotation reused by `record.py`).
+- Produces: `AuditFinding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`, `QualifierMap` (the frozen-mapping annotation reused by `record.py`), and `HashComponent` — a `str` that may not contain a NUL, applied by `record.py` and `report.py` to every field that reaches the `\0`-delimited occurrence and review hashes.
 
 `rule_id` is a **string** on the wire (§1); producer-side factories take a `FindingRule` object and derive it (Task 5).
 
@@ -977,6 +979,45 @@ QualifierMap = Annotated[
 ]
 
 
+def reject_nul(value: str) -> str:
+    """NUL is a FIELD SEPARATOR in the stored hashes, so it cannot also be data.
+
+    `occurrence_key` and `review_id` (Task 6) join their components with `\\0`. That
+    makes the encoding ambiguous the moment a component may contain one:
+
+        occurrence_key(producer_id="a",    ingestion_ref="b\\0c", ...)
+        occurrence_key(producer_id="a\\0b", ingestion_ref="c",    ...)
+
+    build the same byte string and therefore the same digest -- two different
+    observations sharing one idempotency key, which is the key that decides whether an
+    arrival is a retry or a new occurrence.
+
+    The encoding is FROZEN (§3 pins the digests against golden vectors), so the fix is
+    to refuse the character, not to re-length-prefix the payload. Refusing costs
+    nothing real: every component is an identifier -- a producer id, an ingestion ref,
+    a reviewer ref, a lens, a run ref -- and none of them has any use for a NUL.
+
+    Lives here, in the leaf module both `record` and `report` already import, because
+    the wire form and the stored form must refuse the same bytes. A report that
+    accepted a NUL in `ingestion_ref` would only fail later, inside the write path,
+    as a `ValidationError` escaping ingestion's declared error channel.
+    """
+    if "\0" in value:
+        raise ValueError(
+            f"{value!r} contains a NUL, which separates the fields of the occurrence "
+            "and review hashes; a NUL inside a value would let two different tuples "
+            "produce one key"
+        )
+    return value
+
+
+#: Every string that reaches `occurrence_key` or `review_id`, on either the wire form
+#: or the stored form. Public, and public deliberately: `record.py` calls the same
+#: function directly from those two hashes, so the annotation and the hash agree by
+#: construction rather than by two matching copies of one rule.
+HashComponent = Annotated[str, AfterValidator(reject_nul)]
+
+
 def normalize_severity(raw: str) -> str:
     """`warning` and `warn` are one severity, matching `_severity_matches`."""
     try:
@@ -1025,7 +1066,7 @@ git commit -m "feat(audit): the AuditFinding payload, with rule_id as its wire f
 
 **Interfaces:**
 - Consumes: `Severity` (Task 4), `FingerprintError` (Task 3).
-- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, `FindingRule.build(...) -> AuditFinding` — the producer-side factory that makes emitting an undeclared rule impossible — and `FindingRule.identity_subset(qualifiers) -> dict`, which **requires every declared identity qualifier to be explicitly present**.
+- Produces: `FindingRule`, `FindingSection`, `RuleDeclarationError`, `FindingRule.build(...) -> AuditFinding` — the producer-side factory that makes emitting an undeclared rule impossible — `FindingRule.validate_qualifiers(qualifiers)`, which validates against the declared schema **strictly**, and `FindingRule.identity_subset(qualifiers) -> dict`, which **requires every declared identity qualifier to be explicitly present**.
 
 `build()` calls `identity_subset()` itself, so the producer side and the write boundary run the same routine and cannot disagree about what a finding's identity is. Schema validation does not cover this: a Pydantic field with a default accepts `{}` and reports `field=""`, while the fingerprint would receive `{}` — a different digest.
 
@@ -1153,6 +1194,66 @@ def test_ordered_identity_qualifier_collections_are_permitted():
 def test_section_order_is_declared_not_derived_from_the_name():
     section = FindingSection(id="datasets", title="Datasets", section_order=300)
     assert section.section_order == 300
+
+
+def test_a_qualifier_of_the_wrong_type_is_refused_not_quietly_coerced():
+    """Lax validation would not CHECK the value, it would REPLACE it -- elsewhere.
+
+    Pydantic accepts `{"count": "1"}` for an `int` field and reports `count=1`, but
+    the validated model is discarded: the mapping that gets stored and fingerprinted
+    still holds the string. `1` and `"1"` would then be two identities for one
+    finding, both passing validation. `strict=True` is what makes it sound to
+    validate one object and keep another.
+    """
+    class Counted(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        count: int
+
+    assert Counted.model_validate({"count": "1"}).count == 1  # lax would accept it
+
+    rule = _rule(
+        qualifier_schema=Counted, identity_qualifiers=("count",),
+        remediation="none", remediator=None,
+    )
+    with pytest.raises(RuleDeclarationError, match="qualifiers invalid"):
+        rule.validate_qualifiers({"count": "1"})
+    with pytest.raises(RuleDeclarationError, match="qualifiers invalid"):
+        rule.build(
+            subject=EntitySubject(ref="dataset:a"), severity="warn",
+            qualifiers={"count": "1"}, message="m",
+        )
+    assert rule.build(
+        subject=EntitySubject(ref="dataset:a"), severity="warn",
+        qualifiers={"count": 1}, message="m",
+    ).qualifiers["count"] == 1
+
+
+def test_strict_validation_leaves_every_identity_bearing_type_untouched():
+    """The premise of validating one object and storing another.
+
+    If strict mode altered any permitted identity value, keeping the input would be
+    keeping something the schema did not endorse. It does not: for str, bool, int, and
+    lists of those, the validated value IS the input value. The `float` widening
+    strict mode does keep cannot reach identity -- `_identity_type_permitted` refuses
+    `float` outright, so no identity depends on float formatting.
+    """
+    class Mixed(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        name: str
+        flag: bool
+        count: int
+        tags: list[str]
+
+    values = {"name": "gtex", "flag": True, "count": 3, "tags": ["a", "b"]}
+    validated = Mixed.model_validate(values, strict=True)
+    assert validated.model_dump() == values
+
+    rule = _rule(
+        qualifier_schema=Mixed,
+        identity_qualifiers=("name", "flag", "count", "tags"),
+        remediation="none", remediator=None,
+    )
+    assert rule.identity_subset(values) == values
 
 
 def test_an_identity_qualifier_must_be_stated_even_when_the_schema_defaults_it():
@@ -1365,16 +1466,42 @@ class FindingRule(BaseModel):
                     f"{self.id}: namespace {subject.namespace!r} is not in "
                     f"{set(self.identifier_namespaces)}"
                 )
-        try:
-            # `dict(...)`: qualifier mappings are frozen views (`QualifierMap`), and a
-            # model validator takes a concrete dict, not any Mapping.
-            self.qualifier_schema.model_validate(dict(qualifiers))
-        except ValidationError as exc:
-            raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
-        # Compute the identity here too, so a producer cannot build a finding that
-        # ingestion would later refuse. Same routine, one answer.
+        # Both run here, so a producer cannot build a finding the write boundary would
+        # refuse. Same two routines, one answer.
+        self.validate_qualifiers(qualifiers)
         self.identity_subset(qualifiers)
         return finding
+
+    def validate_qualifiers(self, qualifiers: Mapping[str, object]) -> None:
+        """Validate against the declared schema, **strictly**, and keep the input.
+
+        `strict=True` is what makes it sound to validate one thing and store another.
+        Lax validation does not check a value, it *replaces* it: pydantic accepts
+        `{"count": "1"}` for an `int` field and reports `count=1`, while the mapping
+        this method was handed still holds the string `"1"`. The validated model is
+        then discarded and the string is what gets stored and fingerprinted -- so
+        `1` and `"1"` are two identities for one finding, and both pass validation.
+
+        Strict mode admits NO coercion for the types that may bear identity (str,
+        bool, int, and lists of those -- see `_identity_type_permitted`), so for those
+        the validated value and the input are the same value and there is nothing to
+        consume. The one widening strict mode does keep, `int` where a field declares
+        `float`, cannot reach identity: `float` is refused as an identity type
+        precisely so no identity depends on float formatting.
+
+        The narrowing this introduces is deliberate. A producer emitting a tuple for a
+        `list[str]` qualifier is now refused: JSON has no tuple, so that value would
+        arrive at ingestion as a list, and a producer whose emitted form differs from
+        its wire form is a producer whose local checks prove nothing about what the
+        write boundary will see. Emit the wire form.
+
+        `dict(...)`: qualifier mappings are frozen views (`QualifierMap`), and
+        `model_validate` takes a concrete dict, not any Mapping.
+        """
+        try:
+            self.qualifier_schema.model_validate(dict(qualifiers), strict=True)
+        except ValidationError as exc:
+            raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
 
     def identity_subset(self, qualifiers: Mapping[str, object]) -> dict[str, object]:
         """The identity-bearing qualifier subset consumed by the fingerprint.
@@ -1421,7 +1548,7 @@ def _identity_type_permitted(hint: object) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_rules.py -v`
-Expected: PASS, 15 tests
+Expected: PASS, 17 tests
 
 - [ ] **Step 5: Commit**
 
@@ -1440,7 +1567,7 @@ git commit -m "feat(audit): rule and section declarations with a build() that ca
 
 **Interfaces:**
 - Consumes: Tasks 1–4.
-- Produces: `AuditFindingRecord` (frozen, with `with_occurrence` / `with_review` / `with_transition` / `current_severity` / `confirmation_count`), `Occurrence`, `Transition`, `Review`, `CaseStatus`, `RecordError`, `occurrence_key(...)`, `review_id(...)`, `canonical_occurrence_content(occurrence) -> str`, `normalized_instant(value) -> str`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "audit-case"`.
+- Produces: `AuditFindingRecord` (frozen, with `with_occurrence` / `with_review` / `with_transition` / `current_severity` / `confirmation_count`), `Occurrence`, `Transition`, `Review`, `CaseStatus`, `CASE_STATUSES` (derived from that literal, consumed by the CLI's `--status` choice), `RecordError`, `occurrence_key(...)`, `review_id(...)`, `canonical_occurrence_content(occurrence) -> str`, `normalized_instant(value) -> str`, `PERMITTED_TRANSITIONS`, `DOC_KIND = "audit-case"`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1454,6 +1581,7 @@ from pydantic import ValidationError
 from science_model.audit.record import (
     AuditFindingRecord,
     Occurrence,
+    RecordError,
     Review,
     Transition,
     occurrence_key,
@@ -1622,6 +1750,64 @@ def test_review_id_includes_lens_so_two_lenses_do_not_collide():
         reviewer_kind="agent", reviewer_ref="curation-sweep", lens="grounding",
         run_ref="run:x", finding_id=FID,
     )
+
+
+def test_a_nul_cannot_shift_the_boundary_between_occurrence_fields():
+    """`\\0` is the SEPARATOR, so it may not also be a value.
+
+    Without this refusal the encoding is ambiguous: moving the NUL from the end of one
+    component to the start of the next builds the identical byte string, so two
+    different observations share one idempotency key -- the key that decides whether
+    an arrival is a retry or a new occurrence. The digests are frozen against golden
+    vectors, so the character is refused rather than the payload re-encoded.
+    """
+    with pytest.raises(RecordError, match="NUL"):
+        occurrence_key(producer_id="a", ingestion_ref="b\0c", finding_id=FID)
+    with pytest.raises(RecordError, match="NUL"):
+        occurrence_key(producer_id="a\0b", ingestion_ref="c", finding_id=FID)
+
+
+def test_a_nul_cannot_shift_the_boundary_between_review_fields():
+    """The same ambiguity, in the five-component payload."""
+    with pytest.raises(RecordError, match="NUL"):
+        review_id(
+            reviewer_kind="agent", reviewer_ref="r", lens="grounding\0run:x",
+            run_ref="1", finding_id=FID,
+        )
+    with pytest.raises(RecordError, match="NUL"):
+        review_id(
+            reviewer_kind="agent", reviewer_ref="r", lens="grounding",
+            run_ref="run:x\0" + "1", finding_id=FID,
+        )
+
+
+def test_the_models_refuse_the_nul_the_hashes_refuse():
+    """A field the hash refuses must not be storable, or the check is unreachable.
+
+    Rejecting only inside `occurrence_key`/`review_id` would leave a record able to
+    carry a NUL in `producer_id` -- and `Occurrence` recomputes its own key, so the
+    refusal would surface as a construction failure from inside a validator rather
+    than as the field-level error it is.
+    """
+    # Built directly, not through `_occurrence`: that helper computes the key first,
+    # so it would fail in `occurrence_key` and prove nothing about the field.
+    for field in ("producer_id", "ingestion_ref"):
+        kwargs = dict(
+            idempotency_key="d" * 64, producer_id="p", ingestion_ref="r",
+            observed_at=NOW, severity="warn", message="m", qualifiers={}, evidence=(),
+        )
+        kwargs[field] = "a\0b"
+        with pytest.raises(ValidationError, match="NUL"):
+            Occurrence(**kwargs)
+    for field in ("reviewer_ref", "lens", "run_ref"):
+        kwargs = dict(
+            review_id="c" * 64, reviewer_kind="agent", reviewer_ref="curation-sweep",
+            lens="grounding", model="claude-opus-5", run_ref="run:x", at=NOW,
+            outcome="confirms", note="checked",
+        )
+        kwargs[field] = "a\0b"
+        with pytest.raises(ValidationError, match="NUL"):
+            Review(**kwargs)
 
 
 def test_agent_review_requires_lens_and_model():
@@ -1890,12 +2076,17 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
-from science_model.audit.finding import QualifierMap, Severity
+from science_model.audit.finding import (
+    HashComponent,
+    QualifierMap,
+    Severity,
+    reject_nul,
+)
 from science_model.audit.subjects import FindingSubject
 
 DOC_KIND = "audit-case"
@@ -1927,6 +2118,11 @@ CaseStatus = Literal["proposed", "confirmed", "dismissed", "promoted"]
 ReviewerKind = Literal["human", "agent", "deterministic"]
 ReviewOutcome = Literal["confirms", "refutes", "abstains"]
 
+#: DERIVED from the `Literal`, never retyped. The CLI's `--status` choice is built
+#: from this, so a status added above appears in `--help` without a second edit --
+#: and, more to the point, a status *not* above cannot be offered.
+CASE_STATUSES: tuple[str, ...] = get_args(CaseStatus)
+
 #: The transition graph is CLOSED. Any pair absent here is rejected.
 PERMITTED_TRANSITIONS: frozenset[tuple[CaseStatus | None, CaseStatus]] = frozenset(
     {
@@ -1945,7 +2141,25 @@ class RecordError(ValueError):
     """A stored case is malformed."""
 
 
+def _components(**parts: str) -> None:
+    """Every component of a `\\0`-delimited payload, checked before it is joined.
+
+    The models below annotate these same fields with `HashComponent`, so a stored
+    record cannot carry a NUL. This is the other half: these two functions are public,
+    and a caller reaching them directly -- a producer computing a key to compare, a
+    migration -- gets the same refusal rather than a silently ambiguous digest.
+    """
+    for name, value in parts.items():
+        try:
+            reject_nul(value)
+        except ValueError as exc:
+            raise RecordError(f"{name}: {exc}") from exc
+
+
 def occurrence_key(*, producer_id: str, ingestion_ref: str, finding_id: str) -> str:
+    _components(
+        producer_id=producer_id, ingestion_ref=ingestion_ref, finding_id=finding_id
+    )
     payload = f"{OCCURRENCE_DOMAIN}\n{producer_id}\0{ingestion_ref}\0{finding_id}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -1959,6 +2173,13 @@ def review_id(
     finding_id: str,
 ) -> str:
     """Lens is PART OF review identity: two lenses in one run are two reviews."""
+    _components(
+        reviewer_kind=reviewer_kind,
+        reviewer_ref=reviewer_ref,
+        lens=lens or "",
+        run_ref=run_ref,
+        finding_id=finding_id,
+    )
     payload = (
         f"{REVIEW_DOMAIN}\n{reviewer_kind}\0{reviewer_ref}\0{lens or ''}\0"
         f"{run_ref}\0{finding_id}"
@@ -1976,8 +2197,9 @@ class Occurrence(_Base):
     #: REQUIRED, and validated against `occurrence_key(...)` by the owning record.
     #: Optional would mean a stored key nobody ever checks.
     idempotency_key: str = Field(pattern=r"^[0-9a-f]{64}$")
-    producer_id: str = Field(min_length=1)
-    ingestion_ref: str = Field(min_length=1)
+    #: `HashComponent`, not `str`: both are joined with `\0` to form that key.
+    producer_id: HashComponent = Field(min_length=1)
+    ingestion_ref: HashComponent = Field(min_length=1)
     observed_at: Instant
     severity: Severity
     message: str
@@ -2058,11 +2280,13 @@ class Transition(_Base):
 
 class Review(_Base):
     review_id: str
+    #: `reviewer_kind` is a `Literal`, so it cannot carry a NUL; the other three are
+    #: free strings joined into `review_id`, so they are `HashComponent`.
     reviewer_kind: ReviewerKind
-    reviewer_ref: str
-    lens: str | None = None
+    reviewer_ref: HashComponent
+    lens: HashComponent | None = None
     model: str | None = None
-    run_ref: str
+    run_ref: HashComponent
     at: Instant
     outcome: ReviewOutcome
     note: str = Field(min_length=1)
@@ -2280,7 +2504,7 @@ class AuditFindingRecord(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_record.py -v`
-Expected: PASS, 33 tests
+Expected: PASS, 36 tests
 
 Then: `cd science/model && uv run --frozen pytest tests/test_audit_*.py -q`
 Expected: PASS, all audit model tests
@@ -2435,6 +2659,20 @@ def test_generated_at_must_be_iso_8601():
         _report(generated_at="2026-13-45T99:00:00")
 
 
+def test_the_wire_form_refuses_the_nul_the_stored_hashes_refuse():
+    """The report is where these strings ENTER, so it is where they are refused.
+
+    Ingestion copies `ingestion_ref` and `producer_id` straight onto an `Occurrence`,
+    which joins them with `\\0` into an idempotency key. Refusing only at the stored
+    model would let a report validate and then blow up mid-write as a `ValidationError`
+    -- outside ingestion's declared `IngestError` channel, and after the walk.
+    """
+    with pytest.raises(ValidationError, match="NUL"):
+        _report(ingestion_ref="run:a\0b")
+    with pytest.raises(ValidationError, match="NUL"):
+        ReportedFinding(producer_id="p\0q", finding=_finding())
+
+
 def test_the_finding_ceiling_applies_across_both_channels():
     from science_model.audit.report import MAX_REPORT_FINDINGS, AcceptedFinding
 
@@ -2487,7 +2725,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from science_model.audit.finding import AuditFinding
+from science_model.audit.finding import AuditFinding, HashComponent
 
 REPORT_SCHEMA_VERSION = 2
 
@@ -2502,19 +2740,23 @@ class _Base(BaseModel):
 
 
 class ReportedFinding(_Base):
-    producer_id: str = Field(min_length=1)
+    #: `HashComponent`: ingestion copies this straight onto an `Occurrence`, where it
+    #: is joined with `\0` into the idempotency key. Refusing here rather than there
+    #: keeps the failure a report-validation error the caller asked for, instead of a
+    #: `ValidationError` surfacing from inside the write path.
+    producer_id: HashComponent = Field(min_length=1)
     finding: AuditFinding
 
 
 class AcceptedFinding(_Base):
-    producer_id: str = Field(min_length=1)
+    producer_id: HashComponent = Field(min_length=1)
     finding: AuditFinding
     acceptance_key: str = Field(pattern=r"^[0-9a-f]{32}$")
     reason: str = Field(min_length=1)
 
 
 class UnwiredProducer(_Base):
-    producer_id: str
+    producer_id: HashComponent
     code: str = Field(min_length=1)
     reason: str | None = None
 
@@ -2549,7 +2791,8 @@ class AuditReport(BaseModel):
 
     schema_version: Literal[2]
     fingerprint_version: int
-    ingestion_ref: str = Field(min_length=1)
+    #: `HashComponent`: this becomes the `ingestion_ref` of every occurrence written.
+    ingestion_ref: HashComponent = Field(min_length=1)
     #: ISO-8601, and validated as such HERE. Ingestion turns this into the
     #: `observed_at` of every occurrence it writes; a bare `min_length=1` would push a
     #: raw `ValueError` from `datetime.fromisoformat` out of the write path, where it
@@ -2624,6 +2867,7 @@ from science_model.audit.fingerprint import (
     rule_slug,
 )
 from science_model.audit.record import (
+    CASE_STATUSES,
     DOC_KIND,
     CaseStatus,
     AuditFindingRecord,
@@ -2649,6 +2893,7 @@ from science_model.audit.subjects import (
 )
 
 __all__ = [
+    "CASE_STATUSES",
     "DOC_KIND",
     "FINGERPRINT_VERSION",
     "REPORT_SCHEMA_VERSION",
@@ -2685,7 +2930,7 @@ __all__ = [
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_report.py -v`
-Expected: PASS, 11 tests
+Expected: PASS, 12 tests
 
 Then: `cd science/model && uv run --frozen pytest -q` (the model suite is small and fast)
 Expected: PASS
@@ -2835,6 +3080,19 @@ def test_metrics_are_validated_against_the_declared_schema():
         registry.validate_metrics("dataset_anomalies", {"scaned": 3})
 
 
+def test_a_metric_of_the_wrong_type_is_refused_not_quietly_coerced():
+    """A count that is sometimes a string is a count nothing can sum.
+
+    `ProducerMetrics` is `extra="allow"` with no declared fields, so a metric is
+    stored exactly as the report spelled it -- the producer's declared schema is the
+    only thing that types it. Lax validation would accept `"3"` for `scanned: int`,
+    report `3`, discard that model, and leave `"3"` to be rendered and compared.
+    """
+    registry = build_registry([_producer()])
+    with pytest.raises(RegistryError, match="metrics invalid"):
+        registry.validate_metrics("dataset_anomalies", {"scanned": "3"})
+
+
 def test_the_registry_mappings_are_not_mutable():
     registry = build_registry([_producer()])
     with pytest.raises(TypeError):
@@ -2961,6 +3219,15 @@ class FindingRegistry:
         return (self.section(rule.section).section_order, rule.display_order)
 
     def validate_metrics(self, producer_id: str, metrics: dict[str, object]) -> None:
+        """Strict, for the same reason `FindingRule.validate_qualifiers` is.
+
+        `ProducerMetrics` is `extra="allow"` and declares no fields, so a metric
+        arrives exactly as the report spelled it and is stored exactly as it arrived
+        -- the declared schema is the only thing that types it. Lax validation would
+        accept `{"scanned": "3"}` against `scanned: int`, report `3`, discard that
+        model, and leave `"3"` to be rendered and compared. A count that is sometimes
+        a string is a count nothing downstream can sum.
+        """
         producer = self.producers_by_id.get(producer_id)
         if producer is None:
             raise RegistryError(f"unregistered producer {producer_id!r}")
@@ -2971,7 +3238,7 @@ class FindingRegistry:
                 )
             return
         try:
-            producer.metrics_schema.model_validate(metrics)
+            producer.metrics_schema.model_validate(metrics, strict=True)
         except ValidationError as exc:
             raise RegistryError(f"{producer_id!r} metrics invalid: {exc}") from exc
 
@@ -3041,7 +3308,7 @@ def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_registry.py -v`
-Expected: PASS, 12 tests
+Expected: PASS, 13 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -3066,7 +3333,7 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 
 **Interfaces:**
 - Consumes: `AuditFindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
-- Produces (paths): `PathSafetyError` and `PathExistsError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` and `open_dir_inside_if_present(project_root, rel_dir)` (context managers yielding a `dir_fd` / `dir_fd | None`), `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations, every one guarded by `_leaf_name` — `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
+- Produces (paths): `PathSafetyError` and `PathExistsError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` and `open_dir_inside_if_present(project_root, rel_dir)` (context managers yielding a `dir_fd` / `dir_fd | None`), `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations, every one guarded by `_leaf_name` — `exists_at(dir_fd, name) -> bool`, `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
 - Produces (storage): `CASES_DIRNAME`, `LOCK_NAME`, `MAX_CASE_BYTES`, `CaseStore`, `case_store(project_root, *, create)`, `optional_case_store(project_root)`, `case_path(...)`, `case_filename(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
 
 **The organising idea: a validated pathname is not a validated file.** Walking the components of a path and then calling `open()` on that string resolves every component a *second* time, and whatever was swapped in between is what gets opened. So the walk returns a **directory descriptor**, and every read, write, listing, lock, and rename runs through it with `dir_fd=`. `resolve_inside` survives only as a *check-only* primitive for judging the paths an incoming report names; it must never supply a name for a subsequent operation.
@@ -3097,6 +3364,7 @@ from science_tool.findings.paths import (
     PathExistsError,
     PathSafetyError,
     create_regular_file_at,
+    exists_at,
     mkdir_inside,
     open_dir_inside,
     open_dir_inside_if_present,
@@ -3247,6 +3515,23 @@ def test_an_inaccessible_project_root_is_a_safety_error_not_absence(tmp_path):
             pass
 
 
+def test_an_unresolvable_project_root_is_a_path_error_too(tmp_path, monkeypatch):
+    """`resolve()` is a syscall, not string arithmetic.
+
+    It calls `getcwd` for a relative path, so a deleted working directory raises
+    `OSError` there -- outside every `except PathSafetyError` that `storage.py` and
+    `ingest.py` write to build their own errors. A refusal nobody can catch is not a
+    refusal, so the resolve is inside the channel like everything else here.
+    """
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    monkeypatch.chdir(doomed)
+    doomed.rmdir()
+
+    with pytest.raises(PathSafetyError, match="could not resolve project root"):
+        mkdir_inside(Path("relative-root"), "doc/audits/cases")
+
+
 # --- leaf names: a `*_at` argument is one entry, never a path -----------------------
 
 
@@ -3258,6 +3543,8 @@ def test_every_at_operation_refuses_a_name_that_escapes_the_anchor(tmp_path):
     (tmp_path / "outside.txt").write_text("SECRET", encoding="utf-8")
     with open_dir_inside(tmp_path, "anchored") as dir_fd:
         for bad in ("../outside.txt", "a/b", "", ".", "..", "a\\b"):
+            with pytest.raises(PathSafetyError):
+                exists_at(dir_fd, bad)
             with pytest.raises(PathSafetyError):
                 read_regular_file_at(dir_fd, bad, 1024)
             with pytest.raises(PathSafetyError):
@@ -3271,6 +3558,16 @@ def test_every_at_operation_refuses_a_name_that_escapes_the_anchor(tmp_path):
             with pytest.raises(PathSafetyError):
                 replace_at(dir_fd, "ok.md", bad)
     assert (tmp_path / "outside.txt").read_text(encoding="utf-8") == "SECRET"
+
+
+def test_exists_at_reports_a_dangling_link_as_present(tmp_path):
+    # `stat` would follow the link, find nothing, and answer "absent" -- and the
+    # caller would then write straight through it. `lstat` sees the entry itself.
+    (tmp_path / "anchored").mkdir()
+    (tmp_path / "anchored" / "case.md").symlink_to(tmp_path / "gone.md")
+    with open_dir_inside(tmp_path, "anchored") as dir_fd:
+        assert exists_at(dir_fd, "case.md") is True
+        assert exists_at(dir_fd, "absent.md") is False
 
 
 # --- project_relative ---------------------------------------------------------------
@@ -3454,6 +3751,7 @@ from science_tool.findings.storage import (
     CASES_DIRNAME,
     CaseStorageError,
     case_path,
+    case_store,
     load_case,
     load_cases,
     write_case,
@@ -3720,6 +4018,18 @@ def test_write_recovers_from_a_leftover_temp_file(tmp_path):
     write_case(tmp_path, record)
     assert not temp.exists()
     assert load_case(tmp_path, case_path(tmp_path, record)) == record
+
+
+def test_the_stores_presence_check_is_anchored_like_every_other_operation(tmp_path):
+    # `has()` is what decides whether a write happens, so it must not be the one
+    # method that accepts a name `paths.py` never validated: an inline `lstat` would
+    # answer about a file OUTSIDE the held directory and then write inside it.
+    write_case(tmp_path, _record())
+    with case_store(tmp_path, create=False) as store:
+        with pytest.raises(CaseStorageError):
+            store.has("../outside.md")
+        with pytest.raises(CaseStorageError):
+            store.has("nested/case.md")
 ```
 
 - [ ] **Step 2: Run both tests to verify they fail**
@@ -3828,6 +4138,21 @@ def _segments(rel_path: str) -> list[str]:
     return parts
 
 
+def _resolved_root(project_root: Path) -> Path:
+    """`project_root.resolve()`, inside this module's error channel.
+
+    `resolve()` is not a pure string operation: it calls `readlink` and `getcwd`, so a
+    symlink cycle, a permission failure, or a deleted working directory raises
+    `OSError` or `RuntimeError`. Left bare, those escape every `except PathSafetyError`
+    a caller writes -- and `storage.py`/`ingest.py` catch exactly that to build their
+    own errors. A refusal nobody can catch is not a refusal.
+    """
+    try:
+        return project_root.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise PathSafetyError(f"could not resolve project root {project_root}: {exc}") from exc
+
+
 def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     """Open the directory one component at a time and return ITS descriptor.
 
@@ -3839,7 +4164,7 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     `FileNotFoundError`: "the project does not exist" must never be reachable through
     the same branch as "the project has no cases yet".
     """
-    root = project_root.resolve()
+    root = _resolved_root(project_root)
     walked = root
     try:
         parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
@@ -3921,7 +4246,7 @@ def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
     """Create every component of `rel_dir`, never traversing or creating a link."""
     segments = _dir_segments(rel_dir)
     os.close(_walk_dirs(project_root, segments, create=True))
-    return project_root.resolve().joinpath(*segments)
+    return _resolved_root(project_root).joinpath(*segments)
 
 
 def resolve_inside(project_root: Path, rel_path: str) -> Path:
@@ -3932,7 +4257,7 @@ def resolve_inside(project_root: Path, rel_path: str) -> Path:
     name for a subsequent read or write: that is precisely the check/use gap the
     directory descriptors above exist to close. The leaf need not exist.
     """
-    root = project_root.resolve()
+    root = _resolved_root(project_root)
     current = root
     for segment in _segments(rel_path):
         current = current / segment
@@ -3959,12 +4284,31 @@ def project_relative(project_root: Path, path: Path) -> str:
     if ".." in candidate.parts:
         raise PathSafetyError(f"path contains a `..` segment: {path}")
     normalized = Path(os.path.normpath(candidate))
-    for base in (project_root.resolve(), Path(os.path.normpath(project_root))):
+    for base in (_resolved_root(project_root), Path(os.path.normpath(project_root))):
         try:
             return normalized.relative_to(base).as_posix()
         except ValueError:
             continue
     raise PathSafetyError(f"{path} is outside the project root {project_root}")
+
+
+def exists_at(dir_fd: int, name: str) -> bool:
+    """Is there an entry under this name inside the anchored directory?
+
+    `lstat`, not `stat`: a DANGLING link is present under its own name, and treating
+    it as absent would write straight through it.
+
+    Anchored and leaf-validated like every other `*_at` primitive. A caller asking
+    `exists_at(fd, "../elsewhere.md")` would otherwise be answered about a file
+    outside the directory it holds -- and then, on `False`, write inside it.
+    """
+    try:
+        os.lstat(_leaf_name(name), dir_fd=dir_fd)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise PathSafetyError(f"could not stat {name!r}: {exc}") from exc
+    return True
 
 
 def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
@@ -4133,13 +4477,15 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 from science_model.audit import DOC_KIND, AuditFindingRecord, finding_fingerprint, rule_slug
 from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.findings.paths import (
-    PathSafetyError,
     PathExistsError,
+    PathSafetyError,
     create_regular_file_at,
+    exists_at,
     open_dir_inside,
     open_dir_inside_if_present,
     open_lock_at,
@@ -4201,7 +4547,13 @@ def _parse_case(name: str, text: str) -> AuditFindingRecord:
     fields = {k: v for k, v in frontmatter.items() if k != "doc_kind"}
     try:
         record = AuditFindingRecord.model_validate(fields)
-    except Exception as exc:  # pydantic ValidationError or RecordError
+    except ValidationError as exc:
+        # `ValidationError` alone, not `Exception`. Everything this call is expected to
+        # raise arrives as one: `RecordError` and `FingerprintError` are both
+        # `ValueError`s raised inside validators, and pydantic wraps those. A blanket
+        # `except Exception` would also swallow a `TypeError` or an `AttributeError`
+        # from a bug in the record model and report it as a malformed FILE -- sending
+        # the reader to edit a case that is not actually wrong.
         raise CaseStorageError(f"{name} is not a valid case: {exc}") from exc
 
     stem = name[: -len(".md")] if name.endswith(".md") else name
@@ -4253,15 +4605,16 @@ class CaseStore:
         return sorted(n for n in entries if n.endswith(".md"))
 
     def has(self, name: str) -> bool:
-        """`lstat`, not `stat`: a DANGLING link is present under its own name, and
-        treating it as absent would write straight through it."""
+        """Through the anchored primitive, like every other operation here.
+
+        Doing the `lstat` inline would make this the one method in the class that
+        accepts a name `paths.py` has not validated -- and `has()` is what decides
+        whether a write happens.
+        """
         try:
-            os.lstat(name, dir_fd=self._dir_fd)
-        except FileNotFoundError:
-            return False
-        except OSError as exc:
-            raise CaseStorageError(f"could not stat {name!r}: {exc}") from exc
-        return True
+            return exists_at(self._dir_fd, name)
+        except PathSafetyError as exc:
+            raise CaseStorageError(str(exc)) from exc
 
     def read(self, name: str) -> AuditFindingRecord:
         try:
@@ -4421,7 +4774,7 @@ DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
-Expected: PASS — 32 path tests, 23 storage tests
+Expected: PASS — 34 path tests, 24 storage tests
 
 Then the manifest-exclude guard, to confirm the new glob broke nothing:
 Run: `cd science && uv run --frozen pytest tests/test_graph_io_revision_manifest.py tests/test_graph_io.py -q`
@@ -4480,6 +4833,10 @@ class Q(BaseModel):
     #: This is the non-identity qualifier the collision and survival tests turn on; a
     #: qualifier the schema rejects would fail validation before identity ever matters.
     note: str = ""
+    #: An INT field, so the strict-validation test has a type lax mode would coerce.
+    #: `str` is the wrong probe: pydantic's lax mode already refuses an int for a
+    #: `str` field, so `field=1` would fail either way and prove nothing.
+    count: int = 0
 
 
 SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
@@ -4701,6 +5058,34 @@ def test_an_omitted_identity_qualifier_is_refused_despite_the_schemas_default(tm
     with pytest.raises(IngestError, match="declared but absent"):
         ingest_report(tmp_path, report, REGISTRY)
     assert load_cases(tmp_path) == []
+
+
+def test_a_wrongly_typed_qualifier_is_refused_at_the_write_boundary(tmp_path):
+    """The producer boundary and the write boundary run the SAME strict routine.
+
+    A report is untrusted input: nothing guarantees it came from `FindingRule.build()`.
+    Lax validation here would accept `"3"` for `count: int`, report `3`, discard that
+    model, and store the string -- so `3` and `"3"` would be two spellings of one
+    observation, both valid. Nothing is written.
+    """
+    report = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(qualifiers={"field": "year", "count": "3"}),
+        )
+    ])
+    with pytest.raises(IngestError, match="qualifiers invalid"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert load_cases(tmp_path) == []
+
+    # The well-typed spelling of the same observation is accepted.
+    ok = _report(findings=[
+        ReportedFinding(
+            producer_id="dataset_anomalies",
+            finding=_finding(qualifiers={"field": "year", "count": 3}),
+        )
+    ])
+    assert ingest_report(tmp_path, ok, REGISTRY).records_written == 1
 
 
 def test_an_undeclared_rule_is_refused(tmp_path):
@@ -5123,17 +5508,15 @@ def _plan(
                     f"{finding.rule_id}: namespace {finding.subject.namespace!r} is not "
                     f"in {sorted(rule.identifier_namespaces)}"
                 )
-        try:
-            # `dict(...)`: `finding.qualifiers` is a frozen view (`QualifierMap`).
-            rule.qualifier_schema.model_validate(dict(finding.qualifiers))
-        except ValidationError as exc:
-            raise IngestError(f"{finding.rule_id}: qualifiers invalid: {exc}") from exc
-
         _assert_paths_are_safe(project_root, finding)
 
         try:
-            # The SAME routine `FindingRule.build()` runs, so a producer and the write
-            # boundary cannot disagree about what this finding's identity is.
+            # The SAME two routines `FindingRule.build()` runs, so a producer and the
+            # write boundary cannot disagree about whether a finding is well typed or
+            # about what its identity is. `validate_qualifiers` is strict: a report
+            # carrying `"1"` where the schema declares `int` is refused rather than
+            # coerced-then-discarded, so what is fingerprinted is what was declared.
+            rule.validate_qualifiers(finding.qualifiers)
             identity = rule.identity_subset(finding.qualifiers)
         except RuleDeclarationError as exc:
             raise IngestError(str(exc)) from exc
@@ -5281,7 +5664,7 @@ def ingest_report(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_ingest.py -v`
-Expected: PASS, 29 tests
+Expected: PASS, 30 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -5363,6 +5746,37 @@ def test_list_on_a_project_with_no_cases_is_empty_and_exits_zero(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == []
+
+
+def test_an_unknown_status_is_rejected_rather_than_matching_nothing(tmp_path):
+    """A typo must not read as "no cases in that state".
+
+    A free-string `--status` filters an in-memory list, so `confirmd` returns `[]`
+    with exit code 0 -- the answer for a state that has no cases, delivered for a
+    state that does not exist. `click.Choice` turns it into a usage error.
+    """
+    result = CliRunner().invoke(
+        findings_group,
+        ["list", "--project-root", str(tmp_path), "--status", "confirmd"],
+    )
+    assert result.exit_code == 2
+    assert "confirmd" in result.output
+
+
+def test_the_offered_statuses_are_the_models_statuses(tmp_path):
+    """Derived, not retyped: the choices ARE `CaseStatus`.
+
+    A hand-written choice list is a second declaration of the lifecycle, and the
+    failure it produces is silent -- a status the model added stops being selectable
+    while `--help` still looks complete.
+    """
+    from science_model.audit import CASE_STATUSES
+
+    result = CliRunner().invoke(findings_group, ["list", "--help"])
+    assert result.exit_code == 0
+    for status in CASE_STATUSES:
+        assert status in result.output
+    assert set(CASE_STATUSES) == {"proposed", "confirmed", "dismissed", "promoted"}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -5386,6 +5800,7 @@ import sys
 from pathlib import Path
 
 import click
+from science_model.audit import CASE_STATUSES
 
 from science_tool.output import OUTPUT_FORMATS, emit
 
@@ -5446,7 +5861,16 @@ def ingest_command(report_path: Path, project_root: Path, output_format: str) ->
 @click.option(
     "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True
 )
-@click.option("--status", default=None, help="Filter to one lifecycle status.")
+@click.option(
+    # `click.Choice`, not a free string. A filter that silently matches nothing on a
+    # typo is a report of "no cases in that state" -- the wrong answer, delivered with
+    # exit code 0. The choices are DERIVED from the `CaseStatus` literal, so a status
+    # added to the model appears here without a second edit.
+    "--status",
+    type=click.Choice(CASE_STATUSES),
+    default=None,
+    help="Filter to one lifecycle status.",
+)
 @click.option(
     "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table",
     show_default=True,
@@ -5502,7 +5926,7 @@ main.add_command(findings_group)
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_cli.py -v`
-Expected: PASS, 3 tests
+Expected: PASS, 5 tests
 
 Then confirm the group is reachable and that CLI-registration guards still hold:
 Run: `cd science && uv run --frozen python -m science_tool.cli findings --help`
@@ -5803,7 +6227,7 @@ Test **29** is the one deferral that needed a decision rather than a schedule: w
 
 The ratchet is not a placeholder, and Plan 2 must **replace** it with the real equality guard *in the same commit that registers the producer* — not delete it. A commit that removes the ratchet and adds no comparison has moved the tree from "cannot check completeness" to "does not check completeness" while going green, which is precisely the substitution it exists to prevent. This obligation is carried in the test's own docstring, where the person deleting it will read it.
 
-**Type consistency check.** `finding_fingerprint(rule_id=, subject=, identity_qualifiers=)` is called with those exact keywords in Tasks 3, 9, and 10. `occurrence_key(producer_id=, ingestion_ref=, finding_id=)` matches between Tasks 6 and 10. `rule.identity_subset(qualifiers)` defined in Task 5 is consumed in Task 10. `registry.rule()` raising `RegistryError` in Task 8 is caught and re-raised as `IngestError` in Task 10. `CASES_DIRNAME` is `"doc/audits/cases"` in Task 9 and asserted with that value in Task 12.
+**Type consistency check.** `finding_fingerprint(rule_id=, subject=, identity_qualifiers=)` is called with those exact keywords in Tasks 3, 9, and 10. `occurrence_key(producer_id=, ingestion_ref=, finding_id=)` matches between Tasks 6 and 10. `rule.validate_qualifiers(qualifiers)` and `rule.identity_subset(qualifiers)` are defined in Task 5 and consumed, as a pair and in that order, by both `FindingRule.build()` and Task 10's `_plan`. `CASE_STATUSES` is defined in Task 6, re-exported in Task 8's `__init__` edit, and consumed by Task 11's `--status`. `registry.rule()` raising `RegistryError` in Task 8 is caught and re-raised as `IngestError` in Task 10. `CASES_DIRNAME` is `"doc/audits/cases"` in Task 9 and asserted with that value in Task 12.
 
 **Signatures, all resolved against the tree — no grep-and-adjust steps remain.**
 
@@ -5813,6 +6237,15 @@ The ratchet is not a placeholder, and Plan 2 must **replace** it with the real e
 | `ChangeSet` | **`changes.py:44`, not `extract.py`**; `ChangeSet(base_commit=..., head_commit=..., changes=(...))`, `changes` is a tuple |
 | CLI registration | root group is `main` (`cli.py:170,184`); `main.add_command(findings_group)`, joining the run at `cli.py:194` |
 | Manifest test | `science/tests/test_graph_io_revision_manifest.py` |
+
+**Encoding and typing invariants, stated once here for the same reason.** Both are cases of the same mistake — treating a *derived* value as if it were the value that was checked.
+
+| Invariant | Where | Why the obvious version is wrong |
+|---|---|---|
+| No component of a `\0`-delimited hash may contain `\0` | `HashComponent` (Task 4) on `Occurrence.producer_id` / `ingestion_ref`, `Review.reviewer_ref` / `lens` / `run_ref`, `ReportedFinding` / `AcceptedFinding` / `UnwiredProducer.producer_id`, `AuditReport.ingestion_ref`; plus `_components(...)` inside `occurrence_key` and `review_id` themselves | Moving a NUL from the end of one component to the start of the next builds the **identical** byte string. `("a", "b\0c")` and `("a\0b", "c")` produce one digest — reproduced — so two different observations share the idempotency key that decides retry-versus-new. The encoding is frozen against golden vectors, so the character is refused rather than the payload re-encoded. |
+| Qualifier and metric schemas validate `strict=True` | `FindingRule.validate_qualifiers` (Task 5), called by `build()` and by Task 10's `_plan`; `FindingRegistry.validate_metrics` (Task 8) | Lax validation does not check a value, it replaces it — in a model that is then **discarded**. `{"count": "1"}` passes an `int` field and reports `1`, while the mapping that gets stored and fingerprinted still holds `"1"`, making `1` and `"1"` two identities for one finding, both valid. Strict mode admits no coercion for the types that may bear identity, which is what makes it sound to validate one object and keep another. |
+
+Both refusals live on **both** boundaries deliberately. A producer-side check alone proves nothing about a report, which is untrusted input; a write-boundary check alone lets a producer build findings that ingestion will later reject. The same routine runs on each side, so they cannot disagree.
 
 **Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py` — there is no `Path.open`, `read_text`, `mkdir`, `os.replace`, or `parse_frontmatter(path)` anywhere in `science_tool/findings/`.
 
@@ -5824,7 +6257,9 @@ The organising idea is that **a validated pathname is not a validated file**. Th
 | `open_dir_inside` | holds that descriptor open for the whole operation |
 | `open_dir_inside_if_present` | **one** walk answers presence *and* access; `None` only for genuine absence |
 | `mkdir_inside` | creates one component at a time, so it **stops at a link having created nothing beyond it** |
+| `_resolved_root` | `project_root.resolve()` inside this module's error channel — it calls `readlink`/`getcwd`, so a bare `OSError` would escape every `except PathSafetyError` a caller writes |
 | `_leaf_name` | every `*_at` argument is one entry — no separators, no `.`/`..`, non-empty |
+| `exists_at` | `lstat` through the descriptor, so a **dangling link counts as present**; leaf-validated like the rest, because `has()` is what decides whether a write happens |
 | `read_regular_file_at` | `O_NOFOLLOW \| O_NONBLOCK` + `S_ISREG` + `fstat` of *that* descriptor; wraps invalid UTF-8 |
 | `create_regular_file_at` | `O_CREAT \| O_EXCL` — never `O_TRUNC`, so a planted hard link is refused rather than emptied; an existing entry raises the narrow `PathExistsError` |
 | `open_lock_at` | creates if absent, **never truncates**, then requires `S_ISREG` **and `st_nlink == 1`** |
@@ -5837,7 +6272,7 @@ Seven orderings and assumptions this gets right, each of which the obvious code 
 1. **Create, then validate, is not validation.** `mkdir(parents=True)` followed by a check has already created directories in a link's target by the time the check refuses. Asserted by `test_write_creates_nothing_inside_a_symlinked_parents_target`, which checks the *target is still empty* — not merely that an error was raised.
 2. **Absence must be decided by the walk.** `lstat`/`exists()` on a full pathname follow every component but the last. A symlinked `doc/audits` whose target lacks `cases/` therefore raises `FileNotFoundError`, which reads as "nothing stored" for a store that was **redirected**. `test_if_present_REFUSES_an_intermediate_link_whose_target_lacks_the_rest` asserts the naive `os.lstat` failure *and* the correct refusal side by side.
 3. **Asking twice is asking about two things.** An `exists()` helper followed by an open is two resolutions of one name, and the name can denote two different real directories across them — the check/use gap at a larger granularity. There is deliberately **no** `dir_exists_inside`: presence and access are the same question, so `open_dir_inside_if_present` gives them one answer, and `load_cases` holds that descriptor through listing and every read.
-4. **An anchored name that is not a name is not anchored.** `openat` resolves relative to the descriptor, so `read_regular_file_at(fd, "../outside.txt")` walked straight out — reproduced. `_leaf_name` guards every `*_at` operation, and one test sweeps all six against six bad names.
+4. **An anchored name that is not a name is not anchored.** `openat` resolves relative to the descriptor, so `read_regular_file_at(fd, "../outside.txt")` walked straight out — reproduced. `_leaf_name` guards every `*_at` operation — including `exists_at`, the one that decides whether a write happens — and one test sweeps all seven against six bad names.
 5. **`O_NOFOLLOW` says nothing about hard links.** An `O_TRUNC` open of a predictable temp name or the lock file empties whatever else is linked there. Beyond not truncating, the lock requires `st_nlink == 1`: a hard-linked lock is a lock on an inode somebody else chose, and they can hold that `flock` to stall or observe ingestion.
 6. **A read can hang.** A FIFO under a report or case name blocks a plain `O_RDONLY` indefinitely. `O_NONBLOCK` plus `S_ISREG` turns that into a refusal.
 7. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
