@@ -661,6 +661,35 @@ def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: 
     return render_from_frontmatter(final, body)
 
 
+class MalformedTargetError(ValueError):
+    """An existing destination cannot be updated: wrong identity, unparseable, or undated."""
+
+
+def read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str, object], str, str]:
+    """Admit an existing destination for update, or refuse it.
+
+    MOVED from `workbench_apply._read_existing_target` so BOTH writers share it. It must run
+    BEFORE `render_update`, because `render_update` overwrites `id`, `kind`, `created` and
+    `updated` -- so a destination with the wrong identity or no dates would be REPAIRED into
+    validity before `certify_persisted` ever saw it, and the certification would pass on a file
+    that was never admissible. Validating after a repair is not validating.
+    """
+    expected_id, expected_kind = entity.id, entity.kind
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            current_text = handle.read()
+        frontmatter, body = _parse_existing_target_text(current_text)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise MalformedTargetError(f"malformed existing entity target {path}: {exc}") from exc
+    if frontmatter.get("id") != expected_id or frontmatter.get("kind") != expected_kind:
+        raise MalformedTargetError(
+            f"malformed existing entity target {path}: expected {expected_kind} {expected_id}"
+        )
+    if frontmatter.get("created") is None or frontmatter.get("updated") is None:
+        raise MalformedTargetError(f"malformed existing entity target {path}: missing created/updated")
+    return frontmatter, body, current_text
+
+
 def render_update(
     entity: WorkbenchEntity,
     *,
@@ -695,13 +724,17 @@ In `workbench_apply.py`: delete `_RENDERER_DERIVED_FRONTMATTER_KEYS`, `_PROPOSIT
 
 ```python
 from science_tool.dag.entity_frontmatter import (
+    MalformedTargetError,
     WorkbenchEntity,
+    read_existing_target,
     render_create,
     render_update,
 )
 ```
 
-Also delete `_render_workbench_entity_update` entirely — `render_update` replaces it — and delete the local `WorkbenchEntity = PropositionEntity | EvidenceLineEntity` alias (`:34`) in favour of the imported one. Update the two `_render_workbench_entity_update(...)` call sites in `_entity_edit` to `render_update(...)`; the keyword arguments are identical.
+Also delete `_render_workbench_entity_update` entirely — `render_update` replaces it — **move `_read_existing_target` (`:215`) and `_parse_existing_target_text` (`:211`) into the module** as `read_existing_target` (public, and now shared), and delete the local `WorkbenchEntity = PropositionEntity | EvidenceLineEntity` alias (`:34`) in favour of the imported one.
+
+`_read_existing_target` raised `WorkbenchApplyError`; `read_existing_target` raises `MalformedTargetError`. `_entity_edit`'s update branch must therefore catch and re-raise if any existing test asserts the old type — check with `rg -n "malformed existing entity target" science/tests` and decide from what it shows. Update the two `_render_workbench_entity_update(...)` call sites in `_entity_edit` to `render_update(...)`; the keyword arguments are identical.
 
 `_workbench_frontmatter_keys` raised `WorkbenchApplyError` for an unsupported kind; `owned_keys` raises `FrontmatterRenderError`. If any test asserts the former, keep it passing by having `WorkbenchApplyError` subclass nothing new — instead catch and re-raise at the one call site that needs the old type. Check with `rg -n "unsupported workbench entity kind" science/tests` before deciding; if nothing asserts it, no shim is needed.
 
@@ -735,12 +768,8 @@ def _write_entity_file(
     on every recompile. Deliberately NOT `entities.write_entity_file`, which renders the whole
     model and would re-introduce the skeleton dump on this path.
     """
-    from science_tool.dag.entity_frontmatter import render_create, render_update
-    from science_tool.entities import (
-        _atomic_replace_text,
-        _parse_markdown_file_preserving_body,
-        resolve_path_policy,
-    )
+    from science_tool.dag.entity_frontmatter import read_existing_target, render_create, render_update
+    from science_tool.entities import _atomic_replace_text, resolve_path_policy
 
     today = (as_of or date.today()).isoformat()
     assert entity.id is not None
@@ -748,12 +777,16 @@ def _write_entity_file(
     dest = project_root / resolve_path_policy(entity.kind, project_root=project_root).root / f"{local_part}.md"
 
     if dest.exists():
-        existing_frontmatter, existing_body = _parse_markdown_file_preserving_body(dest)
+        # ADMIT FIRST. `read_existing_target` refuses a wrong-identity, undated or unparseable
+        # destination. Reading the file directly and defaulting `created` -- as an earlier draft
+        # of this plan did -- lets `render_update` overwrite id/kind/created/updated and hand
+        # `certify_persisted` a mapping that is valid only because it was just repaired.
+        existing_frontmatter, existing_body, _current = read_existing_target(dest, entity)
         text = render_update(
             entity,
             existing_frontmatter=existing_frontmatter,
             body=existing_body,
-            created=str(existing_frontmatter.get("created") or today),
+            created=str(existing_frontmatter["created"]),
             updated=today,
         )
     else:
@@ -765,9 +798,11 @@ def _write_entity_file(
     _atomic_replace_text(dest, text)
 ```
 
-**The old `try/except (yaml.YAMLError, ValueError, OSError)` around the existing-file read is deliberately gone.** It swallowed a malformed destination and fell through to a full overwrite — a silent fallback that destroys an author's file precisely when something is already wrong with it. A destination that cannot be parsed must raise.
+**The old `try/except (yaml.YAMLError, ValueError, OSError)` around the existing-file read is deliberately gone.** It swallowed a malformed destination and fell through to a full overwrite — a silent fallback that destroys an author's file precisely when something is already wrong with it.
 
-**Verify the three imported helper names** exist in `science/src/science_tool/entities.py` before writing this — `_atomic_replace_text` (`:1769`), `_parse_markdown_file_preserving_body` (`:1983`) and `resolve_path_policy` (`:365`). Note it is the **`_preserving_body`** variant: the plain `_parse_markdown_file` would discard the author's prose.
+This also **ends an existing divergence**: `_entity_edit` already refuses a malformed target via `_read_existing_target`, while the compile path silently overwrote it. Two writers, two answers to "may I update this file?" — the same defect the shared module exists to remove. Step 9 schedules the behavioural test this inverts.
+
+**Verify the two imported helper names** exist in `science/src/science_tool/entities.py` before writing this — `_atomic_replace_text` (`:1769`) and `resolve_path_policy` (`:365`). Body preservation is handled by `read_existing_target`, which returns it.
 
 - [ ] **Step 7: Write the upsert regression**
 
@@ -813,13 +848,35 @@ Expected: PASS.
 - [ ] **Step 9: Run the tool suite and fix rendered-shape expectations**
 
 Run: `cd science && uv run --frozen pytest -q` (allow ~3 min).
-Expected: failures confined to tests asserting on created-file frontmatter — `test_workbench_apply.py`, `test_workbench_compile.py`, `test_workbench_idempotent.py`, `test_workbench_compile_conformance.py` are the likely set. For each, the correct fix is to **drop the now-absent skeleton keys from the expectation** and add the derived title. A failure anywhere else is a real regression: stop and investigate rather than adjusting the test.
+**One BEHAVIOURAL failure is expected and must be inverted, not adjusted.** `test_workbench_compile_conformance.py:217`, `test_malformed_existing_entity_falls_back_gracefully`, writes malformed YAML into an existing destination, recompiles, and asserts compile "must NOT raise" — it requires the silent replacement Step 6 deliberately removed. Rewrite it to assert the new, intended behaviour:
+
+```python
+def test_malformed_existing_entity_is_REFUSED(tmp_path: Path) -> None:
+    """A corrupt existing entity file is refused; the file is left byte-identical.
+
+    Inverted deliberately (design §5.3). The old behaviour silently replaced the file, which
+    destroys an author's content exactly when something is already wrong with it -- and it
+    disagreed with the apply path, which has always refused a malformed target.
+    """
+    ...  # seeding unchanged from the original test, up to and including the malformed write
+    prop_path.write_text("---\n: : bad yaml\n---\n", encoding="utf-8")
+    before = prop_path.read_bytes()
+
+    with pytest.raises(MalformedTargetError):
+        compile_workbench(wb, project_root=tmp_path, as_of=date(2026, 7, 1))
+
+    assert prop_path.read_bytes() == before
+```
+
+Rename the test — the old name asserts the behaviour being removed.
+
+**Every other failure should be a rendered-shape expectation** — `test_workbench_apply.py`, `test_workbench_compile.py`, `test_workbench_idempotent.py` and the rest of `test_workbench_compile_conformance.py` are the likely set. For each, the correct fix is to **drop the now-absent skeleton keys from the expectation** and add the derived title. A failure that is neither the malformed-file test above nor a rendered-shape expectation is a real regression: stop and investigate rather than adjusting the test.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 # Step 9 repairs existing modules that asserted on created-file frontmatter. Run
-# `git status --short` and add every path it names; these four are the ones Step 8 predicts.
+# `git status --short` and add every path it names; these are the ones Step 9 predicts.
 git add science/src/science_tool/dag/entity_frontmatter.py \
         science/src/science_tool/dag/workbench_apply.py \
         science/src/science_tool/dag/workbench.py \
@@ -847,8 +904,9 @@ an owned-key set is the defect this module prevents."
 
 **Files:**
 - Modify: `science/src/science_tool/dag/entity_frontmatter.py` (`certify_persisted`, called from `render_create` and `render_update`)
-- Modify: `science/src/science_tool/dag/workbench_apply.py` (`_entity_edit` update branch)
 - Test: `science/tests/test_workbench_writer_containment.py`
+
+`workbench_apply.py` is **not** modified by this task: after Task 3 it renders through the shared module, so certification reaches it without any edit here.
 
 **Interfaces:**
 - Consumes: `EntityValidator.validate_persisted_base_shape` from Task 2.
@@ -989,9 +1047,8 @@ Expected: all green. Any test that constructs a workbench entity fixture with an
 
 ```bash
 git add science/src/science_tool/dag/entity_frontmatter.py \
-        science/src/science_tool/dag/workbench_apply.py \
         science/tests/test_workbench_writer_containment.py
-git commit -m "feat(workbench): certify the persisted shape on both write paths
+git commit -m "feat(workbench): certify the persisted shape on every write path
 
 An update targeting a pre-containment empty-title record is now rejected,
 naming the record and the field, rather than skipped or backfilled. Skipping
@@ -1028,7 +1085,7 @@ Expected: `test_empty_triple_terms_fail_at_PARSE_time[subject]` FAILS. **Revert.
 - [ ] **Step 4: Mutation D — title in the update set**
 
 Add `"title"` to `PROPOSITION_OWNED_KEYS` in `entity_frontmatter.py`.
-Expected: **two** failures — `test_title_is_CREATE_ONLY` (set arithmetic) and `test_update_preserves_an_authors_replacement_title` (behaviour). The second is the one that matters; the first alone would be an equality with no consequence attached. **Revert.**
+Expected: **three** failures — `test_title_is_CREATE_ONLY` (set arithmetic), `test_update_preserves_an_authors_replacement_title` (apply path), and `test_recompiling_preserves_an_authors_title_and_body` (compile path). The two behavioural ones are what matter; the set assertion alone would be an equality with no consequence attached. Both write paths failing is the point — a create-only key that leaks into the update set breaks every writer, not one. **Revert.**
 
 - [ ] **Step 5: Mutation E — the allowlist**
 
@@ -1038,7 +1095,7 @@ Expected: `test_created_evidence_line_carries_no_skeleton_fields` and `test_crea
 - [ ] **Step 6: Mutation F — the rejection ruling**
 
 In `entity_frontmatter.certify_persisted`, replace the `raise` with `return` (the "skip validation" implementation §5.4 rejects).
-Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS. **Revert.**
+Expected: **three** failures — `test_update_of_an_empty_title_record_is_REJECTED`, `test_the_apply_create_path_is_validated_too`, and `test_the_COMPILE_path_is_validated_and_writes_nothing`. Suppressing the raise defeats certification on every path at once, which is what makes G2 (where certification *lives*) a separate and necessary proof. **Revert.**
 
 - [ ] **Step 7: Mutation G — the backfill temptation**
 
@@ -1094,7 +1151,7 @@ untested. **Revert.**
 
 - [ ] **Step 11: Verify the tree is clean and both suites green**
 
-Every mutation above was reverted, and Task 5 adds no code — the nine tests it exercises were all written in Tasks 1–4.
+All ten mutations above (A–I, including G2) were reverted, and Task 5 adds no code — every test they exercise was written in Tasks 1–4.
 
 Run: `git status --short`
 Expected: **empty**. Any remaining modification is an unreverted mutation; revert it before proceeding.
