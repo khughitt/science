@@ -1,4 +1,5 @@
 # science/tests/test_findings_storage.py
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -11,8 +12,10 @@ from science_model.audit import (
     occurrence_key,
 )
 
+from science_tool.findings import storage as finding_storage
 from science_tool.findings.storage import (
     CASES_DIRNAME,
+    MAX_CASE_BYTES,
     CaseStorageError,
     case_path,
     case_store,
@@ -28,7 +31,11 @@ QUALS = {"field": "year"}
 
 
 def _occurrence(
-    finding_id: str, *, ingestion_ref: str = "ing:1", quals: dict | None = None
+    finding_id: str,
+    *,
+    ingestion_ref: str = "ing:1",
+    quals: dict | None = None,
+    message: str = "drifted",
 ) -> Occurrence:
     # The occurrence's qualifiers must agree with the record's identity on every
     # identity-bearing key, so this helper takes them rather than hardcoding one set.
@@ -42,13 +49,15 @@ def _occurrence(
         ingestion_ref=ingestion_ref,
         observed_at=NOW,
         severity="warn",
-        message="drifted",
+        message=message,
         qualifiers=dict(QUALS if quals is None else quals),
         evidence=(),
     )
 
 
-def _record(quals: dict | None = None) -> AuditFindingRecord:
+def _record(
+    quals: dict | None = None, *, message: str = "drifted"
+) -> AuditFindingRecord:
     quals = QUALS if quals is None else quals
     finding_id = finding_fingerprint(
         rule_id=RULE, subject=SUBJECT, identity_qualifiers=quals
@@ -59,7 +68,7 @@ def _record(quals: dict | None = None) -> AuditFindingRecord:
         rule_id=RULE,
         subject=SUBJECT,
         identity_qualifiers=quals,
-        occurrences=(_occurrence(finding_id, quals=quals),),
+        occurrences=(_occurrence(finding_id, quals=quals, message=message),),
         transitions=(
             Transition(from_status=None, to_status="proposed", actor="ingest", at=NOW,
                        reason="detected"),
@@ -89,6 +98,126 @@ def test_write_is_an_upsert_not_a_write_once(tmp_path):
     assert len(load_case(tmp_path, case_path(tmp_path, record)).occurrences) == 2
 
 
+def test_write_refuses_an_oversized_payload_before_creating_a_temp(
+    tmp_path, monkeypatch
+):
+    record = _record(message="é" * (MAX_CASE_BYTES // 2 + 1))
+    create_called = False
+    real_create = finding_storage.create_regular_file_at
+
+    def tracked_create(dir_fd, name):
+        nonlocal create_called
+        create_called = True
+        return real_create(dir_fd, name)
+
+    monkeypatch.setattr(finding_storage, "create_regular_file_at", tracked_create)
+
+    with pytest.raises(CaseStorageError, match="exceeds"):
+        write_case(tmp_path, record)
+
+    assert create_called is False
+    assert list((tmp_path / CASES_DIRNAME).iterdir()) == []
+
+
+def test_concurrent_writers_never_commit_or_mutate_another_writers_temp(
+    tmp_path, monkeypatch
+):
+    first = _record()
+    second = first.with_occurrence(
+        _occurrence(first.finding_id, ingestion_ref="ing:2")
+    )
+    first_waiting = threading.Event()
+    second_partial = threading.Event()
+    allow_second_to_finish = threading.Event()
+    first_committed = threading.Event()
+    errors = []
+
+    real_fdopen = finding_storage.os.fdopen
+    real_replace_at = finding_storage.replace_at
+
+    class InterleavedHandle:
+        def __init__(self, handle, writer):
+            self._handle = handle
+            self._writer = writer
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return self._handle.__exit__(exc_type, exc, traceback)
+
+        def write(self, text):
+            if self._writer == "case-writer-1":
+                first_waiting.set()
+                if not second_partial.wait(timeout=5):
+                    raise AssertionError("second writer never reached its partial write")
+                return self._handle.write(text)
+            if self._writer == "case-writer-2":
+                split = len(text) // 2
+                written = self._handle.write(text[:split])
+                self._handle.flush()
+                second_partial.set()
+                if not allow_second_to_finish.wait(timeout=5):
+                    raise AssertionError("second writer was never released")
+                return written + self._handle.write(text[split:])
+            return self._handle.write(text)
+
+    def interleaved_fdopen(descriptor, *args, **kwargs):
+        return InterleavedHandle(
+            real_fdopen(descriptor, *args, **kwargs),
+            threading.current_thread().name,
+        )
+
+    def tracked_replace_at(dir_fd, source, target):
+        real_replace_at(dir_fd, source, target)
+        if threading.current_thread().name == "case-writer-1":
+            first_committed.set()
+
+    def run_writer(record):
+        try:
+            write_case(tmp_path, record)
+        except BaseException as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(finding_storage.os, "fdopen", interleaved_fdopen)
+    monkeypatch.setattr(finding_storage, "replace_at", tracked_replace_at)
+
+    writer_1 = threading.Thread(
+        target=run_writer, args=(first,), name="case-writer-1"
+    )
+    writer_2 = threading.Thread(
+        target=run_writer, args=(second,), name="case-writer-2"
+    )
+    writer_1.start()
+    writer_2_started = False
+    try:
+        assert first_waiting.wait(timeout=5)
+        writer_2.start()
+        writer_2_started = True
+        assert second_partial.wait(timeout=5)
+        assert first_committed.wait(timeout=5)
+
+        # Writer 2 still has only half its payload written. The committed name must
+        # therefore be writer 1's complete inode, not writer 2's open temp inode.
+        assert load_case(tmp_path, case_path(tmp_path, first)) == first
+    finally:
+        allow_second_to_finish.set()
+        second_partial.set()
+        writer_1.join(timeout=5)
+        if writer_2_started:
+            writer_2.join(timeout=5)
+
+    assert not writer_1.is_alive()
+    assert not writer_2.is_alive()
+    assert errors == []
+    assert load_case(tmp_path, case_path(tmp_path, second)) == second
+    assert not any(
+        entry.name.endswith(".tmp")
+        for entry in (tmp_path / CASES_DIRNAME).iterdir()
+    )
+
+
 def test_frontmatter_carries_doc_kind_and_never_an_entity_kind(tmp_path):
     text = write_case(tmp_path, _record()).read_text(encoding="utf-8")
     assert "doc_kind: audit-case" in text
@@ -112,6 +241,16 @@ def test_load_refuses_a_filename_whose_slug_disagrees(tmp_path):
     path.rename(moved)
     with pytest.raises(CaseStorageError, match="filename slug"):
         load_case(tmp_path, moved)
+
+
+def test_load_refuses_an_extensionless_case_filename(tmp_path):
+    record = _record()
+    path = write_case(tmp_path, record)
+    extensionless = path.with_suffix("")
+    path.rename(extensionless)
+
+    with pytest.raises(CaseStorageError, match=r"canonical \.md extension"):
+        load_case(tmp_path, extensionless)
 
 
 def test_load_refuses_a_record_whose_finding_id_is_not_its_own_fingerprint(tmp_path):
@@ -269,10 +408,10 @@ def test_load_case_refuses_a_path_outside_the_case_store(tmp_path):
         load_case(tmp_path, stray)
 
 
-def test_write_recovers_from_a_leftover_temp_file(tmp_path):
-    # A crash between create and rename leaves `.<name>.tmp` behind. Because the temp
-    # is created O_EXCL, the next write must clear that one name and retry rather than
-    # truncating whatever is under it.
+def test_write_never_unlinks_an_unowned_temp_file(tmp_path):
+    # A writer cannot distinguish another active writer's temp from a crash leftover.
+    # Writer-unique names make that distinction unnecessary: leave names this writer
+    # did not create alone, and clean up only its own temp.
     record = _record()
     write_case(tmp_path, record)
     temp = case_path(tmp_path, record).with_name(
@@ -280,7 +419,7 @@ def test_write_recovers_from_a_leftover_temp_file(tmp_path):
     )
     temp.write_text("stale", encoding="utf-8")
     write_case(tmp_path, record)
-    assert not temp.exists()
+    assert temp.read_text(encoding="utf-8") == "stale"
     assert load_case(tmp_path, case_path(tmp_path, record)) == record
 
 

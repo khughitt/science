@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.findings import paths as finding_paths
 from science_tool.findings.paths import (
     PathExistsError,
     PathSafetyError,
@@ -176,6 +177,35 @@ def test_an_unresolvable_project_root_is_a_path_error_too(tmp_path, monkeypatch)
         mkdir_inside(Path("relative-root"), "doc/audits/cases")
 
 
+def test_project_root_swap_to_a_symlink_refuses_before_creating_anything(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    moved_project = tmp_path / "moved-project"
+    target = tmp_path / "elsewhere"
+    project.mkdir()
+    target.mkdir()
+
+    original_resolved_root = finding_paths._resolved_root
+    swapped = False
+
+    def resolve_then_swap(project_root):
+        nonlocal swapped
+        resolved = original_resolved_root(project_root)
+        if not swapped:
+            project.rename(moved_project)
+            project.symlink_to(target, target_is_directory=True)
+            swapped = True
+        return resolved
+
+    monkeypatch.setattr(finding_paths, "_resolved_root", resolve_then_swap)
+
+    with pytest.raises(PathSafetyError, match="project root"):
+        mkdir_inside(project, "doc/audits/cases")
+
+    assert list(target.iterdir()) == [], "creation followed the swapped root symlink"
+
+
 # --- leaf names: a `*_at` argument is one entry, never a path -----------------------
 
 
@@ -237,6 +267,41 @@ def test_read_inside_bounded_reads_a_real_file(tmp_path):
     (tmp_path / "runs").mkdir()
     (tmp_path / "runs" / "report.json").write_text("{}", encoding="utf-8")
     assert read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024) == "{}"
+
+
+def test_read_inside_bounded_retries_short_reads_until_eof(tmp_path, monkeypatch):
+    path = tmp_path / "report.json"
+    payload = "complete despite short reads"
+    path.write_text(payload, encoding="utf-8")
+    real_read = finding_paths.os.read
+
+    def short_read(descriptor, max_bytes):
+        return real_read(descriptor, min(max_bytes, 2))
+
+    monkeypatch.setattr(finding_paths.os, "read", short_read)
+
+    assert read_inside_bounded(tmp_path, path, 1024) == payload
+
+
+def test_read_inside_bounded_detects_growth_past_the_bound(tmp_path, monkeypatch):
+    path = tmp_path / "report.json"
+    path.write_bytes(b"0123456789")
+    real_read = finding_paths.os.read
+    grew = False
+
+    def short_read_then_grow(descriptor, max_bytes):
+        nonlocal grew
+        chunk = real_read(descriptor, min(max_bytes, 5))
+        if not grew:
+            with path.open("ab") as handle:
+                handle.write(b"!")
+            grew = True
+        return chunk
+
+    monkeypatch.setattr(finding_paths.os, "read", short_read_then_grow)
+
+    with pytest.raises(PathSafetyError, match="exceeds"):
+        read_inside_bounded(tmp_path, path, 10)
 
 
 def test_read_inside_bounded_refuses_a_symlinked_PARENT(tmp_path):

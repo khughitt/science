@@ -22,6 +22,7 @@ fields is a LOAD ERROR -- never a silent repair or rename.
 from __future__ import annotations
 
 import os
+import secrets
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -32,7 +33,6 @@ from science_model.audit import DOC_KIND, AuditFindingRecord, finding_fingerprin
 from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.findings.paths import (
-    PathExistsError,
     PathSafetyError,
     create_regular_file_at,
     exists_at,
@@ -84,6 +84,8 @@ def _parse_case(name: str, text: str) -> AuditFindingRecord:
     `yaml.YAMLError` -- a type no caller of this module has any reason to catch, and
     one that would escape the CLI's declared error channel entirely.
     """
+    if not name.endswith(".md"):
+        raise CaseStorageError(f"{name} does not have the canonical .md extension")
     try:
         frontmatter, _body = split_frontmatter(text)
     except yaml.YAMLError as exc:
@@ -106,7 +108,7 @@ def _parse_case(name: str, text: str) -> AuditFindingRecord:
         # the reader to edit a case that is not actually wrong.
         raise CaseStorageError(f"{name} is not a valid case: {exc}") from exc
 
-    stem = name[: -len(".md")] if name.endswith(".md") else name
+    stem = name[: -len(".md")]
     if "--" not in stem:
         raise CaseStorageError(f"{name} is not `<rule-slug>--<digest>.md`")
     slug, _, digest = stem.rpartition("--")
@@ -177,7 +179,6 @@ class CaseStore:
 
     def write(self, record: AuditFindingRecord) -> str:
         name = case_filename(record)
-        temp = f".{name}.tmp"
         payload = {
             "doc_kind": DOC_KIND,
             # `Transition.from_status=None` is required for the genesis transition.
@@ -185,40 +186,31 @@ class CaseStore:
             **record.model_dump(mode="json"),
         }
         text = render_frontmatter(payload, _BODY)
+        encoded = text.encode("utf-8")
+        if len(encoded) > MAX_CASE_BYTES:
+            raise CaseStorageError(
+                f"case {name!r} is {len(encoded)} bytes, which exceeds "
+                f"{MAX_CASE_BYTES}"
+            )
         try:
-            descriptor = self._create_temp(temp)
+            temp, descriptor = self._create_temp(name)
             try:
-                with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                    handle.write(text)
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(encoded)
+                replace_at(self._dir_fd, temp, name)
             except BaseException:
                 unlink_at(self._dir_fd, temp)
                 raise
-            replace_at(self._dir_fd, temp, name)
         except PathSafetyError as exc:
             raise CaseStorageError(str(exc)) from exc
         except OSError as exc:
-            unlink_at(self._dir_fd, temp)
             raise CaseStorageError(f"could not write case {name!r}: {exc}") from exc
         return name
 
-    def _create_temp(self, temp: str) -> int:
-        """Create the temp file `O_EXCL`, clearing one stale entry if needed.
-
-        `O_EXCL` means a leftover from a crashed run makes the first attempt fail.
-        Removing that NAME is safe -- `unlink` never follows a link and never
-        truncates, so a planted hard link loses this name and keeps its other one --
-        and the retry still refuses to reuse an entry it did not create itself.
-
-        The catch is `PathExistsError`, NOT `PathSafetyError`: "something is already
-        there" is the one condition deleting a name can fix. Catching the base class
-        would answer a symlinked or unreachable directory by unlinking and trying
-        again, which is a retry loop over a safety failure.
-        """
-        try:
-            return create_regular_file_at(self._dir_fd, temp)
-        except PathExistsError:
-            unlink_at(self._dir_fd, temp)
-            return create_regular_file_at(self._dir_fd, temp)
+    def _create_temp(self, case_name: str) -> tuple[str, int]:
+        """Create one writer-owned temp without touching any pre-existing name."""
+        temp = f".{case_name}.{secrets.token_hex(16)}.tmp"
+        return temp, create_regular_file_at(self._dir_fd, temp)
 
     def lock(self) -> int:
         """The caller owns the returned descriptor and must close it."""

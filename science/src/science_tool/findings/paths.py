@@ -124,7 +124,7 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     root = _resolved_root(project_root)
     walked = root
     try:
-        parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     except OSError as exc:
         raise PathSafetyError(
             f"project root {root} is not an accessible directory: {exc}"
@@ -296,7 +296,12 @@ def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
             raise PathSafetyError(
                 f"{name!r} is {info.st_size} bytes, which exceeds {max_bytes}"
             )
-        data = os.read(descriptor, max_bytes + 1)
+        data = bytearray()
+        while len(data) <= max_bytes:
+            chunk = os.read(descriptor, max_bytes + 1 - len(data))
+            if not chunk:
+                break
+            data.extend(chunk)
     finally:
         os.close(descriptor)
     if len(data) > max_bytes:
