@@ -62,12 +62,41 @@ def _frontmatter_name(path: Path) -> str:
 
 
 def _methodology_names() -> set[str]:
-    expected = {
-        f"science-{_frontmatter_name(path)}"
-        for path in sorted((ROOT / "skills").glob("*/SKILL.md"))
-    }
+    expected = {f"science-{_frontmatter_name(path)}" for path in sorted((ROOT / "skills").glob("*/SKILL.md"))}
     expected.add("science-scientific-writing")
     return expected
+
+
+def _write_minimal_generation_repo(
+    repo_root: Path,
+    *,
+    router_name: str,
+    command_name: str | None = None,
+    router_body: str = "# Test Router\n",
+) -> None:
+    (repo_root / "commands").mkdir(parents=True)
+    (repo_root / "skills" / "test").mkdir(parents=True)
+    (repo_root / "references" / "role-prompts").mkdir(parents=True)
+    (repo_root / "aspects").mkdir()
+    (repo_root / "skills" / "INDEX.md").write_text("# Skills\n", encoding="utf-8")
+    (repo_root / "skills" / "test" / "SKILL.md").write_text(
+        (f"---\nname: {router_name}\ndescription: Test router.\n---\n\n{router_body}"),
+        encoding="utf-8",
+    )
+    (repo_root / "skills" / "writing").mkdir()
+    (repo_root / "skills" / "writing" / "scientific-writing.md").write_text(
+        ("---\nname: scientific-writing\ndescription: Test writing.\n---\n\n# Scientific Writing\n"),
+        encoding="utf-8",
+    )
+    (repo_root / "references" / "command-preamble.md").write_text(
+        "# Command Preamble\n\nFollow the command.",
+        encoding="utf-8",
+    )
+    if command_name is not None:
+        (repo_root / "commands" / f"{command_name}.md").write_text(
+            ("---\ndescription: Test command.\n---\n\n# Test Command\n\nRun the test command.\n"),
+            encoding="utf-8",
+        )
 
 
 def test_command_to_skill_name_uses_science_namespace() -> None:
@@ -163,14 +192,40 @@ def test_generated_methodology_and_support_skills_are_not_user_invocable(
         assert "Adapted from canonical Science skill" not in text, name
 
 
+@pytest.mark.parametrize(
+    ("skill_name", "resource", "dependency"),
+    (
+        (
+            "science-literature",
+            "references/sources/openalex.md",
+            "science-search-literature",
+        ),
+        (
+            "science-study-design",
+            "references/causal-identification.md",
+            "science-critique-approach",
+        ),
+    ),
+)
+def test_methodology_command_references_become_generated_skill_loads(
+    generated: GenerationResult,
+    skill_name: str,
+    resource: str,
+    dependency: str,
+) -> None:
+    package = generated.skill_paths[skill_name].parent
+    text = (package / resource).read_text(encoding="utf-8")
+
+    assert f"`{dependency}` skill" in text
+    assert "/science:" not in text
+
+
 def test_support_methodology_index_lists_every_generated_methodology_skill(
     generated: GenerationResult,
 ) -> None:
     support = generated.skill_paths["science-command-preamble"].parent
     index = (support / "references" / "methodology-index.md").read_text(encoding="utf-8")
-    expected = "# Science Methodology Skills\n\n" + "\n".join(
-        f"- `{name}`" for name in sorted(_methodology_names())
-    )
+    expected = "# Science Methodology Skills\n\n" + "\n".join(f"- `{name}`" for name in sorted(_methodology_names()))
 
     assert index == f"{expected}\n"
 
@@ -233,15 +288,13 @@ def test_generated_skill_markdown_links_are_package_portable(
     installed: bool,
 ) -> None:
     emitted_names = set(generated.skill_paths)
+    methodology_and_support = _methodology_names() | {"science-command-preamble"}
     install_root = tmp_path / ".agents" / "skills"
     install_root.mkdir(parents=True)
     for name in sorted(emitted_names):
         skill_path = generated.skill_paths[name]
         package_root = skill_path.parent.resolve()
-        relative_markdown = [
-            markdown.relative_to(package_root)
-            for markdown in sorted(package_root.rglob("*.md"))
-        ]
+        relative_markdown = [markdown.relative_to(package_root) for markdown in sorted(package_root.rglob("*.md"))]
         checked_root = package_root
         if installed:
             checked_root = install_root / name
@@ -249,6 +302,8 @@ def test_generated_skill_markdown_links_are_package_portable(
         for relative in relative_markdown:
             markdown = checked_root / relative
             text = markdown.read_text(encoding="utf-8")
+            if name in methodology_and_support:
+                assert "/science:" not in text, f"{name}/{relative}"
             for raw in re.findall(r"]\(([^)]+)\)", text):
                 target = raw.split("#", 1)[0]
                 if not target or target.startswith("/") or re.match(r"^[a-z]+:", target):
@@ -280,6 +335,77 @@ def test_missing_generated_skill_dependency_is_rejected() -> None:
             {"science-plan-analysis": {"science-study-design"}},
             {"science-plan-analysis"},
         )
+
+
+def test_missing_methodology_command_dependency_is_rejected(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        router_body="# Test Router\n\nRun `/science:not-generated`.\n",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "missing generated skill dependency for science-test: "
+            r"\['science-not-generated'\]"
+        ),
+    ):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+
+@pytest.mark.parametrize(
+    ("router_name", "command_name"),
+    (
+        ("duplicate", "duplicate"),
+        ("command-preamble", None),
+    ),
+    ids=("command-router", "support-router"),
+)
+@pytest.mark.parametrize("preexisting", (False, True), ids=("absent-output", "existing-output"))
+def test_generated_skill_identity_collision_fails_before_output_mutation(
+    tmp_path: Path,
+    router_name: str,
+    command_name: str | None,
+    preexisting: bool,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name=router_name,
+        command_name=command_name,
+    )
+    skills_output = tmp_path / "skills-output"
+    commands_output = tmp_path / "commands-output"
+    if preexisting:
+        skills_output.mkdir()
+        commands_output.mkdir()
+        (skills_output / "keep.txt").write_text("skills\n", encoding="utf-8")
+        (commands_output / "keep.txt").write_text("commands\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="generated skill identity has multiple sources",
+    ):
+        generate_agent_assets(repo_root, skills_output, commands_output)
+
+    if preexisting:
+        assert {
+            path.relative_to(skills_output): path.read_bytes() for path in skills_output.rglob("*") if path.is_file()
+        } == {Path("keep.txt"): b"skills\n"}
+        assert {
+            path.relative_to(commands_output): path.read_bytes()
+            for path in commands_output.rglob("*")
+            if path.is_file()
+        } == {Path("keep.txt"): b"commands\n"}
+    else:
+        assert not skills_output.exists()
+        assert not commands_output.exists()
 
 
 def test_command_skill_references_to_canonical_skills_become_router_loads(

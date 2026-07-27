@@ -38,6 +38,7 @@ _RELATIVE_MARKDOWN_LINK_RE = re.compile(
     r"(#[^)]+)?\)"
 )
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_AGENT_COMMAND_RE = re.compile(r"`?/science:([a-z0-9-]+)`?")
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,7 @@ def generate_agent_assets(
     )
     command_paths = sorted((repo_root / "commands").glob("*.md"))
     methodology_packages = _methodology_packages(repo_root)
+    _validate_generated_skill_namespace(command_paths, methodology_packages)
     skill_owners = _skill_owner_map(methodology_packages, repo_root)
     dependencies: dict[str, set[str]] = {}
     skills_output_root.mkdir(parents=True, exist_ok=True)
@@ -131,15 +133,9 @@ def _methodology_packages(repo_root: Path) -> tuple[MethodologyPackage, ...]:
     packages = []
     for router in sorted((repo_root / "skills").glob("*/SKILL.md")):
         canonical_name, _, _ = _parse_skill(router)
-        owned = tuple(
-            path
-            for path in sorted(router.parent.rglob("*"))
-            if path.is_file()
-        )
+        owned = tuple(path for path in sorted(router.parent.rglob("*")) if path.is_file())
         if router.parent.name == "writing":
-            owned = tuple(
-                path for path in owned if path.name != "scientific-writing.md"
-            )
+            owned = tuple(path for path in owned if path.name != "scientific-writing.md")
         packages.append(
             MethodologyPackage(
                 name=f"science-{canonical_name}",
@@ -147,9 +143,7 @@ def _methodology_packages(repo_root: Path) -> tuple[MethodologyPackage, ...]:
                 owned_sources=owned,
             )
         )
-    scientific_writing = (
-        repo_root / "skills" / "writing" / "scientific-writing.md"
-    )
+    scientific_writing = repo_root / "skills" / "writing" / "scientific-writing.md"
     packages.append(
         MethodologyPackage(
             name="science-scientific-writing",
@@ -185,8 +179,7 @@ def _validate_unique_skill_owners(
             previous_owner = owners.get(resolved)
             if previous_owner is not None:
                 raise ValueError(
-                    "canonical skill source has multiple owners "
-                    f"for {resolved}: {previous_owner}, {package.name}"
+                    f"canonical skill source has multiple owners for {resolved}: {previous_owner}, {package.name}"
                 )
             owners[resolved] = package.name
 
@@ -215,9 +208,26 @@ def _validate_dependencies(
     for owner, targets in sorted(dependencies.items()):
         missing = sorted(targets - emitted_names)
         if missing:
-            raise ValueError(
-                f"missing generated skill dependency for {owner}: {missing}"
-            )
+            raise ValueError(f"missing generated skill dependency for {owner}: {missing}")
+
+
+def _validate_generated_skill_namespace(
+    command_paths: list[Path],
+    methodology_packages: tuple[MethodologyPackage, ...],
+) -> None:
+    owners: dict[str, str] = {}
+
+    def add(name: str, source: str) -> None:
+        previous = owners.get(name)
+        if previous is not None:
+            raise ValueError(f"generated skill identity has multiple sources for {name}: {previous}, {source}")
+        owners[name] = source
+
+    for command_path in command_paths:
+        add(command_to_skill_name(command_path), str(command_path))
+    for package in methodology_packages:
+        add(package.name, str(package.router_source))
+    add(COMMAND_SUPPORT_SKILL, "generated command support package")
 
 
 def _validate_output_root(
@@ -672,14 +682,15 @@ def _generate_methodology_skills(
     for package in packages:
         canonical_name, description, body = _parse_skill(package.router_source)
         if package.name != f"science-{canonical_name}":
-            raise ValueError(
-                "generated methodology skill name mismatch: "
-                f"{package.name} != science-{canonical_name}"
-            )
+            raise ValueError(f"generated methodology skill name mismatch: {package.name} != science-{canonical_name}")
 
         skill_dir = output_root / package.name
         _replace_generated_directory(skill_dir)
         package_dependencies = dependencies.setdefault(package.name, set())
+        description = _rewrite_methodology_command_references(
+            description,
+            package_dependencies,
+        )
         source_targets = {
             source.resolve(): _methodology_source_target(
                 package,
@@ -769,12 +780,7 @@ def _rewrite_methodology_references(
     def replace_link(match: re.Match[str]) -> str:
         label, raw_target = match.groups()
         target_path, separator, anchor = raw_target.partition("#")
-        if (
-            not target_path
-            or target_path.startswith("/")
-            or "://" in target_path
-            or target_path.startswith("mailto:")
-        ):
+        if not target_path or target_path.startswith("/") or "://" in target_path or target_path.startswith("mailto:"):
             return match.group(0)
         candidate = _resolve_methodology_reference(
             source,
@@ -824,24 +830,32 @@ def _rewrite_methodology_references(
             return f"`{_relative_package_reference(emitted_source, reference, skill_dir)}`"
         if relative == Path("INDEX.md"):
             dependencies.add(COMMAND_SUPPORT_SKILL)
-            return (
-                f"the `{COMMAND_SUPPORT_SKILL}` skill's "
-                "`references/methodology-index.md`"
-            )
+            return f"the `{COMMAND_SUPPORT_SKILL}` skill's `references/methodology-index.md`"
         owner = skill_owners.get(candidate)
         if owner is None:
-            raise ValueError(
-                f"canonical skill reference has no generated owner: {relative}"
-            )
+            raise ValueError(f"canonical skill reference has no generated owner: {relative}")
         dependencies.add(owner)
         return f"the `{owner}` skill"
 
     rewritten = _MARKDOWN_LINK_RE.sub(replace_link, text)
-    return re.sub(
+    rewritten = re.sub(
         r"`((?:skills/|\./|\.\./)?[A-Za-z0-9._/-]+\.md)`",
         replace_backtick,
         rewritten,
     )
+    return _rewrite_methodology_command_references(rewritten, dependencies)
+
+
+def _rewrite_methodology_command_references(
+    text: str,
+    dependencies: set[str],
+) -> str:
+    def replace_command(match: re.Match[str]) -> str:
+        dependency = f"science-{match.group(1)}"
+        dependencies.add(dependency)
+        return f"`{dependency}` skill"
+
+    return _AGENT_COMMAND_RE.sub(replace_command, text)
 
 
 def _resolve_methodology_reference(
@@ -893,15 +907,10 @@ def _methodology_reference_target(
 
     if relative == Path("INDEX.md"):
         dependencies.add(COMMAND_SUPPORT_SKILL)
-        return (
-            f"Load the `{COMMAND_SUPPORT_SKILL}` skill and consult its "
-            "`references/methodology-index.md`"
-        )
+        return f"Load the `{COMMAND_SUPPORT_SKILL}` skill and consult its `references/methodology-index.md`"
     owner = skill_owners.get(candidate)
     if owner is None:
-        raise ValueError(
-            f"canonical skill reference has no generated owner: {relative}"
-        )
+        raise ValueError(f"canonical skill reference has no generated owner: {relative}")
     dependencies.add(owner)
     return f"Load the `{owner}` skill"
 
@@ -918,9 +927,7 @@ def _bundle_methodology_resource(
     try:
         relative = source.relative_to(repo_root)
     except ValueError as error:
-        raise ValueError(
-            f"methodology resource escapes Science toolkit root: {source}"
-        ) from error
+        raise ValueError(f"methodology resource escapes Science toolkit root: {source}") from error
     if not source.is_file():
         raise ValueError(f"methodology resource is not a file: {source}")
 
@@ -1020,9 +1027,7 @@ def _copy_support_tree(
     bundled: set[Path],
 ) -> None:
     if not source_root.is_dir():
-        raise ValueError(
-            f"generated resource source is not a directory: {source_root}"
-        )
+        raise ValueError(f"generated resource source is not a directory: {source_root}")
     for source in sorted(source_root.rglob("*")):
         if not source.is_file():
             continue
