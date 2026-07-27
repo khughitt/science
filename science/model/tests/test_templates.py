@@ -212,6 +212,28 @@ def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
     assert packaged_template.read_text(encoding="utf-8") == root_template.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("kind", sorted(MIGRATED_KINDS))
+def test_every_migrated_template_renders(kind: str) -> None:
+    """Every migrated kind must actually render, not merely exist and match.
+
+    `_render_body` looks up `metadata_by_name[parsed.name]` for every parsed
+    section BEFORE testing inclusion, so a `##` heading added to a template body
+    without its matching `_template.sections` descriptor raises `KeyError`
+    unconditionally -- no `--with`/`--without` combination avoids it.
+
+    `pre-registration` broke exactly that way in b8667272 (2026-07-22) and stayed
+    broken for four days. The two guards that could have caught it did not:
+    `MIGRATED_KINDS` was parametrized only over the root/packaged byte-compare
+    above (both copies were equally unrenderable, so they matched perfectly), and
+    the render tests were a hand-picked subset that never happened to name
+    `pre-registration`. A guard that lists its scope has a hole by construction,
+    so this one enumerates the kinds rather than naming them.
+    """
+    text = Renderer(today=date(2026, 5, 3)).render(kind, fields=_fields(kind))
+    frontmatter = _frontmatter(text)
+    assert "_template" not in frontmatter
+
+
 def test_packaged_templates_are_exactly_the_migrated_kinds() -> None:
     """The packaged templates dir must hold exactly one .md per migrated kind and
     nothing else. The Renderer only ever reads packaged templates for migrated
