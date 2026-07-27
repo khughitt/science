@@ -511,6 +511,35 @@ def test_occurrence_qualifiers_cannot_be_mutated_in_place():
         occurrence.qualifiers["field"] = "month"  # type: ignore[index]
 
 
+def test_occurrence_nested_qualifier_arrays_are_copied_and_immutable():
+    source = {"metadata": {"tags": [["stable"]]}}
+    occurrence = _occurrence(qualifiers=source)
+
+    source["metadata"]["tags"][0].append("caller-added")
+
+    with pytest.raises(TypeError):
+        occurrence.qualifiers["metadata"]["tags"][0][0] = "mutated"
+    assert occurrence.model_dump(mode="json")["qualifiers"] == {
+        "metadata": {"tags": [["stable"]]}
+    }
+
+
+def test_record_nested_identity_qualifier_arrays_are_copied_and_immutable():
+    source = {"tags": [["stable"]]}
+    record = _record(
+        identity_qualifiers=source,
+        occurrences=[_occurrence(qualifiers={"tags": [["stable"]]})],
+    )
+
+    source["tags"][0].append("caller-added")
+
+    with pytest.raises(TypeError):
+        record.identity_qualifiers["tags"][0][0] = "mutated"
+    assert record.model_dump(mode="json")["identity_qualifiers"] == {
+        "tags": [["stable"]]
+    }
+
+
 def test_a_record_round_trips_through_a_plain_dict_dump():
     # The frozen mappings serialize as ordinary dicts, so re-validation -- which is
     # how `with_occurrence` appends -- works on the dumped form.
@@ -587,6 +616,35 @@ def test_current_severity_survives_a_mix_of_naive_and_aware_timestamps():
     )
     assert all(o.observed_at.tzinfo is not None for o in record.occurrences)
     assert record.current_severity() == "warn"
+
+
+def test_a_tzinfo_without_an_offset_is_read_as_naive_utc(monkeypatch):
+    import time
+    from datetime import tzinfo
+
+    class OffsetlessTimezone(tzinfo):
+        def utcoffset(self, value):
+            return None
+
+    try:
+        with monkeypatch.context() as environment:
+            environment.setenv("TZ", "EST5")
+            time.tzset()
+            occurrence = _occurrence(
+                observed_at=datetime(
+                    2026,
+                    7,
+                    27,
+                    12,
+                    0,
+                    tzinfo=OffsetlessTimezone(),
+                )
+            )
+    finally:
+        time.tzset()
+
+    assert occurrence.observed_at == NOW
+    assert occurrence.observed_at.tzinfo is UTC
 
 
 def test_every_stored_moment_is_normalized_to_aware_utc():

@@ -44,7 +44,7 @@ def _to_utc(value: datetime) -> datetime:
     A naive value is READ AS UTC, matching what ingestion does with a report's
     `generated_at`. That is a decision, not a guess, and it lives in one place.
     """
-    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    aware = value if value.utcoffset() is not None else value.replace(tzinfo=UTC)
     return aware.astimezone(UTC)
 
 

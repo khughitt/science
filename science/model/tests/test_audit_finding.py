@@ -69,6 +69,51 @@ def test_a_qualifier_mapping_is_copied_not_aliased():
     assert finding.qualifiers["field"] == "year"
 
 
+def test_nested_qualifier_arrays_are_copied_not_aliased():
+    source = {
+        "tags": ["stable", ["nested"]],
+        "metadata": {"labels": ["kept"]},
+    }
+    finding = _finding(qualifiers=source)
+
+    source["tags"][0] = "caller-mutated"
+    source["tags"][1].append("caller-added")
+    source["metadata"]["labels"].append("caller-added")
+    source["metadata"]["caller-key"] = "caller-added"
+
+    assert finding.model_dump(mode="json")["qualifiers"] == {
+        "tags": ["stable", ["nested"]],
+        "metadata": {"labels": ["kept"]},
+    }
+
+
+def test_nested_qualifier_arrays_cannot_be_mutated_through_a_finding():
+    finding = _finding(
+        qualifiers={
+            "tags": ["stable", ["nested"]],
+            "metadata": {"labels": ["kept"]},
+        }
+    )
+
+    with pytest.raises(TypeError):
+        finding.qualifiers["tags"][0] = "mutated"
+    with pytest.raises(TypeError):
+        finding.qualifiers["tags"][1][0] = "mutated"
+    with pytest.raises(TypeError):
+        finding.qualifiers["metadata"]["labels"][0] = "mutated"
+    with pytest.raises(TypeError):
+        finding.qualifiers["metadata"]["labels"] = ["mutated"]
+
+    dumped = finding.model_dump(mode="json")["qualifiers"]
+    assert dumped == {
+        "tags": ["stable", ["nested"]],
+        "metadata": {"labels": ["kept"]},
+    }
+    assert type(dumped["tags"]) is list
+    assert type(dumped["tags"][1]) is list
+    assert type(dumped["metadata"]["labels"]) is list
+
+
 def test_an_omitted_qualifier_mapping_is_frozen_too():
     finding = _finding(qualifiers={})
     bare = AuditFinding(

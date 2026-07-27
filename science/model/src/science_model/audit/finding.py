@@ -23,15 +23,45 @@ Severity = Literal["error", "warn", "info"]
 _SEVERITY_ALIASES = {"warning": "warn", "warn": "warn", "error": "error", "info": "info"}
 
 
+def _freeze_qualifier_value(value: object) -> object:
+    """Recursively copy qualifier containers into immutable equivalents."""
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze_qualifier_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_qualifier_value(item) for item in value)
+    return value
+
+
 def _freeze_qualifiers(value: Mapping[str, object]) -> Mapping[str, object]:
-    """Return a read-only view over a private copy of a qualifier mapping."""
-    return MappingProxyType(dict(value))
+    """Return a recursively immutable copy of a qualifier mapping."""
+    return MappingProxyType(
+        {key: _freeze_qualifier_value(item) for key, item in value.items()}
+    )
+
+
+def _serialize_qualifier_value(value: object) -> object:
+    """Restore immutable qualifier containers to JSON-ready dicts and arrays."""
+    if isinstance(value, Mapping):
+        return {
+            key: _serialize_qualifier_value(item) for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_serialize_qualifier_value(item) for item in value]
+    return value
+
+
+def _serialize_qualifiers(value: Mapping[str, object]) -> dict[str, object]:
+    return {
+        key: _serialize_qualifier_value(item) for key, item in value.items()
+    }
 
 
 QualifierMap = Annotated[
     Mapping[str, object],
     AfterValidator(_freeze_qualifiers),
-    PlainSerializer(dict, return_type=dict, when_used="always"),
+    PlainSerializer(_serialize_qualifiers, return_type=dict, when_used="always"),
 ]
 """A frozen, JSON-serializable qualifier mapping."""
 
