@@ -145,10 +145,12 @@ keeps that coverage complete. `pre-registration` is migrated. An earlier draft
 of this design claimed the guard was missing and proposed adding one — wrong,
 and the duplicate is not built. The real hole is D0.
 
-### D0 — the pre-registration template does not render today
+### D0 — the pre-registration template did not render — SHIPPED
 
-Discovered while checking D2's renderer contract, and it **blocks this batch**:
-slice 2 edits a template that is already broken.
+Discovered while checking D2's renderer contract. **Shipped standalone ahead of
+this batch** (`a3611ed2`, merged to main `c6a57e70`) rather than riding along:
+it was a live break, and keeping the repair behind unrelated Batch T work would
+have left main broken for however long the batch took.
 
 ```
 Renderer.render("pre-registration") -> KeyError
@@ -161,16 +163,21 @@ render a new pre-registration for four days.** 1 of 19 migrated kinds is
 affected; the other 18 render clean.
 
 Nothing caught it, and the reason is the recorded lesson: **a guard that lists
-its scope has a hole by construction.** `MIGRATED_KINDS` is parametrized over
-the byte-compare test only. The render tests are hand-picked per kind
-(`evidence-line`, one other), so the kind that broke was simply not on the
-list. The two copies match perfectly — and both are unrenderable. A guard
-comparing the wrong property is this batch's own theme, arrived at from the
-toolkit side.
+its scope has a hole by construction.** `MIGRATED_KINDS` was parametrized over
+the byte-compare test only. The render tests are a hand-picked subset, so the
+kind that broke was simply not on the list. The two copies matched perfectly —
+and both were unrenderable. A guard comparing the wrong property is this
+batch's own theme, arrived at from the toolkit side.
 
-Fix: add the missing descriptor, and parametrize a render smoke test over
-`MIGRATED_KINDS` so the scope cannot be listed. Verified red-before/green-after
-against the pre-fix template.
+Fix, as shipped: the missing descriptor in both copies as
+`required: false` (the section is conditional — *"Required when the analysis
+freezes a signature, score, or model to be projected onto a NEW target
+cohort"*), so it renders opt-in via `--with` like the calibration,
+execution-readiness, and vehicle-admissibility gates; plus
+`test_every_migrated_template_renders` parametrized over `MIGRATED_KINDS` so
+the scope cannot be listed. Verified red before the descriptor landed — 1 of 19
+kinds failing at `templates.py:277` — and green after. Model suite 1449 → 1468,
+exactly the 19 new parametrized cases.
 
 ### D3 — the check: substitute the one that can fail
 
@@ -253,10 +260,8 @@ different thing from a gap.
 
 ## Slices
 
-0. **Unbreak the renderer** (D0) — the missing `training-side-confound-gate`
-   descriptor, plus a render smoke test parametrized over `MIGRATED_KINDS`.
-   Ships first and stands alone: it is a live four-day-old break, independent
-   of whether the rest of this batch lands.
+0. ~~**Unbreak the renderer** (D0)~~ — **SHIPPED** as a standalone hotfix,
+   `a3611ed2`, merged to main `c6a57e70`; this branch is rebased onto it.
 1. **Doctrine leaf** — `cost-gate-certification.md` + INDEX row + SKILL.md
    Leaves row + `pipelines/SKILL.md` pointer + codex mirror. Covers Groups A
    and B.
