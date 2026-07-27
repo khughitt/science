@@ -36,7 +36,6 @@ REPORT = {
     "unwired_checks": [],
     "legacy_task_type": [],
     "invalid_entity_aspects": [],
-    "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
     # All four LayeredClaimHealthReport keys. The adoption table at health_cli.py:376
     # reads both coverage metrics UNCONDITIONALLY, and the rival-model table reads its
     # list — a fixture carrying only `migration_issues` raises KeyError before any

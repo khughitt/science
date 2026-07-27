@@ -11,11 +11,9 @@ Three tables, deliberately distinct:
 
 ``DEFERRED`` is defined by growability, not by current size. An earlier draft required a
 measurement above 20k, which left no truthful home for a command that grows but happens
-to be small today -- ``tasks archive`` emits one row per archivable task
-(``tasks_cli.py:333``) yet measures tiny on a freshly-archived project. Calling that
-exempt would assert something false. Every non-budgeted command therefore carries a
-justification string either way: ``EXEMPTIONS`` says why it cannot grow, ``DEFERRED``
-says what makes it grow.
+to be small today. Calling such a command exempt would assert something false. Every
+non-budgeted command therefore carries a justification string either way:
+``EXEMPTIONS`` says why it cannot grow, ``DEFERRED`` says what makes it grow.
 
 A command's OWN output growing with project size is not the only way it can leak: seven
 write/action commands were reclassified ``DEFERRED`` -> ``EXEMPTIONS`` once a *side
@@ -100,7 +98,6 @@ BUDGETS: dict[str, CommandBudget] = {
     "inquiry list": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "inquiry export-pgmpy": CommandBudget(max_chars=20_000, shape=PayloadShape.DOCUMENT),
     "project index": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
-    "tasks archive": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "tasks migrate-storage": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "annotate promote": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),
     "big-picture resolve-questions": CommandBudget(max_chars=20_000, shape=PayloadShape.ROWS, max_rows=40),

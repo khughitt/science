@@ -2,26 +2,34 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from science_model.tasks import Task
 
+from science_tool import tasks as task_module
 from science_tool.cli import main
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _write_active_tasks() -> None:
-    tasks_dir = Path("tasks")
-    tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text(
-        "## [t001] Color task\n"
-        "- priority: P1\n"
-        "- status: active\n"
-        "- related: [question:q001-demo, custom-kind:alpha]\n"
-        "- created: 2026-05-01\n\n"
-        "Description.\n"
+    active_dir = Path("tasks") / "active"
+    active_dir.mkdir(parents=True)
+    task = Task(
+        id="t001",
+        title="Color task",
+        priority="P1",
+        status="active",
+        related=["question:q001-demo", "custom-kind:alpha"],
+        created=date(2026, 5, 1),
+        description="Description.",
+    )
+    (active_dir / "t001-color-task.md").write_text(
+        task_module.render_task_file(task),
+        encoding="utf-8",
     )
 
 
@@ -147,15 +155,19 @@ def test_emit_query_rows_default_has_no_ansi(capsys) -> None:
     assert ANSI_RE.search(captured.out) is None
 
 
-def _health_report_with_archive_lag() -> dict:
+def _health_report_with_managed_artifact_issue() -> dict:
     return {
-        "archive_lag": {
-            "done_in_active": 1,
-            "retired_in_active": 0,
-            "missing_completed": 0,
-        },
         "total_issues": 1,
-        "managed_artifacts": [],
+        "managed_artifacts": [
+            {
+                "name": "AGENTS.md",
+                "install_target": "AGENTS.md",
+                "version": "1",
+                "status": "drifted",
+                "detail": "managed artifact differs",
+                "counts_as_issue": True,
+            }
+        ],
         "tooling_scaffold": [],
         "agent_context": [],
         "unregistered_ref_kinds": [],
@@ -204,13 +216,17 @@ def _health_report_with_archive_lag() -> dict:
 def test_health_never_strips_markup_and_ansi(monkeypatch) -> None:
     from science_tool.graph import health as health_module
 
-    monkeypatch.setattr(health_module, "build_health_report", lambda _root: _health_report_with_archive_lag())
+    monkeypatch.setattr(
+        health_module,
+        "build_health_report",
+        lambda _root: _health_report_with_managed_artifact_issue(),
+    )
 
     result = CliRunner().invoke(main, ["--color", "never", "health"])
 
     assert result.exit_code == 0, result.output
     assert "Next:" in result.output
-    assert "science tasks archive" in result.output
+    assert "science project artifacts check" in result.output
     assert "[cyan]" not in result.output
     assert ANSI_RE.search(result.output) is None
 
@@ -218,12 +234,16 @@ def test_health_never_strips_markup_and_ansi(monkeypatch) -> None:
 def test_health_always_emits_ansi(monkeypatch) -> None:
     from science_tool.graph import health as health_module
 
-    monkeypatch.setattr(health_module, "build_health_report", lambda _root: _health_report_with_archive_lag())
+    monkeypatch.setattr(
+        health_module,
+        "build_health_report",
+        lambda _root: _health_report_with_managed_artifact_issue(),
+    )
 
     result = CliRunner().invoke(main, ["--color", "always", "health"])
 
     assert result.exit_code == 0, result.output
-    assert "science tasks archive" in result.output
+    assert "science project artifacts check" in result.output
     assert ANSI_RE.search(result.output) is not None
 
 

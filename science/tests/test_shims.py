@@ -73,7 +73,7 @@ def _write_minimal_software_project(root: Path) -> None:
     (root / "AGENTS.md").write_text("# Smoke\n", encoding="utf-8")
     for d in ("doc", "specs", "tasks", "knowledge", "src", "entities"):
         (root / d).mkdir()
-    (root / "tasks" / "active.md").write_text("# x\n", encoding="utf-8")
+    (root / "tasks" / "active").mkdir()
 
 
 def test_meta_validate_smoke_runs(tmp_path: Path) -> None:

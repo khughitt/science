@@ -53,7 +53,6 @@ INSTRUMENT_MODULES: tuple[str, ...] = (
     "graph/health_checks/validate.py",
     "graph/health_checks/legacy_task_type.py",
     "graph/health_checks/invalid_entity_aspects.py",
-    "graph/health_checks/archive_lag.py",
     "graph/health_checks/managed_artifacts.py",
     "graph/health_checks/prose_epistemics.py",
     "graph/health_checks/cross_paper_evidence.py",

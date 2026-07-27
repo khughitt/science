@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
-from science_tool.graph.health_checks.archive_lag import TaskArchiveLag, archive_lag_total
-
 
 def _required(container: Mapping[str, Any], key: str, path: str) -> Any:
     if key not in container:
@@ -57,18 +55,6 @@ def _count_issue_flags(findings: list[Mapping[str, Any]], path: str) -> int:
             )
         count += int(flag)
     return count
-
-
-def _validate_archive_lag(report: Mapping[str, Any]) -> int:
-    archive_lag = _mapping(report, "archive_lag", "health report")
-    for key in ("done_in_active", "retired_in_active", "missing_completed"):
-        value = _required(archive_lag, key, "health report.archive_lag")
-        if type(value) is not int:
-            raise TypeError(
-                f"health report.archive_lag.{key} must be an int, "
-                f"got {type(value).__name__}"
-            )
-    return archive_lag_total(cast("TaskArchiveLag", archive_lag))
 
 
 def _count_layered_claim_issues(report: Mapping[str, Any]) -> int:
@@ -129,7 +115,7 @@ def count_issues(report: Mapping[str, Any]) -> int:
     The same function runs over the full report and its projection, making displayed and
     total issue counts comparable. It is deliberately not a plain row count:
     ``managed_artifacts`` uses ``counts_as_issue``, coverage gaps are derived from
-    metrics, and non-zero archive lag contributes one issue.
+    metrics, and nested finding sections have their own issue rules.
     """
     row_sections = (
         "unresolved_refs",
@@ -155,7 +141,6 @@ def count_issues(report: Mapping[str, Any]) -> int:
             f"health report.total_issues must be an int, got {type(total_issues).__name__}"
         )
 
-    lag_total = _validate_archive_lag(report)
     layered_issues = _count_layered_claim_issues(report)
     prose_findings = _findings(report, "prose_epistemics")
     cross_paper_findings = _findings(report, "cross_paper_evidence")
@@ -177,7 +162,6 @@ def count_issues(report: Mapping[str, Any]) -> int:
         + layered_issues
         + len(rows["dataset_anomalies"])
         + len(rows["schema_invalid"])
-        + (1 if lag_total else 0)
         + managed_artifact_issues
         + len(rows["tooling_scaffold"])
         + len(rows["validation"])

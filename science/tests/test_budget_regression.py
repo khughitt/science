@@ -7,29 +7,21 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 from conftest import build_inquiry_graph
+from science_model.tasks import Task
 
+from science_tool import tasks as task_module
 from science_tool.budget.measure import visible_len
 from science_tool.budget.control import CONTROL_NOTICE_MAX_CHARS
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
 from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE, _graph_uri, _load_dataset, _resolve_term, _save_dataset
 
-TASKS = "\n".join(
-    f"""## [t{i:03d}] Task {i} with a deliberately long title to exercise wrapping behaviour
-- priority: P2
-- status: {"active" if i < 5 else "proposed"}
-- related: [question:q0000-a-long-question-slug, hypothesis:h0000-another-long-slug]
-- created: 2026-01-01
-
-Body paragraph for task {i}, long enough to matter multiplied by the backlog size.
-"""
-    for i in range(400)
-)
 TASK_IDS = {f"t{i:03d}" for i in range(400)}
 DATA_RECORD_PATHS = {
     f"data/stranded-record-with-a-long-name-{i:05d}.md" for i in range(3_000)
@@ -39,9 +31,31 @@ DATA_RECORD_PATHS = {
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text(TASKS)
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    for i in range(400):
+        task = Task(
+            id=f"t{i:03d}",
+            title=f"Task {i} with a deliberately long title to exercise wrapping behaviour",
+            priority="P2",
+            status="active" if i < 5 else "proposed",
+            related=[
+                "question:q0000-a-long-question-slug",
+                "hypothesis:h0000-another-long-slug",
+                # Preserve one task-specific validation finding per row so the
+                # complete health-output assertions retain their original load.
+                f"task:t{i:03d}.bad",
+            ],
+            created=date(2026, 1, 1),
+            description=(
+                f"Body paragraph for task {i}, long enough to matter multiplied "
+                "by the backlog size."
+            ),
+        )
+        (active_dir / f"{task.id}-task-{i}.md").write_text(
+            task_module.render_task_file(task),
+            encoding="utf-8",
+        )
     entities = tmp_path / "entities" / "questions"
     entities.mkdir(parents=True)
     for i in range(300):
@@ -168,6 +182,23 @@ def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> 
 
 
 def test_inventory_output_file_contains_every_entity(project: Path) -> None:
+    # The storage adapter's split-active support lands in Task 15. Exercise its
+    # already-supported done-ledger path here without weakening the 400-task oracle.
+    active_dir = project / "tasks" / "active"
+    tasks = [task_module.parse_task_file(path) for path in sorted(active_dir.glob("*.md"))]
+    for path in active_dir.glob("*.md"):
+        path.unlink()
+    done_dir = project / "tasks" / "done"
+    done_dir.mkdir()
+    done_tasks = [
+        task.model_copy(update={"status": "done", "completed": date(2026, 1, 2)})
+        for task in tasks
+    ]
+    (done_dir / "2026-01.md").write_text(
+        task_module.render_tasks(done_tasks),
+        encoding="utf-8",
+    )
+
     target = project / "inventory.json"
     result = _invoke(
         [
@@ -339,54 +370,6 @@ def test_graph_audit_output_file_is_complete_and_stdout_is_a_control_notice(
     assert "truncation" not in payload
 
 
-ARCHIVABLE_TASKS = "\n".join(
-    f"""## [t{i + 500:03d}] Archivable task {i} with a deliberately long title to exercise wrapping behaviour
-- priority: P2
-- status: done
-- created: 2026-01-01
-- completed: 2026-01-02
-
-Body paragraph for archivable task {i}, long enough to matter multiplied by the backlog size.
-"""
-    for i in range(60)
-)
-
-
-@pytest.fixture
-def tasks_archive_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """60 already-`done` tasks, each with a `completed:` date -> 60 archivable rows.
-
-    No `missing_completed` warnings and no parse errors, so stdout is either the
-    projected table/JSON or (with --output) a single control-notice line.
-    """
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "active.md").write_text(ARCHIVABLE_TASKS)
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
-def test_tasks_archive_stdout_stays_within_its_ceiling(tasks_archive_overflow_project: Path) -> None:
-    result = _invoke(["tasks", "archive"])
-    assert result.exit_code == 0, result.output
-    ceiling = BUDGETS["tasks archive"].max_chars
-    assert visible_len(result.output) <= ceiling
-
-
-def test_tasks_archive_output_file_is_complete_and_stdout_is_a_control_notice(
-    tasks_archive_overflow_project: Path,
-) -> None:
-    target = tasks_archive_overflow_project / "archive.json"
-    result = _invoke(["tasks", "archive", "--format", "json", "--output", str(target)])
-    assert result.exit_code == 0, result.output
-    assert result.output.count("\n") == 1
-    assert "wrote 60 rows to" in result.output
-
-    payload = json.loads(target.read_text())
-    assert len(payload["rows"]) == 60
-    assert {row["id"] for row in payload["rows"]} == {f"t{i + 500:03d}" for i in range(60)}
-
-
 def test_project_index_output_file_is_complete_and_stdout_is_a_control_notice(project: Path) -> None:
     target = project / "index.json"
     result = _invoke(["project", "index", "--format", "json", "--output", str(target)])
@@ -408,16 +391,20 @@ def tasks_blockers_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     this needs no entity fixtures at all.
     """
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    refs = ", ".join(f"dataset:missing-{i:03d}" for i in range(50))
-    (tasks_dir / "active.md").write_text(
-        "## [t001] Task blocked by many unresolved refs\n"
-        "- priority: P2\n"
-        "- status: blocked\n"
-        f"- blocked-by: [{refs}]\n"
-        "- created: 2026-01-01\n\n"
-        "Body.\n"
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    task = Task(
+        id="t001",
+        title="Task blocked by many unresolved refs",
+        priority="P2",
+        status="blocked",
+        blocked_by=[f"dataset:missing-{i:03d}" for i in range(50)],
+        created=date(2026, 1, 1),
+        description="Body.",
+    )
+    (active_dir / "t001-task-blocked-by-many-unresolved-refs.md").write_text(
+        task_module.render_task_file(task),
+        encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -1064,18 +1051,22 @@ def tasks_summary_overflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     Status and priority are held constant so only `by_group` overflows the 40-item cap,
     proving the bespoke projector caps each breakdown independently.
     """
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
-    body = "\n".join(
-        f"""## [t{i:03d}] Task {i}
-- priority: P2
-- status: proposed
-- group: group-{i:03d}
-- created: 2026-01-01
-"""
-        for i in range(45)
-    )
-    (tasks_dir / "active.md").write_text(body, encoding="utf-8")
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    for i in range(45):
+        task = Task(
+            id=f"t{i:03d}",
+            title=f"Task {i}",
+            priority="P2",
+            status="proposed",
+            group=f"group-{i:03d}",
+            created=date(2026, 1, 1),
+            description="",
+        )
+        (active_dir / f"{task.id}-task-{i}.md").write_text(
+            task_module.render_task_file(task),
+            encoding="utf-8",
+        )
     monkeypatch.chdir(tmp_path)
     return tmp_path
 

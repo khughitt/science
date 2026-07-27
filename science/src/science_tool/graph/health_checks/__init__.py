@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from science_tool.graph.health_checks import (
     agent_context,
-    archive_lag,
     cross_paper_evidence,
     dataset_anomalies,
     entity_identity,
@@ -37,7 +36,6 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
     entity_identity.CHECK,
     layered_claim_migration.CHECK,
     cross_paper_evidence.CHECK,
-    archive_lag.CHECK,
     managed_artifacts.CHECK,
     tooling_scaffold.CHECK,
     validate.CHECK,

@@ -52,8 +52,19 @@ def test_section_scope_is_fail_closed_at_equal_or_higher_heading(tmp_path):
 
 def _project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text("name: demo\n")
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text("## [t064] Do the thing\n\nbody\n")
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    (active_dir / "t064-do-the-thing.md").write_text(
+        "---\n"
+        "id: t064\n"
+        "title: Do the thing\n"
+        "priority: P2\n"
+        "status: active\n"
+        "aspects: []\n"
+        "created: 2026-01-01\n"
+        "---\n\n"
+        "body\n"
+    )
     (tmp_path / "entities" / "datasets").mkdir(parents=True)
     (tmp_path / "entities" / "datasets" / "xyz.md").write_text("---\nid: dataset:xyz\nkind: dataset\n---\n\nbody\n")
     (tmp_path / "papers").mkdir()

@@ -38,8 +38,19 @@ def _rows():
 def test_oracle_expected_outcome(row, tmp_path):
     # Build a self-contained project reproducing the fixture, with real anchors present.
     (tmp_path / "science.yaml").write_text("name: oracle\n")
-    (tmp_path / "tasks").mkdir()
-    (tmp_path / "tasks" / "active.md").write_text("## [t064] Anchor task\n\nbody\n")
+    active_dir = tmp_path / "tasks" / "active"
+    active_dir.mkdir(parents=True)
+    (active_dir / "t064-anchor-task.md").write_text(
+        "---\n"
+        "id: t064\n"
+        "title: Anchor task\n"
+        "priority: P2\n"
+        "status: active\n"
+        "aspects: []\n"
+        "created: 2026-01-01\n"
+        "---\n\n"
+        "body\n"
+    )
     (tmp_path / "results").mkdir()
     (tmp_path / "results" / "qap.json").write_text("{}")
     fm = row.get("frontmatter", "")

@@ -412,7 +412,7 @@ def parse_task_file(path: Path) -> Task:
             f"{path}: status {data['status']!r} not open; active/ holds open tasks only"
         )
 
-    return Task(**data, description=body.strip())
+    return Task.model_validate({**data, "description": body.strip()})
 
 
 def _canonical_description(text: str) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import click
 
@@ -701,124 +701,6 @@ def tasks_migrate_storage(
         summary=f"Mode: dry-run — would migrate {len(rows)} task(s).",
     )
     _flush_with_notice(len(rows), noun="migration-plan")
-
-
-@tasks_group.command("archive")
-@click.option("--apply", "do_apply", is_flag=True, help="Write changes to disk (default is dry-run).")
-@click.option(
-    "--check",
-    is_flag=True,
-    help="Print archivable counts and exit non-zero when lag is present (used by science health).",
-)
-@click.option(
-    "--format",
-    "output_format",
-    type=click.Choice(OUTPUT_FORMATS),
-    default="table",
-    show_default=True,
-)
-@click.option(
-    "--tasks-dir",
-    default=DEFAULT_TASKS_DIR,
-    show_default=True,
-    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
-)
-@click.option(
-    "--output",
-    "output_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Write the complete, unbudgeted payload to PATH instead of stdout.",
-)
-def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path, output_path: Path | None) -> None:
-    """Move done/retired tasks from active.md to done/YYYY-MM.md.
-
-    Default is dry-run: prints the planned moves without touching disk.
-    Pass --apply to perform the writes (idempotent on re-run).
-    """
-    from science_tool.budget.control import bounded_control_notice
-    from science_tool.budget.invocation import build_complete_via, hint_for
-    from science_tool.budget.registry import lookup
-    from science_tool.budget.sink import BoundedSink
-    from science_tool.tasks_archive import apply_archive, count_archivable, plan_archive
-
-    if check:
-        counts = count_archivable(tasks_dir)
-        emit_query_rows(
-            output_format=output_format,
-            title="Tasks Archive Lag",
-            columns=[("metric", "Metric"), ("count", "Count")],
-            rows=[{"metric": k, "count": v} for k, v in counts.items()],
-        )
-        if any(counts.values()):
-            ctx = click.get_current_context()
-            ctx.exit(1)
-        return
-
-    plan = plan_archive(tasks_dir)
-
-    rows: list[dict[str, Any]] = [
-        {
-            "id": entry.task.id,
-            "status": entry.task.status,
-            "destination": str(entry.destination),
-            "missing_completed": entry.missing_completed,
-        }
-        for entry in plan.entries
-    ]
-
-    complete_via = build_complete_via(click.get_current_context(), output_hint=hint_for("tasks-archive", output_format))
-    control_notice = (
-        bounded_control_notice(f"wrote {len(rows)} rows to {output_path}") if output_path is not None else None
-    )
-    sink = BoundedSink(
-        lookup("tasks archive"), output_path=output_path, command_path="tasks archive", complete_via=complete_via
-    )
-    emit_query_rows(
-        output_format=output_format,
-        title="Tasks Archive Plan",
-        columns=[
-            ("id", "ID"),
-            ("status", "Status"),
-            ("destination", "Destination"),
-            ("missing_completed", "Missing completed:"),
-        ],
-        rows=rows,
-        sink=sink,
-    )
-    sink.flush()
-    if control_notice is not None:
-        click.echo(control_notice)
-
-    for entry in plan.entries:
-        if entry.missing_completed:
-            click.echo(
-                f"WARNING: [{entry.task.id}] has no `completed:` date; "
-                f"routed to current month {entry.destination.name}",
-                err=True,
-            )
-
-    for parse_error in plan.parse_errors:
-        click.echo(
-            f"WARNING: parse error in {parse_error.heading!r}: {parse_error.message}",
-            err=True,
-        )
-
-    if not do_apply:
-        if output_format != "json":
-            click.echo(f"Mode: dry-run — would move {len(plan.entries)} task(s)")
-        return
-
-    if plan.parse_errors:
-        raise click.ClickException(f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md")
-
-    result = apply_archive(plan)
-    if output_format != "json":
-        click.echo(
-            f"Moved {len(result.moved)} task(s); "
-            f"{len(result.skipped_duplicates)} duplicate(s) skipped; "
-            f"wrote {len(result.destinations_written)} destination file(s)"
-        )
 
 
 @tasks_group.command("edit")

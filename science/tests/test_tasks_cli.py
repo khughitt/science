@@ -19,6 +19,13 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+def test_tasks_archive_is_not_a_command(runner: CliRunner) -> None:
+    result = runner.invoke(main, ["tasks", "archive"])
+
+    assert result.exit_code == 2
+    assert "No such command 'archive'" in result.output
+
+
 def _write_active_task(
     root: Path,
     *,

@@ -47,7 +47,7 @@ def _clean_project(root: Path) -> None:
     (root / "README.md").write_text("# Fixture\n", encoding="utf-8")
     (root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
     (root / "AGENTS.md").write_text(_AGENTS, encoding="utf-8")
-    (root / "tasks" / "active.md").write_text("# Active\n\nNothing active.\n", encoding="utf-8")
+    (root / "tasks" / "active").mkdir()
     (root / "entities" / "research-question.md").write_text(
         '---\nid: "research-question:main"\nkind: research-question\ntitle: "RQ"\n'
         'status: "open"\ncreated: 2026-07-18\nupdated: 2026-07-18\n---\n\nWhat?\n',

@@ -79,12 +79,6 @@ _NOT_INSTRUMENTS: frozenset[tuple[str, str]] = frozenset(
         # Takes NO ARGUMENTS. A projection over the module constant HEALTH_CHECKS.
         # It has no input that could be absent, and its return is never empty.
         ("graph/health.py", "list_health_checks"),
-        # Sums three keys of a caller-supplied TaskArchiveLag. Zero I/O. The INSTRUMENT is
-        # the upstream `_collect_archive_lag` check; this is pure arithmetic over the dict
-        # the caller already holds, so 0 is a fact about that argument, not about the world.
-        # (Arrived from the Phase 4 CLI extraction, which pushed this tally down out of the
-        # CLI -- i.e. the ratchet caught a function this branch had never seen.)
-        ("graph/health_checks/archive_lag.py", "archive_lag_total"),
         # `return list(PREDICATE_REGISTRY)`. Same: a module constant, no input to lack.
         ("graph/store/validation.py", "query_predicates"),
     }

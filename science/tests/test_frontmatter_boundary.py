@@ -150,6 +150,7 @@ _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
     ("src/science_tool/datasets_catalog.py", "_render_candidate"): "structural: ---\\n\\n spacing",
     ("src/science_tool/datasets_catalog.py", "_render_entity"): "structural: ---\\n\\n + body .strip()",
     ("src/science_tool/datasets_catalog.py", "verify_access"): "structural: ---\\n\\n + body lstrip; fm mutated in place",
+    ("src/science_tool/tasks.py", "render_task_file"): "pending-normalization: task field order/date quoting + ---\\n\\n body spacing",
     ("src/science_tool/datasets_register.py", "_rewrite_run_frontmatter"): "byte-preservation: Variant C kwargs, no force-quoting on run entities",
     ("src/science_tool/commons/reference_graph_promotion.py", "_render_entity"): "byte-preservation: no allow_unicode; frontmatter-only block",
     # --- hand-template: top-level frontmatter is hand-written, not dumped.

@@ -22,7 +22,6 @@ def _report(**overrides: object) -> dict[str, object]:
         "accepted_validation": [],
         "unwired_checks": [],
         "managed_artifacts": [],
-        "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
         "layered_claims": _layered(),
         "cross_paper_evidence": {
             "status": "ok",
@@ -106,11 +105,6 @@ def test_managed_artifacts_count_only_when_flagged() -> None:
     assert count_issues(_report(managed_artifacts=artifacts)) == 1
 
 
-def test_archive_lag_counts_as_one_regardless_of_magnitude() -> None:
-    lag = {"done_in_active": 9, "retired_in_active": 4, "missing_completed": 2}
-    assert count_issues(_report(archive_lag=lag)) == 1
-
-
 def test_unresolved_refs_count() -> None:
     assert count_issues(_report(unresolved_refs=[{"ref": "a"}, {"ref": "b"}])) == 2
 
@@ -129,7 +123,7 @@ def test_nested_findings_count() -> None:
 
 @pytest.mark.parametrize(
     "key",
-    ["validation", "archive_lag", "layered_claims", "cross_paper_evidence", "prose_epistemics"],
+    ["validation", "layered_claims", "cross_paper_evidence", "prose_epistemics"],
 )
 def test_missing_required_section_is_rejected(key: str) -> None:
     report = _report()
@@ -140,7 +134,7 @@ def test_missing_required_section_is_rejected(key: str) -> None:
 
 @pytest.mark.parametrize(
     ("key", "value"),
-    [("validation", {}), ("archive_lag", []), ("layered_claims", [])],
+    [("validation", {}), ("layered_claims", [])],
 )
 def test_wrong_section_type_is_rejected(key: str, value: object) -> None:
     with pytest.raises(TypeError, match=key):

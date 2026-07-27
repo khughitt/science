@@ -22,6 +22,7 @@ import pytest
 _GRAPH = Path(__file__).resolve().parents[1] / "src" / "science_tool" / "graph"
 _HEALTH = _GRAPH / "health.py"
 _CHECKS_DIR = _GRAPH / "health_checks"
+_SCIENCE_TOOL = _GRAPH.parent
 
 # Set from the measured post-migration size of health.py (450 lines), plus ~20%
 # headroom, rounded to a clean number.
@@ -133,3 +134,15 @@ def test_health_stays_within_its_line_budget() -> None:
         f"post-migration count of 450 lines + ~20% headroom); a health check "
         f"belongs in its own module under graph/health_checks/"
     )
+
+
+def test_retired_task_archive_surfaces_are_absent() -> None:
+    assert not (_SCIENCE_TOOL / "tasks_archive.py").exists()
+    assert not (_CHECKS_DIR / "archive_lag.py").exists()
+
+    importers = [
+        path.relative_to(_SCIENCE_TOOL)
+        for path in _SCIENCE_TOOL.rglob("*.py")
+        if "science_tool.tasks_archive" in path.read_text(encoding="utf-8")
+    ]
+    assert importers == []

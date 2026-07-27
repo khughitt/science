@@ -49,7 +49,7 @@
       "severity": "error",
       "path": null,
       "line": null,
-      "message": "task t001 missing required field: aspects",
+      "message": "tasks/active/t001-keep-parity-corpus-stable.md: missing required key: aspects",
       "rule": "tasks",
       "task": null
     },

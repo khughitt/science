@@ -44,6 +44,10 @@ def test_lookup_returns_none_for_unregistered_command() -> None:
     assert lookup("tasks add") is None
 
 
+def test_retired_tasks_archive_has_no_budget() -> None:
+    assert lookup("tasks archive") is None
+
+
 def test_every_deferred_entry_states_what_makes_it_grow() -> None:
     """DEFERRED is defined by growability, not by current size.
 
