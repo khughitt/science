@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12+, Pydantic v2, Click, pytest. `science-model` has no dependency on `science_tool`; the dependency runs one way only.
 
-**Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md), revision 5. Section references below (§1, §3, …) are to that document.
+**Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md), revision 6. Section references below (§1, §3, …) are to that document.
 
 ## Global Constraints
 
@@ -808,7 +808,7 @@ git commit -m "feat(audit): freeze fingerprint v1 with golden vectors"
 
 **Interfaces:**
 - Consumes: `FindingSubject` (Task 1), `Evidence` / `MAX_EVIDENCE_ENTRIES` (Task 2).
-- Produces: `AuditFinding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`.
+- Produces: `AuditFinding`, `Severity` (`Literal["error", "warn", "info"]`), `normalize_severity(raw: str) -> str`, `QualifierMap` (the frozen-mapping annotation reused by `record.py`).
 
 `rule_id` is a **string** on the wire (§1); producer-side factories take a `FindingRule` object and derive it (Task 5).
 
@@ -869,6 +869,46 @@ def test_evidence_round_trips_as_a_discriminated_union():
 def test_unknown_field_is_refused():
     with pytest.raises(ValidationError):
         _finding(rule="dataset.cached-field-drift")
+
+
+def test_qualifiers_cannot_be_mutated_in_place():
+    # `frozen=True` is SHALLOW. Qualifiers bear identity, so an in-place edit would
+    # change what the finding IS while every derived id kept saying otherwise.
+    finding = _finding()
+    with pytest.raises(TypeError):
+        finding.qualifiers["field"] = "month"      # type: ignore[index]
+    with pytest.raises(TypeError):
+        del finding.qualifiers["field"]            # type: ignore[attr-defined]
+    assert finding.qualifiers == {"field": "year"}
+
+
+def test_a_qualifier_mapping_is_copied_not_aliased():
+    # A proxy over a dict the caller still holds is not immutable.
+    source = {"field": "year"}
+    finding = _finding(qualifiers=source)
+    source["field"] = "month"
+    assert finding.qualifiers["field"] == "year"
+
+
+def test_an_omitted_qualifier_mapping_is_frozen_too():
+    # Pydantic does not validate defaults unless told to; without `validate_default`
+    # this one would be a plain mutable dict.
+    finding = _finding(qualifiers={})
+    bare = AuditFinding(
+        rule_id="dataset.cached-field-drift",
+        subject=EntitySubject(ref="dataset:gtex-v8"),
+        severity="warn",
+        message="m",
+    )
+    assert bare.qualifiers == finding.qualifiers == {}
+    with pytest.raises(TypeError):
+        bare.qualifiers["sneak"] = 1              # type: ignore[index]
+
+
+def test_qualifiers_serialize_as_a_plain_dict():
+    dumped = _finding().model_dump(mode="json")["qualifiers"]
+    assert type(dumped) is dict
+    assert dumped == {"field": "year"}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -892,9 +932,11 @@ does not fork a case.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
 from science_model.audit.subjects import FindingSubject
@@ -902,6 +944,29 @@ from science_model.audit.subjects import FindingSubject
 Severity = Literal["error", "warn", "info"]
 
 _SEVERITY_ALIASES = {"warning": "warn", "warn": "warn", "error": "error", "info": "info"}
+
+
+def _freeze_qualifiers(value: Mapping[str, object]) -> Mapping[str, object]:
+    """A read-only view over a PRIVATE copy.
+
+    Pydantic's `frozen=True` is shallow: it blocks `finding.qualifiers = {...}` and
+    does nothing about `finding.qualifiers["field"] = "other"`. Qualifiers bear
+    IDENTITY, so an in-place edit would silently change what a case is while the
+    stored `finding_id` kept saying otherwise. The proxy wraps `dict(value)` rather
+    than `value` itself, so no caller retains a writable handle on the underlying
+    mapping -- a proxy over a dict someone else still holds is not immutable.
+    """
+    return MappingProxyType(dict(value))
+
+
+#: Annotated once, used for every qualifier mapping in this package. The serializer
+#: converts back to a plain dict so `model_dump()` output is ordinary JSON-ready data
+#: and re-validation (`with_occurrence`) round-trips.
+QualifierMap = Annotated[
+    Mapping[str, object],
+    AfterValidator(_freeze_qualifiers),
+    PlainSerializer(dict, return_type=dict, when_used="always"),
+]
 
 
 def normalize_severity(raw: str) -> str:
@@ -918,7 +983,9 @@ class AuditFinding(BaseModel):
     rule_id: str
     subject: FindingSubject
     severity: Severity
-    qualifiers: dict[str, object] = Field(default_factory=dict)
+    #: `validate_default=True` is required: pydantic does NOT validate defaults, so
+    #: without it an omitted `qualifiers` would be a plain, mutable `{}`.
+    qualifiers: QualifierMap = Field(default_factory=dict, validate_default=True)
     message: str
     evidence: list[Evidence] = Field(default_factory=list, max_length=MAX_EVIDENCE_ENTRIES)
 
@@ -931,7 +998,7 @@ class AuditFinding(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_finding.py -v`
-Expected: PASS, 6 tests
+Expected: PASS, 10 tests
 
 - [ ] **Step 5: Commit**
 
@@ -1103,6 +1170,7 @@ from __future__ import annotations
 
 import re
 import typing
+from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -1211,7 +1279,7 @@ class FindingRule(BaseModel):
         *,
         subject: FindingSubject,
         severity: str,
-        qualifiers: dict[str, object],
+        qualifiers: Mapping[str, object],
         message: str,
         evidence: list[object] | None = None,
     ) -> AuditFinding:
@@ -1240,12 +1308,14 @@ class FindingRule(BaseModel):
                     f"{set(self.identifier_namespaces)}"
                 )
         try:
-            self.qualifier_schema.model_validate(qualifiers)
+            # `dict(...)`: qualifier mappings are frozen views (`QualifierMap`), and a
+            # model validator takes a concrete dict, not any Mapping.
+            self.qualifier_schema.model_validate(dict(qualifiers))
         except ValidationError as exc:
             raise RuleDeclarationError(f"{self.id}: qualifiers invalid: {exc}") from exc
         return finding
 
-    def identity_subset(self, qualifiers: dict[str, object]) -> dict[str, object]:
+    def identity_subset(self, qualifiers: Mapping[str, object]) -> dict[str, object]:
         """The identity-bearing qualifier subset consumed by the fingerprint."""
         return {k: qualifiers[k] for k in self.identity_qualifiers if k in qualifiers}
 
@@ -1270,7 +1340,7 @@ def _identity_type_permitted(hint: object) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_rules.py -v`
-Expected: PASS, 8 tests
+Expected: PASS, 12 tests
 
 - [ ] **Step 5: Commit**
 
@@ -1584,6 +1654,34 @@ def test_current_severity_takes_the_max_across_producers():
         ]
     )
     assert record.current_severity() == "error"
+
+
+def test_identity_qualifiers_cannot_be_mutated_in_place():
+    # `finding_id` is a digest OVER this mapping. If the mapping can change, the
+    # digest silently stops describing the case it names.
+    #
+    # The two exception types are not a typo: `mappingproxy` refuses SUBSCRIPT
+    # mutation with `TypeError` and simply does not HAVE the mutating dict methods,
+    # so `.clear()` is an `AttributeError`. Both are asserted because both are ways
+    # a caller reaches for.
+    record = _record()
+    with pytest.raises(TypeError):
+        record.identity_qualifiers["field"] = "month"   # type: ignore[index]
+    with pytest.raises(AttributeError):
+        record.identity_qualifiers.clear()              # type: ignore[attr-defined]
+
+
+def test_occurrence_qualifiers_cannot_be_mutated_in_place():
+    occurrence = _record().occurrences[0]
+    with pytest.raises(TypeError):
+        occurrence.qualifiers["field"] = "month"        # type: ignore[index]
+
+
+def test_a_record_round_trips_through_a_plain_dict_dump():
+    # The frozen mappings serialize as ordinary dicts, so re-validation -- which is
+    # how `with_occurrence` appends -- works on the dumped form.
+    record = _record()
+    assert AuditFindingRecord.model_validate(record.model_dump(mode="json")) == record
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1614,7 +1712,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, Evidence
-from science_model.audit.finding import Severity
+from science_model.audit.finding import QualifierMap, Severity
 from science_model.audit.subjects import FindingSubject
 
 DOC_KIND = "audit-case"
@@ -1680,7 +1778,9 @@ class Occurrence(_Base):
     observed_at: datetime
     severity: Severity
     message: str
-    qualifiers: dict[str, object] = Field(default_factory=dict)
+    #: Frozen like every qualifier mapping here: a stored observation is history, and
+    #: history that can be edited in place is not history.
+    qualifiers: QualifierMap = Field(default_factory=dict, validate_default=True)
     evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
     #: Present when the observation arrived on the report's `accepted` channel.
     acceptance_key: str | None = None
@@ -1773,7 +1873,9 @@ class AuditFindingRecord(BaseModel):
     fingerprint_version: int
     rule_id: str
     subject: FindingSubject
-    identity_qualifiers: dict[str, object] = Field(default_factory=dict)
+    #: The identity-bearing subset. `finding_id` is a digest OVER this mapping, so a
+    #: mutable one would let a caller change the identity without changing the digest.
+    identity_qualifiers: QualifierMap = Field(default_factory=dict, validate_default=True)
 
     occurrences: tuple[Occurrence, ...] = Field(min_length=1)
     reviews: tuple[Review, ...] = ()
@@ -1916,7 +2018,7 @@ class AuditFindingRecord(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_record.py -v`
-Expected: PASS, 21 tests
+Expected: PASS, 24 tests
 
 Then: `cd science/model && uv run --frozen pytest tests/test_audit_*.py -q`
 Expected: PASS, all audit model tests
@@ -2050,6 +2152,49 @@ def test_totals_must_agree_with_the_channels():
     with pytest.raises(ValidationError):
         _report(totals={"findings_total": 7, "findings_by_severity": {"warn": 7},
                         "accepted_total": 0, "unwired_total": 0})
+
+
+def test_findings_by_severity_must_agree_with_the_unsuppressed_channel():
+    # The scalar total is right; the breakdown is not. A check on the total alone
+    # would pass this.
+    with pytest.raises(ValidationError, match="findings_by_severity"):
+        _report(totals={"findings_total": 1, "findings_by_severity": {"error": 1},
+                        "accepted_total": 0, "unwired_total": 0})
+    with pytest.raises(ValidationError, match="findings_by_severity"):
+        _report(totals={"findings_total": 1,
+                        "findings_by_severity": {"warn": 1, "error": 0},
+                        "accepted_total": 0, "unwired_total": 0})
+
+
+def test_generated_at_must_be_iso_8601():
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        _report(generated_at="last Tuesday")
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        _report(generated_at="2026-13-45T99:00:00")
+
+
+def test_the_finding_ceiling_applies_across_both_channels():
+    from science_model.audit.report import MAX_REPORT_FINDINGS, AcceptedFinding
+
+    half = MAX_REPORT_FINDINGS // 2
+    findings = [
+        ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}"))
+        for i in range(half + 1)
+    ]
+    accepted = [
+        AcceptedFinding(
+            producer_id="p", finding=_finding(ref=f"dataset:acc-{i}"),
+            acceptance_key="b" * 32, reason="known",
+        )
+        for i in range(half + 1)
+    ]
+    with pytest.raises(ValidationError, match="ceiling"):
+        _report(
+            findings=findings, accepted=accepted,
+            totals={"findings_total": len(findings),
+                    "findings_by_severity": {"warn": len(findings)},
+                    "accepted_total": len(accepted), "unwired_total": 0},
+        )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2074,13 +2219,19 @@ supervisor or the ingesting command, never by a finding.
 
 from __future__ import annotations
 
+from collections import Counter
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from science_model.audit.finding import AuditFinding
 
 REPORT_SCHEMA_VERSION = 2
+
+#: The ceiling applies to `findings + accepted` TOGETHER. Both channels are ingested
+#: (design §8), so a bound on one alone is a bound on nothing: 5000 accepted
+#: observations cost exactly what 5000 unsuppressed ones cost.
 MAX_REPORT_FINDINGS = 5000
 
 
@@ -2137,13 +2288,30 @@ class AuditReport(BaseModel):
     schema_version: Literal[2]
     fingerprint_version: int
     ingestion_ref: str = Field(min_length=1)
+    #: ISO-8601, and validated as such HERE. Ingestion turns this into the
+    #: `observed_at` of every occurrence it writes; a bare `min_length=1` would push a
+    #: raw `ValueError` from `datetime.fromisoformat` out of the write path, where it
+    #: is neither an `IngestError` nor a validation failure the caller can report.
     generated_at: str = Field(min_length=1)
     findings: list[ReportedFinding] = Field(max_length=MAX_REPORT_FINDINGS)
-    accepted: list[AcceptedFinding] = Field(default_factory=list)
+    accepted: list[AcceptedFinding] = Field(
+        default_factory=list, max_length=MAX_REPORT_FINDINGS
+    )
     metrics: dict[str, ProducerMetrics] = Field(default_factory=dict)
     unwired: list[UnwiredProducer] = Field(default_factory=list)
     totals: ReportTotals
     meta: ReportMeta
+
+    @field_validator("generated_at")
+    @classmethod
+    def _iso_8601(cls, value: str) -> str:
+        try:
+            datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"generated_at must be ISO-8601, got {value!r}: {exc}"
+            ) from exc
+        return value
 
     @model_validator(mode="after")
     def _validate(self) -> "AuditReport":
@@ -2154,6 +2322,12 @@ class AuditReport(BaseModel):
         # with identical identity and different prose -- precisely the collision the
         # rule exists to prevent. Ingestion enforces it after computing fingerprints
         # (`science_tool.findings.ingest._plan`).
+        if len(self.findings) + len(self.accepted) > MAX_REPORT_FINDINGS:
+            raise ValueError(
+                f"{len(self.findings)} findings + {len(self.accepted)} accepted exceeds "
+                f"the {MAX_REPORT_FINDINGS} ceiling; both channels are ingested, so the "
+                "bound is on their sum"
+            )
         if self.totals.findings_total != len(self.findings):
             raise ValueError(
                 f"totals.findings_total {self.totals.findings_total} != "
@@ -2163,6 +2337,17 @@ class AuditReport(BaseModel):
             raise ValueError("totals.accepted_total disagrees with the accepted channel")
         if self.totals.unwired_total != len(self.unwired):
             raise ValueError("totals.unwired_total disagrees with the unwired channel")
+        # `findings_by_severity` counts the UNSUPPRESSED channel only -- it is the
+        # severity breakdown of what is being shown. Checking the scalar total while
+        # leaving the breakdown unchecked is how a summary comes to disagree with the
+        # rows underneath it. Equality is exact: a `{"warn": 0}` entry for a severity
+        # nothing emitted is a disagreement, not a harmless zero.
+        actual = Counter(item.finding.severity for item in self.findings)
+        if dict(self.totals.findings_by_severity) != dict(actual):
+            raise ValueError(
+                f"totals.findings_by_severity {dict(self.totals.findings_by_severity)} "
+                f"disagrees with the findings channel {dict(actual)}"
+            )
         return self
 ```
 
@@ -2238,7 +2423,7 @@ __all__ = [
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science/model && uv run --frozen pytest tests/test_audit_report.py -v`
-Expected: PASS, 8 tests
+Expected: PASS, 11 tests
 
 Then: `cd science/model && uv run --frozen pytest -q` (the model suite is small and fast)
 Expected: PASS
@@ -2594,7 +2779,7 @@ def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_registry.py -v`
-Expected: PASS, 11 tests
+Expected: PASS, 12 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -2619,17 +2804,26 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 
 **Interfaces:**
 - Consumes: `AuditFindingRecord`, `DOC_KIND`, `rule_slug`, `finding_fingerprint` from `science_model.audit`.
-- Produces (paths): `PathSafetyError`, `resolve_inside(project_root, rel_path) -> Path`, `open_read_bounded(path, max_bytes) -> str`, `open_write_nofollow(path) -> int`.
-- Produces (storage): `CASES_DIRNAME = "doc/audits/cases"`, `case_path(...)`, `write_case(...)`, `load_case(...)`, `load_cases(...)`, `CaseStorageError`.
+- Produces (paths): `PathSafetyError`, `resolve_inside(project_root, rel_path) -> Path`, `mkdir_inside(project_root, rel_dir) -> Path`, `project_relative(project_root, path) -> str`, `read_inside_bounded(project_root, path, max_bytes) -> str`, `open_read_bounded(path, max_bytes) -> str`, `open_write_nofollow(path) -> int`.
+- Produces (storage): `CASES_DIRNAME = "doc/audits/cases"`, `MAX_CASE_BYTES`, `case_path(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
 
-Two reasons `paths.py` exists rather than inlining the checks:
+Three reasons `paths.py` exists rather than inlining the checks:
 
 1. **Checking only the final component is not symlink refusal.** A link at `doc/` or
    `doc/audits/` redirects the whole operation while `path.is_symlink()` on the leaf
    returns `False`. `resolve_inside` walks **every** component from the project root.
-2. **`stat()`-then-`read()` is a race.** `open_read_bounded` opens once with
+2. **Validating after mutating is not validating.** `Path.mkdir(parents=True)` follows
+   links, so a linked `doc/audits` gets a real `cases/` created in its target — outside
+   the project — before any check runs. `mkdir_inside` creates one component at a time
+   through directory descriptors opened `O_DIRECTORY | O_NOFOLLOW`, so it stops *at* the
+   link having created nothing beyond it.
+3. **`stat()`-then-`read()` is a race.** `open_read_bounded` opens once with
    `O_NOFOLLOW`, then `fstat`s *that descriptor* and reads from it, so the file it
    sized is the file it read.
+
+`load_case` takes the **project root**, not just a path, for the same reason: given a
+bare path it would have to open it directly, which is precisely what following a link
+looks like.
 
 Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted** — occurrences accumulate — so the write is temp-file-plus-rename rather than exclusive-create.
 
@@ -2637,11 +2831,16 @@ Unlike `write_run_record`, which is write-once (`O_EXCL`), a case is **upserted*
 
 ```python
 # science/tests/test_findings_paths.py
+from pathlib import Path
+
 import pytest
 
 from science_tool.findings.paths import (
     PathSafetyError,
+    mkdir_inside,
     open_read_bounded,
+    project_relative,
+    read_inside_bounded,
     resolve_inside,
 )
 
@@ -2703,6 +2902,69 @@ def test_open_read_bounded_refuses_a_symlink(tmp_path):
     link.symlink_to(real)
     with pytest.raises(PathSafetyError, match="symlink"):
         open_read_bounded(link, 1024)
+
+
+def test_mkdir_inside_creates_the_whole_chain(tmp_path):
+    created = mkdir_inside(tmp_path, "doc/audits/cases")
+    assert created == tmp_path / "doc" / "audits" / "cases"
+    assert created.is_dir()
+    # Idempotent: an existing chain is not an error.
+    assert mkdir_inside(tmp_path, "doc/audits/cases") == created
+
+
+def test_mkdir_inside_refuses_a_symlinked_component_AND_CREATES_NOTHING_BEYOND_IT(
+    tmp_path,
+):
+    # This is the ordering bug in its pure form. `doc/audits` is a link to a directory
+    # that does NOT contain `cases/`. `Path.mkdir(parents=True)` would follow the link
+    # and create `cases/` in the target -- outside the project -- and only then would a
+    # validation step refuse the path, with the directory already made.
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
+        mkdir_inside(tmp_path, "doc/audits/cases")
+
+    assert list(target.iterdir()) == [], "a directory was created in the link target"
+
+
+def test_mkdir_inside_refuses_a_component_that_is_a_regular_file(tmp_path):
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").write_text("not a directory", encoding="utf-8")
+    with pytest.raises(PathSafetyError, match="symlink or not a directory"):
+        mkdir_inside(tmp_path, "doc/audits/cases")
+
+
+def test_project_relative_returns_the_relative_spelling(tmp_path):
+    assert project_relative(tmp_path, tmp_path / "doc" / "x.md") == "doc/x.md"
+    assert project_relative(tmp_path, Path("doc/x.md")) == "doc/x.md"
+
+
+def test_project_relative_refuses_a_path_outside_the_project(tmp_path):
+    outside = tmp_path.parent / "not-in-here.json"
+    with pytest.raises(PathSafetyError, match="outside the project root"):
+        project_relative(tmp_path, outside)
+    with pytest.raises(PathSafetyError, match=r"\.\."):
+        project_relative(tmp_path, tmp_path / ".." / "escape.json")
+
+
+def test_read_inside_bounded_refuses_a_symlinked_PARENT(tmp_path):
+    # The leaf is a real file inside the link target, so a leaf-only `O_NOFOLLOW`
+    # check reads it happily.
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "report.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "runs").symlink_to(target, target_is_directory=True)
+    with pytest.raises(PathSafetyError, match="symlink"):
+        read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024)
+
+
+def test_read_inside_bounded_reads_a_real_file(tmp_path):
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "report.json").write_text("{}", encoding="utf-8")
+    assert read_inside_bounded(tmp_path, tmp_path / "runs" / "report.json", 1024) == "{}"
 ```
 
 - [ ] **Step 1b: Write the failing storage test**
@@ -2783,7 +3045,7 @@ def test_case_path_carries_the_rule_slug_and_the_full_digest(tmp_path):
 def test_write_then_load_round_trips(tmp_path):
     record = _record()
     path = write_case(tmp_path, record)
-    assert load_case(path) == record
+    assert load_case(tmp_path, path) == record
 
 
 def test_write_is_an_upsert_not_a_write_once(tmp_path):
@@ -2791,7 +3053,7 @@ def test_write_is_an_upsert_not_a_write_once(tmp_path):
     write_case(tmp_path, record)
     grown = record.with_occurrence(_occurrence(record.finding_id, ingestion_ref="ing:2"))
     write_case(tmp_path, grown)
-    assert len(load_case(case_path(tmp_path, record)).occurrences) == 2
+    assert len(load_case(tmp_path, case_path(tmp_path, record)).occurrences) == 2
 
 
 def test_frontmatter_carries_doc_kind_and_never_an_entity_kind(tmp_path):
@@ -2807,7 +3069,7 @@ def test_load_refuses_a_filename_whose_digest_disagrees(tmp_path):
     moved = path.with_name(f"dataset-cached-field-drift--{'0' * 64}.md")
     path.rename(moved)
     with pytest.raises(CaseStorageError, match="filename digest"):
-        load_case(moved)
+        load_case(tmp_path, moved)
 
 
 def test_load_refuses_a_filename_whose_slug_disagrees(tmp_path):
@@ -2816,7 +3078,7 @@ def test_load_refuses_a_filename_whose_slug_disagrees(tmp_path):
     moved = path.with_name(f"some-other-rule--{record.finding_id}.md")
     path.rename(moved)
     with pytest.raises(CaseStorageError, match="filename slug"):
-        load_case(moved)
+        load_case(tmp_path, moved)
 
 
 def test_load_refuses_a_record_whose_finding_id_is_not_its_own_fingerprint(tmp_path):
@@ -2829,7 +3091,7 @@ def test_load_refuses_a_record_whose_finding_id_is_not_its_own_fingerprint(tmp_p
     assert tampered != text
     path.write_text(tampered, encoding="utf-8")
     with pytest.raises(CaseStorageError, match="recomputed fingerprint"):
-        load_case(path)
+        load_case(tmp_path, path)
 
 
 def test_write_refuses_a_symlinked_cases_directory(tmp_path):
@@ -2851,6 +3113,19 @@ def test_write_refuses_a_symlinked_PARENT_of_the_cases_directory(tmp_path):
     (tmp_path / "doc" / "audits").symlink_to(real, target_is_directory=True)
     with pytest.raises(CaseStorageError, match="symlink"):
         write_case(tmp_path, _record())
+
+
+def test_write_creates_nothing_inside_a_symlinked_parents_target(tmp_path):
+    # The link target does NOT yet contain `cases/`. A `mkdir(parents=True)` that runs
+    # before validation would create it there, outside the project, and the later
+    # refusal would arrive after the damage. Nothing must appear in the target.
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "audits").symlink_to(real, target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink|not a directory"):
+        write_case(tmp_path, _record())
+    assert list(real.iterdir()) == []
 
 
 def test_load_refuses_a_case_reached_through_a_symlinked_parent(tmp_path):
@@ -2875,6 +3150,51 @@ def test_load_cases_returns_every_case_sorted_by_finding_id(tmp_path):
 
 def test_load_cases_on_a_project_with_no_cases_returns_empty(tmp_path):
     assert load_cases(tmp_path) == []
+
+
+def test_load_cases_refuses_a_DANGLING_cases_symlink(tmp_path):
+    # `Path.exists()` follows links, so this reads as absent and would report "no
+    # findings" for a store that was redirected somewhere that no longer exists.
+    # Absence must mean nothing is there under any name.
+    (tmp_path / "doc" / "audits").mkdir(parents=True)
+    (tmp_path / "doc" / "audits" / "cases").symlink_to(
+        tmp_path / "gone", target_is_directory=True
+    )
+    with pytest.raises(CaseStorageError, match="symlink"):
+        load_cases(tmp_path)
+
+
+def test_load_cases_refuses_a_cases_path_that_is_not_a_directory(tmp_path):
+    (tmp_path / "doc" / "audits").mkdir(parents=True)
+    (tmp_path / "doc" / "audits" / "cases").write_text("nope", encoding="utf-8")
+    with pytest.raises(CaseStorageError, match="not a directory"):
+        load_cases(tmp_path)
+
+
+def test_load_case_refuses_a_case_reached_through_a_symlinked_parent(tmp_path):
+    # `load_case` takes the project root precisely so it walks components. Given only
+    # a path, it would open whatever the link pointed at.
+    write_case(tmp_path, _record())
+    real_cases = tmp_path / "doc" / "audits" / "cases"
+    moved = tmp_path / "moved-cases"
+    real_cases.rename(moved)
+    real_cases.symlink_to(moved, target_is_directory=True)
+    with pytest.raises(CaseStorageError, match="symlink"):
+        load_case(tmp_path, case_path(tmp_path, _record()))
+
+
+def test_load_case_refuses_a_path_outside_the_project(tmp_path):
+    outside = tmp_path.parent / "stray.md"
+    outside.write_text("---\ndoc_kind: audit-case\n---\n", encoding="utf-8")
+    with pytest.raises(CaseStorageError, match="outside the project root"):
+        load_case(tmp_path, outside)
+
+
+def test_load_case_refuses_a_file_with_no_frontmatter(tmp_path):
+    path = write_case(tmp_path, _record())
+    path.write_text("just a body, no frontmatter\n", encoding="utf-8")
+    with pytest.raises(CaseStorageError, match="frontmatter"):
+        load_case(tmp_path, path)
 ```
 
 - [ ] **Step 2: Run both tests to verify they fail**
@@ -2888,12 +3208,18 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.findings.
 # science/src/science_tool/findings/paths.py
 """One hardened path primitive, used for every filesystem touch in this package.
 
-Two failures this exists to prevent:
+Three failures this exists to prevent:
 
 1. **Partial symlink checks.** `path.is_symlink()` on a leaf says nothing about
    `doc/` or `doc/audits/`. A link at any component redirects the whole operation
    while the leaf check passes, so `resolve_inside` walks EVERY component.
-2. **stat-then-read races.** Sizing a path and then opening it are two lookups of a
+2. **Mutating before validating.** `Path.mkdir(parents=True)` FOLLOWS links: if
+   `doc/audits` is a link, it happily creates `cases/` in the target, outside the
+   project, and only then does a later check refuse the path. The damage is already
+   done. `mkdir_inside` therefore creates one component at a time through directory
+   descriptors opened `O_DIRECTORY | O_NOFOLLOW`, so it stops AT the link having
+   created nothing beyond it.
+3. **stat-then-read races.** Sizing a path and then opening it are two lookups of a
    name that can change in between. `open_read_bounded` opens ONCE with `O_NOFOLLOW`
    and `fstat`s that descriptor, so the file it sized is the file it read.
 """
@@ -2908,24 +3234,32 @@ class PathSafetyError(ValueError):
     """A path is absolute, escapes the project, or passes through a symlink."""
 
 
+def _segments(rel_path: str) -> list[str]:
+    """The validated components of a project-relative path.
+
+    `..` is REFUSED, never collapsed: collapsing `a/../b` lexically answers a question
+    about the filesystem (what is `a`?) with string arithmetic.
+    """
+    candidate = rel_path.replace("\\", "/")
+    if candidate.startswith("/"):
+        raise PathSafetyError(f"path must be project-relative, got {rel_path!r}")
+    parts = [s for s in candidate.split("/") if s not in ("", ".")]
+    if any(segment == ".." for segment in parts):
+        raise PathSafetyError(f"path contains a `..` segment: {rel_path!r}")
+    if not parts:
+        raise PathSafetyError(f"path names no file, got {rel_path!r}")
+    return parts
+
+
 def resolve_inside(project_root: Path, rel_path: str) -> Path:
     """Return `project_root / rel_path`, refusing a symlink at ANY component.
 
     The leaf need not exist -- callers create case files. Every component that DOES
     exist, including the leaf, must be a real entry rather than a link.
     """
-    candidate = rel_path.replace("\\", "/")
-    if candidate.startswith("/"):
-        raise PathSafetyError(f"path must be project-relative, got {rel_path!r}")
-    segments = [s for s in candidate.split("/") if s not in ("", ".")]
-    if any(segment == ".." for segment in segments):
-        raise PathSafetyError(f"path contains a `..` segment: {rel_path!r}")
-    if not segments:
-        raise PathSafetyError(f"path names no file, got {rel_path!r}")
-
     root = project_root.resolve()
     current = root
-    for segment in segments:
+    for segment in _segments(rel_path):
         current = current / segment
         if current.is_symlink():
             raise PathSafetyError(
@@ -2933,6 +3267,79 @@ def resolve_inside(project_root: Path, rel_path: str) -> Path:
                 "real entry inside the project"
             )
     return current
+
+
+def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
+    """Create every component of `rel_dir`, never traversing or creating a link.
+
+    Each component is created relative to a descriptor for its parent and then
+    REOPENED `O_DIRECTORY | O_NOFOLLOW`. `mkdir` does not follow a final symlink, so a
+    linked component raises `FileExistsError`, and the reopen then fails with `ELOOP`
+    -- refusing BEFORE any deeper component is created. `Path.mkdir(parents=True)`
+    followed by a check cannot offer this: by the time the check runs, directories
+    have already been created wherever the link pointed.
+    """
+    segments = _segments(rel_dir)
+    root = project_root.resolve()
+    current = root
+    parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for segment in segments:
+            current = current / segment
+            try:
+                os.mkdir(segment, mode=0o755, dir_fd=parent_fd)
+            except FileExistsError:
+                pass  # may be a real directory -- the reopen below decides
+            except OSError as exc:
+                raise PathSafetyError(f"could not create {current}: {exc}") from exc
+            try:
+                child_fd = os.open(
+                    segment,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=parent_fd,
+                )
+            except OSError as exc:
+                raise PathSafetyError(
+                    f"{current} is a symlink or not a directory; every component of "
+                    f"{rel_dir!r} must be a real directory inside the project ({exc})"
+                ) from exc
+            os.close(parent_fd)
+            parent_fd = child_fd
+    finally:
+        os.close(parent_fd)
+    return current
+
+
+def project_relative(project_root: Path, path: Path) -> str:
+    """The project-relative spelling of an absolute-or-relative `path`, or refuse.
+
+    Used for caller-supplied paths -- the report file, a case file handed back by
+    `case_path` -- so they go through the same component walk as everything else.
+    `path` is NOT resolved: resolving would follow the very links this refuses, and a
+    symlinked report would silently be read as its target.
+
+    Both spellings of the root are accepted because the caller may name the project
+    with an unresolved prefix (`/tmp/...` where `/tmp` is a link) while the walk
+    starts from the resolved one. Which spelling matched changes nothing: the
+    authoritative refusal is `resolve_inside`, below.
+    """
+    candidate = path if path.is_absolute() else (project_root / path)
+    if ".." in candidate.parts:
+        raise PathSafetyError(f"path contains a `..` segment: {path}")
+    normalized = Path(os.path.normpath(candidate))
+    for base in (project_root.resolve(), Path(os.path.normpath(project_root))):
+        try:
+            return normalized.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    raise PathSafetyError(f"{path} is outside the project root {project_root}")
+
+
+def read_inside_bounded(project_root: Path, path: Path, max_bytes: int) -> str:
+    """Read a caller-supplied path after the full inside-the-project component walk."""
+    return open_read_bounded(
+        resolve_inside(project_root, project_relative(project_root, path)), max_bytes
+    )
 
 
 def open_read_bounded(path: Path, max_bytes: int) -> str:
@@ -2990,15 +3397,22 @@ import os
 from pathlib import Path
 
 from science_model.audit import DOC_KIND, AuditFindingRecord, finding_fingerprint, rule_slug
-from science_model.frontmatter import parse_frontmatter, render_frontmatter
+from science_model.frontmatter import render_frontmatter, split_frontmatter
 
 from science_tool.findings.paths import (
     PathSafetyError,
+    mkdir_inside,
     open_write_nofollow,
+    read_inside_bounded,
     resolve_inside,
 )
 
 CASES_DIRNAME = "doc/audits/cases"
+
+#: A case is frontmatter plus one comment line. Anything approaching this is a file
+#: someone else's tooling wrote into `cases/`, and reading it unbounded is the same
+#: mistake as reading an unbounded report.
+MAX_CASE_BYTES = 4 * 1024 * 1024
 
 _BODY = (
     "<!-- Project-state case about repository or corpus hygiene. Not a KG entity: "
@@ -3026,16 +3440,19 @@ def case_path(project_root: Path, record: AuditFindingRecord) -> Path:
 
 def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
     relative = f"{CASES_DIRNAME}/{case_filename(record)}"
-    directory = cases_dir(project_root)
     try:
-        # Create the directory chain first, then verify EVERY component of the target
-        # -- including `doc/` and `doc/audits/` -- is real rather than a link.
-        directory.mkdir(parents=True, exist_ok=True)
+        # `mkdir_inside`, NOT `mkdir(parents=True)` then a check: the latter follows a
+        # linked component and creates directories in its target before anything has
+        # been validated. Validation that runs after the mutation it was meant to
+        # prevent is not validation.
+        mkdir_inside(project_root, CASES_DIRNAME)
         path = resolve_inside(project_root, relative)
     except PathSafetyError as exc:
         raise CaseStorageError(str(exc)) from exc
     except OSError as exc:
-        raise CaseStorageError(f"could not create {directory}: {exc}") from exc
+        raise CaseStorageError(
+            f"could not create {cases_dir(project_root)}: {exc}"
+        ) from exc
 
     payload = {"doc_kind": DOC_KIND, **record.model_dump(mode="json", exclude_none=True)}
     text = render_frontmatter(payload, _BODY)
@@ -3054,13 +3471,19 @@ def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
     return path
 
 
-def load_case(path: Path) -> AuditFindingRecord:
-    if path.is_symlink():
-        raise CaseStorageError(f"{path} is a symlink; refusing to read through a link")
-    parsed = parse_frontmatter(path)
-    if parsed is None:
+def load_case(project_root: Path, path: Path) -> AuditFindingRecord:
+    """Read one case. Takes the project root so it uses the SAME component walk as
+    every other filesystem touch here -- `parse_frontmatter(path)` would open the path
+    directly, following any link on the way to it."""
+    try:
+        text = read_inside_bounded(project_root, path, MAX_CASE_BYTES)
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+    except OSError as exc:
+        raise CaseStorageError(f"could not read {path}: {exc}") from exc
+    frontmatter, _body = split_frontmatter(text)
+    if not frontmatter:
         raise CaseStorageError(f"{path} has no parsable frontmatter")
-    frontmatter, _body = parsed
     if frontmatter.get("doc_kind") != DOC_KIND:
         raise CaseStorageError(
             f"{path} is not a {DOC_KIND}; got doc_kind={frontmatter.get('doc_kind')!r}"
@@ -3101,18 +3524,30 @@ def load_case(path: Path) -> AuditFindingRecord:
 
 def load_cases(project_root: Path) -> list[AuditFindingRecord]:
     directory = cases_dir(project_root)
-    if not directory.exists():
+    # `lstat`, not `exists()`: `exists()` follows links, so a DANGLING `cases` symlink
+    # reads as absent and the caller is told "no findings" about a store that was
+    # redirected out from under it. Absence must mean nothing is there under ANY name.
+    try:
+        os.lstat(directory)
+    except FileNotFoundError:
         return []
-    # A redirected cases/ is an ERROR, not an empty result: silently returning [] would
-    # report "no findings" for a project whose cases were moved out from under it.
-    for relative in (CASES_DIRNAME, f"{CASES_DIRNAME}/."):
-        try:
-            resolve_inside(project_root, relative.rstrip("/."))
-        except PathSafetyError as exc:
-            raise CaseStorageError(str(exc)) from exc
-    if not directory.is_dir():
-        return []
-    records = [load_case(path) for path in sorted(directory.glob("*.md"))]
+    except OSError as exc:
+        raise CaseStorageError(f"could not stat {directory}: {exc}") from exc
+
+    # Something is there. It must be a real directory reached without a link -- a
+    # redirected or replaced case store is an unavailable instrument, not an empty one.
+    try:
+        resolved = resolve_inside(project_root, CASES_DIRNAME)
+    except PathSafetyError as exc:
+        raise CaseStorageError(str(exc)) from exc
+    if not resolved.is_dir():
+        raise CaseStorageError(
+            f"{resolved} exists but is not a directory; refusing to report zero cases "
+            "from a path that cannot hold any"
+        )
+    records = [
+        load_case(project_root, path) for path in sorted(resolved.glob("*.md"))
+    ]
     return sorted(records, key=lambda r: r.finding_id)
 ```
 
@@ -3142,7 +3577,7 @@ DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_paths.py tests/test_findings_storage.py -v`
-Expected: PASS — 8 path tests, 13 storage tests
+Expected: PASS — 15 path tests, 18 storage tests
 
 Then the manifest-exclude guard, to confirm the new glob broke nothing:
 Run: `cd science && uv run --frozen pytest tests/test_graph_io_revision_manifest.py tests/test_graph_io.py -q`
@@ -3167,7 +3602,7 @@ git commit -m "feat(findings): hardened path handling and case storage bound to 
 
 **Interfaces:**
 - Consumes: Tasks 6–9.
-- Produces: `ingest_report(project_root, report, registry, *, actor="ingest") -> IngestOutcome`, `IngestOutcome` (`records_written`, `occurrences_appended`, `occurrences_skipped`), `IngestError`, `MAX_REPORT_BYTES = 8 * 1024 * 1024`, `load_report(path) -> AuditReport`.
+- Produces: `ingest_report(project_root, report, registry, *, actor="ingest") -> IngestOutcome`, `IngestOutcome` (`records_written`, `occurrences_appended`, `occurrences_skipped`), `IngestError`, `MAX_REPORT_BYTES = 8 * 1024 * 1024`, `load_report(project_root, path) -> AuditReport`.
 
 Not a multi-file transaction, and it does not claim to be: full prevalidation, then atomic per-record writes under a project-scoped lock, with **idempotent retry** as the documented recovery from partial I/O failure (§8).
 
@@ -3176,6 +3611,7 @@ Not a multi-file transaction, and it does not claim to be: full prevalidation, t
 ```python
 # science/tests/test_findings_ingest.py
 import json
+from collections import Counter
 
 import pytest
 from pydantic import BaseModel, ConfigDict
@@ -3192,13 +3628,14 @@ from science_tool.findings.ingest import IngestError, ingest_report, load_report
 from science_tool.findings.producers import FindingProducer, build_registry
 from science_tool.findings.storage import load_cases
 
-#: Short local alias; the tests below construct many payloads.
-Finding = AuditFinding
-
 
 class Q(BaseModel):
     model_config = ConfigDict(extra="forbid")
     field: str = ""
+    #: Declared on the schema but deliberately absent from `RULE.identity_qualifiers`.
+    #: This is the non-identity qualifier the collision and survival tests turn on; a
+    #: qualifier the schema rejects would fail validation before identity ever matters.
+    note: str = ""
 
 
 SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
@@ -3228,12 +3665,17 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
     ]
     accepted = accepted or []
+    # `findings_by_severity` is DERIVED here, not hardcoded: `AuditReport` now checks
+    # the breakdown against the channel, so a helper that always says `warn` would make
+    # every non-warn test fail at construction instead of where it means to.
     base = dict(
         schema_version=2, fingerprint_version=1, ingestion_ref="ing:1",
         generated_at="2026-07-27T12:00:00+00:00", findings=findings, accepted=accepted,
         metrics={}, unwired=[],
         totals={"findings_total": len(findings),
-                "findings_by_severity": {"warn": len(findings)},
+                "findings_by_severity": dict(
+                    Counter(item.finding.severity for item in findings)
+                ),
                 "accepted_total": len(accepted), "unwired_total": 0},
         meta={"producers_run": ["dataset_anomalies"], "total_duration_seconds": 0.1,
               "timings": []},
@@ -3439,7 +3881,7 @@ def test_load_report_refuses_an_unknown_schema_version(tmp_path):
     path = tmp_path / "report.json"
     path.write_text(json.dumps({"schema_version": 99}), encoding="utf-8")
     with pytest.raises(IngestError, match="schema_version"):
-        load_report(path)
+        load_report(tmp_path, path)
 
 
 def test_load_report_refuses_an_oversize_report(tmp_path):
@@ -3448,7 +3890,7 @@ def test_load_report_refuses_an_oversize_report(tmp_path):
     path = tmp_path / "report.json"
     path.write_text("x" * (MAX_REPORT_BYTES + 1), encoding="utf-8")
     with pytest.raises(IngestError, match="exceeds"):
-        load_report(path)
+        load_report(tmp_path, path)
 
 
 def test_load_report_refuses_a_symlinked_report(tmp_path):
@@ -3457,7 +3899,43 @@ def test_load_report_refuses_a_symlinked_report(tmp_path):
     link = tmp_path / "link.json"
     link.symlink_to(real)
     with pytest.raises(IngestError, match="symlink"):
-        load_report(link)
+        load_report(tmp_path, link)
+
+
+def test_load_report_refuses_a_report_under_a_symlinked_PARENT(tmp_path):
+    # The report file itself is real; `runs/` is the link. An `O_NOFOLLOW` on the
+    # final component alone reads this without complaint.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "report.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "runs").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(IngestError, match="symlink"):
+        load_report(tmp_path, tmp_path / "runs" / "report.json")
+
+
+def test_load_report_refuses_a_report_outside_the_project(tmp_path):
+    # §8 gives the actor ONE supervisor-supplied report path, on a surface the
+    # `report-only` tier already allows -- which is inside the project.
+    project = tmp_path / "project"
+    project.mkdir()
+    stray = tmp_path / "stray.json"
+    stray.write_text("{}", encoding="utf-8")
+    with pytest.raises(IngestError, match="outside the project root"):
+        load_report(project, stray)
+
+
+def test_a_dangling_case_symlink_is_refused_rather_than_overwritten(tmp_path):
+    # `Path.exists()` is False for a dangling link, so an existence check would treat
+    # this as "no case yet" and write straight through the link.
+    from science_tool.findings.storage import case_path
+
+    ingest_report(tmp_path, _report(), REGISTRY)
+    records = load_cases(tmp_path)
+    path = case_path(tmp_path, records[0])
+    path.unlink()
+    path.symlink_to(tmp_path / "gone.md")
+    with pytest.raises(IngestError, match="symlink"):
+        ingest_report(tmp_path, _report(ingestion_ref="ing:2"), REGISTRY)
 
 
 def test_evidence_path_escaping_the_project_is_refused_at_the_model(tmp_path):
@@ -3486,15 +3964,18 @@ def test_one_producer_emitting_two_findings_with_one_identity_is_refused(tmp_pat
 
 
 def test_a_non_identity_qualifier_difference_still_collides(tmp_path):
-    # `note` is not an identity qualifier, so these two share a fingerprint.
+    # The two payloads differ ONLY in `note`, which `RULE` does not list among its
+    # identity qualifiers, so they share a fingerprint and collide. A version of this
+    # test where both payloads carry the same qualifiers proves nothing about
+    # non-identity qualifiers -- it is just the previous test again.
     report = _report(findings=[
         ReportedFinding(
             producer_id="dataset_anomalies",
-            finding=_finding(qualifiers={"field": "year"}),
+            finding=_finding(qualifiers={"field": "year", "note": "first look"}),
         ),
         ReportedFinding(
             producer_id="dataset_anomalies",
-            finding=_finding(qualifiers={"field": "year"}, message="other"),
+            finding=_finding(qualifiers={"field": "year", "note": "second look"}),
         ),
     ])
     with pytest.raises(IngestError, match="two findings with identity"):
@@ -3523,7 +4004,7 @@ def test_a_subject_path_through_a_symlink_is_refused(tmp_path):
     report = _report(findings=[
         ReportedFinding(
             producer_id="dataset_anomalies",
-            finding=Finding(
+            finding=AuditFinding(
                 rule_id="tags.lingering", subject=PathSubject(path="doc/x.md"),
                 severity="warn", qualifiers={}, message="m", evidence=[],
             ),
@@ -3609,8 +4090,9 @@ from science_model.audit.record import canonical_occurrence_content
 
 from science_tool.findings.paths import (
     PathSafetyError,
-    open_read_bounded,
+    mkdir_inside,
     open_write_nofollow,
+    read_inside_bounded,
     resolve_inside,
 )
 from science_tool.findings.producers import FindingRegistry, RegistryError
@@ -3639,13 +4121,21 @@ class IngestOutcome(BaseModel):
     occurrences_skipped: int
 
 
-def load_report(path: Path) -> AuditReport:
-    # One open, sized and read from the SAME descriptor: `stat()` then `read_text()`
-    # are two lookups of a name that can change in between.
+def load_report(project_root: Path, path: Path) -> AuditReport:
+    """Read the actor's one gated report path.
+
+    Takes the project root because the report must LIVE inside it: §8 gives the actor
+    exactly one supervisor-supplied report path, on a surface `report-only` already
+    allows. `read_inside_bounded` therefore walks every component -- a link at any of
+    them is refused, not merely one on the file itself -- and reads once from a single
+    `O_NOFOLLOW` descriptor it also sized, so `stat()`-then-`read()` cannot race.
+    """
     try:
-        text = open_read_bounded(path, MAX_REPORT_BYTES)
+        text = read_inside_bounded(project_root, path, MAX_REPORT_BYTES)
     except PathSafetyError as exc:
         raise IngestError(str(exc)) from exc
+    except OSError as exc:
+        raise IngestError(f"could not read {path}: {exc}") from exc
     try:
         raw = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -3672,14 +4162,13 @@ def _project_lock(project_root: Path) -> Iterator[None]:
     """
     directory = cases_dir(project_root)
     try:
-        directory.mkdir(parents=True, exist_ok=True)
-        resolve_inside(project_root, f"{CASES_DIRNAME}/.ingest.lock")
+        mkdir_inside(project_root, CASES_DIRNAME)
+        lock_path = resolve_inside(project_root, f"{CASES_DIRNAME}/.ingest.lock")
     except PathSafetyError as exc:
         raise IngestError(str(exc)) from exc
     except OSError as exc:
         raise IngestError(f"could not create {directory}: {exc}") from exc
 
-    lock_path = directory / ".ingest.lock"
     try:
         descriptor = open_write_nofollow(lock_path)
     except PathSafetyError as exc:
@@ -3749,7 +4238,8 @@ def _plan(
                     f"in {sorted(rule.identifier_namespaces)}"
                 )
         try:
-            rule.qualifier_schema.model_validate(finding.qualifiers)
+            # `dict(...)`: `finding.qualifiers` is a frozen view (`QualifierMap`).
+            rule.qualifier_schema.model_validate(dict(finding.qualifiers))
         except ValidationError as exc:
             raise IngestError(f"{finding.rule_id}: qualifiers invalid: {exc}") from exc
 
@@ -3788,7 +4278,7 @@ def _plan(
     return planned
 
 
-def _assert_paths_are_safe(project_root: Path, finding: Finding) -> None:
+def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:
     """Every path the finding names must resolve inside the project without a link.
 
     The model normalizes path SYNTAX; only the filesystem can answer whether a
@@ -3833,7 +4323,7 @@ def ingest_report(
                 observed_at=observed_at,
                 severity=item.finding.severity,
                 message=item.finding.message,
-                qualifiers=item.finding.qualifiers,
+                qualifiers=dict(item.finding.qualifiers),
                 evidence=tuple(item.finding.evidence),
                 acceptance_key=item.acceptance_key,
             )
@@ -3856,14 +4346,17 @@ def ingest_report(
                 status="proposed",
             )
             path = case_path(project_root, probe)
-            if not path.exists():
+            # `lexists`, not `exists()`: a case path that is a DANGLING link is present
+            # under its own name, and treating it as absent would overwrite whatever
+            # the link points at. `load_case` below refuses it explicitly instead.
+            if not os.path.lexists(path):
                 write_case(project_root, probe)
                 written += 1
                 appended += 1
                 continue
 
             try:
-                existing = load_case(path)
+                existing = load_case(project_root, path)
             except CaseStorageError as exc:
                 raise IngestError(str(exc)) from exc
 
@@ -3897,7 +4390,7 @@ def ingest_report(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/test_findings_ingest.py -v`
-Expected: PASS, 18 tests
+Expected: PASS, 26 tests
 
 Then: `cd science && uv run ruff check && uv run pyright`
 Expected: no findings
@@ -4035,7 +4528,7 @@ def ingest_command(report_path: Path, project_root: Path, output_format: str) ->
     from science_tool.findings.ingest import IngestError, ingest_report, load_report
 
     try:
-        report = load_report(report_path)
+        report = load_report(project_root, report_path)
         outcome = ingest_report(project_root, report, _registry())
     except IngestError as exc:
         message = f"refused: {exc}"
@@ -4206,19 +4699,26 @@ def test_each_declared_scope_exists_on_disk(namespace: str):
     assert target.exists(), f"{namespace}: declared scope {target} does not exist"
 
 
-def test_plan_1_registers_no_producers_so_test_29_cannot_be_written_here():
-    """Fails the moment Plan 2 adds a producer, as the reminder to write test 29.
+def test_phase_boundary_ratchet_no_producers_are_registered_yet():
+    """A PHASE-BOUNDARY RATCHET, not a placeholder.
 
-    Deleting this test is the correct response -- once producers exist, replace it
-    with the real discovery-versus-registration comparison.
+    It states a fact that is true in Plan 1 and false the instant Plan 2 registers its
+    first producer: at that moment the tree goes red, and the only correct way to make
+    it green is to write design test 29 -- the real discovery-versus-registration
+    comparison -- IN THE SAME COMMIT that registers the producer.
+
+    Deleting it is not the correct response. Replacing it is. A commit that removes
+    this and adds no equality guard has moved the codebase from "cannot check
+    completeness" to "does not check completeness" while turning the tree green, which
+    is the exact substitution this ratchet exists to make impossible.
     """
     from science_tool.findings.cli import _registry
 
     assert not _registry().producers_by_id, (
         "producers are now registered, so design test 29 (producer-namespace "
         "completeness) can and must be written: compare the modules discovered under "
-        "each NAMESPACE_DIRS entry against the registered producers, and delete this "
-        "placeholder."
+        "each NAMESPACE_DIRS entry against the registered producers, and REPLACE this "
+        "ratchet with that comparison in this same commit."
     )
 ```
 
@@ -4354,16 +4854,20 @@ Expected: no findings from any of the three
 
 Edit the design document's status block, changing:
 
-```
-> **Status:** design, revision 5 — **approved for implementation planning**.
-```
-
-to:
+The current line begins:
 
 ```
-> **Status:** revision 5. **Plan 1 (the contract) is implemented**; Plan 2 (the
-> atomic convergence) and Plan 3 (acceptance migration) are outstanding.
+> **Status:** design, revision 6 — **approved for implementation planning**. **Spec 1 of
 ```
+
+Replace the `design, revision 6 — **approved for implementation planning**.` clause with:
+
+```
+> **Status:** revision 6. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
+```
+
+Leave the rest of that block, from `**Spec 1 of` onward, untouched.
 
 - [ ] **Step 5: Commit**
 
@@ -4382,7 +4886,7 @@ git commit -m "docs(plans): record that the finding contract landed"
 |---|---|---|
 | §1 `AuditFinding` payload | 4 | `rule_id` as wire form, severity normalization |
 | §1 evidence union | 2 | types frozen, `extra="forbid"`, bounds |
-| §1 one finding per (producer, finding) | 7 | enforced on `AuditReport` |
+| §1 one finding per (producer, finding) | 10 | enforced in `_plan`, after fingerprints exist; Task 7 asserts the report deliberately does *not* try |
 | §2 subject union | 1 | four variants, no fallback |
 | §3 fingerprint v1 | 3 | normalization, canonical encoding, digest, slug, golden vectors |
 | §4 `AuditFindingRecord` | 6 | identity + occurrences + transitions + reviews |
@@ -4404,7 +4908,9 @@ git commit -m "docs(plans): record that the finding contract landed"
 
 Test **23** (graph isolation) is *not* in that set — it is covered here, in Task 12.
 
-Test **29** is the one deferral that needed a decision rather than a schedule: with zero registered producers, a discovery-versus-registration comparison is `set() == set()`, which passes vacuously. Task 12 ships the *precondition* (every namespace declares its scope) plus a placeholder that fails the moment Plan 2 registers a producer, so the deferral cannot be forgotten.
+Test **29** is the one deferral that needed a decision rather than a schedule: with zero registered producers, a discovery-versus-registration comparison is `set() == set()`, which passes vacuously. Task 12 ships the *precondition* (every namespace declares its scope) plus a **phase-boundary ratchet** — `test_phase_boundary_ratchet_no_producers_are_registered_yet` — which asserts a fact that stops being true the instant Plan 2 registers its first producer.
+
+The ratchet is not a placeholder, and Plan 2 must **replace** it with the real equality guard *in the same commit that registers the producer* — not delete it. A commit that removes the ratchet and adds no comparison has moved the tree from "cannot check completeness" to "does not check completeness" while going green, which is precisely the substitution it exists to prevent. This obligation is carried in the test's own docstring, where the person deleting it will read it.
 
 **Type consistency check.** `finding_fingerprint(rule_id=, subject=, identity_qualifiers=)` is called with those exact keywords in Tasks 3, 9, and 10. `occurrence_key(producer_id=, ingestion_ref=, finding_id=)` matches between Tasks 6 and 10. `rule.identity_subset(qualifiers)` defined in Task 5 is consumed in Task 10. `registry.rule()` raising `RegistryError` in Task 8 is caught and re-raised as `IngestError` in Task 10. `CASES_DIRNAME` is `"doc/audits/cases"` in Task 9 and asserted with that value in Task 12.
 
@@ -4417,4 +4923,23 @@ Test **29** is the one deferral that needed a decision rather than a schedule: w
 | CLI registration | root group is `main` (`cli.py:170,184`); `main.add_command(findings_group)`, joining the run at `cli.py:194` |
 | Manifest test | `science/tests/test_graph_io_revision_manifest.py` |
 
-**Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py`: `resolve_inside` walks *every* component and refuses a symlink at any of them; `open_read_bounded` opens once with `O_NOFOLLOW` and sizes the descriptor it read; `open_write_nofollow` refuses a symlinked final component. That covers the report, the lock file, case reads and writes, and every `PathSubject` and `LocationEvidence` path in an ingested report. Checking only the final component would let a link at `doc/` or `doc/audits/` redirect the whole operation.
+**Filesystem-safety invariants, stated once here so a reviewer can check them in one place.** Every filesystem touch in this package goes through `paths.py` — there is no `Path.open`, `read_text`, `mkdir`, or `parse_frontmatter(path)` anywhere in `science_tool/findings/`:
+
+| Primitive | Guarantee |
+|---|---|
+| `resolve_inside` | walks *every* component from the project root; a symlink at any of them is refused |
+| `mkdir_inside` | creates one component at a time through `O_DIRECTORY \| O_NOFOLLOW` descriptors, so it **stops at a link having created nothing beyond it** |
+| `project_relative` | a caller-supplied path is refused unless it is inside the project, with no `..` |
+| `read_inside_bounded` | `project_relative` → `resolve_inside` → `open_read_bounded`, in that order |
+| `open_read_bounded` | opens once with `O_NOFOLLOW` and `fstat`s *that* descriptor, so no stat/read race |
+| `open_write_nofollow` | refuses a symlinked final component |
+
+Three orderings this gets right, each of which the obvious code gets wrong:
+
+1. **Create, then validate, is not validation.** `mkdir(parents=True)` followed by a check has already created directories in a link's target by the time the check refuses. `mkdir_inside` refuses first. Asserted by `test_write_creates_nothing_inside_a_symlinked_parents_target`, which checks the *target is still empty* — not merely that an error was raised.
+2. **`exists()` is not presence.** It follows links, so a dangling `cases` symlink reads as absent and `load_cases` would report zero findings for a store that was redirected. `load_cases` uses `lstat`; ingestion uses `os.path.lexists` before deciding a case is new.
+3. **A leaf check is not a path check.** `load_report` and `load_case` both take the **project root**, because given only a path they would have to open it directly — which is what following a link looks like.
+
+**Immutability invariants.** Pydantic's `frozen=True` is shallow: it blocks attribute assignment and nothing else. `AuditFinding.qualifiers`, `Occurrence.qualifiers`, and `AuditFindingRecord.identity_qualifiers` are therefore `QualifierMap` — a `MappingProxyType` over a private copy — so identity cannot be edited in place while `finding_id` keeps claiming otherwise. `validate_default=True` is required on all three and is not decoration: verified against pydantic 2.12.5, an omitted field without it is a plain mutable `dict`.
+
+**Report-boundary invariants.** `generated_at` is validated as ISO-8601 at the model, so `datetime.fromisoformat` in the write path cannot leak a raw `ValueError`; the `MAX_REPORT_FINDINGS` ceiling applies to `findings + accepted` **together**, because §8 ingests both; and `findings_by_severity` must equal the actual breakdown of the unsuppressed channel exactly. Checking the scalar total while leaving the breakdown unchecked is how a summary comes to disagree with the rows beneath it.
