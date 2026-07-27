@@ -22,6 +22,7 @@ fields is a LOAD ERROR -- never a silent repair or rename.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -58,6 +59,9 @@ _BODY = (
     "carries no `kind:`/`id:`, never materializes into the knowledge graph, never "
     "affects belief or attention. See "
     "docs/plans/2026-07-27-finding-convergence-design.md -->\n"
+)
+_CASE_SHAPED_NAME = re.compile(
+    r"^[a-z0-9-]+--[0-9a-f]{64}(?:\..*)?$"
 )
 
 
@@ -177,7 +181,22 @@ class CaseStore:
             entries = os.listdir(self._dir_fd)
         except OSError as exc:
             raise CaseStorageError(f"could not list the case store: {exc}") from exc
-        return sorted(n for n in entries if n.endswith(".md"))
+        cases: list[str] = []
+        for name in entries:
+            # Locks and writer-owned temps begin with a dot. They are operational
+            # leaves, never cases, even when a temp embeds a case-shaped name.
+            if name.startswith("."):
+                continue
+            if not _CASE_SHAPED_NAME.fullmatch(name):
+                # Operator notes and other unrelated files are not audit cases.
+                continue
+            if not name.endswith(".md"):
+                raise CaseStorageError(
+                    f"{name} is case-shaped but does not have the canonical .md "
+                    "extension"
+                )
+            cases.append(name)
+        return sorted(cases)
 
     def has(self, name: str) -> bool:
         """Through the anchored primitive, like every other operation here.

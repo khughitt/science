@@ -24,6 +24,7 @@ from typing import Iterator
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 from pydantic_core import PydanticSerializationError
+import yaml
 from science_model.audit import (
     REPORT_SCHEMA_VERSION,
     AuditFinding,
@@ -53,6 +54,9 @@ from science_tool.findings.storage import (
     case_store,
     serialize_case,
 )
+from science_tool.entity_scan import iter_entity_markdown
+from science_tool.tasks import known_task_ids
+from science_model.frontmatter import parse_frontmatter
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
 SUPPORTED_FINGERPRINT_VERSIONS = frozenset({1})
@@ -115,7 +119,21 @@ def _snapshot_report(report: AuditReport) -> AuditReport:
     """
     try:
         payload = report.model_dump(mode="json", warnings="error")
-        return AuditReport.model_validate(payload, strict=True)
+        snapshot = AuditReport.model_validate(payload, strict=True)
+        canonical = json.dumps(
+            snapshot.model_dump(mode="json", warnings="error"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        if len(canonical) > MAX_REPORT_BYTES:
+            raise IngestError(
+                f"canonical report snapshot is {len(canonical)} bytes, which exceeds "
+                f"{MAX_REPORT_BYTES}"
+            )
+        return snapshot
+    except IngestError:
+        raise
     except (
         PydanticSerializationError,
         ValidationError,
@@ -175,6 +193,20 @@ def _plan(
             f"toolkit implements {sorted(SUPPORTED_FINGERPRINT_VERSIONS)}"
         )
 
+    claimed_producers = {
+        *report.meta.producers_run,
+        *(item.producer_id for item in report.unwired),
+        *report.metrics,
+        *(item.producer_id for item in report.findings),
+        *(item.producer_id for item in report.accepted),
+    }
+    unknown_producers = claimed_producers - set(registry.producers_by_id)
+    if unknown_producers:
+        raise IngestError(
+            f"unregistered producer ids in report provenance: "
+            f"{sorted(unknown_producers)}"
+        )
+
     for producer_id, metrics in report.metrics.items():
         try:
             registry.validate_metrics(producer_id, metrics.model_dump())
@@ -187,6 +219,11 @@ def _plan(
     ] + [
         (a.producer_id, a.finding, a.acceptance_key) for a in report.accepted
     ]
+    known_entities = (
+        _known_canonical_entity_refs(project_root)
+        if any(finding.subject.type == "entity" for _, finding, _ in channels)
+        else frozenset()
+    )
 
     for producer_id, finding, acceptance_key in channels:
         if producer_id not in registry.producers_by_id:
@@ -205,12 +242,20 @@ def _plan(
                 f"{finding.rule_id}: subject type {finding.subject.type!r} is not in "
                 f"{sorted(rule.subject_types)}"
             )
-        if finding.subject.type == "identifier" and rule.identifier_namespaces:
+        if finding.subject.type == "identifier":
             if finding.subject.namespace not in rule.identifier_namespaces:
                 raise IngestError(
                     f"{finding.rule_id}: namespace {finding.subject.namespace!r} is not "
                     f"in {sorted(rule.identifier_namespaces)}"
                 )
+        if (
+            finding.subject.type == "entity"
+            and finding.subject.ref not in known_entities
+        ):
+            raise IngestError(
+                f"{finding.rule_id}: entity subject {finding.subject.ref!r} is not an "
+                "exact known canonical project entity or live task id"
+            )
         _assert_paths_are_safe(project_root, finding)
 
         try:
@@ -220,17 +265,28 @@ def _plan(
             # carrying `"1"` where the schema declares `int` is refused rather than
             # coerced-then-discarded, so what is fingerprinted is what was declared.
             rule.validate_qualifiers(finding.qualifiers)
-            identity = rule.identity_subset(finding.qualifiers)
+            canonical_qualifiers = rule.canonicalize_identity_qualifiers(
+                finding.qualifiers
+            )
+            identity = rule.identity_subset(canonical_qualifiers)
         except RuleDeclarationError as exc:
             raise IngestError(str(exc)) from exc
+        canonical_finding = AuditFinding(
+            rule_id=finding.rule_id,
+            subject=finding.subject,
+            severity=finding.severity,
+            qualifiers=canonical_qualifiers,
+            message=finding.message,
+            evidence=finding.evidence,
+        )
         planned.append(
             _Planned(
                 finding_id=finding_fingerprint(
-                    rule_id=finding.rule_id,
-                    subject=finding.subject,
+                    rule_id=canonical_finding.rule_id,
+                    subject=canonical_finding.subject,
                     identity_qualifiers=identity,
                 ),
-                finding=finding,
+                finding=canonical_finding,
                 producer_id=producer_id,
                 acceptance_key=acceptance_key,
                 identity_qualifiers=identity,
@@ -253,6 +309,29 @@ def _plan(
             )
         seen.add(key)
     return planned
+
+
+def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
+    """Exact live frontmatter IDs plus active/done task IDs; never aliases or graph."""
+    refs: set[str] = set()
+    try:
+        for path in iter_entity_markdown(project_root / "entities"):
+            parsed = parse_frontmatter(path)
+            if parsed is None:
+                continue
+            frontmatter, _body = parsed
+            entity_id = frontmatter.get("id")
+            if isinstance(entity_id, str):
+                refs.add(entity_id)
+        refs.update(
+            f"task:{task_id}"
+            for task_id in known_task_ids(project_root / "tasks")
+        )
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise IngestError(
+            f"could not resolve canonical entity subjects from project records: {exc}"
+        ) from exc
+    return frozenset(refs)
 
 
 def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:

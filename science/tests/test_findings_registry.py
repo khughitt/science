@@ -4,6 +4,7 @@ from science_model.audit import FindingRule, FindingSection
 
 from science_tool.findings.producers import (
     FindingProducer,
+    FindingRegistry,
     RegistryError,
     build_registry,
 )
@@ -171,6 +172,33 @@ def test_the_registry_mappings_are_not_mutable():
         registry.sections_by_id["injected"] = SECTION
     with pytest.raises(TypeError):
         registry.producers_by_id["injected"] = _producer()
+
+
+def test_the_public_registry_constructor_copies_and_wraps_every_mapping():
+    rule = _rule()
+    producer = _producer()
+    rules = {rule.id: rule}
+    sections = {SECTION.id: SECTION}
+    producers = {producer.producer_id: producer}
+
+    registry = FindingRegistry(
+        rules_by_id=rules,
+        sections_by_id=sections,
+        producers_by_id=producers,
+    )
+    rules.clear()
+    sections.clear()
+    producers.clear()
+
+    assert registry.rule(rule.id) is rule
+    assert registry.section(SECTION.id) is SECTION
+    assert registry.producers_by_id[producer.producer_id] is producer
+    with pytest.raises(TypeError):
+        registry.rules_by_id["injected"] = _rule("dataset.injected")
+    with pytest.raises(TypeError):
+        registry.sections_by_id["injected"] = SECTION
+    with pytest.raises(TypeError):
+        registry.producers_by_id["injected"] = producer
 
 
 def test_project_config_cannot_add_or_override_a_rule(tmp_path):

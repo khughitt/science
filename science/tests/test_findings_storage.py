@@ -330,6 +330,30 @@ def test_load_cases_returns_every_case_sorted_by_finding_id(tmp_path):
     assert len(loaded) == 2
 
 
+@pytest.mark.parametrize("suffix", ["", ".txt"])
+def test_load_cases_refuses_case_shaped_noncanonical_extensions(tmp_path, suffix):
+    record = _record()
+    path = write_case(tmp_path, record)
+    path.rename(path.with_suffix(suffix))
+
+    with pytest.raises(CaseStorageError, match=r"canonical \.md extension"):
+        load_cases(tmp_path)
+
+
+def test_load_cases_ignores_unrelated_notes_and_operational_files(tmp_path):
+    record = _record()
+    write_case(tmp_path, record)
+    cases = tmp_path / CASES_DIRNAME
+    (cases / "notes.md").write_text("operator note", encoding="utf-8")
+    (cases / ".ingest.lock").write_text("", encoding="utf-8")
+    (cases / f".{case_path(tmp_path, record).name}.deadbeef.tmp").write_text(
+        "stale temp",
+        encoding="utf-8",
+    )
+
+    assert load_cases(tmp_path) == [record]
+
+
 def test_load_cases_on_a_project_with_no_cases_returns_empty(tmp_path):
     assert load_cases(tmp_path) == []
 

@@ -67,6 +67,23 @@ class FindingRegistry:
     sections_by_id: Mapping[str, FindingSection]
     producers_by_id: Mapping[str, FindingProducer]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "rules_by_id",
+            MappingProxyType(dict(self.rules_by_id)),
+        )
+        object.__setattr__(
+            self,
+            "sections_by_id",
+            MappingProxyType(dict(self.sections_by_id)),
+        )
+        object.__setattr__(
+            self,
+            "producers_by_id",
+            MappingProxyType(dict(self.producers_by_id)),
+        )
+
     def rule(self, rule_id: str) -> FindingRule:
         try:
             return self.rules_by_id[rule_id]

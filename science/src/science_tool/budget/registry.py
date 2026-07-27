@@ -159,7 +159,6 @@ EXEMPTIONS: dict[str, str] = {
     "entity review": "single review result",
     "feedback scaffold-test": "three fixed guidance lines for one scaffold",
     "feedback update": "single update confirmation",
-    "findings ingest": "fixed-shape success or refusal summary for one ingestion report",
     "graph init": "at most three fixed initialization guidance lines",
     "graph stats": "measured 341 chars on 2026-07-24; fixed-shape summary",
     "inquiry import": "single imported-inquiry path",
@@ -289,6 +288,10 @@ DEFERRED: dict[str, DeferredCommand] = {
     ),
     "findings list": DeferredCommand(
         "one output row per stored audit case",
+        "1b",
+    ),
+    "findings ingest": DeferredCommand(
+        "untrusted validation text can grow with the input report",
         "1b",
     ),
 }

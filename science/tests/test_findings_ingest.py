@@ -32,6 +32,11 @@ class Q(BaseModel):
     count: int = 0
 
 
+class ListQ(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tags: list[str]
+
+
 SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
 RULE = FindingRule(
     id="dataset.stale-review",
@@ -42,6 +47,16 @@ RULE = FindingRule(
     title="t",
     section="datasets",
     display_order=100,
+)
+LIST_RULE = FindingRule(
+    id="dataset.tag-sequence",
+    severities={"warn"},
+    subject_types={"entity"},
+    qualifier_schema=ListQ,
+    identity_qualifiers=("tags",),
+    title="t",
+    section="datasets",
+    display_order=101,
 )
 REGISTRY = build_registry(
     [
@@ -55,6 +70,74 @@ REGISTRY = build_registry(
         )
     ]
 )
+
+
+def _seed_entity(project_root, ref):
+    prefix, _, slug = ref.partition(":")
+    homes = {
+        "dataset": "datasets",
+        "hypothesis": "hypotheses",
+    }
+    path = project_root / "entities" / homes[prefix] / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\nid: {ref}\nkind: {prefix}\ntitle: {slug}\n---\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _canonical_entity_fixture(tmp_path):
+    _seed_entity(tmp_path, "dataset:a")
+    _seed_entity(tmp_path, "dataset:b")
+
+
+def test_array_identity_qualifier_round_trips_from_build_through_ingestion(tmp_path):
+    registry = build_registry(
+        [
+            FindingProducer(
+                producer_id="dataset_anomalies",
+                namespace="health_checks",
+                rules=(RULE, LIST_RULE),
+                sections=(SECTION,),
+                metrics_schema=None,
+                remediators=frozenset(),
+            )
+        ]
+    )
+    finding = LIST_RULE.build(
+        subject=EntitySubject(ref="dataset:a"),
+        severity="warn",
+        qualifiers={"tags": ["raw", "derived"]},
+        message="ordered tags differ",
+    )
+    assert finding.model_dump(mode="json")["qualifiers"]["tags"] == [
+        "raw",
+        "derived",
+    ]
+
+    ingest_report(
+        tmp_path,
+        _report(
+            findings=[
+                ReportedFinding(
+                    producer_id="dataset_anomalies",
+                    finding=finding,
+                )
+            ]
+        ),
+        registry,
+    )
+
+    record = load_cases(tmp_path)[0]
+    assert record.model_dump(mode="json")["identity_qualifiers"]["tags"] == [
+        "raw",
+        "derived",
+    ]
+    assert record.model_dump(mode="json")["occurrences"][0]["qualifiers"]["tags"] == [
+        "raw",
+        "derived",
+    ]
 
 
 def _finding(**overrides) -> AuditFinding:
@@ -76,6 +159,12 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         else [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
     )
     accepted = accepted or []
+    producers_run = sorted(
+        {
+            *(item.producer_id for item in findings),
+            *(item.producer_id for item in accepted),
+        }
+    ) or ["dataset_anomalies"]
     # `findings_by_severity` is DERIVED here, not hardcoded: `AuditReport` now checks
     # the breakdown against the channel, so a helper that always says `warn` would make
     # every non-warn test fail at construction instead of where it means to.
@@ -97,7 +186,7 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
             "unwired_total": 0,
         },
         meta={
-            "producers_run": ["dataset_anomalies"],
+            "producers_run": producers_run,
             "total_duration_seconds": 0.1,
             "timings": [],
         },
@@ -113,6 +202,95 @@ def test_ingest_writes_a_case_with_a_genesis_transition(tmp_path):
     assert record.transitions[0].from_status is None
     assert record.transitions[0].actor == "dataset_anomalies"
     assert len(record.occurrences) == 1
+
+
+def test_entity_subject_must_name_an_exact_canonical_frontmatter_id(tmp_path):
+    outcome = ingest_report(tmp_path, _report(), REGISTRY)
+    assert outcome.records_written == 1
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(
+            tmp_path,
+            _report(
+                ingestion_ref="ing:missing",
+                findings=[
+                    ReportedFinding(
+                        producer_id="dataset_anomalies",
+                        finding=_finding(
+                            subject=EntitySubject(ref="dataset:missing")
+                        ),
+                    )
+                ],
+            ),
+            REGISTRY,
+        )
+
+
+def test_entity_subject_does_not_resolve_aliases_or_short_prefixes(tmp_path):
+    alias_path = tmp_path / "entities" / "datasets" / "canonical.md"
+    alias_path.write_text(
+        "---\nid: dataset:canonical\nkind: dataset\naliases:\n"
+        "  - dataset:alias\n---\n",
+        encoding="utf-8",
+    )
+    for ref in ("dataset:alias", "dataset:canon"):
+        with pytest.raises(IngestError, match="known canonical"):
+            ingest_report(
+                tmp_path,
+                _report(
+                    ingestion_ref=f"ing:{ref}",
+                    findings=[
+                        ReportedFinding(
+                            producer_id="dataset_anomalies",
+                            finding=_finding(subject=EntitySubject(ref=ref)),
+                        )
+                    ],
+                ),
+                REGISTRY,
+            )
+
+
+@pytest.mark.parametrize("ledger", ["active.md", "done/2026-07.md"])
+def test_entity_subject_accepts_exact_live_task_ids(tmp_path, ledger):
+    path = tmp_path / "tasks" / ledger
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "## [t001] Review findings\n"
+        "- status: active\n"
+        "- priority: medium\n"
+        "- created: 2026-07-27\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="task:t001")),
+            )
+        ]
+    )
+
+    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+
+
+def test_entity_subject_rejects_archived_task_aliases(tmp_path):
+    archive = tmp_path / "tasks" / "archive.md"
+    archive.parent.mkdir(parents=True)
+    archive.write_text(
+        "## [t999] Archived alias\n- status: retired\n",
+        encoding="utf-8",
+    )
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="task:t999")),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="known canonical"):
+        ingest_report(tmp_path, report, REGISTRY)
 
 
 def test_ingest_exposes_no_actor_override():
@@ -266,6 +444,8 @@ def test_no_arrival_order_dependence(tmp_path):
     b = tmp_path / "b"
     a.mkdir()
     b.mkdir()
+    _seed_entity(a, "dataset:a")
+    _seed_entity(b, "dataset:a")
     first = _report(
         findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
     )
@@ -313,6 +493,8 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     b = tmp_path / "b"
     a.mkdir()
     b.mkdir()
+    _seed_entity(a, "dataset:a")
+    _seed_entity(b, "dataset:a")
     early = _report(
         ingestion_ref="ing:early",
         generated_at="2026-07-27T10:00:00+00:00",
@@ -349,6 +531,119 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
         (occurrence.observed_at, occurrence.idempotency_key)
         for occurrence in first.occurrences
     )
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        pytest.param(
+            {"type": "path", "path": "doc/cafe\u0301.md"},
+            id="path",
+        ),
+        pytest.param(
+            {
+                "type": "identifier",
+                "namespace": "reference",
+                "value": "cafe\u0301",
+            },
+            id="identifier",
+        ),
+    ],
+)
+def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subject):
+    from science_model.audit import IdentifierSubject, PathSubject
+
+    unicode_rule = FindingRule(
+        id="refs.unicode-identity",
+        severities={"warn"},
+        subject_types={subject["type"]},
+        identifier_namespaces=(
+            {"reference"} if subject["type"] == "identifier" else set()
+        ),
+        qualifier_schema=Q,
+        identity_qualifiers=("field",),
+        title="t",
+        section="datasets",
+        display_order=102,
+    )
+    registry = build_registry(
+        [
+            FindingProducer(
+                producer_id="dataset_anomalies",
+                namespace="health_checks",
+                rules=(unicode_rule,),
+                sections=(SECTION,),
+                metrics_schema=None,
+                remediators=frozenset(),
+            )
+        ]
+    )
+    first_subject = (
+        PathSubject(path=subject["path"])
+        if subject["type"] == "path"
+        else IdentifierSubject(
+            namespace=subject["namespace"],
+            value=subject["value"],
+        )
+    )
+    second_subject = (
+        PathSubject(path="doc/café.md")
+        if subject["type"] == "path"
+        else IdentifierSubject(namespace="reference", value="café")
+    )
+    projects = [tmp_path / "first", tmp_path / "second"]
+    for project in projects:
+        project.mkdir()
+        if subject["type"] == "path":
+            path = project / "doc" / "café.md"
+            path.parent.mkdir()
+            path.write_text("subject", encoding="utf-8")
+
+    early = _report(
+        ingestion_ref="ing:early",
+        generated_at="2026-07-27T10:00:00+00:00",
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=AuditFinding(
+                    rule_id=unicode_rule.id,
+                    subject=first_subject,
+                    severity="warn",
+                    qualifiers={"field": "anne\u0301e"},
+                    message="early",
+                ),
+            )
+        ],
+    )
+    late = _report(
+        ingestion_ref="ing:late",
+        generated_at="2026-07-27T14:00:00+00:00",
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=AuditFinding(
+                    rule_id=unicode_rule.id,
+                    subject=second_subject,
+                    severity="warn",
+                    qualifiers={"field": "année"},
+                    message="late",
+                ),
+            )
+        ],
+    )
+
+    ingest_report(projects[0], early, registry)
+    ingest_report(projects[0], late, registry)
+    ingest_report(projects[1], late, registry)
+    ingest_report(projects[1], early, registry)
+
+    left = load_cases(projects[0])[0]
+    right = load_cases(projects[1])[0]
+    assert _normalized(left) == _normalized(right)
+    assert left.identity_qualifiers["field"] == "année"
+    assert {
+        occurrence.qualifiers["field"] for occurrence in left.occurrences
+    } == {"année"}
 
 
 def test_non_identity_qualifiers_survive_on_the_occurrence(tmp_path):
@@ -474,10 +769,121 @@ def test_an_undeclared_rule_is_refused(tmp_path):
 
 def test_an_unregistered_producer_is_refused(tmp_path):
     report = _report(
-        findings=[ReportedFinding(producer_id="who", finding=_finding())]
+        findings=[ReportedFinding(producer_id="who", finding=_finding())],
+        meta={
+            "producers_run": ["who"],
+            "total_duration_seconds": 0.1,
+            "timings": [],
+        },
     )
     with pytest.raises(IngestError, match="unregistered producer"):
         ingest_report(tmp_path, report, REGISTRY)
+
+
+def test_unknown_producer_provenance_is_refused_everywhere_before_store_creation(
+    tmp_path,
+):
+    from science_model.audit import ProducerMetrics, UnwiredProducer
+
+    reports = [
+        _report(
+            findings=[],
+            totals={
+                "findings_total": 0,
+                "findings_by_severity": {},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            },
+            meta={
+                "producers_run": ["unknown"],
+                "total_duration_seconds": 0.1,
+                "timings": [],
+            },
+        ),
+        _report(
+            findings=[],
+            unwired=[
+                UnwiredProducer(
+                    producer_id="unknown",
+                    code="not-wired",
+                    reason="missing",
+                )
+            ],
+            totals={
+                "findings_total": 0,
+                "findings_by_severity": {},
+                "accepted_total": 0,
+                "unwired_total": 1,
+            },
+            meta={
+                "producers_run": [],
+                "total_duration_seconds": 0.1,
+                "timings": [],
+            },
+        ),
+        _report(
+            findings=[],
+            metrics={"unknown": ProducerMetrics(scanned=1)},
+            totals={
+                "findings_total": 0,
+                "findings_by_severity": {},
+                "accepted_total": 0,
+                "unwired_total": 0,
+            },
+            meta={
+                "producers_run": ["unknown"],
+                "total_duration_seconds": 0.1,
+                "timings": [],
+            },
+        ),
+    ]
+
+    for report in reports:
+        with pytest.raises(IngestError, match="unregistered producer"):
+            ingest_report(tmp_path, report, REGISTRY)
+        assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_unknown_accepted_producer_is_refused_before_store_creation(tmp_path):
+    from science_model.audit import AcceptedFinding
+
+    report = _report(
+        findings=[],
+        accepted=[
+            AcceptedFinding(
+                producer_id="unknown",
+                finding=_finding(),
+                acceptance_key="b" * 32,
+                reason="known",
+            )
+        ],
+        meta={
+            "producers_run": ["unknown"],
+            "total_duration_seconds": 0.1,
+            "timings": [],
+        },
+    )
+    with pytest.raises(IngestError, match="unregistered producer"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_registered_producer_may_run_and_emit_no_output(tmp_path):
+    report = _report(
+        findings=[],
+        totals={
+            "findings_total": 0,
+            "findings_by_severity": {},
+            "accepted_total": 0,
+            "unwired_total": 0,
+        },
+    )
+
+    outcome = ingest_report(tmp_path, report, REGISTRY)
+
+    assert outcome.records_written == 0
+    assert outcome.occurrences_appended == 0
+    assert outcome.occurrences_skipped == 0
 
 
 def test_a_severity_outside_the_rule_is_refused(tmp_path):
@@ -551,9 +957,31 @@ def test_ingest_revalidates_nested_values_from_model_construct(tmp_path):
     _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
 
 
+def test_direct_ingestion_refuses_an_oversized_snapshot_before_store_creation(
+    tmp_path,
+):
+    from science_tool.findings.ingest import MAX_REPORT_BYTES
+
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(message="é" * (MAX_REPORT_BYTES // 2 + 1)),
+            )
+        ]
+    )
+
+    with pytest.raises(IngestError, match="exceeds"):
+        ingest_report(tmp_path, report, REGISTRY)
+
+    assert not (tmp_path / CASES_DIRNAME).exists()
+    assert not (tmp_path / "doc").exists()
+
+
 def test_ingest_snapshots_and_revalidates_mutable_report_lists(tmp_path):
     report = _report()
-    findings_alias = report.findings
+    findings_alias = list(report.findings)
+    forged = report.model_copy(update={"findings": findings_alias})
     findings_alias.append(
         ReportedFinding(
             producer_id="dataset_anomalies",
@@ -561,16 +989,17 @@ def test_ingest_snapshots_and_revalidates_mutable_report_lists(tmp_path):
         )
     )
 
-    _assert_forged_report_is_refused_without_mutation(tmp_path, report)
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
 
 
 def test_ingest_wraps_a_cyclic_mutation_during_report_snapshot(tmp_path):
     report = _report()
     cyclic: dict[str, object] = {}
     cyclic["self"] = cyclic
-    report.meta.timings.append(cyclic)
+    forged_meta = report.meta.model_copy(update={"timings": [cyclic]})
+    forged = report.model_copy(update={"meta": forged_meta})
 
-    _assert_forged_report_is_refused_without_mutation(tmp_path, report)
+    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
 
 
 def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):

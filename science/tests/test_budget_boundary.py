@@ -23,8 +23,8 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
-    "exempt": 121,
-    "deferred": 96,
+    "exempt": 120,
+    "deferred": 97,
 }
 
 
@@ -140,9 +140,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     grows with the project's topic count. That took the partition to 69/119/95 = 283.
     `project spec-path` then added one exempt leaf because it resolves one slug to a
     fixed three-field record, taking the partition to 69/120/95 = 284. The audit-case
-    command family adds `findings ingest` as an exemption because it emits a fixed-shape
-    ingestion summary or refusal, and `findings list` as deferred because it emits one
-    row per stored audit case. The live partition is therefore 69/121/96 = 286.
+    command family initially classified `findings ingest` as fixed-shape, but its
+    refusal includes untrusted validation text that can grow with the input report; it
+    is therefore deferred alongside `findings list`, which emits one row per stored
+    audit case. The live partition is therefore 69/120/97 = 286.
     """
     actual = {
         "budgeted": len(BUDGETS),
@@ -151,6 +152,12 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     }
     assert actual == EXPECTED_CLASSIFICATION_COUNTS
     assert sum(actual.values()) == len(_leaf_commands(main, []))
+
+
+def test_findings_ingest_is_deferred_because_validation_text_can_grow():
+    assert "findings ingest" not in EXEMPTIONS
+    assert "validation" in DEFERRED["findings ingest"].growth_reason
+    assert "report" in DEFERRED["findings ingest"].growth_reason
 
 
 def test_belief_basis_is_deferred_because_compare_emits_one_row_per_delta() -> None:
