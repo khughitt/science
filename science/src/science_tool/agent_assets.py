@@ -1376,12 +1376,31 @@ def _rewrite_methodology_command_references(
         article = match.group("article")
         if article is None:
             prefix = text[: match.start()].rstrip()
-            line_prefix = text[text.rfind("\n", 0, match.start()) + 1 : match.start()]
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_prefix = text[line_start : match.start()]
+            current_marker = re.fullmatch(
+                r"\s*(?:[-*+]|\d+[.)]|\|+|#+)\s*",
+                line_prefix,
+            )
+            previous_line = (
+                text[: max(0, line_start - 1)].split("\n")[-1].strip()
+                if line_start
+                else ""
+            )
+            previous_boundary = (
+                not previous_line
+                or previous_line[-1] in ".!?:|"
+                or re.match(
+                    r"^(?:```|#+|[-*+]\s|\d+[.)]\s)",
+                    previous_line,
+                )
+                is not None
+            )
             at_structural_start = (
                 not prefix
                 or prefix[-1] in ".!?:|"
-                or re.fullmatch(r"\s*(?:[-*+]|\d+[.)])?\s*", line_prefix)
-                is not None
+                or (current_marker is not None and bool(line_prefix.strip()))
+                or (not line_prefix.strip() and previous_boundary)
             )
             article = "The " if at_structural_start else "the "
         arguments = match.groupdict().get("arguments")

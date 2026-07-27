@@ -243,7 +243,7 @@ Run this skill:
 
 - Do NOT use this skill to **reorganize** DAG topology (add/remove nodes/edges).
   That is a design-level activity; use the `science-sketch-model` skill or
-  The `science-critique-approach` skill instead. This skill only reconciles existing
+  the `science-critique-approach` skill instead. This skill only reconciles existing
   edges with new evidence.
 - Do NOT use `--fix` unattended. The mutations include opening tasks and
   editing YAML — both need human judgement on each specific proposal.

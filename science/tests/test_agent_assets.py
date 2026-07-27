@@ -1084,6 +1084,21 @@ def test_known_colon_command_mentions_normalize_without_dependencies() -> None:
     assert dependencies == set()
 
 
+def test_soft_wrapped_slash_reference_keeps_lowercase_article() -> None:
+    dependencies: set[str] = set()
+
+    rewritten = agent_assets._rewrite_methodology_command_references(
+        "The digest is maintained by\n`/science:curate`.",
+        dependencies,
+        {"curate"},
+    )
+
+    assert rewritten == (
+        "The digest is maintained by\n"
+        "the `science-curate` skill."
+    )
+
+
 def test_generated_command_skill_loads_name_emitted_packages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1204,6 +1219,13 @@ def test_generated_corpus_has_sentence_aware_articles_and_no_known_colon_aliases
     ).read_text(encoding="utf-8")
     assert "The `science-big-picture` skill produces" in curate
     assert "The `science-curate` skill with input `[--dry-run]" in curate
+    imported = generated.skill_paths["science-import-project"].read_text(
+        encoding="utf-8",
+    )
+    assert (
+        "maintained by\n"
+        "the `science-curate` skill based on `core/decisions.md`"
+    ) in imported
 
 
 def test_project_agents_md_scaffolds_use_neutral_skill_names(
