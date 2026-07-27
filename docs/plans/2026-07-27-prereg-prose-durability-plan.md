@@ -261,12 +261,15 @@ Two subtleties carry their own tests because both are silent when wrong:
   contract), and leaves `build/./` as `build/.`. Use `PurePosixPath` for the
   normalization, then reject absolute paths, `..` segments, and any result with
   no `/`.
-- **A fence is closed only by its own delimiter, with nothing after it.** A
-  `~~~` line inside a ``` ``` ``` block is content, and per CommonMark a
-  *closing* fence may be followed only by whitespace — so ```` ```not-a-close ````
-  is content too. An opening fence may carry an info string (```` ```python ````),
-  which is why the trailing-text check applies only when a block is already open.
-  Either mistake ends the block early and exposes every path in the rest of it.
+- **Fence matching has three CommonMark constraints, and getting any one wrong
+  ends a block early and exposes every path in its remainder.** A fence is
+  closed only by (a) its *own* delimiter character, at least as long — a `~~~`
+  line inside a ``` ``` ``` block is content; (b) a marker followed by nothing
+  but whitespace — ```` ```not-a-close ```` is content; and (c) a marker indented
+  **0–3 spaces** — at four it is an indented code block, so an indented ```` ``` ````
+  inside an open fence is content. An *opening* fence may carry an info string
+  (```` ```python ````), which is why the trailing-text rule applies only once a
+  block is open. All three have tests.
 
 **Files:**
 - Modify: `science/src/science_tool/validate/checks/prereg_vehicles.py`
@@ -368,6 +371,28 @@ def test_candidate_paths_does_not_close_a_fence_on_a_marker_with_trailing_text()
     assert _candidate_paths(body) == ["c/three.json"]
 
 
+def test_candidate_paths_does_not_close_a_fence_on_an_over_indented_marker() -> None:
+    """Four spaces makes it an indented code block, not a fence delimiter.
+
+    Verified against the alternative: with an unbounded `^[ \\t]*` this returns
+    `['b/two.json']` -- a path that is still inside fenced Markdown.
+    """
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "```\n`a/one.json`\n    ```\n`b/two.json`\n```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
+def test_candidate_paths_accepts_a_three_space_indented_fence() -> None:
+    """0-3 spaces is still a fence; the cap must not break ordinary indentation."""
+    from science_tool.validate.checks.prereg_vehicles import _candidate_paths
+
+    body = "   ```\n`a/one.json`\n   ```\n\nafter `c/three.json`\n"
+
+    assert _candidate_paths(body) == ["c/three.json"]
+
+
 def test_candidate_paths_allows_an_opening_info_string() -> None:
     """The trailing-text rule applies to CLOSERS only; ```python still opens."""
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
@@ -428,7 +453,10 @@ _RULE_PROSE = "prereg.prose-path-nondurable"
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # Captures the delimiter run so a fence is closed only by its OWN character, at
 # least as long -- a `~~~` line inside a ``` block is content, not the closer.
-_FENCE_LINE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+# Indentation is capped at three spaces per CommonMark: at four it is an indented
+# code block, so a 4-space ``` inside an open fence is CONTENT. An unbounded
+# `^[ \t]*` closes on it and exposes the rest of the block.
+_FENCE_LINE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _INLINE_CODE = re.compile(r"`([^`\n]+)`")
 # The exact grammar behind the design's 23-finding corpus survey. Anchored at
 # both ends: a span containing a command, flag, argument or prose fails as a
@@ -535,7 +563,7 @@ def _candidate_paths(body: str) -> list[str]:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 38 tests (21 existing + 3 + 14).
+Expected: PASS, 40 tests (21 existing + 3 + 16).
 
 - [ ] **Step 5: Commit**
 
@@ -711,7 +739,7 @@ def _nondurable_state(root: Path, relative: str) -> str | None:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 46 tests.
+Expected: PASS, 48 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -937,7 +965,7 @@ def test_the_rule_is_silent_when_git_cannot_answer(
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: **exactly five failures**, matching the table above. The 46 earlier
+Expected: **exactly five failures**, matching the table above. The 48 earlier
 tests and the seven regression pins PASS. If a *different* count fails, stop and
 reconcile before implementing — a pin failing now means the current behaviour is
 not what this plan assumes.
@@ -1043,7 +1071,7 @@ through the closing `yield from _check_vehicle(ctx, relative, entry)` with:
 
 Run: `uv run --frozen pytest tests/validate/test_checks_prereg_vehicles.py -q`
 
-Expected: PASS, 58 tests. If an *existing* test now fails, the restructure
+Expected: PASS, 60 tests. If an *existing* test now fails, the restructure
 changed behaviour — revert Step 4 and redo it, do not edit the existing test.
 
 - [ ] **Step 6: Run the whole validate suite and typecheck**
@@ -1107,10 +1135,11 @@ In `science/src/science_tool/validate/gates.py`, immediately after the existing
             # document names a path git will not preserve, NOT that the path is load-bearing.
             # A pre-registration may legitimately name an ignored OUTPUT directory, so an ERROR
             # would assert a contradiction the predicate does not establish. This reason does not
-            # expire when the corpus is clean. (2) Certification forbids it today anyway: 23
-            # findings across 4 projects. A ratchet is therefore not merely deferred pending
-            # migration -- it would first require a narrower predicate that genuinely implies
-            # contradiction. See docs/plans/2026-07-27-prereg-prose-durability-design.md.
+            # expire when the corpus is clean. (2) Certification forbids it today anyway: 16
+            # findings across 6 of the 11 projects holding pre-registrations. A ratchet is
+            # therefore not merely deferred pending migration -- it would first require a
+            # narrower predicate that genuinely implies contradiction. See
+            # docs/plans/2026-07-27-prereg-prose-durability-design.md.
 ```
 
 - [ ] **Step 4: Verify nothing changed behaviourally**
@@ -1153,51 +1182,71 @@ Expected: PASS with no snapshot diff. `tests/validate/fixtures/_combined` has no
 document. **A snapshot diff here means something unintended changed — investigate
 it; do not run `scripts/update-validate-snapshots.py`.**
 
-- [ ] **Step 2: Run the validator across the corpus**
+- [ ] **Step 2: Derive the cohort, then validate every member**
 
-Uses an explicit, task-specific output directory. Do not rely on any ambient
-scratch-directory variable — this must work in a bare shell.
+**Do not hand-list the projects.** The design's first survey did, and it was
+wrong twice: it named `~/d/multiple-myeloma`, which does not exist (the project
+is `~/d/cancer/cancer-types/multiple-myeloma`, holds 61 pre-registrations, and
+fires), and it omitted six other projects entirely. A glob against a wrong path
+returns nothing, and nothing is indistinguishable from a clean result.
 
-From `.worktrees/prereg-prose-durability/science`:
-
-The directory is **removed and recreated** so no report from an earlier run can
-be mistaken for this one, and the loop is **fail-fast** so a validator error
-stops certification rather than leaving a project silently unmeasured.
+One block, so `CERT_DIR` is in scope throughout — a fresh agent shell does not
+carry a variable between fenced blocks.
 
 ```bash
-set -euo pipefail
+set -uo pipefail
 CERT_DIR=/tmp/prose-path-nondurable-cert
 rm -rf "$CERT_DIR"
 mkdir -p "$CERT_DIR"
-for p in ~/d/natural-systems ~/d/protein-landscape ~/d/seq-feats \
-         ~/d/3d-attention-bias ~/d/multiple-myeloma; do
-  uv run --frozen science validate --project-root "$p" --format json \
-    --output "$CERT_DIR/$(basename "$p").json"
-done
+
+# Every Science project on disk, then narrow to those holding pre-registrations.
+find -L ~/d -maxdepth 5 -name science.yaml \
+     -not -path "*/.worktrees/*" -not -path "*/templates/*" -not -path "*/tests/*" \
+     -printf '%h\n' | sort > "$CERT_DIR/all-projects.txt"
+
+: > "$CERT_DIR/cohort.tsv"
+while IFS= read -r root; do
+  count=$(find "$root/entities/pre-registrations" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
+  [ "$count" -gt 0 ] && printf '%s\t%s\n' "$count" "$root" >> "$CERT_DIR/cohort.tsv"
+done < "$CERT_DIR/all-projects.txt"
+
+echo "cohort:"; cat "$CERT_DIR/cohort.tsv"
+
+# `science validate` exits 1 when a report CONTAINS error findings, having
+# written the JSON successfully. That is a normal outcome for several projects,
+# so a bare `set -e` would abort certification on a valid report. Tolerate a
+# non-zero exit ONLY when a non-empty report was written; a missing or empty
+# report is fatal.
+while IFS=$'\t' read -r count root; do
+  slug=$(printf '%s' "$root" | sed "s|$HOME/d/||; s|/|__|g")
+  out="$CERT_DIR/$slug.json"
+  uv run --frozen science validate --project-root "$root" --format json --output "$out"
+  rc=$?
+  if [ ! -s "$out" ]; then
+    echo "FATAL: $root exited $rc and wrote no usable report at $out" >&2
+    exit 1
+  fi
+  printf 'ok  rc=%-3s %5s pre-regs  %s\n' "$rc" "$count" "$slug"
+done < "$CERT_DIR/cohort.tsv"
+
+echo "reports written: $(ls -1 "$CERT_DIR"/*.json | wc -l)"
 ```
 
-If `science validate` exits non-zero for a project because that project has
-findings, capture the exit code explicitly rather than dropping `set -e` — the
-report is still written, and what must not be tolerated is a *missing* report.
-Confirm all five exist before continuing:
-
-```bash
-ls -1 "$CERT_DIR" | sort
-```
-
-Expected: exactly five `.json` files.
+Expected: **11 cohort rows**, 11 reports, no `FATAL`. Several projects will show
+`rc=1`; that is expected and is not a certification failure. If the cohort count
+is not 11, stop — the project layout has changed since this plan was written and
+the design's table needs remeasuring, not reinterpreting.
 
 - [ ] **Step 3: Measure findings AND pre-registration totals**
 
 Selecting by exact `rule` equality — substring counting on rendered output
-silently miscounts. The script also counts pre-registrations per project,
-because the results table's first column needs them and the JSON report does not
-carry that number.
+silently miscounts. Pre-registration counts come from `cohort.tsv`, since the
+JSON report does not carry that number.
 
 **It fails hard on a missing report.** An earlier draft treated an absent file
 as zero findings, which would have "certified" a project that was never
-validated — the certification would read identically whether `multiple-myeloma`
-has no findings or was skipped entirely.
+validated — the certification would read identically whether a project has no
+findings or was skipped entirely.
 
 ```bash
 uv run --frozen python - <<'PY'
@@ -1206,21 +1255,14 @@ import json
 import pathlib
 
 CERT_DIR = pathlib.Path("/tmp/prose-path-nondurable-cert")
-ROOT = pathlib.Path.home() / "d"
 RULE = "prereg.prose-path-nondurable"
-PROJECTS = [
-    "natural-systems",
-    "protein-landscape",
-    "seq-feats",
-    "3d-attention-bias",
-    "multiple-myeloma",
-]
+HOME_D = str(pathlib.Path.home() / "d") + "/"
 
-totals = [0, 0, 0]
-for name in PROJECTS:
-    prereg_dir = ROOT / name / "entities" / "pre-registrations"
-    preregs = sorted(prereg_dir.glob("*.md")) if prereg_dir.is_dir() else []
-    report = CERT_DIR / f"{name}.json"
+rows = []
+for line in (CERT_DIR / "cohort.tsv").read_text().splitlines():
+    count, root = line.split("\t")
+    slug = root.replace(HOME_D, "").replace("/", "__")
+    report = CERT_DIR / f"{slug}.json"
     if not report.is_file():
         raise SystemExit(
             f"MISSING REPORT: {report}. Certification is invalid -- a project that was "
@@ -1228,14 +1270,20 @@ for name in PROJECTS:
         )
     hits = [r for r in json.loads(report.read_text())["results"] if r.get("rule") == RULE]
     docs = collections.Counter(r.get("path") for r in hits)
-    note = "" if prereg_dir.is_dir() else "   (no entities/pre-registrations/ directory)"
-    print(f"=== {name}: {len(preregs)} pre-registrations, {len(docs)} documents, {len(hits)} findings{note}")
-    for hit in hits:
-        print(f"  {hit.get('path')}\n    {hit.get('message')}")
-    totals = [totals[0] + len(preregs), totals[1] + len(docs), totals[2] + len(hits)]
+    rows.append((root.replace(HOME_D, ""), int(count), len(docs), hits))
 
-print(f"=== TOTAL: {totals[0]} pre-registrations, {totals[1]} documents, {totals[2]} findings")
-print("=== design predicted: 46 pre-registrations, 9 documents, 23 findings")
+rows.sort(key=lambda r: (-len(r[3]), r[0]))
+print(f"{'project':46} {'pre-regs':>9} {'docs':>5} {'findings':>9}")
+for name, npre, ndocs, hits in rows:
+    print(f"{name:46} {npre:9} {ndocs:5} {len(hits):9}")
+print(
+    f"{'TOTAL (' + str(len(rows)) + ' projects)':46} "
+    f"{sum(r[1] for r in rows):9} {sum(r[2] for r in rows):5} {sum(len(r[3]) for r in rows):9}"
+)
+print("\n=== design predicted: 11 projects, 144 pre-registrations, 10 documents, 16 findings\n")
+for name, _, _, hits in rows:
+    for hit in hits:
+        print(f"  {name:40} {hit.get('path')}\n      {hit.get('message')}")
 PY
 ```
 
@@ -1262,17 +1310,18 @@ were counted from each project's `entities/pre-registrations/` directory.
 
 ## Result
 
+One row per cohort member, in the order Step 3 printed them. The cohort is
+whatever Step 2 derived — do not copy this list from the design; copy it from
+the run.
+
 | project | pre-registrations | documents | findings |
 |---|---:|---:|---:|
-| natural-systems | «n» | «n» | «n» |
-| protein-landscape | «n» | «n» | «n» |
-| seq-feats | «n» | «n» | «n» |
-| 3d-attention-bias | «n» | «n» | «n» |
-| multiple-myeloma | 0 | 0 | 0 (no `entities/pre-registrations/` directory; the check returns before any document is read) |
-| **total** | **«n»** | **«n»** | **«n»** |
+| «project» | «n» | «n» | «n» |
+| … | | | |
+| **total («n» projects)** | **«n»** | **«n»** | **«n»** |
 
-Design predicted 23 findings across 9 documents in 46 pre-registrations.
-Measured: «n»/«n»/«n» — «matches, or: differs because …».
+Design predicted 11 projects, 144 pre-registrations, 10 documents, 16 findings.
+Measured: «n»/«n»/«n»/«n» — «matches, or: differs because …».
 
 ## Findings
 
@@ -1368,7 +1417,7 @@ only the results-document change; `git status` must be clean afterwards.
 
 ## Final verification
 
-- [ ] `uv run --frozen pytest -q` from `science/` — full suite green, 58 tests
+- [ ] `uv run --frozen pytest -q` from `science/` — full suite green, 60 tests
       in `tests/validate/test_checks_prereg_vehicles.py`.
 - [ ] `uv run --frozen pytest -q -m snapshot` — no snapshot diff.
 - [ ] `git diff --check` — clean.

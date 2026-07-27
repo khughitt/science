@@ -127,7 +127,7 @@ For each pre-registration whose `frozen_because(...)` is not `None`:
 
        ^[A-Za-z0-9_.][A-Za-z0-9_./+-]*/[A-Za-z0-9_./+-]*$
 
-   This is the exact grammar behind the 23-finding survey below, stated so the
+   This is the exact grammar behind the 16-finding survey below, stated so the
    count is reproducible. Anchoring at both ends is what does the work: a span
    containing a command, flag, argument list, internal whitespace, or prose
    fails as a whole, so path-shaped arguments are never mined out of
@@ -284,55 +284,103 @@ lint, not in this validation rule.
 
 ## Corpus measurement
 
-Survey over every project holding pre-registrations, plus `multiple-myeloma`
-as an explicit zero row so the certification scope is auditable.
+**Cohort: every Science project on disk that holds pre-registrations, derived by
+discovery rather than by a hand-written list.** Enumerating `science.yaml` under
+`~/d` (excluding `.worktrees`, `templates`, `tests`) finds 25 projects, of which
+**11** have a non-empty `entities/pre-registrations/`. All 11 are measured.
+
+The derivation matters. An earlier draft of this section hand-listed four
+projects and recorded `multiple-myeloma` as a zero row at path
+`~/d/multiple-myeloma`. **That path does not exist** — the real project is
+`~/d/cancer/cancer-types/multiple-myeloma`, it holds **61** pre-registrations,
+and it fires. The glob returned nothing and the absence was silently recorded as
+a measurement. Six further projects were missing from the list entirely. A
+certification cohort that is typed by hand can be wrong in exactly the way the
+rule under test is about: an absence that looks like a result.
 
 | project | pre-registrations | documents | findings |
 |---|---:|---:|---:|
 | natural-systems | 34 | 4 | 6 |
-| protein-landscape | 3 | 2 | 9 |
-| seq-feats | 5 | 1 | 5 |
-| 3d-attention-bias | 4 | 2 | 3 |
-| multiple-myeloma | — | — | **0** (no `entities/pre-registrations/`; the check returns before any document is read) |
-| **total** | **46** | **9** | **23** |
+| cancer/data-sources/cbioportal | 4 | 2 | 4 |
+| cancer/mechanisms/evolution | 4 | 1 | 2 |
+| protein-landscape | 3 | 1 | 2 |
+| cancer/cancer-types/multiple-myeloma | 61 | 1 | 1 |
+| cancer/therapeutics | 4 | 1 | 1 |
+| health/comparisons/pan-disease | 14 | 0 | 0 |
+| health/processes/post-acute-infection | 6 | 0 | 0 |
+| health/processes/cycles | 5 | 0 | 0 |
+| seq-feats | 5 | 0 | 0 |
+| 3d-attention-bias | 4 | 0 | 0 |
+| **total (11 projects)** | **144** | **10** | **16** |
+
+Six of eleven projects fire. Every finding is `ignored`; the corpus currently
+produces no `untracked` finding at all.
+
+### Why this replaces an earlier 23/9 figure
+
+Both the cohort and the predicate were wrong, and they moved the count in
+opposite directions.
+
+**The cohort was too small** — 4 projects, 46 pre-registrations, against the
+real 11 and 144.
+
+**The predicate was fail-open**, which *inflated* the count. The earlier probe
+read every non-zero `git check-ignore` exit as "not ignored" and every non-zero
+`ls-files` exit as "not tracked", concluding *untracked*. Measured against the
+real corpus, that is not a theoretical concern:
+
+    $ git check-ignore -q -- data/phase2/cgi
+    fatal: pathspec 'data/phase2/cgi' is beyond a symbolic link
+    exit 128
+
+**Every one of seq-feats' 5, 3d-attention-bias' 3, and 7 of protein-landscape's
+9 earlier findings was a git error misread as non-durability** — all of them
+paths behind a symlink. The tri-state helper removes 15 false findings, and the
+three projects that contributed them now report zero.
+
+That is the strongest available argument for the tri-state contract: it is not
+hardening against a hypothetical, it is the difference between a 23-finding
+instrument that is mostly wrong and a 16-finding one that is not.
+
+### The findings
 
 Every finding was read in context. Most are substrate declarations rather than
-incidental mentions; the **role** column records what the document appears to
-be doing with each path, and is the author's call to confirm, not the rule's to
-assert:
+incidental mentions; the **apparent role** column records what the document
+seems to be doing with each path, and is the author's call to confirm, not the
+rule's to assert:
 
-| project | document | path | state | apparent role |
-|---|---|---|---|---|
-| natural-systems | `0001` | `pipeline/graph-analysis/data/graph-export.json` | ignored | `**Source:** … field .limitRelations` |
-| natural-systems | `0014` | `data/processed/arxiv/datapackage.json` | ignored | locked-settings bullet |
-| natural-systems | `0026` | `pipeline/graph-analysis/data/graph-export.json` | ignored | the `fb-2026-07-11-024` artifact |
-| natural-systems | `0026` | `pipeline/graph-analysis/data` | ignored | the containing root |
-| natural-systems | `0026` | `pipeline/h03/results/betti.json` | ignored | *"The 11 comes from …, computed on the 172-model instance cohort"* |
-| natural-systems | `0028` | `data/processed/formulation-breadth/source-ids.txt` | ignored | substrate table row |
-| protein-landscape | `0002`, `0003` | `data/processed/benchmark-frame.parquet` | untracked | *"… by taking the first three"* |
-| protein-landscape | `0002` | `data/processed/foldseek-reps-disorder.parquet` | untracked | substrate |
-| protein-landscape | `0002` | `data/raw/foldseek/v3/1-AFDBClusters-…tsv.gz` | untracked | substrate |
-| protein-landscape | `0003` | `data/processed/heldout-taxa-benchmark`, `…/splits.parquet` | untracked | substrate |
-| protein-landscape | `0003` | `data/raw/go` | untracked | substrate |
-| protein-landscape | `0003` | `results/heldout-taxa-benchmark`, `…/q81-evaluation` | ignored | output location |
-| 3d-attention-bias | `0002`, `0004` | `data/distance_matrices/rnass` | untracked | substrate |
-| 3d-attention-bias | `0002` | `data/distance_matrices_random/rnass` | untracked | substrate |
-| seq-feats | `0003` | `data/{phase2/cgi,phase2/tfbs,phase3/domains,pilot/sp,pilot/tmr}` | untracked | five substrate directories |
+| project | document | path | apparent role |
+|---|---|---|---|
+| natural-systems | `0001` | `pipeline/graph-analysis/data/graph-export.json` | `**Source:** … field .limitRelations` |
+| natural-systems | `0014` | `data/processed/arxiv/datapackage.json` | locked-settings bullet |
+| natural-systems | `0026` | `pipeline/graph-analysis/data/graph-export.json` | the `fb-2026-07-11-024` artifact |
+| natural-systems | `0026` | `pipeline/graph-analysis/data` | the containing root |
+| natural-systems | `0026` | `pipeline/h03/results/betti.json` | *"The 11 comes from …, computed on the 172-model instance cohort"* |
+| natural-systems | `0028` | `data/processed/formulation-breadth/source-ids.txt` | substrate table row |
+| cbioportal | `0002` | `results/signature-brca-2026-04-22` | output location |
+| cbioportal | `0002` | `data/gene_replication_timing.feather` | substrate |
+| cbioportal | `0003` | `results/poc-2026-04-17/metadata/samples_annotated.feather` | output location |
+| cbioportal | `0003` | `data/mc3.v0.2.8.PUBLIC.maf.gz` | substrate |
+| evolution | `0003` | `data/raw/t063-q095-tcga-public-payload/pancan_rnaseq_freeze.tsv.gz` | substrate |
+| evolution | `0003` | `data/raw/t063-q095-tcga-public-payload/pancan_mutation_freeze.tsv.gz` | substrate |
+| protein-landscape | `0003` | `results/heldout-taxa-benchmark` | output location |
+| protein-landscape | `0003` | `results/heldout-taxa-benchmark/q81-evaluation` | output location |
+| multiple-myeloma | `0058` | `data/external/ctrp_v2/2015/ctrpv2-sensitivity-long.parquet` | substrate |
+| therapeutics | `0001` | `data/raw/nci-almanac/ComboDrugGrowth_Nov2017.zip` | substrate |
 
-The softest class is **output locations** — protein-landscape's two
-`results/heldout-taxa-benchmark` entries name where results will be written
-rather than what was consumed. These are still reported, but they are also the
-reason the rule is advisory rather than a contradiction detector: a frozen
-document may legitimately name an ignored output directory without claiming its
-contents are frozen. The rule reports the durability fact, which is true of an
-output path, and leaves the load-bearing question to the author. Distinguishing
-input from output mechanically would require exactly the semantic judgment this
-rule refuses to make.
+**Output locations are 5 of 16**, up from 2 of 23 in the earlier figure — a
+larger share of the instrument's output than the first survey suggested. This
+strengthens rather than weakens the advisory framing: a rule where nearly a
+third of findings name a path whose contents were never claimed to be frozen
+must not carry an ERROR asserting a contradiction. It is the reason the rule
+reports the durability fact and leaves the load-bearing question to the author.
+Distinguishing input from output mechanically would require exactly the semantic
+judgment this rule refuses to make.
 
 ### Two extraction decisions settled by measurement, not taste
 
-**Backticked-only costs almost no recall.** Scanning bare prose text in
-addition to code spans adds **one finding across all 46 documents** while
+**Backticked-only costs no recall at all.** Scanning bare prose text in addition
+to code spans adds **zero findings across all 144 pre-registrations**, while
 opening a large false-positive surface. Path-like tokens in these documents are
 essentially always in code spans.
 
@@ -350,10 +398,10 @@ Two independent reasons, either of which alone would be sufficient:
 - **The rule is advisory by construction.** It proves a durability fact, not a
   contradiction, so it may not carry an ERROR that asserts the stronger claim.
   This reason does not expire when the corpus is clean.
-- **Corpus certification forbids it today anyway.** Twenty-three findings
-  across four projects means gating would fail four real builds for a contract
-  none of them could have met — the same reason `vehicle-undeclared` is
-  ungated, recorded in the same place.
+- **Corpus certification forbids it today anyway.** Sixteen findings across
+  six of the eleven projects holding pre-registrations means gating would fail
+  six real builds for a contract none of them could have met — the same reason
+  `vehicle-undeclared` is ungated, recorded in the same place.
 
 `gates.py` gains a comment beside `vehicle-undeclared`'s noting the absence and
 both reasons; the rule name is **not** added to any tier set.
@@ -392,7 +440,7 @@ the feedback filing and its closure, this design and its results document.
 `vehicle-unverifiable`; the boundary-side gap (a payload root carrying a
 descriptor that wants to be a manifest root) — filed separately, adjacent to
 the open `fb-2026-07-27-001`/`-002` MM30 boundary cluster; any migration of the
-23 findings in the downstream projects.
+16 findings in the downstream projects.
 
 ## Verification
 
@@ -407,6 +455,8 @@ the open `fb-2026-07-27-001`/`-002` MM30 boundary cluster; any migration of the
 | frozen doc, path only inside a fenced block | silent |
 | frozen doc, fence closed by a different delimiter (`~~~` inside ```` ``` ````) | silent — the block has not ended |
 | frozen doc, fence marker with trailing text (```` ```not-a-close ````) | silent — a closer may carry only whitespace |
+| frozen doc, fence marker indented 4+ spaces inside an open block | silent — at four spaces it is an indented code block, not a delimiter |
+| frozen doc, fence indented 0–3 spaces | works normally as a delimiter |
 | frozen doc, opening fence with an info string (```` ```python ````) | silent — the block still opens |
 | frozen doc, path only inside an HTML comment | silent |
 | frozen doc, span containing a command with a path argument | silent |
