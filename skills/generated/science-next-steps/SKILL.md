@@ -239,7 +239,7 @@ Scan pipeline plans in `entities/plans/` for implementation tasks that are not t
 Scan active analysis-facing tasks and inquiries for linked `plan:<stem>` analysis
 plans (`entities/plans/*-analysis-plan.md` with `plan_kind: analysis-plan`). If
 none exists and the task is about running, validating, or pre-registering a data
-analysis, add a recommended next action to run `science-plan-analysis`. Check
+analysis, add a recommended next action to run `science-plan-analysis` skill. Check
 `entities/plans/*-analysis-plan.md` before recommending a new one.
 
 **Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
@@ -321,7 +321,7 @@ than relying on the operator to remember. Surface two classes here, the way stal
 entities are already surfaced above.
 
 **Unreflected failures.** Scan for failure signatures that have no linked
-reflection, and recommend `science-post-mortem` for each:
+reflection, and recommend `science-post-mortem` skill for each:
 
 - a pre-registration amendment recording a **protocol deviation**, or observed
   values that leaked before the freeze point;
@@ -335,7 +335,7 @@ project's feedback with `science feedback list --project <project-id> --format j
 (post-mortem writes there). List every failure signature with **no** corresponding
 feedback entry as an "unreflected failure" and add a Recommended Next Action:
 
-> Reflect on `<failure>` with `science-post-mortem <failure>` — no lesson has been
+> Reflect on `<failure>` with `science-post-mortem` skill <failure>` — no lesson has been
 > filed for it, so the fix-and-move-on pull will lose it.
 
 If every failure signature already has a linked entry, say so; do not pad. If the
@@ -367,7 +367,7 @@ Recommend 3-5 actions based on:
 For each suggestion, include:
 - The task ID (if it exists) or "new task" if suggesting something not yet tracked
 - A brief rationale (1 sentence)
-- The suggested command to run (e.g., `science-research-topic`, `science-tasks add ...`)
+- The suggested command to run (e.g., `science-research-topic` skill, `science-tasks` skill add ...`)
 
 **Design constraints:** If the user has provided actionable design feedback during the session that doesn't fit the task/question/hypothesis taxonomy (e.g., page density preferences, API constraints, performance requirements), capture it as a row in the Recommended Next Actions table with a note to record it in project memory or a design doc.
 
@@ -445,7 +445,7 @@ If sync is stale, include a note in the Recommended Next Actions table:
 
 | Priority | Action | Rationale | Command |
 |---|---|---|---|
-| P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | `science-sync` |
+| P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | `science-sync` skill |
 
 ## After Writing
 

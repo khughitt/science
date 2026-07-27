@@ -82,7 +82,7 @@ When the workflow integrates an ODE, or otherwise discretises:
   absolute likelihood. Certifying a trajectory to a tolerance says nothing about the difference the
   inference actually reads.
 
-See Load the `science-study-design` skill.
+See `science-study-design` skill.
 
 ## plan-pipeline
 

@@ -15,7 +15,7 @@ before any leaf.
 ## Scope boundary
 
 Covers QA of embeddings/manifolds/clusterings regardless of source domain. Excludes assay-level
-measurement QA (see the `science-bio` skill).
+measurement QA (see `science-bio` skill).
 
 ## Leaves
 
@@ -29,8 +29,8 @@ Single leaf; load it directly.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-bio` skill, the `science-statistics` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-bio` skill, `science-statistics` skill
 
 ## Success test
 
@@ -38,4 +38,4 @@ An embedding/clustering claim routes to the leaf with no methodology read from t
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

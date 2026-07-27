@@ -16,7 +16,7 @@ claimed — before interpretation.
 
 Covers pre-registration, replicate/power justification, estimator certification, sensitivity
 arbitration, causal identification, and bias/variance reasoning. Excludes model fitting (see
-the `science-statistics` skill).
+`science-statistics` skill).
 
 ## Leaves
 
@@ -38,8 +38,8 @@ data are seen, certification/arbitration leaves at verdict time.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-statistics` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-statistics` skill
 
 ## Success test
 
@@ -47,4 +47,4 @@ A rigor commitment or verdict routes to the correct leaf with no methodology rea
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

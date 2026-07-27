@@ -76,4 +76,4 @@ The agent carried out skill authoring according to the workflow, applied the jud
 ## Companion Skills
 
 - [`skill-taxonomy.md`](skill-taxonomy.md) — the classification and metadata contract.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

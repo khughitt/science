@@ -78,7 +78,7 @@ when one class dominates; report both and inspect the confusion matrix.
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<curation_task>/
@@ -108,6 +108,6 @@ Report:
 
 ## Companion Skills
 
-- Load the `science-literature` skill - source hierarchy and source-quality assessment for literature-derived claims.
-- Load the `science-literature` skill - citation and source-pointer conformance.
-- Load the `science-study-design` skill - verdict handling when curated labels or adjudication choices change results.
+- `science-literature` skill - source hierarchy and source-quality assessment for literature-derived claims.
+- `science-literature` skill - citation and source-pointer conformance.
+- `science-study-design` skill - verdict handling when curated labels or adjudication choices change results.

@@ -122,6 +122,6 @@ Each PubMed-derived item must include:
 ## Companion Skills
 
 - [`openalex.md`](openalex.md) - citation-count, author-order, and OpenAlex identifier reconciliation.
-- Load the `science-epistemics` skill - label, claim, and source-curation QA for ranked literature sets.
+- `science-epistemics` skill - label, claim, and source-curation QA for ranked literature sets.
 - [`../citation-discipline.md`](../citation-discipline.md) - citation and source-pointer conformance.
-- Load the `science-scientific-writing` skill - project-awareness checks before writing.
+- `science-scientific-writing` skill - project-awareness checks before writing.

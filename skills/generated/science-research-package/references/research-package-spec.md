@@ -112,6 +112,6 @@ The `.vl.json` files are copied into the package's `figures/` directory and refe
 
 ## Companion Skills
 
-- Load the `science-data-management` skill - Frictionless descriptor conventions reused by research packages.
-- Load the `science-pipelines` skill - terminal workflow rules that build and validate packages.
-- Load the `science-epistemics` skill - proposition and evidence entity semantics used by package provenance.
+- `science-data-management` skill - Frictionless descriptor conventions reused by research packages.
+- `science-pipelines` skill - terminal workflow rules that build and validate packages.
+- `science-epistemics` skill - proposition and evidence entity semantics used by package provenance.

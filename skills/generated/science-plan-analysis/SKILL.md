@@ -124,7 +124,7 @@ root `--version` probe is the permanent bootstrap surface; do not replace it wit
 a preflight subcommand, which an older CLI could not recognize either.
 
 > **Prerequisites:**
-> - Read the `science-command-preamble` skill's `references/methodology-index.md`.
+> - Read `science-command-preamble` skill's `references/methodology-index.md`.
 > - Load only the skill leaves justified by the modality, estimand, and data-signal classification.
 
 ## Purpose
@@ -134,8 +134,8 @@ data modality classification, input QA, independent-unit checks, estimand and
 metric clarity, power/resolution limits, bias-vs-variance risks, sensitivity
 arbitration, and required output artifacts.
 
-Use `science-plan-pipeline` after this command when execution orchestration is
-non-trivial. Use `science-pre-register` after this command when the plan is
+Use `science-plan-pipeline` skill after this command when execution orchestration is
+non-trivial. Use `science-pre-register` skill after this command when the plan is
 `ready` or `ready-with-caveats` and confirmatory criteria should be locked.
 
 ## When a Pre-Registration Already Exists
@@ -160,7 +160,7 @@ route it there instead of silently re-planning around it.
 3. Read relevant hypotheses, inquiries, tasks, prior pre-registrations, and existing plans named by the user.
 4. **Pre-registration discovery.** Search for locked or draft pre-registrations in `entities/pre-registrations/`; do not assume absence just because no task mentions one.
 5. If an inquiry slug is provided, read the inquiry/model state and reuse captured estimand, variables, independent unit, and model/test fields.
-6. If the task is literature synthesis or theory without a data-analysis component, route to `science-research-topic` or `science-research-papers` unless the user explicitly wants an analysis plan.
+6. If the task is literature synthesis or theory without a data-analysis component, route to `science-research-topic` skill or `science-research-papers` skill unless the user explicitly wants an analysis plan.
 7. Before drafting the plan, run a data-availability / metric-feasibility pre-check:
    - Are the needed inputs already represented by `dataset:<slug>` entities?
    - Is each input available now, explicitly acquisition-gated, or absent?
@@ -200,7 +200,7 @@ reason.
 ## Workflow
 
 1. Classify the analysis: modalities, independent unit, estimand, intended model/test, confirmatory vs exploratory status.
-2. Load the minimum relevant leaves from the `science-command-preamble` skill's `references/methodology-index.md`.
+2. Load the minimum relevant leaves from `science-command-preamble` skill's `references/methodology-index.md`.
 3. Identify required input inspection and preprocessing/normalization checks.
 4. Build a **Per-Input Data Profile** with one row per input artifact or dataset. Include encoding / file format, row grain, join cardinality, missing-value sentinels, provenance / source version, checksum or immutable identifier, and identity declaration status for identity-bearing inputs.
 5. State model/test assumptions, power floor or resolution limit, bias-vs-variance risks, and sensitivity-arbitration rules. If the analysis fits parameters numerically, also state the estimator certification plan (the four axes) and, for each validation probe, what result would make that probe fail.
@@ -293,7 +293,7 @@ the profile's smoothness structure.
 For **every validation probe** you plan, write the answer to: *what result would make this probe
 fail?* A probe with no such answer is evidence-shaped ceremony — it will discharge the obligation
 without ever having tested it. See
-``study-design-estimator-certification`` guidance from the `science-study-design` skill.
+`science-study-design` skill.
 
 In `Per-Input Data Profile`, use one row per input artifact or dataset and include:
 

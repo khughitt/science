@@ -78,9 +78,9 @@ model adjusts for it.
 Record the method, the covariates in the selection model, the negative-control
 comparison, and the sensitivity results that change verdict interpretation. Place
 this step under the workflow-result package `results/<workflow>/<slug>/` (see
-Load the `science-data-management` skill for
+`science-data-management` skill for
 placement) and generate a `datapackage.json` descriptor for the directory (see
-Load the `science-data-management` skill
+`science-data-management` skill
 for descriptor format):
 
 ```
@@ -117,5 +117,5 @@ reporting language permitted by its audit outcome.
 
 - [`somatic-mutation-qa.md`](somatic-mutation-qa.md) - input-call and denominator QA required before selection verdicts.
 - [`mutational-signatures-qa.md`](mutational-signatures-qa.md) - signature decomposition and burden on the same cohort.
-- Load the `science-study-design` skill - low-power driver tests for rare genes.
-- Load the `science-study-design` skill - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.
+- `science-study-design` skill - low-power driver tests for rare genes.
+- `science-study-design` skill - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.

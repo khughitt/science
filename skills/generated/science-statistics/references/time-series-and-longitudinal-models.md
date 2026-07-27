@@ -82,7 +82,7 @@ details rather than estimand-defining assumptions.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 results/<analysis>/time_series_qa/
@@ -104,6 +104,6 @@ lag sensitivity, or influential units.
 ## Companion Skills
 
 - [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - mixed-effects, hierarchical, censoring, and grouped-outcome models.
-- Load the `science-study-design` skill - pre-committed rules for lag/window and missingness sensitivity.
-- Load the `science-study-design` skill - independent-unit and transition-count power floors.
-- Load the `science-study-design` skill - separating sampling/process bias from estimator variance.
+- `science-study-design` skill - pre-committed rules for lag/window and missingness sensitivity.
+- `science-study-design` skill - independent-unit and transition-count power floors.
+- `science-study-design` skill - separating sampling/process bias from estimator variance.

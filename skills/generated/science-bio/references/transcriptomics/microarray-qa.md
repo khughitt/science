@@ -156,7 +156,7 @@ historical results.
 
 ## Output: a per-cohort QA package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<cohort_id>/
@@ -181,4 +181,4 @@ be an n ≈ 700 (MMRF) instead of n ≈ 5,400 meta-analysis.
 - [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
 - [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
 - [`bulk-rnaseq-qa.md`](bulk-rnaseq-qa.md) - companion checks when aggregating microarray with RNA-seq cohorts.
-- Load the `science-study-design` skill - separating platform bias from estimator variance.
+- `science-study-design` skill - separating platform bias from estimator variance.

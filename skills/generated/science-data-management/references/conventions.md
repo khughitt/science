@@ -17,7 +17,7 @@ The on-disk layout and descriptor conventions for a project's research **data**
 `datapackage` descriptor *format* (see [`frictionless.md`](frictionless.md)), the
 acquisition workflow (see `acquisition.md`), and **research packages** — a
 distinct artifact governed by
-Load the `science-research-package` skill
+`science-research-package` skill
 (see *Invariants* → package artifacts).
 
 **Logical vs. physical paths, and split storage.** Only the bulk **`data/…`**
@@ -51,7 +51,7 @@ and version-controlled** (lightweight provenance in-repo vs out-of-tree bulk).
 2. **Research packages** — a **separate** artifact at `research/packages/{name}/`
    with `datapackage.json` profile `science-research-package` and a nested
    `research` extension. Authority:
-   Load the `science-research-package` skill.
+   `science-research-package` skill.
    This contract references that artifact; it does not define it.
 
 **QA-artifact output paths** (split by lifecycle):
@@ -143,7 +143,7 @@ EDAM annotation for a FASTA sequence resource:
 The workflow-result manifest's authority is `templates/workflow-run.md` (the
 manifest path) and `science qa-audit` (which consumes `resources`); the
 research-package schema's authority is
-Load the `science-research-package` skill.
+`science-research-package` skill.
 This contract references them rather than restating their schemas.
 
 ## Invalid cases
@@ -164,8 +164,8 @@ applicable, an itemized checklist otherwise?
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
-- Load the `science-research-package` skill — the separate research-package artifact this contract bounds against.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-research-package` skill — the separate research-package artifact this contract bounds against.
 - [`../SKILL.md`](../SKILL.md) — the data-management router.
 - [`frictionless.md`](frictionless.md) — the `datapackage` descriptor format that realizes these directory conventions.
 - `acquisition.md` — the acquisition workflow that produces data in this layout.

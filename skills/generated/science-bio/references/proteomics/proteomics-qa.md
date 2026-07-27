@@ -85,7 +85,7 @@ shared peptides, and post-translational-modification localization ambiguity.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<proteomics_dataset>/
@@ -107,6 +107,6 @@ verdict downgrade caused by missingness or ambiguous rollup.
 ## Companion Skills
 
 - [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - protein identity, UniProt/isoform mapping, homology, and sequence-derived labels.
-- Load the `science-data-management` skill - data-package descriptors and validation conventions.
-- Load the `science-study-design` skill - separating preprocessing bias from estimator variance.
-- Load the `science-study-design` skill - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.
+- `science-data-management` skill - data-package descriptors and validation conventions.
+- `science-study-design` skill - separating preprocessing bias from estimator variance.
+- `science-study-design` skill - pre-committed rules for imputation, rollup, and batch sensitivity disagreement.

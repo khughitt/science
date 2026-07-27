@@ -483,11 +483,11 @@ script_path: code/workflows/scripts/analyze.py
 
 For full schema documentation — including `cells.json` structure, cell types, and
 the `science-research-package` datapackage profile — see the
-the `science-research-package` skill skill.
+`science-research-package` skill.
 
 ## Companion Skills
 
 - [`reproducibility.md`](reproducibility.md) - shared, substrate-agnostic reproducibility practice (tool-agnostic planning, provenance capture, sandbox-fetch guards).
 - [`../SKILL.md`](../SKILL.md) - pipelines router: choosing and combining execution substrates.
-- Load the `science-data-management` skill - data-package descriptors for workflow inputs and outputs.
-- Load the `science-research-package` skill - research-package schema and validation commands.
+- `science-data-management` skill - data-package descriptors for workflow inputs and outputs.
+- `science-research-package` skill - research-package schema and validation commands.

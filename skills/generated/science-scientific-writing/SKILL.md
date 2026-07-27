@@ -98,9 +98,9 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 
 ## Companion Skills
 
-- Load the `science-literature` skill - citation format, bibliography keys, and source-pointer conformance.
-- Load the `science-literature` skill - selecting and assessing the sources this prose cites.
-- Load the `science-statistics` skill - statistical reporting language for pre-registrations, analyses, and verdicts.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-literature` skill - citation format, bibliography keys, and source-pointer conformance.
+- `science-literature` skill - selecting and assessing the sources this prose cites.
+- `science-statistics` skill - statistical reporting language for pre-registrations, analyses, and verdicts.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 
 For the project's reasoning model, see `docs/user-guide/epistemic-model.md`.

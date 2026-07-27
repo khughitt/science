@@ -12,7 +12,7 @@ the cross-cutting rigor every pipeline must satisfy regardless of substrate, loa
 ## Routing trigger
 
 Load this router when the execution shape of an analysis is in scope — **only
-after** methodology is decided (see the `science-command-preamble` skill's `references/methodology-index.md` and `science-plan-analysis`)
+after** methodology is decided (see `science-command-preamble` skill's `references/methodology-index.md` and `science-plan-analysis`)
 — before loading any leaf. Picking an execution substrate before the analysis
 question is specified usually produces ceremony without rigor.
 
@@ -40,8 +40,8 @@ not instead of it.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-statistics` skill, the `science-data-management` skill, the `science-research-package` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-statistics` skill, `science-data-management` skill, `science-research-package` skill
 
 ## Success test
 
@@ -51,6 +51,6 @@ compose order when leaves combine), and construction-rigor questions route to
 
 ## Companion Skills
 
-- Load the `science-data-management` skill — data/result layout: read from `data/raw/`, write processed outputs and workflow-result packages under `results/<workflow>/<slug>/`.
-- Load the `science-research-package` skill — **only when** the pipeline's deliverable is a narrative research package under `research/packages/{name}/`; ordinary workflow results do not need one.
-- Load the `science-statistics` skill — statistical decisions that should be made before pipeline construction.
+- `science-data-management` skill — data/result layout: read from `data/raw/`, write processed outputs and workflow-result packages under `results/<workflow>/<slug>/`.
+- `science-research-package` skill — **only when** the pipeline's deliverable is a narrative research package under `research/packages/{name}/`; ordinary workflow results do not need one.
+- `science-statistics` skill — statistical decisions that should be made before pipeline construction.

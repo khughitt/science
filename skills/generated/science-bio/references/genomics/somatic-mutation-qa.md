@@ -97,7 +97,7 @@ half the panels has half the maximum callable sample count.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<cohort_id>/somatic_mutation_qa/
@@ -118,5 +118,5 @@ negative mutation frequencies.
 
 - [`mutational-signatures-qa.md`](mutational-signatures-qa.md) - downstream SBS/DBS/ID signatures and tumor mutational burden.
 - [`driver-selection.md`](driver-selection.md) - downstream dN/dS, dNdScv, and driver-ranking selection inference.
-- Load the `science-study-design` skill - low-power mutation-frequency contrasts.
-- Load the `science-study-design` skill - hypermutator-included versus hypermutator-excluded arbitration.
+- `science-study-design` skill - low-power mutation-frequency contrasts.
+- `science-study-design` skill - hypermutator-included versus hypermutator-excluded arbitration.

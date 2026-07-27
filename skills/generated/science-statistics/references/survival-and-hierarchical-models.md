@@ -99,7 +99,7 @@ Report:
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 results/<analysis>/model_qa/
@@ -121,6 +121,6 @@ non-identifiability, divergences, or sensitivity disagreement.
 ## Companion Skills
 
 - [`bayesian-workflow.md`](bayesian-workflow.md) - the general convergence/calibration/sensitivity gate this leaf specializes.
-- Load the `science-study-design` skill - pre-committed verdict rules for model diagnostics and sensitivity runs.
-- Load the `science-study-design` skill - independent-unit power floors for survival and hierarchical models.
+- `science-study-design` skill - pre-committed verdict rules for model diagnostics and sensitivity runs.
+- `science-study-design` skill - independent-unit power floors for survival and hierarchical models.
 - [`compositional-data.md`](compositional-data.md) - denominator and zero-handling rules for fraction-valued model inputs.

@@ -146,8 +146,8 @@ against the described files.
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 - [`conventions.md`](conventions.md) — the directory/result layout that these descriptors describe.
 - [`acquisition.md`](acquisition.md) — the acquisition workflow that produces these descriptors.
-- Load the `science-research-package` skill - Frictionless descriptor conventions reused by research packages.
-- Load the `science-pipelines` skill - workflow rules that generate package descriptors as terminal artifacts.
+- `science-research-package` skill - Frictionless descriptor conventions reused by research packages.
+- `science-pipelines` skill - workflow rules that generate package descriptors as terminal artifacts.

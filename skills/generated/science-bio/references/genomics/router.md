@@ -12,7 +12,7 @@ modes (panel coverage, calling pipeline drift, reference-build mismatches,
 cohort composition) that look plausible until they invalidate downstream
 inference.
 
-For analysis-readiness planning, start at Load the `science-command-preamble` skill and consult its `references/methodology-index.md` or
+For analysis-readiness planning, start at `science-command-preamble` skill's `references/methodology-index.md` or
 run `science-plan-analysis`.
 
 ## Layers and QA mindsets
@@ -41,7 +41,7 @@ the existing leaves.
 
 ## Companion Skills
 
-- Load the `science-data-management` skill — generic data-management conventions.
-- [`../transcriptomics/SKILL.md`](../transcriptomics/SKILL.md) — expression cohorts often paired with mutation cohorts.
-- Load the `science-study-design` skill — mutation-frequency contrasts are typically low-power for rare genes.
-- Load the `science-study-design` skill — hypermutator-included vs -excluded analyses are the canonical sensitivity pair.
+- `science-data-management` skill — generic data-management conventions.
+- [`../transcriptomics/router.md`](../transcriptomics/router.md) — expression cohorts often paired with mutation cohorts.
+- `science-study-design` skill — mutation-frequency contrasts are typically low-power for rare genes.
+- `science-study-design` skill — hypermutator-included vs -excluded analyses are the canonical sensitivity pair.

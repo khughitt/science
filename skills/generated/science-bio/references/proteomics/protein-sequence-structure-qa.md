@@ -92,7 +92,7 @@ leakage, label hierarchy mismatch, and length or taxonomy confounding.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<protein_dataset>/
@@ -111,5 +111,5 @@ sequence version, label source, and split rule each result used.
 
 ## Companion Skills
 
-- Load the `science-ml` skill - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
-- Load the `science-data-management` skill - generic data-management conventions for processed protein datasets.
+- `science-ml` skill - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
+- `science-data-management` skill - generic data-management conventions for processed protein datasets.

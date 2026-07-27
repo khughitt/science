@@ -112,7 +112,7 @@ Does the produced QA package contain the named files, and does the summary state
 
 ## Companion Skills
 
-- `SKILL.md` — the transcriptomics router.
+- `router.md` — the transcriptomics router.
 - `data-integration.md` — the multi-cohort integration decision that consumes this QA.
 - `bulk-rnaseq-qa.md`, `microarray-qa.md`, `scrna-qa.md` — platform-specific QA.
-- the `science-data-management` skill — Data-Package substrate for the cohort_audit sidecar.
+- `science-data-management` skill — Data-Package substrate for the cohort_audit sidecar.

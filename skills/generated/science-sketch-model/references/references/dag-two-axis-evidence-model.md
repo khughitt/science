@@ -2,7 +2,7 @@
 
 How to annotate causal-DAG edges with honest, comparable evidence labels.
 Consumed by the `dag` subcommand group (`science dag render / audit /
-staleness`) and by the `/science:dag-audit` skill.
+staleness`) and by the `science-dag-audit` skill.
 
 ## Motivation
 

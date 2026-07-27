@@ -97,8 +97,8 @@ Was the required reasoning/precommitment carried out before interpretation, and 
 
 ## Companion Skills
 
-- `SKILL.md` — the transcriptomics router.
+- `router.md` — the transcriptomics router.
 - `cohort-qa.md` — the per-cohort QA this decision consumes.
 - `bulk-rnaseq-qa.md`, `microarray-qa.md`, `scrna-qa.md` — modality realizations of the chosen strategy.
-- the `science-statistics` skill — the actual aggregation / hierarchical modeling.
-- the `science-study-design` skill — pre-registering the committed strategy.
+- `science-statistics` skill — the actual aggregation / hierarchical modeling.
+- `science-study-design` skill — pre-registering the committed strategy.

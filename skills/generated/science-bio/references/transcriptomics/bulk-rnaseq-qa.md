@@ -150,7 +150,7 @@ doubt, check the original publication's methods section.
 
 ## Output: a per-cohort QA package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<cohort_id>/
@@ -166,5 +166,5 @@ data/processed/<cohort_id>/
 
 - [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
 - [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
-- Load the `science-study-design` skill - independent-unit and interval-resolution checks for cohort-level contrasts.
-- Load the `science-study-design` skill - separating preprocessing bias from estimator variance.
+- `science-study-design` skill - independent-unit and interval-resolution checks for cohort-level contrasts.
+- `science-study-design` skill - separating preprocessing bias from estimator variance.

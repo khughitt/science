@@ -15,7 +15,7 @@ that depend on sources.
 ## Scope boundary
 
 Covers literature search tools, source evaluation, and citation conformance. Excludes proposition
-schema/graph reasoning (see the `science-epistemics` skill).
+schema/graph reasoning (see `science-epistemics` skill).
 
 ## Leaves
 
@@ -32,8 +32,8 @@ Search leaves feed evaluation; citation-discipline applies whenever a claim cite
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-epistemics` skill, the `science-research-package` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-epistemics` skill, `science-research-package` skill
 
 ## Success test
 
@@ -41,4 +41,4 @@ A sourcing/citation task routes to the correct leaf with no methodology read fro
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

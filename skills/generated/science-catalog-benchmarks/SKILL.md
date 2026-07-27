@@ -143,7 +143,7 @@ Do not create belief-test plans, benchmark outcomes, graph edges, or benchmark g
 
 Read:
 
-1. the `science-data-management` skill
+1. `science-data-management` skill
 2. `references/docs/user-guide/benchmarking.md`
 3. `entities/datasets/`, if present
 4. `entities/questions/`, `entities/hypotheses/`, and `entities/propositions/`, if present

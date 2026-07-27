@@ -83,9 +83,9 @@ forcing precise proportions.
 ## Minimum output package
 
 Place this QA step under the workflow-result package `results/<workflow>/<slug>/`
-(see Load the `science-data-management` skill
+(see `science-data-management` skill
 for placement) and generate a `datapackage.json` descriptor for the directory
-(see Load the `science-data-management` skill
+(see `science-data-management` skill
 for descriptor format):
 
 ```
@@ -117,5 +117,5 @@ Conditions were evaluated and whether inputs were audited upstream.
 
 - [`somatic-mutation-qa.md`](somatic-mutation-qa.md) - input-call and denominator QA required before signature or burden verdicts.
 - [`driver-selection.md`](driver-selection.md) - gene-level selection and dN/dS inference on the same cohort.
-- Load the `science-study-design` skill - low-count signature and burden tests.
-- Load the `science-study-design` skill - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.
+- `science-study-design` skill - low-count signature and burden tests.
+- `science-study-design` skill - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.

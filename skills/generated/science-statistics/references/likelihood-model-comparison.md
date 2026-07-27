@@ -76,7 +76,7 @@ Likelihoods that sum over rare events or large state spaces underflow silently.
   comparison is read, certify the estimator: reproducibility under perturbation of every
   inferentially irrelevant choice, *and* accuracy against a reference with a different
   error-generating mechanism. See
-  Load the `science-study-design` skill.
+  `science-study-design` skill.
 - In a likelihood **ratio**, optimizer error does **not** cancel. Both terms carry
   one-sided upward error, and the larger model is systematically the harder one to fit —
   so the error has a sign. Match the inner tolerance between the compared models.
@@ -145,11 +145,11 @@ non-identifiability, or selection instability.
 
 ## Companion Skills
 
-- Load the `science-study-design` skill — certify the estimator
+- `science-study-design` skill — certify the estimator
   before the comparison is read; this leaf's numerical-precision audit assumes what that
   one establishes.
 - [`bayesian-workflow.md`](bayesian-workflow.md) — the convergence gate the Bayesian LOO/ELPD arm assumes.
 
-- Load the `science-study-design` skill — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
-- Load the `science-study-design` skill — the minimum effect a likelihood comparison can resolve at the available n.
+- `science-study-design` skill — pre-commit which comparison metric is verdict-bearing and which are reported alongside.
+- `science-study-design` skill — the minimum effect a likelihood comparison can resolve at the available n.
 - [`population-genetics-likelihood.md`](population-genetics-likelihood.md) — a domain consumer: constructing the pop-gen likelihoods this leaf then compares.

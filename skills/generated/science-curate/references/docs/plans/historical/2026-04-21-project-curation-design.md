@@ -14,11 +14,11 @@ Science projects accumulate durable research memory: questions, hypotheses, inte
 - paper notes and discussions contain insights that later questions should surface but do not;
 - graph and frontmatter links under-represent the real conceptual connections in the project.
 
-`/science:big-picture` produces a high-level synthesis. `/science:next-steps` prioritizes future work. `/science:review-tasks` audits the backlog. None of these performs a systematic memory curation pass.
+`science-big-picture` skill produces a high-level synthesis. `science-next-steps` skill prioritizes future work. `science-review-tasks` skill audits the backlog. None of these performs a systematic memory curation pass.
 
 ## Goal
 
-Introduce `/science:curate`, an agent-led project memory curation command. Its purpose is to inspect the accumulated project corpus, repair obvious connective tissue when safe, and produce a durable curation ledger of forgotten insights, missed connections, drift, duplication, and follow-up decisions.
+Introduce `science-curate` skill, an agent-led project memory curation command. Its purpose is to inspect the accumulated project corpus, repair obvious connective tissue when safe, and produce a durable curation ledger of forgotten insights, missed connections, drift, duplication, and follow-up decisions.
 
 The command should behave like a careful research librarian and project maintainer, not like an automated linter. CLI helpers gather inventories and candidate signals; the agent performs the semantic judgement.
 
@@ -26,7 +26,7 @@ The command should behave like a careful research librarian and project maintain
 
 ### In scope (v1)
 
-- New command `/science:curate`.
+- New command `science-curate` skill.
 - New Codex skill `science-curate`.
 - Agent-led workflow that reads targeted source artifacts and writes a curation ledger.
 - Optional high-confidence, small curation edits after explicit user approval or an explicit apply flag.
@@ -40,14 +40,14 @@ The command should behave like a careful research librarian and project maintain
 - Fully automated semantic curation.
 - Bulk rewrites across the corpus.
 - Automatic hypothesis merging, task retirement, or DAG status changes without human approval.
-- Replacing `/science:big-picture`, `/science:next-steps`, `/science:health`, or `/science:review-tasks`.
+- Replacing `science-big-picture` skill, `science-next-steps` skill, `science-health` skill, or `science-review-tasks` skill.
 - Generating canonical project synthesis. Curation findings can feed synthesis, but the output is a ledger and action queue, not the project narrative.
 - Building an embedding search index. Useful later, but not required for v1.
 
 ## Command Interface
 
 ```text
-/science:curate [--dry-run] [--no-write] [--scope <scope>] [--since <date>] [--apply-obvious] [--commit]
+`science-curate` skill [--dry-run] [--no-write] [--scope <scope>] [--since <date>] [--apply-obvious] [--commit]
 ```
 
 - Default: run an agent-led sweep, do not mutate files unless the agent reaches an explicit approval checkpoint.
@@ -139,7 +139,7 @@ Suggested body:
 7. **Actioned Fixes** - exact files changed, before/after summary, and rationale.
 8. **Pending Decisions** - items that need user judgement.
 9. **Suggested Follow-Ups** - task additions, commands to run, or synthesis updates.
-10. **Self-Reflection** - improvements noticed for `/science:curate`, its skill, prompts, or CLI helpers.
+10. **Self-Reflection** - improvements noticed for `science-curate` skill, its skill, prompts, or CLI helpers.
 
 ## Workflow
 
@@ -221,7 +221,7 @@ For docs-only edits where Python files are untouched, the agent may skip Python 
 
 At the end of the sweep, the agent must answer:
 
-> What did this curation sweep make harder than it should have been? Note any improvements to `/science:curate`, the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
+> What did this curation sweep make harder than it should have been? Note any improvements to `science-curate` skill, the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
 
 The response belongs in the ledger's **Self-Reflection** section. It should be operational: name the rough problem, where it appeared, and the smallest improvement that would help next time.
 
@@ -229,16 +229,16 @@ The response belongs in the ledger's **Self-Reflection** section. It should be o
 
 | Command | Relationship |
 |---|---|
-| `/science:big-picture` | Consumes curated project memory better after `/science:curate`; remains the synthesis generator. |
-| `/science:next-steps` | Uses curation findings as inputs to recommendations; remains forward-looking. |
-| `/science:review-tasks` | Overlaps on stale task detection, but `/science:curate` is broader and semantic. |
-| `/science:health` | Provides structural health signals consumed during inventory. |
-| `/science:update-graph` | Applies graph/materialization repairs after curation changes source metadata. |
-| `/science:dag-audit` | Handles detailed DAG evidence drift; `/science:curate` can surface candidates and defer to DAG audit. |
+| `science-big-picture` skill | Consumes curated project memory better after `science-curate` skill; remains the synthesis generator. |
+| `science-next-steps` skill | Uses curation findings as inputs to recommendations; remains forward-looking. |
+| `science-review-tasks` skill | Overlaps on stale task detection, but `science-curate` skill is broader and semantic. |
+| `science-health` skill | Provides structural health signals consumed during inventory. |
+| `science-update-graph` skill | Applies graph/materialization repairs after curation changes source metadata. |
+| `science-dag-audit` skill | Handles detailed DAG evidence drift; `science-curate` skill can surface candidates and defer to DAG audit. |
 
 ## Acceptance Criteria
 
-- Running `/science:curate --dry-run` on a project creates or prints a ledger with the required sections.
+- Running `science-curate` skill --dry-run` on a project creates or prints a ledger with the required sections.
 - The sweep distinguishes applied fixes, proposed edits, and pending decisions.
 - High-confidence edits are small, local, and evidence-backed.
 - Medium- and low-confidence findings are not auto-applied.
@@ -252,4 +252,4 @@ The response belongs in the ledger's **Self-Reflection** section. It should be o
 - Add a machine-readable curation ledger companion file for trend analysis across sweeps.
 - Add a `science curate diff` helper to compare two curation ledgers.
 - Add project-level recurring curation cadence reminders.
-- Feed high-quality forgotten-insight findings into `/science:big-picture` bundle assembly.
+- Feed high-quality forgotten-insight findings into `science-big-picture` skill bundle assembly.

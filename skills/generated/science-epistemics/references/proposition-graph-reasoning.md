@@ -106,5 +106,5 @@ Was the required reasoning/precommitment carried out before interpretation, and 
 ## Companion Skills
 
 - [`proposition-schema.md`](proposition-schema.md) - the strict enums and field semantics this reasoning writes against.
-- Load the `science-literature` skill - evaluating external sources, as opposed to the project's own graph.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-literature` skill - evaluating external sources, as opposed to the project's own graph.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

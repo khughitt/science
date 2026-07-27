@@ -138,6 +138,12 @@ def _write_minimal_generation_repo(
         )
 
 
+def _replace_test_router_frontmatter(repo_root: Path, frontmatter: str) -> None:
+    router = repo_root / "skills" / "test" / "SKILL.md"
+    body = router.read_text(encoding="utf-8").split("---\n", 2)[-1]
+    router.write_text(f"---\n{frontmatter}\n---\n{body}", encoding="utf-8")
+
+
 def test_command_to_skill_name_uses_science_namespace() -> None:
     assert command_to_skill_name(Path("commands/status.md")) == "science-status"
     assert command_to_skill_name(Path("commands/research-topic.md")) == "science-research-topic"
@@ -210,6 +216,25 @@ def test_methodology_resources_are_recursive(
     resource: str,
 ) -> None:
     assert (generated.skill_paths[skill_name].parent / resource).is_file()
+
+
+def test_generated_packages_have_exactly_one_root_skill_file(
+    generated: GenerationResult,
+) -> None:
+    for name, skill_path in sorted(generated.skill_paths.items()):
+        package = skill_path.parent
+        assert skill_path == package / "SKILL.md", name
+        assert list(package.rglob("SKILL.md")) == [skill_path], name
+
+
+def test_nested_methodology_routers_use_nondiscoverable_resource_names(
+    generated: GenerationResult,
+) -> None:
+    bio = generated.skill_paths["science-bio"].parent
+
+    for subtree in ("genomics", "proteomics", "transcriptomics"):
+        assert (bio / "references" / subtree / "router.md").is_file()
+        assert not (bio / "references" / subtree / "SKILL.md").exists()
 
 
 def test_writing_router_delegates_scientific_writing_to_standalone_skill(
@@ -325,10 +350,15 @@ def test_unresolved_bundled_resource_link_fails_generation(tmp_path: Path) -> No
     repo_root = tmp_path / "repo"
     (repo_root / "commands").mkdir(parents=True)
     (repo_root / "skills").mkdir()
+    (repo_root / "skills" / "writing").mkdir()
     (repo_root / "references" / "role-prompts").mkdir(parents=True)
     (repo_root / "aspects").mkdir()
     (repo_root / "docs").mkdir()
     (repo_root / "skills" / "INDEX.md").write_text("# Skills\n", encoding="utf-8")
+    (repo_root / "skills" / "writing" / "scientific-writing.md").write_text(
+        "---\nname: scientific-writing\ndescription: Test writing.\n---\n",
+        encoding="utf-8",
+    )
     (repo_root / "references" / "command-preamble.md").write_text(
         "# Command Preamble\n\nFollow the command.",
         encoding="utf-8",
@@ -422,6 +452,73 @@ def test_missing_methodology_command_dependency_is_rejected(tmp_path: Path) -> N
         ValueError,
         match=(
             "missing generated skill dependency for science-test: "
+            r"\['science-not-generated'\]"
+        ),
+    ):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+
+@pytest.mark.parametrize(
+    "instruction",
+    (
+        "Load the `science-not-generated` skill.",
+        "Load `science-not-generated` before continuing.",
+    ),
+    ids=("skill-phrase", "bare-load"),
+)
+def test_unknown_explicit_generated_skill_load_fails_generation(
+    tmp_path: Path,
+    instruction: str,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+    command = repo_root / "commands" / "demo.md"
+    command.write_text(
+        command.read_text(encoding="utf-8")
+        + f"\n{instruction}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "missing generated skill dependency for science-demo: "
+            r"\['science-not-generated'\]"
+        ),
+    ):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+
+def test_unknown_slash_command_rewrite_fails_generation(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="demo",
+    )
+    command = repo_root / "commands" / "demo.md"
+    command.write_text(
+        command.read_text(encoding="utf-8")
+        + "\nContinue with `/science:not-generated`.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "missing generated skill dependency for science-demo: "
             r"\['science-not-generated'\]"
         ),
     ):
@@ -566,11 +663,11 @@ def test_command_without_explicit_role_defaults_to_research_assistant(
 
 def test_rejects_unsupported_explicit_command_role(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
-    (repo_root / "commands").mkdir(parents=True)
-    (repo_root / "skills").mkdir()
-    (repo_root / "references").mkdir()
-    (repo_root / "aspects").mkdir()
-    (repo_root / "skills" / "INDEX.md").write_text("# Skills\n", encoding="utf-8")
+    _write_minimal_generation_repo(
+        repo_root,
+        router_name="test",
+        command_name="invalid",
+    )
     (repo_root / "references" / "command-preamble.md").write_text(
         (ROOT / "references" / "command-preamble.md").read_text(encoding="utf-8"),
         encoding="utf-8",
@@ -628,6 +725,119 @@ def test_rejects_commands_output_inside_canonical_tree(tmp_path: Path) -> None:
         generate_agent_assets(ROOT, tmp_path / "skills", output)
 
     assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "frontmatter",
+    (
+        "name: [unterminated\ndescription: Test router.",
+        "name: {nested: value}\ndescription: Test router.",
+    ),
+    ids=("malformed-yaml", "non-string-name"),
+)
+def test_invalid_skill_yaml_fails_before_output_mutation(
+    tmp_path: Path,
+    frontmatter: str,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(repo_root, router_name="test")
+    _replace_test_router_frontmatter(repo_root, frontmatter)
+    skills_output = tmp_path / "skills-output"
+    commands_output = tmp_path / "commands-output"
+    skills_output.mkdir()
+    commands_output.mkdir()
+    (skills_output / "keep.txt").write_text("skills\n", encoding="utf-8")
+    (commands_output / "keep.txt").write_text("commands\n", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="invalid skill frontmatter|invalid Agent Skill name",
+    ):
+        generate_agent_assets(repo_root, skills_output, commands_output)
+
+    assert _file_bytes(skills_output) == {"keep.txt": b"skills\n"}
+    assert _file_bytes(commands_output) == {"keep.txt": b"commands\n"}
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "../escape",
+        "UpperCase",
+        "-leading",
+        "trailing-",
+        "double--hyphen",
+        "x" * 65,
+    ),
+)
+def test_invalid_agent_skill_name_fails_before_output_mutation(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(repo_root, router_name="test")
+    _replace_test_router_frontmatter(
+        repo_root,
+        f"name: {name!r}\ndescription: Test router.",
+    )
+    skills_output = tmp_path / "skills-output"
+    commands_output = tmp_path / "commands-output"
+
+    with pytest.raises(ValueError, match="invalid Agent Skill name"):
+        generate_agent_assets(repo_root, skills_output, commands_output)
+
+    assert not skills_output.exists()
+    assert not commands_output.exists()
+
+
+@pytest.mark.parametrize(
+    "description",
+    (
+        None,
+        "",
+        "   ",
+        ["not", "a", "string"],
+    ),
+    ids=("missing", "empty", "whitespace", "non-string"),
+)
+def test_invalid_agent_skill_description_fails_before_output_mutation(
+    tmp_path: Path,
+    description: object,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write_minimal_generation_repo(repo_root, router_name="test")
+    description_line = "" if description is None else f"\ndescription: {description!r}"
+    _replace_test_router_frontmatter(
+        repo_root,
+        f"name: test{description_line}",
+    )
+
+    with pytest.raises(ValueError, match="Agent Skill description"):
+        generate_agent_assets(
+            repo_root,
+            tmp_path / "skills-output",
+            tmp_path / "commands-output",
+        )
+
+    assert not (tmp_path / "skills-output").exists()
+    assert not (tmp_path / "commands-output").exists()
+
+
+def test_generated_output_path_must_be_strictly_contained(tmp_path: Path) -> None:
+    output_root = tmp_path / "output"
+    output_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    marker = outside / "keep.txt"
+    marker.write_text("user content\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="escapes generated output root"):
+        agent_assets._replace_generated_directory(
+            output_root,
+            output_root / ".." / "outside",
+        )
+
+    assert marker.read_text(encoding="utf-8") == "user content\n"
 
 
 def test_generate_agent_assets_rewrites_arguments_and_template_paths(
@@ -713,6 +923,55 @@ def test_generated_command_skill_loads_name_emitted_packages(
         )
         assert explicit_loads <= emitted_names, command_name
         assert explicit_loads <= validated_dependencies[command_name], command_name
+
+
+def test_cross_package_rewrites_are_context_safe(
+    generated: GenerationResult,
+) -> None:
+    pre_register = generated.skill_paths["science-pre-register"].read_text(
+        encoding="utf-8",
+    )
+    snakemake = (
+        generated.skill_paths["science-pipelines"].parent
+        / "references"
+        / "snakemake.md"
+    ).read_text(encoding="utf-8")
+
+    assert "See `science-study-design` skill." in pre_register
+    assert "see the `science-research-package` skill." in _norm(snakemake)
+
+
+def test_generated_distribution_has_no_rewrite_corruption_or_slash_commands(
+    generated: GenerationResult,
+) -> None:
+    roots = (
+        next(iter(generated.skill_paths.values())).parent.parent,
+        next(iter(generated.opencode_command_paths.values())).parent,
+    )
+    corrupt = re.compile(
+        r"\b(?:see\s+Load|the\s+the|skill\s+skill)\b"
+        r"|`the\s+`science-|``science-",
+        re.IGNORECASE,
+    )
+    for root in roots:
+        for path in sorted(root.rglob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            assert "/science:" not in text, path.relative_to(root)
+            assert corrupt.search(text) is None, path.relative_to(root)
+
+
+def test_project_agents_md_scaffolds_use_neutral_skill_names(
+    generated: GenerationResult,
+) -> None:
+    for name in ("science-create-project", "science-import-project"):
+        agents_md = (
+            generated.skill_paths[name].parent
+            / "references"
+            / "templates"
+            / "agents-md.md"
+        ).read_text(encoding="utf-8")
+        assert "/science:" not in agents_md
+        assert "`science-curate` skill" in agents_md
 
 
 def test_explicit_leaf_load_names_emitted_owner_and_records_dependency() -> None:

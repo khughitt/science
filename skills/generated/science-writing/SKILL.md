@@ -12,31 +12,31 @@ A router carries no methodology; teaching content belongs in a typed leaf.
 Load this router when writing or editing project prose is in scope, before
 loading any leaf.
 
-For analysis-readiness planning, start at Load the `science-command-preamble` skill and consult its `references/methodology-index.md` or run
+For analysis-readiness planning, start at `science-command-preamble` skill's `references/methodology-index.md` or run
 `science-plan-analysis`.
 
 ## Scope boundary
 
 Covers prose conventions for project documents — voice, hedging, structure,
 and framework connection. Excludes citation conformance and source evaluation
-(see Load the `science-literature` skill).
+(see `science-literature` skill).
 
 ## Leaves
 
 | Leaf | Load when | Do not load when |
 |---|---|---|
-| Load the `science-scientific-writing` skill | Writing or editing any research document, entity description, or project prose | Only validating citation keys — load the `science-literature` skill |
+| `science-scientific-writing` skill | Writing or editing any research document, entity description, or project prose | Only validating citation keys — load `science-literature` skill |
 
 ## Decision / compose order
 
 Leaves are independent. Compose with
-Load the `science-literature` skill
+`science-literature` skill
 whenever the prose carries citations.
 
 ## Parent & neighbors
 
-- Parent index: Load the `science-command-preamble` skill and consult its `references/methodology-index.md`
-- Neighboring routers: Load the `science-literature` skill, Load the `science-epistemics` skill, Load the `science-statistics` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-literature` skill, `science-epistemics` skill, `science-statistics` skill
 
 ## Success test
 
@@ -44,4 +44,4 @@ Representative in-scope tasks route to the correct leaf (or the correct compose 
 
 ## Companion Skills
 
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

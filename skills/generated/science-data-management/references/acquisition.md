@@ -97,9 +97,9 @@ scripted, descriptors present?
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 - [`../SKILL.md`](../SKILL.md) — the data-management router.
 - [`conventions.md`](conventions.md) — where acquired data and results must live.
 - [`frictionless.md`](frictionless.md) — the descriptor format this workflow produces.
-- Load the `science-literature` skill — source-choice evaluation for data-source provenance.
-- Load the `science-literature` skill — citation conformance for data-source references.
+- `science-literature` skill — source-choice evaluation for data-source provenance.
+- `science-literature` skill — citation conformance for data-source references.

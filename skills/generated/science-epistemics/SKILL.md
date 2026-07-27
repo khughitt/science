@@ -15,7 +15,7 @@ label agreement is in question — before interpretation.
 ## Scope boundary
 
 Covers proposition/evidence schema conformance, proposition-graph outcome reasoning, and curated-label
-QA. Excludes source selection/citation (see the `science-literature` skill).
+QA. Excludes source selection/citation (see `science-literature` skill).
 
 ## Leaves
 
@@ -31,8 +31,8 @@ Leaves are independent; schema conformance typically precedes graph reasoning.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-literature` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-literature` skill
 
 ## Success test
 
@@ -40,4 +40,4 @@ A proposition/annotation concern routes to the correct leaf with no methodology 
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

@@ -92,5 +92,5 @@ Did the agent carry out the cross-cutting practice according to its workflow, ju
 ## Companion Skills
 
 - [`citation-discipline.md`](citation-discipline.md) - citation and source-pointer conformance for what this practice produces.
-- Load the `science-epistemics` skill - reasoning over the project's own proposition graph, as opposed to external sources.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-epistemics` skill - reasoning over the project's own proposition graph, as opposed to external sources.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

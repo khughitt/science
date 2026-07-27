@@ -96,7 +96,7 @@ discordant guides behind a gene-level score.
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 results/<analysis>/functional_genomics_qa/
@@ -126,6 +126,6 @@ State:
 
 ## Companion Skills
 
-- Load the `science-ml` skill - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
+- `science-ml` skill - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
 - [`transcriptomics/scrna-qa.md`](transcriptomics/scrna-qa.md) - single-cell perturbation and pseudobulk QA.
-- Load the `science-study-design` skill - verdict rules when toxicity, batch, or copy-number sensitivities disagree.
+- `science-study-design` skill - verdict rules when toxicity, batch, or copy-number sensitivities disagree.

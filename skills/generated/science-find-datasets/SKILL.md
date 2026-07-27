@@ -131,8 +131,8 @@ hypotheses, and inquiry variables; then ask the user to confirm the focus.
 
 
 Additionally:
-1. Read the `science-data-management` skill for data management conventions.
-2. If present, read the `science-data-management` skill for runtime Data Package guidance.
+1. Read `science-data-management` skill for data management conventions.
+2. If present, read `science-data-management` skill for runtime Data Package guidance.
 3. Read project context:
    - `entities/questions/`
    - `entities/hypotheses/`
@@ -331,8 +331,8 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 
 1. Download selected datasets
 2. Create Frictionless Data Package descriptors
-3. Run `science-plan-pipeline` to build computational workflow
-4. Run `science-discuss` to evaluate dataset choices
+3. Run `science-plan-pipeline` skill to build computational workflow
+4. Run `science-discuss` skill to evaluate dataset choices
 
 ### Emission rules (rev 2.1)
 

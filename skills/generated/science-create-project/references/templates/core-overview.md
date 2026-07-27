@@ -7,7 +7,7 @@ a fresh collaborator (human or agent) can read to be useful in five minutes.
 
 Keep it durable. Avoid:
 - duplicating science.yaml or README.md (those are loaded separately)
-- pasting recent /science:status output (that's regenerated each session)
+- pasting recent `science-status` skill output (that's regenerated each session)
 - play-by-play history (use git log + entities/meta/ for that)
 
 Include only the judgment calls and context that machine-readable manifests

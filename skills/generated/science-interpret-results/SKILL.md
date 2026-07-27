@@ -537,15 +537,15 @@ Write durable result interpretations under `entities/interpretations/`, and when
 4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.
 5. If the project still lacks proposition-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
 6. Suggest next steps:
-   - `science-compare-hypotheses`
-   - `science-discuss`
-   - `science-add-hypothesis`
-   - `science-pre-register`
+   - `science-compare-hypotheses` skill
+   - `science-discuss` skill
+   - `science-add-hypothesis` skill
+   - `science-pre-register` skill
 
 ## When results surprise you
 
 If a result contradicted a pre-registered expectation, a run failed, or an
-assumption turned out to be violated, consider `science-post-mortem` to capture
+assumption turned out to be violated, consider `science-post-mortem` skill to capture
 a generalized methodology lesson — what would have surfaced the issue sooner —
 as feedback.
 

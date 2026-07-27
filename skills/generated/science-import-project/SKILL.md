@@ -323,7 +323,7 @@ If the existing `AGENTS.md` begins with `@core/overview.md` or
 `@core/decisions.md` directives, remove them. Those files routinely run into
 the hundreds of lines and would be injected into context every turn. The
 "Load-bearing constraints" digest in `AGENTS.md` is maintained by
-`science-curate` based on `core/decisions.md` instead.
+`science-curate` skill based on `core/decisions.md` instead.
 
 ### `CLAUDE.md`
 

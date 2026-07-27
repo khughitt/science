@@ -28,8 +28,8 @@ When both leaves apply, load `references/skill-taxonomy.md` first to establish t
 
 ## Parent & neighbors
 
-- Parent index: Load the `science-command-preamble` skill and consult its `references/methodology-index.md`
-- Neighboring subject routers: Load the `science-bio` skill, Load the `science-ml` skill, Load the `science-data-management` skill, Load the `science-statistics` skill, Load the `science-study-design` skill, Load the `science-epistemics` skill, Load the `science-literature` skill, Load the `science-research-package` skill, Load the `science-pipelines` skill, and Load the `science-writing` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring subject routers: `science-bio` skill, `science-ml` skill, `science-data-management` skill, `science-statistics` skill, `science-study-design` skill, `science-epistemics` skill, `science-literature` skill, `science-research-package` skill, `science-pipelines` skill, and `science-writing` skill
 
 ## Templates
 
@@ -41,6 +41,6 @@ Representative skill-development requests route to the correct leaf, or to taxon
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 - `references/skill-taxonomy.md` — the classification and metadata contract.
 - `references/skill-authoring.md` — the authoring procedure.

@@ -238,7 +238,7 @@ manuscript.
 
 A reasonable QA artifact for each ingested cohort:
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<cohort_id>/
@@ -260,5 +260,5 @@ preprocessing without rerunning anything.
 
 - [`cohort-qa.md`](cohort-qa.md) - platform-general cohort QA (checklist + inspection idioms).
 - [`data-integration.md`](data-integration.md) - cross-cohort aggregation strategy and batch adjustment.
-- Load the `science-statistics` skill - cell fractions, donor-level composition, and denominator choices.
-- Load the `science-study-design` skill - donor-level power floors and cell-n inflation checks.
+- `science-statistics` skill - cell fractions, donor-level composition, and denominator choices.
+- `science-study-design` skill - donor-level power floors and cell-n inflation checks.

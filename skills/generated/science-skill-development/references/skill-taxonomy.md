@@ -128,4 +128,4 @@ Conformance is checked explicitly against the vocabulary and invariants: mechani
 ## Companion Skills
 
 - [`skill-authoring.md`](skill-authoring.md) — the procedure for applying this contract.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

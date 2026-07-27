@@ -125,7 +125,7 @@ a preflight subcommand, which an older CLI could not recognize either.
 
 > **Prerequisites:**
 > - Read `references/docs/user-guide/science-model.md`, `references/docs/user-guide/entities.md`, `references/docs/user-guide/graph-and-derived-state.md`, and `references/docs/plans/historical/2026-03-01-knowledge-graph-design.md` for model, entity, and graph semantics. These live in the **toolkit** repo; a consumer project usually does not vendor them — read whichever are reachable and skip any that are missing rather than blocking the review on them.
-> - For research methodology, read the `science-command-preamble` skill's `references/methodology-index.md` and load the relevant `literature/`/`epistemics/` leaves.
+> - For research methodology, read `science-command-preamble` skill's `references/methodology-index.md` and load the relevant `literature/`/`epistemics/` leaves.
 > - Read the `discussant` role prompt from `prompts/roles/discussant.md` (if available)
 
 ## Overview

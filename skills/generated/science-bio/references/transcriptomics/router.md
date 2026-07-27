@@ -17,8 +17,8 @@ integrated for meta-analysis — before loading any leaf.
 
 Covers expression-cohort ingest QA and multi-cohort integration across bulk
 RNA-seq, microarray, and scRNA-seq. Excludes the statistical modeling itself
-(→ the `science-statistics` skill) and generic data conventions
-(→ the `science-data-management` skill).
+(→ `science-statistics` skill) and generic data conventions
+(→ `science-data-management` skill).
 
 ## Leaves
 
@@ -40,9 +40,9 @@ RNA-seq, microarray, and scRNA-seq. Excludes the statistical modeling itself
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
 - Parent router: `../../SKILL.md`
-- Neighboring routers: `../genomics/SKILL.md`, `../proteomics/SKILL.md`
+- Neighboring routers: `../genomics/router.md`, `../proteomics/router.md`
 
 ## Success test
 
@@ -51,8 +51,8 @@ compose order when leaves combine) with no methodology read from this router.
 
 ## Companion Skills
 
-- the `science-statistics` skill — statistical modeling that consumes QA'd cohorts.
-- the `science-data-management` skill — generic data conventions.
-- the `science-data-management` skill — Data-Package substrate for the cohort_audit sidecar.
-- `../genomics/SKILL.md` — mutation cohorts often paired with expression cohorts.
-- the `science-literature` skill — field-consensus context for QA thresholds.
+- `science-statistics` skill — statistical modeling that consumes QA'd cohorts.
+- `science-data-management` skill — generic data conventions.
+- `science-data-management` skill — Data-Package substrate for the cohort_audit sidecar.
+- `../genomics/router.md` — mutation cohorts often paired with expression cohorts.
+- `science-literature` skill — field-consensus context for QA thresholds.

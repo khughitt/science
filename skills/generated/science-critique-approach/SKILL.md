@@ -173,7 +173,7 @@ For brevity, examples write just `science <command>` — **always expand to `uv 
 
 ### Step 1: Load the inquiry
 
-The user provides an inquiry slug (e.g., `science-critique-approach my-dag`).
+The user provides an inquiry slug (e.g., `science-critique-approach` skill my-dag`).
 
 ```bash
 science inquiry show "<slug>" --format json

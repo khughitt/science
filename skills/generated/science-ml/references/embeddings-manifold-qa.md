@@ -97,7 +97,7 @@ For CKA, Procrustes, nearest-neighbor overlap, or cross-manifold alignment:
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 results/<analysis>/embedding_qa/
@@ -116,5 +116,5 @@ seed/hyperparameter, and negative-control checks.
 
 ## Companion Skills
 
-- Load the `science-bio` skill - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
-- Load the `science-study-design` skill - distinguishing projection variance from estimator bias.
+- `science-bio` skill - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
+- `science-study-design` skill - distinguishing projection variance from estimator bias.

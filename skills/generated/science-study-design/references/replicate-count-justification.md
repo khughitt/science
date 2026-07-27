@@ -259,4 +259,4 @@ producing confusing nulls late.
 
 - [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) - deciding whether more algorithmic replicates can address the dominant error term.
 - [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit information limits that replicates cannot repair.
-- Load the `science-statistics` skill - posterior diagnostics and repeated-measure model checks.
+- `science-statistics` skill - posterior diagnostics and repeated-measure model checks.

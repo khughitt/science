@@ -117,6 +117,6 @@ provenance fields?
 
 ## Companion Skills
 
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 - [`../SKILL.md`](../SKILL.md) — the pipelines router (choose the execution substrate).
 - [`snakemake.md`](snakemake.md), [`marimo.md`](marimo.md), [`runpod.md`](runpod.md) — the substrate tool-guides whose mechanics this practice constrains.

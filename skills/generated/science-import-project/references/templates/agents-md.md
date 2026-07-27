@@ -7,15 +7,15 @@ actually reads at session start.
 Keep it short. References to core/overview.md and core/decisions.md belong in
 the Pointers section, NOT as `@`-includes (those would inline hundreds of
 lines per turn). The Load-bearing constraints section between the BEGIN/END
-markers is managed by `/science:curate` — edit core/decisions.md instead and
+markers is managed by `science-curate` skill — edit core/decisions.md instead and
 let curate refresh the digest.
 
 Update mechanism (read this before "fixing" the template for an existing
-project): `/science:curate` only refreshes the load-bearing-constraints
+project): `science-curate` skill only refreshes the load-bearing-constraints
 digest between the BEGIN/END markers below, from that project's
 `core/decisions.md`. The static body of this template — everything else on
 this page — only applies at create/import time; it is written once when a
-project is scaffolded via `/science:create-project` or `/science:import-project`.
+project is scaffolded via `science-create-project` skill or `science-import-project` skill.
 There is no push-to-existing-projects mechanism for the boilerplate, and it
 does not propagate to projects that already exist. To change an existing
 project's `AGENTS.md` body, edit that project's file directly.
@@ -67,7 +67,7 @@ uv run --with-editable ~/d/science/science <command>
 ## Task execution
 
 - Tasks live in `tasks/active.md`, managed by `science tasks` (or
-  the `/science:tasks` slash command). Completed/retired tasks archive
+  the `science-tasks` skill). Completed/retired tasks archive
   to `tasks/done/YYYY-MM.md`.
 - **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
   `TaskList` tools.** They create a parallel task store outside the
@@ -115,13 +115,13 @@ This overrides any skill default that writes and commits the loose design doc.
 
 - <bullets — gotchas not derivable from the code>
 
-<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->
+<!-- BEGIN: load-bearing-constraints (managed by `science-curate` skill; edit core/decisions.md instead) -->
 ## Load-bearing constraints
 
 <!-- One bullet per active decision in core/decisions.md, phrased as an
 imperative rule. The "why" stays in core/decisions.md. -->
 
-- _none yet — populated by `/science:curate` once `core/decisions.md` has entries._
+- _none yet — populated by `science-curate` skill once `core/decisions.md` has entries._
 
 <!-- END: load-bearing-constraints -->
 

@@ -14,16 +14,16 @@ Load this router when the data under analysis is a biological assay, before load
 ## Scope boundary
 
 Covers assay-level measurement QA for genomics, transcriptomics, proteomics, and functional-genomics
-data. Excludes general dimensionality-reduction QA (see the `science-ml` skill) and dataset-directory
-conventions (see the `science-data-management` skill).
+data. Excludes general dimensionality-reduction QA (see `science-ml` skill) and dataset-directory
+conventions (see `science-data-management` skill).
 
 ## Leaves
 
 | Leaf | Load when | Do not load when |
 |---|---|---|
-| `references/genomics/SKILL.md` | somatic mutation, CN/SV, or signature/selection data | expression or protein data |
-| `references/transcriptomics/SKILL.md` | bulk RNA-seq, microarray, or scRNA data | non-expression assays |
-| `references/proteomics/SKILL.md` | mass-spec proteomics or protein sequence/structure data | nucleic-acid assays |
+| `references/genomics/router.md` | somatic mutation, CN/SV, or signature/selection data | expression or protein data |
+| `references/transcriptomics/router.md` | bulk RNA-seq, microarray, or scRNA data | non-expression assays |
+| `references/proteomics/router.md` | mass-spec proteomics or protein sequence/structure data | nucleic-acid assays |
 | `references/functional-genomics-qa.md` | CRISPR/RNAi screens, DepMap, perturbation data | descriptive (non-perturbation) assays |
 
 ## Decision / compose order
@@ -32,8 +32,8 @@ Route to exactly one assay sub-area; QA leaves within a sub-area may compose per
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-ml` skill, the `science-data-management` skill, the `science-statistics` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-ml` skill, `science-data-management` skill, `science-statistics` skill
 
 ## Success test
 
@@ -42,4 +42,4 @@ from this router.
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

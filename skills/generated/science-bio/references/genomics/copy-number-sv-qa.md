@@ -99,7 +99,7 @@ not independent confirmation of them.
 
 ## Output Package
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 data/processed/<cohort_id>/cn_sv_amplicon_qa/
@@ -117,8 +117,8 @@ independent).
 
 ## Companion Skills
 
-- [`SKILL.md`](SKILL.md) — genomics data-ingestion hub.
+- [`router.md`](router.md) — genomics data-ingestion hub.
 - [`somatic-mutation-qa.md`](somatic-mutation-qa.md) — callable-territory and missing-vs-zero rules that also govern CN/SV denominators.
-- Load the `science-statistics` skill — downstream selection/segregation modelling that consumes per-cell CN.
-- Load the `science-study-design` skill — focal-event and per-cell contrasts are typically low-power.
-- Load the `science-study-design` skill — ploidy-model and AA/AC-version variants are the canonical sensitivity pair.
+- `science-statistics` skill — downstream selection/segregation modelling that consumes per-cell CN.
+- `science-study-design` skill — focal-event and per-cell contrasts are typically low-power.
+- `science-study-design` skill — ploidy-model and AA/AC-version variants are the canonical sensitivity pair.

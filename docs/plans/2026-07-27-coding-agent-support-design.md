@@ -243,7 +243,13 @@ package includes its local resource subtree recursively and preserves that
 subtree's relative structure beneath `references/`. This includes nested
 routers and resources such as `bio/{genomics,transcriptomics,proteomics}/`,
 `literature/sources/`, and `meta/templates/`. Link rewriting handles
-multi-segment relative paths; a flat `glob("*.md")` is insufficient.
+multi-segment relative paths; a flat `glob("*.md")` is insufficient. The one
+reserved-filename exception is a nested canonical `SKILL.md`: it is emitted as
+`router.md`, and every link or backticked path to it is rewritten accordingly.
+Hosts may scan skill roots recursively, so each generated package must contain
+exactly one discoverable `SKILL.md`, at the package root. Nested routers remain
+resources of their owning top-level package and never create extra emitted
+skill identities.
 
 References that leave a methodology router's source subtree are rewritten to
 load the corresponding generated `science-*` router instead of becoming
@@ -252,6 +258,13 @@ exception to ordinary local-subtree copying: it does not bundle
 `writing/scientific-writing.md`. It delegates to the standalone
 `science-scientific-writing` package, which is the sole emitted copy and the
 target for every "load the scientific-writing skill" rewrite.
+
+Cross-package rewriting is context-aware. The generator processes a whole
+Markdown link before considering bare backticked paths, and substitutes a noun
+phrase such as “the `science-study-design` skill” when the reference occurs in
+running prose. It preserves or introduces imperative “Load ...” wording only
+when rendering a complete load instruction. Replacements do not carry their
+own duplicated article or `skill` suffix into the surrounding sentence.
 
 Generated methodology bodies omit "Adapted from canonical Science skill ..."
 notes. The generated index remains the provenance map. Generation fails if two

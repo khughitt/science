@@ -16,7 +16,7 @@ data or results, before loading any leaf.
 
 Covers the on-disk conventions, descriptor format, and acquisition workflow for
 project data and results; excludes modality-specific QA (routed to the bio/ml
-leaves below) and the statistical modeling itself (the `science-statistics` skill).
+leaves below) and the statistical modeling itself (`science-statistics` skill).
 
 ## Leaves
 
@@ -30,15 +30,15 @@ leaves below) and the statistical modeling itself (the `science-statistics` skil
 
 Route to the owning leaf before designing preprocessing or QA:
 
-- Expression matrices, bulk RNA-seq, microarray, scRNA-seq → the `science-bio` skill.
-- Somatic mutation tables, MAF/cBioPortal/TCGA/GENIE cohorts → the `science-bio` skill.
-- Mutational signatures, TMB → the `science-bio` skill.
-- dN/dS, dNdScv, driver selection → the `science-bio` skill.
-- CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, perturbation assays → the `science-bio` skill.
-- Proteomics, phosphoproteomics, mass spec, TMT/LFQ/DIA/DDA → the `science-bio` skill.
-- Protein sequence/structure, homology-split datasets → the `science-bio` skill.
-- Embeddings, UMAP/HDBSCAN/Mapper, CKA, manifolds → the `science-ml` skill.
-- Literature sources → the `science-literature` skill, the `science-literature` skill.
+- Expression matrices, bulk RNA-seq, microarray, scRNA-seq → `science-bio` skill.
+- Somatic mutation tables, MAF/cBioPortal/TCGA/GENIE cohorts → `science-bio` skill.
+- Mutational signatures, TMB → `science-bio` skill.
+- dN/dS, dNdScv, driver selection → `science-bio` skill.
+- CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, perturbation assays → `science-bio` skill.
+- Proteomics, phosphoproteomics, mass spec, TMT/LFQ/DIA/DDA → `science-bio` skill.
+- Protein sequence/structure, homology-split datasets → `science-bio` skill.
+- Embeddings, UMAP/HDBSCAN/Mapper, CKA, manifolds → `science-ml` skill.
+- Literature sources → `science-literature` skill, `science-literature` skill.
 
 ## Decision / compose order
 
@@ -51,8 +51,8 @@ specialized leaf for modality QA after the data is laid out.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md` (or run `science-plan-analysis`).
-- Neighboring routers: the `science-pipelines` skill, the `science-statistics` skill, the `science-bio` skill, the `science-ml` skill.
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md` (or run `science-plan-analysis`).
+- Neighboring routers: `science-pipelines` skill, `science-statistics` skill, `science-bio` skill, `science-ml` skill.
 
 ## Success test
 
@@ -62,7 +62,7 @@ methodology being read from this router.
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
 - [`references/conventions.md`](references/conventions.md) — data/result layout + descriptor contract.
 - [`references/acquisition.md`](references/acquisition.md) — data acquisition + preprocessing workflow.
 - [`references/frictionless.md`](references/frictionless.md) — `datapackage` descriptor format.

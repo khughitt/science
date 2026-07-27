@@ -89,6 +89,6 @@ Alexandre Andorra
 
 ## Companion Skills
 
-- Load the `science-statistics` skill — confounder timing and collider adjustment inside survival/hierarchical models.
+- `science-statistics` skill — confounder timing and collider adjustment inside survival/hierarchical models.
 - [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) — confounding as a bias term that averaging does not remove.
-- Load the `science-statistics` skill — once identification licenses the estimand, the fitting/diagnostic discipline for estimating it.
+- `science-statistics` skill — once identification licenses the estimand, the fitting/diagnostic discipline for estimating it.

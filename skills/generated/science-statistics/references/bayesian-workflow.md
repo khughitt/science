@@ -40,7 +40,7 @@ exactly why they are written down.
      miscalibrated out of sample.
 6. **Prior/likelihood sensitivity.** Power-scale the prior and the likelihood
    (PSIS, no refit) and flag any conclusion that hinges on the prior. See
-   Load the `science-study-design` skill.
+   `science-study-design` skill.
 7. **Model comparison.** Out-of-sample predictive comparison, not variable
    selection. See the Bayesian arm of
    [`likelihood-model-comparison.md`](likelihood-model-comparison.md).
@@ -70,5 +70,5 @@ The tool-specific version of this workflow — PyMC + ArviZ specifics (nutpie,
 ## Companion Skills
 
 - [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) — non-centered parameterization and grouped-data diagnostics.
-- Load the `science-study-design` skill — the power-scaling prior-sensitivity step and how it arbitrates the verdict.
+- `science-study-design` skill — the power-scaling prior-sensitivity step and how it arbitrates the verdict.
 - [`likelihood-model-comparison.md`](likelihood-model-comparison.md) — the LOO/ELPD/stacking model-comparison step.

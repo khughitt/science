@@ -30,8 +30,8 @@ Leaves are independent; load whichever matches the data modality.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: `../genomics/SKILL.md`, `../transcriptomics/SKILL.md`
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `../genomics/router.md`, `../transcriptomics/router.md`
 
 ## Success test
 
@@ -39,4 +39,4 @@ A proteomics dataset routes to the correct leaf with no methodology read from th
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

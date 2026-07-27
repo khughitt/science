@@ -96,7 +96,7 @@ State:
 
 ## Minimum Artifacts
 
-Generate a `datapackage.json` for this directory; see Load the `science-data-management` skill.
+Generate a `datapackage.json` for this directory; see `science-data-management` skill.
 
 ```
 results/<analysis>/compositional_qa/
@@ -116,6 +116,6 @@ ambiguous.
 
 ## Companion Skills
 
-- Load the `science-bio` skill - donor-level single-cell composition and pseudobulk QA.
+- `science-bio` skill - donor-level single-cell composition and pseudobulk QA.
 - [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - hierarchical models for repeated fractions or grouped denominators.
-- Load the `science-study-design` skill - distinguishing compositional bias from sampling variance.
+- `science-study-design` skill - distinguishing compositional bias from sampling variance.

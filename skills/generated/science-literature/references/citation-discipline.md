@@ -13,7 +13,7 @@ Answers: what must a citation or source pointer mean and contain?
 
 Governs every citation, bibliography key, and source pointer in project prose
 and entity frontmatter. It does not govern document structure or templates
-(see Load the `science-scientific-writing` skill),
+(see `science-scientific-writing` skill),
 nor the annotation-token vocabulary, which is owned by
 `docs/conventions/annotation-tokens.md`.
 
@@ -73,5 +73,5 @@ Is there an explicit conformance check against the vocabulary/invariants — mec
 ## Companion Skills
 
 - [`literature-evaluation.md`](literature-evaluation.md) - how sources are selected and assessed before they are cited.
-- Load the `science-scientific-writing` skill - document structure, hedging, and annotation-token usage in prose.
-- Load the `science-command-preamble` skill and consult its `references/methodology-index.md` — the skill index.
+- `science-scientific-writing` skill - document structure, hedging, and annotation-token usage in prose.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.

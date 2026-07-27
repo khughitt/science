@@ -9,8 +9,8 @@ provenance: internal
 
 Project-specific schema for the Science proposition/evidence model. For the
 generic methodology layer, see
-Load the `science-literature` skill (source hierarchy,
-evaluating sources) and Load the `science-literature` skill
+`science-literature` skill (source hierarchy,
+evaluating sources) and `science-literature` skill
 (citation discipline). For the prose explanation of the model, see
 `docs/user-guide/epistemic-model.md` and `docs/user-guide/evidence-lines.md`.
 
@@ -106,7 +106,7 @@ Do not collapse these into a generic "computational evidence" label.
 
 ## Companion Skills
 
-- Load the `science-literature` skill - evaluating the external sources that populate proposition entities.
-- Load the `science-literature` skill - citation and source-pointer conformance for `source_refs`.
+- `science-literature` skill - evaluating the external sources that populate proposition entities.
+- `science-literature` skill - citation and source-pointer conformance for `source_refs`.
 - [`proposition-graph-reasoning.md`](proposition-graph-reasoning.md) - reasoning over the graph these field values build.
 - [`annotation-curation-qa.md`](annotation-curation-qa.md) - curated claims that will populate proposition entities.

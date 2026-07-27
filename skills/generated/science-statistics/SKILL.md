@@ -12,14 +12,14 @@ A router carries no methodology; teaching content belongs in a typed leaf.
 Load this router when a finite-sample statistical model is being designed,
 built, constructed, fit, compared, analyzed, or reviewed — distinct from the
 rigor commitments and verdict certifications that route to
-the `science-study-design` skill.
+`science-study-design` skill.
 
 ## Scope boundary
 
 Covers the model's structure, fit, and comparison across the six modeling
 families below. Excludes the rigor wrapper — pre-registration, replicate/power
 justification, estimator certification, sensitivity arbitration, causal
-identification, and bias/variance reasoning (see the `science-study-design` skill).
+identification, and bias/variance reasoning (see `science-study-design` skill).
 The two routers are composable axes: a task may load both — pre-registering a
 Cox model loads this router for the model family and `study-design` for the
 commitment.
@@ -42,8 +42,8 @@ family and data structure, not by discipline.
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring router: the `science-study-design` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring router: `science-study-design` skill
 
 ## Success test
 
@@ -52,7 +52,7 @@ router.
 
 ## Companion Skills
 
-- the `science-study-design` skill — the rigor-commitment and verdict-certification axis; compose with this router.
-- the `science-literature` skill, the `science-epistemics` skill — high-level research methodology; this router is the quantitative-modeling layer beneath them.
-- the `science-writing` skill — reporting statistical decisions in pre-regs and interpretations.
-- the `science-data-management` skill — input-data conventions; some modeling decisions depend on data shape (count vs continuous, zero-inflation).
+- `science-study-design` skill — the rigor-commitment and verdict-certification axis; compose with this router.
+- `science-literature` skill, `science-epistemics` skill — high-level research methodology; this router is the quantitative-modeling layer beneath them.
+- `science-writing` skill — reporting statistical decisions in pre-regs and interpretations.
+- `science-data-management` skill — input-data conventions; some modeling decisions depend on data shape (count vs continuous, zero-inflation).

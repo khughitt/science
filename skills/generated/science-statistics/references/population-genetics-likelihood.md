@@ -84,6 +84,6 @@ selection claim.
 ## Companion Skills
 
 - [`likelihood-model-comparison.md`](likelihood-model-comparison.md) — the AIC/BIC/LRT, numerical-precision, and bootstrap machinery for comparing these models.
-- Load the `science-bio` skill — QA for the per-cell CN calls these likelihoods are fit to.
-- Load the `science-study-design` skill — the minimum selection coefficient resolvable at the available cell/generation count.
-- Load the `science-study-design` skill — pre-committing how drift-vs-selection sensitivity passes resolve the verdict.
+- `science-bio` skill — QA for the per-cell CN calls these likelihoods are fit to.
+- `science-study-design` skill — the minimum selection coefficient resolvable at the available cell/generation count.
+- `science-study-design` skill — pre-committing how drift-vs-selection sensitivity passes resolve the verdict.

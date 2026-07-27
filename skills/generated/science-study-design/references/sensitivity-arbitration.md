@@ -134,5 +134,5 @@ Include:
 ## Companion Skills
 
 - [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - determining whether a null sensitivity can arbitrate.
-- Load the `science-statistics` skill - diagnostics for model adequacy and grouped data.
-- Load the `science-statistics` skill - sensitivity rules for denominator, zero-handling, and basis choices.
+- `science-statistics` skill - diagnostics for model adequacy and grouped data.
+- `science-statistics` skill - sensitivity rules for denominator, zero-handling, and basis choices.

@@ -229,7 +229,7 @@ execution is deferred until a suitable data vehicle is admissible. Omit otherwis
   Once a vehicle IS admitted, record it in `vehicles:` with its sha256 before executing.
 - Enumerate the substrate-verification preconditions (G1, G2, … ) that a candidate
   dataset/vehicle MUST satisfy before this pre-reg's confirmatory analysis may run.
-- These G-gates ARE the "Blocking Checks Before Execution" that /science:plan-analysis
+- These G-gates ARE the "Blocking Checks Before Execution" that `science-plan-analysis` skill
   reports for a committed pre-reg — define them once here and reference them there,
   rather than restating the gate in both artifacts.
 

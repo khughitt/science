@@ -14,7 +14,7 @@ Load this router when producing or validating a research-package artifact, befor
 ## Scope boundary
 
 Covers the research-package descriptor contract and the component that renders its provenance route.
-Excludes general dataset-directory conventions (see the `science-data-management` skill).
+Excludes general dataset-directory conventions (see `science-data-management` skill).
 
 ## Leaves
 
@@ -29,8 +29,8 @@ Excludes general dataset-directory conventions (see the `science-data-management
 
 ## Parent & neighbors
 
-- Parent index: the `science-command-preamble` skill's `references/methodology-index.md`
-- Neighboring routers: the `science-literature` skill, the `science-data-management` skill
+- Parent index: `science-command-preamble` skill's `references/methodology-index.md`
+- Neighboring routers: `science-literature` skill, `science-data-management` skill
 
 ## Success test
 
@@ -38,4 +38,4 @@ A research-package task routes to the correct leaf with no methodology read from
 
 ## Companion Skills
 
-- the `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
+- `science-command-preamble` skill's `references/methodology-index.md` — the skill index.
