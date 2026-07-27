@@ -1,6 +1,7 @@
 # Finding Convergence — Design
 
-> **Status:** design, revision 6 — **approved for implementation planning**. **Spec 1 of
+> **Status:** revision 6. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
