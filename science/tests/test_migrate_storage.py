@@ -30,6 +30,24 @@ CONFLICT_REFUSAL = (
     "both tasks/active.md and tasks/active/ exist with no migration journal; "
     "inspect and remove one by hand — this is not an auto-resumable migration."
 )
+COMPLEX_RELATIVE_LINK_DESCRIPTION = (
+    "Live [outer [inner]](../docs/nested.md), "
+    r"[escaped \] label](../docs/escaped-label.md), and "
+    "[multi\nline](../docs/multiline.md).\n"
+    "![plot [preview]](images/plot(2).png).\n\n"
+    "[nested [reference]]: ./nested-ref.md\n"
+    r"[escaped \] reference]: <../reference files/escaped.md>" "\n\n"
+    r"\[literal](escaped-literal.md)" "\n"
+    r"\[literal reference]: escaped-reference.md"
+)
+COMPLEX_RELATIVE_DESTINATIONS = (
+    "../docs/nested.md",
+    "../docs/escaped-label.md",
+    "../docs/multiline.md",
+    "images/plot(2).png",
+    "./nested-ref.md",
+    "../reference files/escaped.md",
+)
 
 
 def _migrate_module() -> ModuleType:
@@ -261,6 +279,37 @@ def test_plan_refuses_live_relative_markdown_destinations_without_writing(
     assert not (tasks_dir / JOURNAL).exists()
 
 
+def test_plan_refuses_complex_relative_markdown_destinations_without_writing(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Complex relative links",
+                description=COMPLEX_RELATIVE_LINK_DESCRIPTION,
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    reasons = "\n".join(plan.refusals)
+    assert "t001" in reasons
+    for destination in COMPLEX_RELATIVE_DESTINATIONS:
+        assert destination in reasons
+    assert "escaped-literal.md" not in reasons
+    assert "escaped-reference.md" not in reasons
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 @pytest.mark.parametrize("status", ["active", "done"])
 def test_apply_refuses_relative_markdown_destination_and_preserves_source(
     tmp_path: Path,
@@ -287,6 +336,40 @@ def test_apply_refuses_relative_markdown_destination_and_preserves_source(
     ):
         migrate.apply_migration(tasks_dir, today=TODAY)
 
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / "done").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
+def test_apply_refuses_complex_relative_markdown_destinations_and_preserves_source(
+    tmp_path: Path,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [
+            _task(
+                "t001",
+                "Complex relative links",
+                description=COMPLEX_RELATIVE_LINK_DESCRIPTION,
+            )
+        ],
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(
+        migrate.MigrationRefused,
+        match=r"t001.*relative Markdown destination.*nested\.md",
+    ) as exc_info:
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    message = str(exc_info.value)
+    for destination in COMPLEX_RELATIVE_DESTINATIONS:
+        assert destination in message
+    assert "escaped-literal.md" not in message
+    assert "escaped-reference.md" not in message
     assert source.read_bytes() == before
     assert not (tasks_dir / "active").exists()
     assert not (tasks_dir / "done").exists()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from science_tool import markdown_scan
 from science_tool.markdown_scan import iter_prose_matches, prose_spans
 
 LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<target>[^)\s]+)\)")
@@ -112,6 +113,68 @@ def test_prose_spans_cover_prose_and_exclude_code() -> None:
     assert "code" not in joined
     assert "[x](./a.md)" in joined
     assert "b" in joined
+
+
+def test_markdown_destinations_support_complex_inline_links_and_images() -> None:
+    text = (
+        "See [outer [inner]](../docs/nested.md), "
+        r"[escaped \] label](../docs/escaped-label.md), and "
+        "[multi\nline](../docs/multiline.md).\n"
+        "![plot [preview]](images/plot(2).png) or "
+        r"[escaped parens](../docs/part\(one\).md)."
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../docs/nested.md",
+        "../docs/escaped-label.md",
+        "../docs/multiline.md",
+        "images/plot(2).png",
+        r"../docs/part\(one\).md",
+    ]
+
+
+def test_markdown_destinations_support_complex_reference_definitions() -> None:
+    text = (
+        "[nested [reference]]: ./nested-ref.md\n"
+        r"[escaped \] reference]: <../reference files/escaped.md>" "\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "./nested-ref.md",
+        "../reference files/escaped.md",
+    ]
+
+
+def test_markdown_destinations_ignore_escaped_literals_and_code() -> None:
+    text = (
+        r"\[literal](escaped-literal.md)" "\n"
+        r"!\[literal image](escaped-image.png)" "\n"
+        r"\[literal reference]: escaped-reference.md" "\n"
+        "`[inline code](inline-code.md)`\n"
+        "```markdown\n"
+        "[fenced](fenced.md)\n"
+        "[fenced-ref]: fenced-ref.md\n"
+        "```\n"
+        "[live](live.md)\n"
+    )
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == ["live.md"]
+
+
+def test_markdown_destinations_fail_closed_on_unclosed_live_destination() -> None:
+    text = "[live](../ambiguous.md\n" r"\[literal](../escaped.md"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../ambiguous.md",
+    ]
+
+
+def test_markdown_destination_prefix_never_crosses_a_code_mask() -> None:
+    text = "[ambiguous](../prefix\\`code`suffix.md)"
+
+    assert list(markdown_scan.iter_markdown_destinations(text)) == [
+        "../prefix\\",
+    ]
 
 
 def test_scans_this_repositorys_own_plan_corpus() -> None:

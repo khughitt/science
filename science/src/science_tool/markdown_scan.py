@@ -144,3 +144,258 @@ def iter_prose_matches(pattern: re.Pattern[str], text: str) -> Iterator[re.Match
     for match in pattern.finditer(text):
         if any(start <= match.start() and match.end() <= stop for start, stop in spans):
             yield match
+
+
+def _is_escaped(text: str, index: int) -> bool:
+    backslashes = 0
+    cursor = index - 1
+    while cursor >= 0 and text[cursor] == "\\":
+        backslashes += 1
+        cursor -= 1
+    return backslashes % 2 == 1
+
+
+def _after_escape(index: int, stop: int) -> int:
+    """Skip an escape pair without crossing the current prose span."""
+    return min(index + 2, stop)
+
+
+def _label_end(text: str, start: int, stop: int) -> int | None:
+    """Return the closing bracket for a balanced, escape-aware label."""
+    depth = 1
+    cursor = start + 1
+    while cursor < stop:
+        character = text[cursor]
+        if character == "\\":
+            cursor = _after_escape(cursor, stop)
+            continue
+        if character == "[":
+            depth += 1
+        elif character == "]":
+            depth -= 1
+            if depth == 0:
+                return cursor
+        cursor += 1
+    return None
+
+
+def _angle_destination(
+    text: str,
+    start: int,
+    stop: int,
+) -> tuple[str, int, bool]:
+    """Return destination, next offset, and whether the closing ``>`` was found."""
+    cursor = start + 1
+    while cursor < stop:
+        character = text[cursor]
+        if character == "\\":
+            cursor = _after_escape(cursor, stop)
+            continue
+        if character == ">":
+            return text[start + 1 : cursor].strip(), cursor + 1, True
+        if character == "\n":
+            break
+        cursor += 1
+    return text[start + 1 : cursor].strip(), cursor, False
+
+
+def _inline_close_after_destination(text: str, start: int, stop: int) -> int | None:
+    """Return the offset after an outer ``)`` following whitespace/title."""
+    cursor = start
+    while cursor < stop and text[cursor].isspace():
+        cursor += 1
+    if cursor >= stop:
+        return None
+    if text[cursor] == ")":
+        return cursor + 1
+
+    delimiter = text[cursor]
+    if delimiter in {'"', "'"}:
+        cursor += 1
+        while cursor < stop:
+            if text[cursor] == "\\":
+                cursor = _after_escape(cursor, stop)
+                continue
+            if text[cursor] == delimiter:
+                cursor += 1
+                break
+            cursor += 1
+        else:
+            return None
+    elif delimiter == "(":
+        depth = 1
+        cursor += 1
+        while cursor < stop:
+            if text[cursor] == "\\":
+                cursor = _after_escape(cursor, stop)
+                continue
+            if text[cursor] == "(":
+                depth += 1
+            elif text[cursor] == ")":
+                depth -= 1
+                if depth == 0:
+                    cursor += 1
+                    break
+            cursor += 1
+        else:
+            return None
+    else:
+        return None
+
+    while cursor < stop and text[cursor].isspace():
+        cursor += 1
+    return cursor + 1 if cursor < stop and text[cursor] == ")" else None
+
+
+def _inline_destination(
+    text: str,
+    start: int,
+    stop: int,
+) -> tuple[str, int] | None:
+    cursor = start
+    while cursor < stop and text[cursor].isspace():
+        cursor += 1
+    if cursor >= stop:
+        return None
+
+    if text[cursor] == "<":
+        destination, after_destination, complete = _angle_destination(
+            text,
+            cursor,
+            stop,
+        )
+        if not destination:
+            return None
+        if complete:
+            close = _inline_close_after_destination(text, after_destination, stop)
+            if close is not None:
+                return destination, close
+        return destination, after_destination
+
+    destination_start = cursor
+    depth = 0
+    while cursor < stop:
+        character = text[cursor]
+        if character == "\\":
+            cursor = _after_escape(cursor, stop)
+            continue
+        if character == "(":
+            depth += 1
+            cursor += 1
+            continue
+        if character == ")":
+            if depth == 0:
+                destination = text[destination_start:cursor]
+                return (destination, cursor + 1) if destination else None
+            depth -= 1
+            cursor += 1
+            continue
+        if character.isspace() and depth == 0:
+            destination = text[destination_start:cursor]
+            if not destination:
+                return None
+            close = _inline_close_after_destination(text, cursor, stop)
+            return destination, close if close is not None else cursor
+        cursor += 1
+
+    destination = text[destination_start:cursor]
+    return (destination, cursor) if destination else None
+
+
+def _reference_destination(
+    text: str,
+    start: int,
+    stop: int,
+) -> tuple[str, int] | None:
+    cursor = start
+    while cursor < stop and text[cursor] in " \t":
+        cursor += 1
+    if cursor >= stop or text[cursor] == "\n":
+        return None
+
+    line_end = text.find("\n", cursor, stop)
+    if line_end == -1:
+        line_end = stop
+    if text[cursor] == "<":
+        destination, _after_destination, _complete = _angle_destination(
+            text,
+            cursor,
+            line_end,
+        )
+        return (destination, line_end) if destination else None
+
+    destination_start = cursor
+    depth = 0
+    while cursor < line_end:
+        character = text[cursor]
+        if character == "\\":
+            cursor = _after_escape(cursor, line_end)
+            continue
+        if character == "(":
+            depth += 1
+            cursor += 1
+            continue
+        if character == ")":
+            if depth == 0:
+                break
+            depth -= 1
+            cursor += 1
+            continue
+        if character.isspace() and depth == 0:
+            break
+        cursor += 1
+    destination = text[destination_start:cursor]
+    return (destination, line_end) if destination else None
+
+
+def _is_reference_definition_start(text: str, index: int) -> bool:
+    line_start = text.rfind("\n", 0, index) + 1
+    prefix = text[line_start:index]
+    return len(prefix) <= 3 and not prefix.strip(" ")
+
+
+def iter_markdown_destinations(text: str) -> Iterator[str]:
+    """Yield source destinations from live Markdown prose.
+
+    This is an intentionally small CommonMark-oriented scanner, not a renderer.
+    It recognises inline links and images with balanced, escaped, or multiline
+    labels; reference definitions indented by at most three spaces; angle
+    destinations; and ordinary destinations with escaped or balanced
+    parentheses. Escaped opening brackets and every existing code mask are
+    literal and therefore ignored.
+
+    Reference uses are not resolved because their definition is scanned
+    directly. Optional titles attached to a destination are consumed but not
+    validated; continuation-line reference titles, autolinks, and raw HTML are
+    outside this interface. Malformed live syntax yields any safely readable
+    destination prefix so callers can fail closed.
+    """
+    for span_start, span_stop in prose_spans(text):
+        cursor = span_start
+        while cursor < span_stop:
+            if text[cursor] != "[" or _is_escaped(text, cursor):
+                cursor += 1
+                continue
+
+            end = _label_end(text, cursor, span_stop)
+            if end is None:
+                cursor += 1
+                continue
+
+            after_label = end + 1
+            parsed: tuple[str, int] | None = None
+            if (
+                _is_reference_definition_start(text, cursor)
+                and after_label < span_stop
+                and text[after_label] == ":"
+            ):
+                parsed = _reference_destination(text, after_label + 1, span_stop)
+            elif after_label < span_stop and text[after_label] == "(":
+                parsed = _inline_destination(text, after_label + 1, span_stop)
+
+            if parsed is None:
+                cursor += 1
+                continue
+            destination, next_cursor = parsed
+            yield destination
+            cursor = max(after_label + 1, next_cursor)
