@@ -568,9 +568,10 @@ def _find_active_file(tasks_dir: Path, task_id: str) -> Path | None:
     if len(matches) > 1:
         locations = ", ".join(str(path) for path in matches)
         raise ValueError(f"duplicate active task files for {task_id}: {locations}")
-    if not matches:
+    active_index = _active_task_index(tasks_dir)
+    existing = active_index.get(task_id)
+    if existing is None:
         return None
-    existing = matches[0]
     parse_task_file(existing)
     return existing
 
@@ -754,6 +755,22 @@ def _strict_task_ids_in_path(path: Path) -> list[str]:
     return _strict_task_ids_in_text(text)
 
 
+def _active_task_index(tasks_dir: Path) -> dict[str, Path]:
+    """Index active files by semantic id after validating store-wide identity."""
+    active = _active_dir(tasks_dir)
+    index: dict[str, Path] = {}
+    for path in sorted(active.glob("*.md")):
+        task_ids = _strict_task_ids_in_path(path)
+        for task_id in task_ids:
+            prior = index.get(task_id)
+            if prior is not None:
+                raise ValueError(
+                    f"duplicate task id {task_id} in active files: {prior}, {path}"
+                )
+            index[task_id] = path
+    return index
+
+
 @contextmanager
 def _task_allocation_lock(tasks_dir: Path) -> Iterator[None]:
     """Serialize all ``active/`` and ``done/`` writes across processes.
@@ -790,17 +807,7 @@ def next_task_id(tasks_dir: Path, *, require_split: bool = True) -> str:
         _require_split(tasks_dir)
     max_num = 0
 
-    active = _active_dir(tasks_dir)
-    active_ids: list[str] = []
-    if active.is_dir():
-        for path in active.glob("*.md"):
-            active_ids.extend(_strict_task_ids_in_path(path))
-    duplicates = sorted(
-        task_id for task_id in set(active_ids) if active_ids.count(task_id) > 1
-    )
-    if duplicates:
-        raise ValueError(f"duplicate task ids in {active}: {duplicates}")
-    for task_id in active_ids:
+    for task_id in _active_task_index(tasks_dir):
         max_num = max(max_num, int(task_id[1:]))
 
     done_dir = tasks_dir / "done"
