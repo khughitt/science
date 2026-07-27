@@ -1280,12 +1280,12 @@ def _since_window_months(since: date, today: date) -> list[str]:
 
 
 def _read_since_candidates(tasks_dir: Path, since: date) -> list[Task]:
-    """Active tasks unioned with archive months in `[since, today]`.
+    """Open tasks from ``active/`` unioned with done ledgers in ``[since, today]``.
 
     Month-file selection is only a read optimization; the row predicate in
-    `list_tasks` is the authoritative membership test. Archive files may be
+    `list_tasks` is the authoritative membership test. Monthly done ledgers may be
     missing for any month in the window -- that is not an error. Duplicate
-    task IDs across active files and selected done ledgers are rejected.
+    task IDs across split active files and selected done ledgers are rejected.
     """
     from science_tool.tasks_ledger import _read_destination
 

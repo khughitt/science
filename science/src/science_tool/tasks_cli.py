@@ -957,9 +957,9 @@ def tasks_list(
             return row
 
         rows = [_row_with_readiness(t) for t in matched]
-        # Total count of active tasks before any filtering, so callers can
-        # tell whether they're looking at a curated view or the full list
-        # (fb-2026-05-01-006).
+        # Total count of open task files in tasks/active/ before filtering, so
+        # callers can tell whether they are seeing a curated view or the full
+        # open-task set (fb-2026-05-01-006).
         from science_tool.tasks import _read_active
 
         active_total = len(_read_active(DEFAULT_TASKS_DIR, require_split=False))
@@ -981,9 +981,10 @@ def tasks_list(
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        # active_total counts only tasks/active/ and is meaningless for a
-        # --since query, whose rows come from the archive union — omit it
-        # rather than ship a "curated vs full" ratio that doesn't apply.
+        # active_total counts only open task files in tasks/active/ and is
+        # meaningless for a --since query, whose rows come from active/ plus
+        # selected monthly done ledgers. Omit it rather than ship an invalid
+        # "curated vs full" ratio.
         if since is None:
             meta["active_total"] = active_total
         emit_query_rows(

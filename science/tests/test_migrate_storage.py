@@ -1140,6 +1140,49 @@ def test_task_allocation_lock_itself_uses_no_follow_and_does_not_truncate_symlin
     assert outside.read_bytes() == before
 
 
+def test_task_allocation_lock_preserves_regular_lock_file_contents(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    lock_path = tasks_dir / ".tasks.lock"
+    sentinel = b"persistent allocation lock sentinel\n\x00exact bytes\n"
+    lock_path.write_bytes(sentinel)
+
+    with task_module._task_allocation_lock(tasks_dir):
+        assert lock_path.read_bytes() == sentinel
+
+    assert lock_path.read_bytes() == sentinel
+
+
+def test_migration_atomic_write_cleans_random_temp_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migrate = _migrate_module()
+    target = tmp_path / "tasks" / "done" / "2026-07.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("original ledger\n", encoding="utf-8")
+    target_before = target.read_bytes()
+    captured_temp: Path | None = None
+
+    def fail_replace(source: str | Path, destination: str | Path) -> None:
+        nonlocal captured_temp
+        captured_temp = Path(source)
+        assert Path(destination) == target
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(migrate.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        migrate.atomic_write_text(target, "replacement ledger\n")
+
+    assert target.read_bytes() == target_before
+    assert captured_temp is not None
+    assert captured_temp.parent == target.parent
+    assert not captured_temp.exists()
+
+
 def test_apply_rejects_symlinked_journal_temp_without_mutating_outside_file(
     tmp_path: Path,
 ) -> None:

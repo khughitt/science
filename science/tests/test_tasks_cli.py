@@ -517,7 +517,7 @@ class TestTasksList:
             # must not be present in the applied-filters meta.
             assert "only_status" not in data["meta"]["applied_filters"]
             # active_total counts only active/ and is meaningless for a
-            # --since query spanning the archive -- it must be omitted.
+            # --since query spanning monthly done ledgers -- it must be omitted.
             assert "active_total" not in data["meta"]
 
             status_result = runner.invoke(

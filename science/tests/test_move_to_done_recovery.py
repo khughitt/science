@@ -130,6 +130,33 @@ def test_retry_refuses_ledger_occurrence_with_changed_stable_field(tmp_path: Pat
     assert not (tasks_dir / "done" / "2026-08.md").exists()
 
 
+def test_retry_refuses_ledger_occurrence_with_incompatible_description(
+    tmp_path: Path,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    active = _active_task()
+    active_path = _write_active(tasks_dir, active)
+    conflicting = active.model_copy(
+        update={
+            "status": "done",
+            "completed": date(2026, 7, 31),
+            "description": "Unrelated replacement description.",
+        }
+    )
+    done_path = tasks_dir / "done" / "2026-07.md"
+    _write_done(done_path, conflicting)
+    active_before = active_path.read_bytes()
+    ledger_before = done_path.read_bytes()
+    retry = active.model_copy(update={"status": "done", "completed": date(2026, 8, 1)})
+
+    with pytest.raises(ValueError, match=r"conflicting.*t042"):
+        _move(tasks_dir, retry, target_status="done")
+
+    assert active_path.read_bytes() == active_before
+    assert done_path.read_bytes() == ledger_before
+    assert not (tasks_dir / "done" / "2026-08.md").exists()
+
+
 def test_done_retry_refuses_matching_retired_ledger_occurrence(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     active = _active_task()
