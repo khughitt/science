@@ -17,6 +17,39 @@ from science_tool.agent_assets import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_coding_agent_docs_use_current_distribution_and_cli() -> None:
+    checked = [
+        ROOT / "README.md",
+        ROOT / "docs" / "user-guide" / "coding-agents.md",
+        ROOT / "docs" / "user-guide" / "codex.md",
+        ROOT / "docs" / "user-guide" / "crush.md",
+        ROOT / "docs" / "user-guide" / "opencode.md",
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8") for path in checked)
+
+    assert "skills/generated/" in text
+    assert "science agents install" in text
+    assert "codex-skills/" not in text
+    assert "crush-skills/" not in text
+    assert "opencode-skills/" not in text
+    assert "Converted from Claude command" not in text
+
+
+def test_root_install_documents_are_removed() -> None:
+    for rel in ("INSTALL.crush.md", "INSTALL.opencode.md", "MULTI_AGENT.md"):
+        assert not (ROOT / rel).exists()
+
+
+def test_coding_agent_pages_are_in_user_guide_navigation() -> None:
+    pages = ("coding-agents.md", "codex.md", "crush.md", "opencode.md")
+    index = (ROOT / "docs" / "user-guide" / "index.md").read_text(encoding="utf-8")
+    mkdocs = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+
+    for page in pages:
+        assert page in index
+        assert page in mkdocs
+
+
 @pytest.fixture
 def generated(tmp_path: Path) -> GenerationResult:
     return generate_agent_assets(

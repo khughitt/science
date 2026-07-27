@@ -98,9 +98,20 @@ For local Claude development:
 claude --plugin-dir /path/to/science
 ```
 
-For Codex, see [Codex](docs/user-guide/codex.md); support uses generated
-`science-*` skills from `codex-skills/`. The main manual is the
-[user guide](docs/user-guide/index.md).
+Choose the host page for setup and invocation details. Codex, Crush, and
+OpenCode share the generated `skills/generated/` distribution; use the
+installer rather than copying its files.
+
+| Host | Start here |
+|---|---|
+| Claude | [Agent Workflows](docs/user-guide/agent-workflows.md) |
+| Codex | [Codex](docs/user-guide/codex.md) |
+| Crush | [Crush](docs/user-guide/crush.md) |
+| OpenCode | [OpenCode](docs/user-guide/opencode.md) |
+
+The common [coding-agent guide](docs/user-guide/coding-agents.md) covers
+`science agents install`, project and user scope, generated assets, and safe
+updates. The main manual is the [user guide](docs/user-guide/index.md).
 
 ## Development
 
