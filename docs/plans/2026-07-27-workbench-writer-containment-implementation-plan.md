@@ -79,7 +79,16 @@ from science_tool.dag.workbench import (
 
 
 def _row(**over) -> WorkbenchRow:
-    base = {"subject": "concept:a", "predicate": "affects", "object": "concept:b", "patch": "p"}
+    # `polarity` is REQUIRED here: `affects` is sign-meaningful, and `PropositionEntity` rejects it
+    # without positive/negative/unsigned. Omitting it makes every test below fail during fixture
+    # construction, before any title assertion is reached.
+    base = {
+        "subject": "concept:a",
+        "predicate": "affects",
+        "object": "concept:b",
+        "patch": "p",
+        "polarity": "unsigned",
+    }
     return WorkbenchRow(**{**base, **over})
 
 
@@ -126,7 +135,7 @@ def test_empty_triple_terms_fail_at_PARSE_time(field: str) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
-Expected: the four title tests FAIL with `assert '' == '...'` (title is `""` today); the two parametrized parse tests FAIL because `ValidationError` is not raised — an empty string is currently accepted.
+Expected: the **five** title tests FAIL with `assert '' == '...'` (title is `""` today); the two parametrized parse tests FAIL because `ValidationError` is not raised — an empty string is currently accepted. Seven failures in total.
 
 - [ ] **Step 3: Add `min_length` to the triple terms**
 
@@ -216,6 +225,7 @@ Expected: green, **except** existing workbench tests that assert on rendered fro
 - [ ] **Step 8: Commit**
 
 ```bash
+# Add any existing test module Step 7 required repairing; `git status --short` names them.
 git add science/src/science_tool/dag/workbench.py \
         science/tests/test_workbench_writer_containment.py
 git commit -m "feat(workbench): derive entity titles at lift instead of persisting empties
@@ -233,8 +243,9 @@ as an empty string."
 
 **Files:**
 - Modify: `science/model/src/science_model/entity_schema/validator.py`
-- Modify: `science/model/src/science_model/entity_schema/__init__.py` (export)
 - Test: `science/model/tests/test_persisted_base_shape.py` (new)
+
+`entity_schema/__init__.py` is **not** modified: the operation is a method on the already-exported `EntityValidator`. Step 5 verifies that rather than editing anything.
 
 **Interfaces:**
 - Produces: `EntityValidator.validate_persisted_base_shape(mapping: dict[str, Any]) -> None`, raising `EntityValidationError`. Task 4 calls it from both workbench write paths.
@@ -455,6 +466,19 @@ def test_created_entity_has_a_non_empty_title(tmp_path) -> None:
     assert fm["title"].strip()
 
 
+def test_created_evidence_line_keeps_a_deliberate_false(tmp_path) -> None:
+    # `belief_eligible=False` is a staging DECISION -- an empirical stub with no dataset_usage is
+    # staged ineligible -- not an unset default. This is the test that makes Mutation H in Task 5
+    # bite: exclude_defaults=True would silently drop it, and nothing else would notice.
+    from science_model.reasoning import EvidenceType
+
+    stub = EvidenceStub(stance="supports", evidence_type=EvidenceType.EMPIRICAL_DATA)
+    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
+    assert line.belief_eligible is False
+    fm = _created_frontmatter(tmp_path, line)
+    assert fm["belief_eligible"] is False
+
+
 def test_title_is_CREATE_ONLY() -> None:
     # Adding `title` to a per-kind update set would overwrite an author's replacement on the next
     # apply and contradict design §5.2. The delta between create and update is exactly this.
@@ -474,14 +498,25 @@ def test_update_preserves_an_authors_replacement_title(tmp_path) -> None:
     # The reason title is create-only, proved behaviourally rather than by set arithmetic.
     from science_tool.dag.workbench_apply import _entity_edit
 
+    import yaml
+
     entity = _proposition_for_row(_row())
     first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
     first.path.parent.mkdir(parents=True, exist_ok=True)
-    first.path.write_text(first.final_text.replace(entity.title, "An author's real title"), encoding="utf-8")
+    # Replace the title in the FRONTMATTER ONLY. `str.replace` over the whole file also rewrites
+    # the body heading, and then a substring assertion passes even when the frontmatter title was
+    # overwritten -- an inert proof of exactly the thing this test exists to catch.
+    frontmatter, body = first.final_text.split("---\n", 2)[1:]
+    edited = yaml.safe_load(frontmatter) | {"title": "An author's real title"}
+    first.path.write_text(
+        "---\n" + yaml.safe_dump(edited, sort_keys=False, allow_unicode=True) + "---\n" + body,
+        encoding="utf-8",
+    )
 
     second = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
 
-    assert "An author's real title" in second.final_text
+    reloaded = yaml.safe_load(second.final_text.split("---\n", 2)[1])
+    assert reloaded["title"] == "An author's real title"
 ```
 
 Add `from datetime import date` to the module imports.
@@ -689,12 +724,12 @@ Expected: failures confined to tests asserting on created-file frontmatter — `
 - [ ] **Step 9: Commit**
 
 ```bash
+# Step 8 may have repaired several existing test modules. Run `git status --short` and add
+# every one it names -- the list below is the minimum, not the whole set.
 git add science/src/science_tool/dag/entity_frontmatter.py \
         science/src/science_tool/dag/workbench_apply.py \
         science/src/science_tool/dag/workbench.py \
-        science/tests/test_workbench_writer_containment.py \
-        science/tests/test_workbench_apply.py \
-        science/tests/test_workbench_compile.py
+        science/tests/test_workbench_writer_containment.py
 git commit -m "feat(workbench): render new entity files from an owned allowlist
 
 Both create paths full-dumped the model, which is what wrote datapackage: ''
@@ -713,11 +748,15 @@ an owned-key set is the defect this module prevents."
 ### Task 4: Validate at the persistence boundary, and reject stale records
 
 **Files:**
-- Modify: `science/src/science_tool/dag/workbench_apply.py` (`_entity_edit`, both branches)
+- Modify: `science/src/science_tool/dag/entity_frontmatter.py` (`certify_persisted`, called from `render_create`)
+- Modify: `science/src/science_tool/dag/workbench_apply.py` (`_entity_edit` update branch)
 - Test: `science/tests/test_workbench_writer_containment.py`
 
 **Interfaces:**
 - Consumes: `EntityValidator.validate_persisted_base_shape` from Task 2.
+- Produces: `entity_frontmatter.certify_persisted(entity, text, *, path)` and `entity_frontmatter.PersistedShapeError`.
+
+**Certification lives in `render_create`, not in `_entity_edit`.** There are two create paths (Task 3), and putting the check in the caller would cover only one of them — a compile-path regression could still persist an invalid base shape. `render_create` is the single point both go through, so certifying there covers both by construction. The **update** branch is rendered in `workbench_apply` and therefore calls `certify_persisted` directly.
 
 **The ruling being implemented (design §5.4).** An update targeting one of the 769 pre-existing empty-title records **fails**, naming the record and the field. Not skipped, not backfilled. Skipping re-creates the defect being closed; backfilling turns an ordinary update into a silent migration of a record the author did not ask to touch, repairing the population piecemeal in an order set by whoever happened to edit what.
 
@@ -731,7 +770,8 @@ Append to `science/tests/test_workbench_writer_containment.py`:
 def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
     # THE §5.4 ruling. Three implementations were plausible -- reject, skip validation, backfill --
     # and only rejection is fail-early without silently migrating a record nobody asked to touch.
-    from science_tool.dag.workbench_apply import WorkbenchApplyError, _entity_edit
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+    from science_tool.dag.workbench_apply import _entity_edit
 
     entity = _proposition_for_row(_row())
     edit = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
@@ -740,7 +780,7 @@ def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
         edit.final_text.replace(f"title: {entity.title}", "title: ''"), encoding="utf-8"
     )
 
-    with pytest.raises(WorkbenchApplyError) as exc:
+    with pytest.raises(PersistedShapeError) as exc:
         _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
 
     message = str(exc.value)
@@ -749,17 +789,37 @@ def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
     assert edit.path.read_text(encoding="utf-8").count("title: ''") == 1  # and wrote nothing
 
 
-def test_the_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
-    # Both paths, not just the risky-looking one. Neutralize the title derivation and the create
-    # path must refuse to plan a write rather than emit an empty-title file.
-    from science_tool.dag import workbench_apply
-
+def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
+    # Both create paths, not just the risky-looking one. Neutralize the title derivation and the
+    # create path must refuse to plan a write rather than emit an empty-title file.
     from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+    from science_tool.dag.workbench_apply import _entity_edit
 
-    monkeypatch.setattr(wb, "_proposition_title", lambda row: "")
     entity = _proposition_for_row(_row())
-    with pytest.raises(workbench_apply.WorkbenchApplyError, match="title"):
-        workbench_apply._entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    monkeypatch.setattr(entity, "title", "", raising=False)
+    with pytest.raises(PersistedShapeError, match="title"):
+        _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+
+
+def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch) -> None:
+    # The second create path, exercised through its real entry point. Task 3 routes it through the
+    # shared renderer; without certification INSIDE render_create, a compile-path regression could
+    # still persist an invalid base shape while `_entity_edit` stayed green.
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    monkeypatch.setattr(wb, "_proposition_title", lambda row: "")
+    workbench = wb.WorkbenchFile.model_validate(
+        {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
+                                 "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}
+    )
+
+    with pytest.raises(PersistedShapeError, match="title"):
+        wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
+
+    assert not list((tmp_path / "entities").rglob("*.md")), "a refused compile still wrote a file"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -767,52 +827,62 @@ def test_the_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
 Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
 Expected: both FAIL — no validation runs at the boundary yet, so `_entity_edit` returns a plan instead of raising. If `test_the_create_path_is_validated_too` errors instead on the monkeypatch target, correct the target to wherever Task 1 placed `_proposition_title`; do not weaken the assertion.
 
-- [ ] **Step 3: Add the boundary check**
+- [ ] **Step 3: Add the boundary check to the shared module**
 
-In `workbench_apply.py`, add near `_render_entity_text_from_frontmatter`:
+In `science/src/science_tool/dag/entity_frontmatter.py`:
 
 ```python
-def _certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path) -> None:
-    """Refuse to plan a write whose result would not satisfy the durable base shape.
+class PersistedShapeError(ValueError):
+    """A write was refused because its result would not satisfy the durable base shape."""
 
-    Runs on BOTH branches of `_entity_edit`. On create it catches a writer regression; on update
-    it catches a record that predates containment -- deliberately a REJECTION, not a backfill
-    (design §5.4): a workbench update must not silently migrate a record the author did not ask
-    to touch.
+
+def certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path | None = None) -> None:
+    """Refuse to render or plan a write whose result would fail the durable base shape.
+
+    On create this catches a writer regression; on update it catches a record that predates
+    containment -- deliberately a REJECTION, not a backfill (design §5.4): a workbench update must
+    not silently migrate a record the author did not ask to touch.
     """
     frontmatter = yaml.safe_load(text.split("---\n", 2)[1]) or {}
     try:
         EntityValidator().validate_persisted_base_shape(frontmatter)
     except EntityValidationError as exc:
-        raise WorkbenchApplyError(
-            f"{path}: {entity.id} would not satisfy the durable base shape and was NOT written\n"
+        where = f"{path}: " if path is not None else ""
+        raise PersistedShapeError(
+            f"{where}{entity.id} would not satisfy the durable base shape and was NOT written\n"
             f"  {exc}\n"
-            f"  This record predates writer containment. Repair it directly; the workbench will "
-            f"not backfill it."
+            f"  If this record predates writer containment, repair it directly; the workbench "
+            f"will not backfill it."
         ) from exc
 ```
 
-Import at the top of the module:
+Imports to add at the top of the module:
 
 ```python
+from pathlib import Path
+
 from science_model.entity_schema import EntityValidationError, EntityValidator
 ```
 
-- [ ] **Step 4: Call it on both branches**
+- [ ] **Step 4: Certify both paths**
 
-In `_entity_edit`, in the create branch immediately before constructing `PlannedWorkbenchEdit`:
-
-```python
-        _certify_persisted(entity, final_text, path=path)
-```
-
-and in the update branch, immediately before the final `return PlannedWorkbenchEdit(...)`:
+In `render_create`, immediately before returning:
 
 ```python
-    _certify_persisted(entity, final_text, path=path)
+    text = render_from_frontmatter(final, body)
+    certify_persisted(entity, text)
+    return text
 ```
 
-Certify `final_text` — the text that would actually be written — not the intermediate `unchanged_timestamp_text`, which exists only to decide whether `updated` advances.
+That covers **both** create paths — `_entity_edit`'s no-file branch and `compile_workbench`'s writer — because both go through `render_create`.
+
+In `workbench_apply._entity_edit`, in the **update** branch only, immediately before the final `return PlannedWorkbenchEdit(...)`:
+
+```python
+    certify_persisted(entity, final_text, path=path)
+```
+
+Certify `final_text` — the text that would actually be written — not the intermediate `unchanged_timestamp_text`, which exists only to decide whether `updated` advances. Add `certify_persisted` to the `entity_frontmatter` import list.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -827,7 +897,8 @@ Expected: all green. Any test that constructs a workbench entity fixture with an
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science/src/science_tool/dag/workbench_apply.py \
+git add science/src/science_tool/dag/entity_frontmatter.py \
+        science/src/science_tool/dag/workbench_apply.py \
         science/tests/test_workbench_writer_containment.py
 git commit -m "feat(workbench): certify the persisted shape on both write paths
 
@@ -875,50 +946,35 @@ Expected: `test_created_evidence_line_carries_no_skeleton_fields` and `test_crea
 
 - [ ] **Step 6: Mutation F — the rejection ruling**
 
-In `_certify_persisted`, replace the `raise` with `return` (the "skip validation" implementation §5.4 rejects).
+In `entity_frontmatter.certify_persisted`, replace the `raise` with `return` (the "skip validation" implementation §5.4 rejects).
 Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS. **Revert.**
 
 - [ ] **Step 7: Mutation G — the backfill temptation**
 
-In `_certify_persisted`, before validating, set `frontmatter["title"] = frontmatter["title"] or entity.title` (the "backfill" implementation §5.4 rejects).
+In `entity_frontmatter.certify_persisted`, before validating, set `frontmatter["title"] = frontmatter.get("title") or entity.title` (the "backfill" implementation §5.4 rejects).
 Expected: `test_update_of_an_empty_title_record_is_REJECTED` FAILS — no exception raised. This mutation is listed separately from F because it is the *plausible* wrong answer: it looks helpful and it makes the suite green if the rejection test is missing. **Revert.**
 
-- [ ] **Step 8: Mutation H — the exclude_defaults trap**
+- [ ] **Step 8: Mutation G2 — certification in the caller instead of the renderer**
+
+Move the `certify_persisted` call out of `render_create` and into `_entity_edit`'s create branch.
+Expected: `test_the_COMPILE_path_is_validated_and_writes_nothing` FAILS — `_entity_edit` is still covered, but the compile path is not. This is the mutation that proves *where* certification lives matters, not merely that it exists. **Revert.**
+
+- [ ] **Step 9: Mutation H — the exclude_defaults trap**
 
 Make `render_create` filter-free and thread `exclude_defaults=True` into `generated_frontmatter`'s `render_entity_text` call. (`render_entity_text` takes no such parameter, so this mutation also requires a temporary local variant — that friction is itself informative.)
-Expected: the skeleton test passes but `test_created_proposition_carries_only_owned_keys` still fails, **and** a new failure appears wherever `belief_eligible=False` is asserted — demonstrating why the design chose an allowlist over the flag. If no existing test covers `belief_eligible=False` on a created evidence line, **add one** before reverting:
+Expected: `test_created_proposition_carries_only_owned_keys` still fails (unowned keys leak), **and** `test_created_evidence_line_keeps_a_deliberate_false` fails — `belief_eligible: False` is gone from the rendered frontmatter. That second failure is the point: it demonstrates why the design chose an allowlist over the flag. **Revert.**
 
-```python
-def test_created_evidence_line_keeps_a_deliberate_false(tmp_path) -> None:
-    # `belief_eligible=False` is a staging DECISION (workbench.py: an empirical stub with no
-    # dataset_usage), not an unset default. exclude_defaults=True would silently drop it.
-    from science_model.propositions import EvidenceType
+- [ ] **Step 10: Verify the tree is clean and both suites green**
 
-    stub = EvidenceStub(stance="supports", evidence_type=EvidenceType.EMPIRICAL_DATA)
-    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
-    assert line.belief_eligible is False
-    fm = _created_frontmatter(tmp_path, line)
-    assert fm["belief_eligible"] is False
-```
+Every mutation above was reverted, and Task 5 adds no code — the tests it exercises were all written in Tasks 1–4.
 
-**Revert** the mutation; **keep** the new test.
+Run: `git status --short`
+Expected: **empty**. Any remaining modification is an unreverted mutation; revert it before proceeding.
 
-- [ ] **Step 9: Verify the tree is clean and both suites green**
-
-Run: `git status --short` — expected: only `science/tests/test_workbench_writer_containment.py` modified (the test added in Step 8).
 Run: `cd science/model && uv run --frozen pytest -q`, then `cd science && uv run --frozen pytest -q` (allow ~3 min), then `cd science && uv run ruff check && uv run pyright`.
 Expected: all green.
 
-- [ ] **Step 10: Commit**
-
-```bash
-git add science/tests/test_workbench_writer_containment.py
-git commit -m "test(workbench): pin the deliberate-false case the allowlist protects
-
-Mutation H demonstrated that exclude_defaults=True would drop
-belief_eligible=False, which is a staging decision rather than an unset
-default. Every other mutation proof was observed and reverted."
-```
+There is no commit in this task.
 
 ---
 
