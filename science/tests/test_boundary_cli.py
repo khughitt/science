@@ -183,6 +183,63 @@ def test_sync_check_rejects_correct_but_untracked_root_gitignore(tmp_path: Path)
     assert "not durably tracked" in result.output
 
 
+@pytest.mark.parametrize("index_kind", ("intent-to-add", "symlink", "stale-blob"))
+def test_sync_check_rejects_nondurable_root_index_entry(
+    tmp_path: Path,
+    index_kind: str,
+):
+    repo = _repo(tmp_path, DECL)
+    first = _invoke(repo, ("sync",))
+    assert first.exit_code == 0, first.output
+    correct = (repo / ".gitignore").read_text(encoding="utf-8")
+
+    if index_kind == "intent-to-add":
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "-N", ".gitignore"],
+            check=True,
+        )
+    elif index_kind == "symlink":
+        oid = (
+            subprocess.run(
+                ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+                input=b"ignore-target",
+                check=True,
+                capture_output=True,
+            )
+            .stdout.decode("ascii")
+            .strip()
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "120000",
+                oid,
+                ".gitignore",
+            ],
+            check=True,
+        )
+    elif index_kind == "stale-blob":
+        (repo / ".gitignore").write_text("stale indexed bytes\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", ".gitignore"],
+            check=True,
+        )
+        (repo / ".gitignore").write_text(correct, encoding="utf-8")
+    else:
+        raise AssertionError(f"unknown root index kind {index_kind!r}")
+
+    assert (repo / ".gitignore").read_text(encoding="utf-8") == correct
+    result = _invoke(repo, ("sync", "--check"))
+
+    assert result.exit_code == 1
+    assert "not durably tracked" in result.output
+
+
 def test_sync_renders_unsafe_gitignore_failure(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     (repo / "ignore-target").write_text("")

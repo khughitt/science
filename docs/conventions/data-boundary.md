@@ -128,7 +128,10 @@ ensures indexed paths obey their declared storage class, while
 `boundary.unreachable-tracked`, and `boundary.ignored-undeclared` enforce the
 generated and unmanaged-rule surfaces. `boundary.generated-drift` also
 requires the root `.gitignore` to be tracked, present, and regular so clones
-receive the managed block instead of relying on machine-local ignore state. See
+receive the managed block instead of relying on machine-local ignore state. Its
+index entry must be one stage-0 regular blob containing the current managed
+block; intent-to-add, unmerged, symlink, gitlink, and stale-blob entries are
+drift. See
 `docs/plans/2026-07-26-vcs-storage-boundary-design.md`.
 
 `science data audit` is advisory discovery, not enforcement. It classifies files

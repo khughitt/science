@@ -38,6 +38,113 @@ def _rules(root: Path) -> list[str]:
     return [r.rule for r in _results(root)]
 
 
+def _hash_blob(repo: Path, body: bytes) -> str:
+    return (
+        subprocess.run(
+            ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+            input=body,
+            check=True,
+            capture_output=True,
+        )
+        .stdout.decode("ascii")
+        .strip()
+    )
+
+
+def _install_invalid_root_index_entry(repo: Path, kind: str, correct: str) -> None:
+    if kind == "intent-to-add":
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "-N", ".gitignore"],
+            check=True,
+        )
+        tree = subprocess.run(
+            ["git", "-C", str(repo), "write-tree"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        names = subprocess.run(
+            ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", tree],
+            check=True,
+            capture_output=True,
+        ).stdout.split(b"\0")
+        assert b".gitignore" not in names
+        return
+
+    if kind == "symlink":
+        oid = _hash_blob(repo, b"ignore-target")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "120000",
+                oid,
+                ".gitignore",
+            ],
+            check=True,
+        )
+        return
+
+    if kind == "gitlink":
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "science.yaml"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-qm", "fixture head"],
+            check=True,
+        )
+        commit = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "160000",
+                commit,
+                ".gitignore",
+            ],
+            check=True,
+        )
+        return
+
+    if kind == "unmerged":
+        base = _hash_blob(repo, correct.encode())
+        ours = _hash_blob(repo, b"ours\n")
+        theirs = _hash_blob(repo, b"theirs\n")
+        records = f"100644 {base} 1\t.gitignore\n100644 {ours} 2\t.gitignore\n100644 {theirs} 3\t.gitignore\n"
+        subprocess.run(
+            ["git", "-C", str(repo), "update-index", "--index-info"],
+            input=records,
+            check=True,
+            text=True,
+        )
+        return
+
+    if kind == "stale-blob":
+        (repo / ".gitignore").write_text("stale indexed bytes\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", ".gitignore"],
+            check=True,
+        )
+        (repo / ".gitignore").write_text(correct, encoding="utf-8")
+        return
+
+    raise AssertionError(f"unknown invalid root index kind {kind!r}")
+
+
 def test_tracked_ignored_fires_without_any_declaration(tmp_path: Path):
     repo = _repo(tmp_path)
     (repo / "data").mkdir()
@@ -217,6 +324,34 @@ def test_correct_root_gitignore_must_be_a_tracked_governed_source(tmp_path: Path
     assert len(findings) == 1
     assert findings[0].severity is Severity.ERROR
     assert "tracked, present, regular" in findings[0].message
+
+
+@pytest.mark.parametrize(
+    "index_kind",
+    ("intent-to-add", "symlink", "gitlink", "unmerged", "stale-blob"),
+)
+def test_generated_drift_requires_durable_root_index_blob(
+    tmp_path: Path,
+    index_kind: str,
+):
+    decl = {
+        "roots": [{"path": "data/raw", "class": "payload"}],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    cfg = BoundaryConfig.model_validate(decl)
+    correct = splice_managed_block("", render_managed_block(cfg))
+    (repo / ".gitignore").write_text(correct, encoding="utf-8")
+    _install_invalid_root_index_entry(repo, index_kind, correct)
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
+    assert "stage-0 regular blob" in findings[0].message
+    assert (repo / ".gitignore").is_file()
+    assert not (repo / ".gitignore").is_symlink()
+    assert (repo / ".gitignore").read_text(encoding="utf-8") == correct
 
 
 def test_generated_drift_rejects_symlinked_root_gitignore_without_following(tmp_path: Path):
@@ -404,6 +539,106 @@ def test_index_invariant_uses_effective_git_casefolding(tmp_path: Path):
         ("data/external/ds/part.parquet", Severity.ERROR),
         ("data/raw/secret.bin", Severity.ERROR),
     ]
+
+
+def test_index_invariant_does_not_expand_unicode_in_tracked_globs(tmp_path: Path):
+    decl = {
+        "roots": [
+            {
+                "path": "Data/External",
+                "class": "manifest",
+                "tracked": ["Straße.json"],
+            }
+        ],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.ignoreCase", "true"],
+        check=True,
+    )
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    dataset = repo / "data/external/ds"
+    dataset.mkdir(parents=True)
+    target = dataset / "STRASSE.JSON"
+    target.write_text("{}\n", encoding="utf-8")
+    ignored = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "check-ignore",
+            "--no-index",
+            "-q",
+            "data/external/ds/STRASSE.JSON",
+        ],
+        check=False,
+    )
+    assert ignored.returncode == 0, "Git must not equate Straße.json with STRASSE.JSON"
+
+    (repo / ".git/info/exclude").write_text("/data/.gitignore\n", encoding="utf-8")
+    (repo / "data/.gitignore").write_text(
+        "!external/\n!external/**\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    indexed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b"data/external/ds/STRASSE.JSON" in indexed
+    assert b"data/.gitignore" not in indexed
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
+        ("data/external/ds/STRASSE.JSON", Severity.ERROR)
+    ]
+
+
+def test_index_invariant_does_not_expand_unicode_in_root_prefixes(tmp_path: Path):
+    decl = {
+        "roots": [{"path": "Data/Straße", "class": "payload"}],
+        "unmanaged_allow": [],
+    }
+    repo = _repo(tmp_path, decl)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.ignoreCase", "true"],
+        check=True,
+    )
+    cfg = BoundaryConfig.model_validate(decl)
+    (repo / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(cfg)),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    outside = repo / "data/STRASSE/outside.bin"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("outside", encoding="utf-8")
+    ignored = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "check-ignore",
+            "--no-index",
+            "-q",
+            "data/STRASSE/outside.bin",
+        ],
+        check=False,
+    )
+    assert ignored.returncode == 1, "Git must not equate Straße with STRASSE"
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+
+    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+
+    assert findings == []
 
 
 def test_declaration_conflict_catches_a_bare_wildcard(tmp_path: Path):

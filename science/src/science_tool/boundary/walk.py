@@ -18,6 +18,16 @@ from pathlib import Path, PurePosixPath
 
 from science_tool.boundary.config import BoundaryRoot
 
+_ASCII_CASEFOLD = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "abcdefghijklmnopqrstuvwxyz",
+)
+
+
+def git_ascii_casefold(value: str) -> str:
+    """Apply Git's byte-oriented ASCII case folding without Unicode expansion."""
+    return value.translate(_ASCII_CASEFOLD)
+
 
 def matches_tracked_path(
     rel_to_root: str,
@@ -26,8 +36,8 @@ def matches_tracked_path(
     case_sensitive: bool = True,
 ) -> bool:
     """Match the path relative to the root, right-anchored, at any depth."""
-    candidate = PurePosixPath(rel_to_root if case_sensitive else rel_to_root.casefold())
-    patterns = globs if case_sensitive else tuple(glob.casefold() for glob in globs)
+    candidate = PurePosixPath(rel_to_root if case_sensitive else git_ascii_casefold(rel_to_root))
+    patterns = globs if case_sensitive else tuple(git_ascii_casefold(glob) for glob in globs)
     return any(candidate.match(glob) for glob in patterns)
 
 

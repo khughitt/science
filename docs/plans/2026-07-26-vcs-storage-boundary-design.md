@@ -322,7 +322,7 @@ that killed the previous attempt.
 
 | command | purpose |
 |---|---|
-| `science boundary sync` | rewrite the managed block; `--check` exits nonzero on drift; `--verify-current-tree` diffs ignore decisions before/after |
+| `science boundary sync` | rewrite the managed block; `--check` exits nonzero on managed-content or durable indexed-source drift; `--verify-current-tree` diffs ignore decisions before/after |
 | `science boundary check` | fast standalone gate for pre-commit hooks: runs the two universal checks (`tracked-ignored`, `unanchored-pattern`) only; it loads the declaration once for `unmanaged_allow`, falling back to defaults when unusable |
 | `science boundary init` | adoption aid: propose a declaration from the existing tree |
 
@@ -334,18 +334,19 @@ advisory and blocks nothing). No boundary check consults it.
 
 ### Checks
 
-All six are mechanical. No heuristic participates in enforcement.
+All seven are mechanical. No heuristic participates in enforcement.
 
 | check | scope | severity | predicate |
 |---|---|---|---|
 | `boundary.tracked-ignored` | all projects | ERROR | a tracked file matches an ignore rule |
-| `boundary.generated-drift` | declared only | ERROR | managed block ≠ regenerated block |
+| `boundary.generated-drift` | declared only | ERROR | working-tree or indexed managed block ≠ regenerated block, or the root `.gitignore` is not a present regular file backed by one stage-0 regular blob |
+| `boundary.index-violation` | declared only | ERROR | an indexed path violates its declared `payload` or `manifest` storage class |
 | `boundary.declaration-conflict` | declared only | ERROR | an unmanaged rule matches a path under a declared root |
 | `boundary.unreachable-tracked` | declared only | ERROR | an extant file matching a `tracked:` glob is absent from the git-visibility oracle |
 | `boundary.ignored-undeclared` | declared only | WARN | an unmanaged **exclude** ignores a project path with no declared root and no allowlist entry |
 | `boundary.unanchored-pattern` | all projects | WARN | bare directory-name **exclude**, no leading `/`, in the unmanaged region, not allowlisted |
 
-Two universal checks, four declaration-derived; four ERROR, two WARN.
+Two universal checks, five declaration-derived; five ERROR, two WARN.
 
 #### Sign awareness
 
@@ -383,11 +384,12 @@ allowlist is simply the scaffold's list, coupled in one place. MM30's bare
 
 #### Source universe
 
-The six checks split into two kinds that must read different sources, and
-conflating them is what made the allowlist ambiguous in the first place.
+The seven checks read three different kinds of Git evidence. Conflating them is
+what made the allowlist ambiguous in the first place.
 
 **Rule-text checks** — `declaration-conflict`, `ignored-undeclared`,
-`unanchored-pattern` — inspect pattern text, and are scoped to **tracked,
+`unanchored-pattern` — inspect pattern text, and are scoped to
+**non-intent-to-add, stage-0 regular index entries with present regular
 in-worktree `.gitignore` files**: the root file's unmanaged region plus any
 nested `.gitignore`. This is the project's shareable, version-controlled
 declaration surface, and it is exactly the set `unmanaged_allow` may name.
@@ -400,12 +402,26 @@ Explicitly **outside** that universe:
   that machine, which is not a decision a project may make
 - a nested `.gitignore` that is itself ignored (one inside a `payload` root, for
   instance) — untracked, therefore not shareable, therefore not governed
+- an intent-to-add `.gitignore` — `ls-files` can name it, but `write-tree` omits
+  it, so neither its rules nor an allowlist reference to it are durable
 
 **Effect checks** — `tracked-ignored` and `unreachable-tracked` — use git's
 **full effective resolution**, including `.git/info/exclude` and
 `core.excludesFile`, because they ask what actually happened rather than what
 was declared. A machine-local rule that causes a real defect must still surface;
 MM30's global bare `archive` is precisely that case.
+
+**Durable-index checks** — `generated-drift` and `index-violation` — inspect
+what the index would preserve rather than inferring durability from a working
+file or an ignore-rule winner. For every nonempty declaration, the root
+`.gitignore` must be a present regular worktree file backed by exactly one
+stage-0 regular blob whose indexed managed block equals regenerated output.
+Intent-to-add, unmerged stages, symlink or gitlink modes, and a stale indexed
+blob all fail this predicate. Independently, every indexed path equal to or
+beneath a `payload` root is an ERROR, and every indexed path beneath a
+`manifest` root must match a declared `tracked:` glob. An untracked nested
+`.gitignore` or machine-local negation can change what `git add` stages, but it
+cannot override this declaration-derived index invariant.
 
 The principle: **govern what is shareable, diagnose whatever actually bites.**
 An effect check may therefore report a rule that no rule-text check governs and
@@ -461,8 +477,11 @@ ignore-oriented search would ever surface it — yet pinning one file out of a
 declared root by hand is precisely the per-case exception this design abolishes.
 Flagging the text is the point.
 
-Throughout, git's own pattern engine does all the matching; nothing is
-reimplemented.
+Git's own pattern engine performs unmanaged-rule matching. The index invariant
+uses the already-admitted `tracked:` grammar with Git-equivalent byte semantics:
+when `core.ignoreCase=true`, only ASCII `A`–`Z` are folded. Python Unicode
+`casefold()` is deliberately not used because expansions such as
+`Straße` → `strasse` would equate paths that Git keeps distinct.
 
 `boundary.ignored-undeclared` closes the complementary hole. `declaration-conflict`
 only inspects paths *beneath a declared root*, so without this check a project
@@ -534,9 +553,10 @@ Each of these comes from an observed failure, not speculation:
 ### Wiring
 
 - New `validate/checks/boundary.py`, registered in `CANONICAL_CHECKS`.
-- All six checks are cheap enough for `--profile commit` (worst case three git
-  calls plus a config load), so they run in the pre-commit path rather than only
-  on full validate.
+- All seven checks are cheap enough for `--profile commit`. Focused performance
+  guards bound the dominant conflict search; index inspection uses NUL-framed
+  Git plumbing plus one root-blob read. They therefore run in the pre-commit
+  path rather than only on full validate.
 - **No separate `health` boundary section.** `graph/health_checks/validate.py`
   already runs the canonical validation runner and surfaces every non-info
   result, so registering the checks in `CANONICAL_CHECKS` makes them appear
@@ -550,7 +570,7 @@ Each of these comes from an observed failure, not speculation:
 Enforcement is split by check kind rather than staged by release. The two
 universal checks ship immediately — `tracked-ignored` fail-closed, because it
 requires no configuration and cannot produce a false positive, and
-`unanchored-pattern` as a warning. The four declaration-derived checks activate
+`unanchored-pattern` as a warning. The five declaration-derived checks activate
 only once a project declares `boundary:`.
 
 This deliberately avoids the capability-fit rollout shape, where a fail-closed
@@ -614,6 +634,12 @@ it must not leave a candidate block installed merely because it found a change:
   exactly as it was found
 
 Committing the new block is `sync` without the flag — a separate, deliberate act.
+
+`sync --check` verifies both the working-tree managed block and its durable
+indexed representation. A byte-current working file is still drift when the
+root `.gitignore` is absent from the index, intent-to-add, unmerged, recorded as
+a symlink or gitlink, or backed by a regular blob whose indexed managed block is
+stale. This is what ensures a clone receives the same generated boundary.
 
 ### Retiring the conflicting convention
 
@@ -686,7 +712,18 @@ Required, or the declaration becomes a fourth opinion rather than the authority:
   rules from one), a tracked-but-deleted one contributes nothing, and an
   unreadable one raises rather than reading as empty.
 - Environment fidelity: `core.ignoreCase` is inherited by the isolated
-  evaluation, with both the case-folding and case-sensitive directions pinned.
+  evaluation, with both the ASCII case-folding and case-sensitive directions
+  pinned. A real-Git Unicode regression proves that `Straße.json` does not
+  admit indexed `STRASSE.JSON`, and that Unicode expansion cannot widen a
+  declared root prefix.
+- Index invariant: an ignored, untracked nested `.gitignore` can make
+  `git add -A` stage a payload file, but `boundary.index-violation` still rejects
+  it; a manifest descriptor matching `tracked:` remains allowed while a staged
+  sibling payload is rejected.
+- Durable root source: validation, `has_drift()`, and `sync --check` reject an
+  intent-to-add root `.gitignore`, unmerged stages, symlink and gitlink index
+  modes, and a regular indexed blob whose managed block is stale, even when the
+  working-tree file is byte-correct and regular.
 - Non-UTF-8 tolerance: a byte-valued `.gitignore` pattern and a non-UTF-8
   filename are both handled, since git handles both. `sync` preserves the raw
   rule bytes and verification restores them byte-for-byte.

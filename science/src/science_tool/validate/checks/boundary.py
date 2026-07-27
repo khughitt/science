@@ -37,13 +37,14 @@ from science_tool.boundary.config import (
     BoundaryConfig,
     StorageClass,
 )
-from science_tool.boundary.generate import extract_managed_block, render_managed_block
+from science_tool.boundary.generate import ManagedBlockError, extract_managed_block, render_managed_block
 from science_tool.boundary.gitio import (
     BoundaryGitError,
     IgnoreRule,
     git_ignores_case,
     governed_ignore_files,
     indexed_paths,
+    indexed_regular_blob,
     is_git_worktree,
     matching_unmanaged_rules,
     read_ignore_file,
@@ -51,7 +52,7 @@ from science_tool.boundary.gitio import (
     unmanaged_rules,
     visible_paths,
 )
-from science_tool.boundary.walk import iter_repo_files, manifest_candidates, matches_tracked_path
+from science_tool.boundary.walk import git_ascii_casefold, iter_repo_files, manifest_candidates, matches_tracked_path
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.project_config import ProjectConfigError, load_project_config
 from science_tool.validate.checks import Check
@@ -192,7 +193,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
 
     if cfg_error is not None:
         # NEVER downgrade a broken declaration to "undeclared": that would
-        # disable four checks exactly when the configuration is wrong.
+        # disable five checks exactly when the configuration is wrong.
         yield Result(
             severity=Severity.ERROR,
             path=Path(PROJECT_CONFIG_FILENAME),
@@ -222,6 +223,13 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
 
     # ---- declared: generated-drift --------------------------------------
     expected = render_managed_block(cfg)
+    indexed_managed_body: str | None = None
+    indexed_gitignore = indexed_regular_blob(root, GITIGNORE.as_posix())
+    if indexed_gitignore is not None:
+        try:
+            indexed_managed_body = extract_managed_block(indexed_gitignore.decode("utf-8", "surrogateescape"))
+        except ManagedBlockError:
+            pass
     if gitignore_error is not None:
         yield Result(
             severity=Severity.ERROR,
@@ -246,15 +254,16 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
             rule="boundary.generated-drift",
             task=None,
         )
-    elif GITIGNORE.as_posix() not in governed:
+    elif indexed_managed_body != expected:
         yield Result(
             severity=Severity.ERROR,
             path=GITIGNORE,
             line=None,
             message=(
                 "the root .gitignore has the current science-managed boundary block but "
-                "is not a tracked, present, regular ignore source. A clone would not "
-                "receive the generated boundary. Stage it explicitly with "
+                "does not have a tracked, present, regular worktree source backed by a "
+                "stage-0 regular blob containing the current managed block. A clone would "
+                "not receive the generated boundary. Stage it explicitly with "
                 "`git add -f .gitignore` after reviewing any repository-level exclude "
                 "that prevented ordinary staging."
             ),
@@ -296,8 +305,8 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                 continue
             indexed_prefix = indexed_parts[: len(root_parts)]
             if ignore_case:
-                indexed_prefix = [part.casefold() for part in indexed_prefix]
-                root_parts = [part.casefold() for part in root_parts]
+                indexed_prefix = [git_ascii_casefold(part) for part in indexed_prefix]
+                root_parts = [git_ascii_casefold(part) for part in root_parts]
             if indexed_prefix != root_parts:
                 continue
             relative = "/".join(indexed_parts[len(root_parts) :])

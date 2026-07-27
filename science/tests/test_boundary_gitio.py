@@ -308,6 +308,65 @@ def test_governed_ignore_files_skip_a_symlink(tmp_path: Path):
     assert unmanaged_rules(repo) == []
 
 
+def test_governed_ignore_files_reject_a_nonregular_index_entry(tmp_path: Path):
+    """A regular worktree file cannot make an indexed symlink shareable."""
+    repo = _repo(tmp_path)
+    source = _write(repo, ".gitignore", "*.parquet\n")
+    oid = (
+        subprocess.run(
+            ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+            input=b"ignore-target",
+            check=True,
+            capture_output=True,
+        )
+        .stdout.decode("ascii")
+        .strip()
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "120000",
+            oid,
+            ".gitignore",
+        ],
+        check=True,
+    )
+    assert source.is_file()
+    assert not source.is_symlink()
+
+    assert governed_ignore_files(repo) == []
+
+
+def test_governed_ignore_files_skip_intent_to_add(tmp_path: Path):
+    """Intent-to-add is omitted by write-tree, so its rules are not shareable."""
+    repo = _repo(tmp_path)
+    _write(repo, ".gitignore", "*.parquet\n")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "-N", ".gitignore"],
+        check=True,
+    )
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "write-tree"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    names = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", tree],
+        check=True,
+        capture_output=True,
+    ).stdout.split(b"\0")
+    assert b".gitignore" not in names
+
+    assert governed_ignore_files(repo) == []
+    assert unmanaged_rules(repo) == []
+
+
 def test_governed_ignore_files_skip_a_symlinked_parent(tmp_path: Path):
     """No parent component may redirect governed reads outside the repository."""
     repo = _repo(tmp_path)

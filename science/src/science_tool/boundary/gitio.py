@@ -45,6 +45,14 @@ class IgnoreRule:
     pattern: str
 
 
+@dataclass(frozen=True)
+class _IndexEntry:
+    mode: str
+    object_name: str
+    stage: str
+    path: str
+
+
 class BoundaryGitError(Exception):
     """A git invocation failed in a way that must not be read as 'clean'."""
 
@@ -302,6 +310,54 @@ def _scalar_z(payload: bytes, *, label: str) -> str | None:
     return values[0] if values else None
 
 
+def _index_entries(project_root: Path, *paths: str) -> list[_IndexEntry]:
+    args = ["ls-files", "--stage", "-z"]
+    if paths:
+        args.extend(("--", *paths))
+    entries: list[_IndexEntry] = []
+    for record in _split_z(_git(project_root, *args)):
+        header, separator, path = record.partition("\t")
+        fields = header.split(" ")
+        if not separator or len(fields) != 3:
+            raise BoundaryGitError("malformed git ls-files --stage record")
+        mode, object_name, stage = fields
+        entries.append(
+            _IndexEntry(
+                mode=mode,
+                object_name=object_name,
+                stage=stage,
+                path=path,
+            )
+        )
+    return entries
+
+
+def _intent_to_add_paths(project_root: Path) -> set[str]:
+    """Paths Git omits from a tree because they are only intent-to-add."""
+    common = ("diff", "--cached", "--name-only", "-z", "--no-renames")
+    visible = set(
+        _split_z(
+            _git(
+                project_root,
+                *common,
+                "--ita-visible-in-index",
+                "--",
+            )
+        )
+    )
+    durable = set(
+        _split_z(
+            _git(
+                project_root,
+                *common,
+                "--ita-invisible-in-index",
+                "--",
+            )
+        )
+    )
+    return visible - durable
+
+
 def _check_ignore_records(payload: bytes) -> list[tuple[str, int, str, str]]:
     """Parse exact four-field `check-ignore -v -z` records."""
     fields = _split_z(payload)
@@ -341,6 +397,23 @@ def indexed_paths(project_root: Path) -> list[str]:
     return sorted(set(_split_z(_git(project_root, "ls-files", "-z"))))
 
 
+def indexed_regular_blob(project_root: Path, path: str) -> bytes | None:
+    """Return a path's sole stage-0 regular blob, or None if it is nondurable.
+
+    Intent-to-add records carry Git's empty placeholder blob. Callers that
+    require committed content must compare the returned bytes with that content;
+    for a nonempty managed boundary this excludes intent-to-add without parsing
+    the unstable `ls-files --debug` flag format.
+    """
+    entries = _index_entries(project_root, path)
+    if len(entries) != 1:
+        return None
+    entry = entries[0]
+    if entry.path != path or entry.stage != "0" or entry.mode not in {"100644", "100755"}:
+        return None
+    return _git(project_root, "cat-file", "blob", entry.object_name)
+
+
 def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
     """Tracked files that nonetheless match an ignore rule."""
     tracked = _git(project_root, "ls-files", "-z")
@@ -374,11 +447,21 @@ def tracked_ignored(project_root: Path) -> list[IgnoreHit]:
 
 
 def governed_ignore_files(project_root: Path) -> list[str]:
-    """Tracked, present, non-symlink `.gitignore` files actually in effect."""
-    tracked = _split_z(_git(project_root, "ls-files", "-z"))
-    named = (path for path in tracked if path == ".gitignore" or path.endswith("/.gitignore"))
+    """Stage-0 regular, present `.gitignore` files actually in effect."""
+    by_path: dict[str, list[_IndexEntry]] = {}
+    for entry in _index_entries(project_root):
+        if entry.path == ".gitignore" or entry.path.endswith("/.gitignore"):
+            by_path.setdefault(entry.path, []).append(entry)
+    intent_to_add = _intent_to_add_paths(project_root) if by_path else set()
     governed: list[str] = []
-    for path in named:
+    for path, entries in by_path.items():
+        if (
+            path in intent_to_add
+            or len(entries) != 1
+            or entries[0].stage != "0"
+            or entries[0].mode not in {"100644", "100755"}
+        ):
+            continue
         descriptor = _open_governed(project_root, path, missing_ok=True)
         if descriptor is None:
             continue

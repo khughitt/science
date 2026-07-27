@@ -94,6 +94,78 @@ def test_has_drift_when_correct_root_gitignore_is_not_tracked(tmp_path: Path):
     assert has_drift(repo)
 
 
+@pytest.mark.parametrize("index_kind", ("intent-to-add", "symlink", "stale-blob"))
+def test_has_drift_when_root_index_entry_is_not_durable(
+    tmp_path: Path,
+    index_kind: str,
+):
+    cfg = BoundaryConfig.model_validate(DECL)
+    correct = splice_managed_block("", render_managed_block(cfg))
+    repo = _repo(tmp_path, DECL, gitignore=correct)
+
+    if index_kind == "intent-to-add":
+        subprocess.run(
+            ["git", "-C", str(repo), "rm", "-q", "--cached", ".gitignore"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-qm", "drop ignore"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "-N", ".gitignore"],
+            check=True,
+        )
+        tree = subprocess.run(
+            ["git", "-C", str(repo), "write-tree"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        names = subprocess.run(
+            ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", tree],
+            check=True,
+            capture_output=True,
+        ).stdout.split(b"\0")
+        assert b".gitignore" not in names
+    elif index_kind == "symlink":
+        oid = (
+            subprocess.run(
+                ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+                input=b"ignore-target",
+                check=True,
+                capture_output=True,
+            )
+            .stdout.decode("ascii")
+            .strip()
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "update-index",
+                "--cacheinfo",
+                "120000",
+                oid,
+                ".gitignore",
+            ],
+            check=True,
+        )
+    elif index_kind == "stale-blob":
+        (repo / ".gitignore").write_text("stale indexed bytes\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", ".gitignore"],
+            check=True,
+        )
+        (repo / ".gitignore").write_text(correct, encoding="utf-8")
+    else:
+        raise AssertionError(f"unknown root index kind {index_kind!r}")
+
+    assert (repo / ".gitignore").read_text(encoding="utf-8") == correct
+    assert has_drift(repo)
+
+
 def test_verify_refuses_dirty_gitignore(tmp_path: Path):
     repo = _repo(tmp_path, DECL)
     (repo / ".gitignore").write_text("dirty\n")

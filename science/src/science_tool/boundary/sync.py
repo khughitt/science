@@ -17,8 +17,13 @@ from pathlib import Path
 from typing import BinaryIO
 
 from science_tool.boundary.config import BoundaryConfig, BoundaryConfigError
-from science_tool.boundary.generate import extract_managed_block, render_managed_block, splice_managed_block
-from science_tool.boundary.gitio import BoundaryGitError, governed_ignore_files
+from science_tool.boundary.generate import (
+    ManagedBlockError,
+    extract_managed_block,
+    render_managed_block,
+    splice_managed_block,
+)
+from science_tool.boundary.gitio import BoundaryGitError, indexed_regular_blob
 from science_tool.boundary.probes import probe_paths
 from science_tool.boundary.walk import iter_repo_files
 from science_tool.project_config import load_project_config
@@ -353,9 +358,16 @@ def sync(project_root: Path) -> SyncResult:
 def has_drift(project_root: Path) -> bool:
     """Report managed-content or durable tracked-source drift."""
     cfg = _config(project_root)
-    if extract_managed_block(_text(_snapshot_ignore_file(project_root))) != render_managed_block(cfg):
+    expected = render_managed_block(cfg)
+    if extract_managed_block(_text(_snapshot_ignore_file(project_root))) != expected:
         return True
-    return GITIGNORE not in governed_ignore_files(project_root)
+    indexed = indexed_regular_blob(project_root, GITIGNORE)
+    if indexed is None:
+        return True
+    try:
+        return extract_managed_block(indexed.decode("utf-8", "surrogateescape")) != expected
+    except ManagedBlockError:
+        return True
 
 
 def _probe_decisions(project_root: Path, probes: list[str]) -> dict[str, bool]:

@@ -1527,6 +1527,23 @@ def test_data_boundary_docs_include_the_declared_index_invariant() -> None:
     assert "`boundary.index-violation`" in text
     assert "indexed paths obey their declared storage class" in _norm(text)
     assert "root `.gitignore` to be tracked, present, and regular" in _norm(text)
+    assert "one stage-0 regular blob containing the current managed block" in _norm(text)
+
+
+def test_boundary_design_pins_the_seven_check_and_durable_index_contract() -> None:
+    text = _read("docs/plans/2026-07-26-vcs-storage-boundary-design.md")
+    normalized = _norm(text)
+
+    assert "All seven are mechanical" in text
+    assert "`boundary.index-violation`" in text
+    assert "Two universal checks, five declaration-derived; five ERROR, two WARN." in text
+    assert "stage-0 regular blob" in normalized
+    assert "indexed managed block" in normalized
+    assert "non-intent-to-add, stage-0 regular index entries" in normalized
+    assert "five declaration-derived checks activate" in normalized
+    assert "`sync --check` verifies both" in normalized
+    assert "All six checks" not in text
+    assert "The six checks split" not in text
 
 
 def test_agents_template_and_guide_document_import_interception_in_sequence() -> None:
