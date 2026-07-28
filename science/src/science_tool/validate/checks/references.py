@@ -49,23 +49,60 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.refs import check_refs
-from science_tool.validate.checks import Check
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.checks import Check, CheckObservation
+from science_tool.validate.result import Severity
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "references", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="references",
+    section_title="references",
+    section_order=109,
+    rule_ids=("references.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="reference integrity...", order=7)
-def check_references(ctx: "ValidateContext") -> Iterable[Result]:
+def _result(
+    severity: Severity,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=None,
+        line=None,
+        message=message,
+        rule=RULES["references.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=7, producer_id="validate.references", rules=tuple(RULES.values()))
+def check_references(ctx: "ValidateContext") -> Iterable[CheckObservation]:
     broken = [issue for issue in check_refs(ctx.project_root) if issue.ref_type != "marker"]
     if not broken:
-        return [_result(Severity.INFO, "Reference integrity check complete (no broken refs)")]
+        return [
+            _result(
+                Severity.INFO,
+                "Reference integrity check complete (no broken refs)",
+                key=["summary"],
+            )
+        ]
 
     by_type = Counter(issue.ref_type for issue in broken)
-    return [_result(Severity.WARN, f"{count} broken refs: {ref_type}") for ref_type, count in sorted(by_type.items())]
+    return [
+        _result(
+            Severity.WARN,
+            f"{count} broken refs: {ref_type}",
+            key=["ref-type", ref_type],
+        )
+        for ref_type, count in sorted(by_type.items())
+    ]

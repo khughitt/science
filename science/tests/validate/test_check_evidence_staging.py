@@ -15,6 +15,7 @@ from science_tool.validate import Severity, ValidateContext
 # Helpers (mirror the pattern in test_checks_evidence_lines.py)
 # ---------------------------------------------------------------------------
 
+
 def _write_manifest(root: Path) -> None:
     root.joinpath("science.yaml").write_text(
         "\n".join(
@@ -73,6 +74,7 @@ def _empirical_line(*, belief_eligible: str | None, dataset_usage: str) -> str:
 # Tests — ERROR cases
 # ---------------------------------------------------------------------------
 
+
 def test_empirical_belief_eligible_no_dataset_usage_errors(tmp_path: Path) -> None:
     """Empirical + belief_eligible: true + no dataset_usage → ERROR."""
     from science_tool.validate.checks.evidence_lines import (
@@ -90,7 +92,7 @@ def test_empirical_belief_eligible_no_dataset_usage_errors(tmp_path: Path) -> No
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 
@@ -111,7 +113,7 @@ def test_empirical_belief_eligible_empty_list_dataset_usage_errors(tmp_path: Pat
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 
@@ -132,13 +134,14 @@ def test_empirical_belief_eligible_absent_no_dataset_usage_errors(tmp_path: Path
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 
 # ---------------------------------------------------------------------------
 # Tests — PASS cases (no error)
 # ---------------------------------------------------------------------------
+
 
 def test_empirical_belief_eligible_with_dataset_usage_clean(tmp_path: Path) -> None:
     """Empirical + belief_eligible: true + non-empty dataset_usage → no error."""

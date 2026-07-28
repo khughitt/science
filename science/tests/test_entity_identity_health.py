@@ -47,11 +47,17 @@ records:
         encoding="utf-8",
     )
 
-    report = build_health_report(project, checks={"entity_identity"})
+    report = build_health_report(
+        project,
+        ingestion_ref="health:test",
+        generated_at="2026-07-28T12:00:00+00:00",
+        checks={"entity_identity"},
+    )
 
-    assert report["entity_identity"][0]["code"] == "missing-canonical-id"
-    assert report["entity_identity"][0]["severity"] == "warning"
-    assert report["total_issues"] == 1
+    identity = [item.finding for item in report.findings if item.producer_id == "entity_identity"]
+    assert identity[0].qualifiers["code"] == "missing-canonical-id"
+    assert identity[0].severity == "warn"
+    assert report.totals.findings_total == 2
 
 
 def test_identity_health_reports_unbaselined_missing_id_as_error_through_real_health_flow(tmp_path) -> None:
@@ -63,11 +69,17 @@ def test_identity_health_reports_unbaselined_missing_id_as_error_through_real_he
         encoding="utf-8",
     )
 
-    report = build_health_report(project, checks={"entity_identity"})
+    report = build_health_report(
+        project,
+        ingestion_ref="health:test",
+        generated_at="2026-07-28T12:00:00+00:00",
+        checks={"entity_identity"},
+    )
 
-    assert report["entity_identity"][0]["code"] == "missing-canonical-id"
-    assert report["entity_identity"][0]["severity"] == "error"
-    assert report["total_issues"] == 1
+    identity = [item.finding for item in report.findings if item.producer_id == "entity_identity"]
+    assert identity[0].qualifiers["code"] == "missing-canonical-id"
+    assert identity[0].severity == "error"
+    assert report.totals.findings_total == 2
 
 
 def test_identity_health_flags_missing_canonical_id_as_warning_for_baselined_record(tmp_path) -> None:

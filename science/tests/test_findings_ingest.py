@@ -5,6 +5,7 @@ from collections import Counter
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 from science_model.audit import (
+    AcceptedFinding,
     AuditFinding,
     AuditReport,
     EntitySubject,
@@ -85,12 +86,14 @@ REGISTRY = build_registry(
         FindingProducer(
             producer_id="dataset_anomalies",
             namespace="health_checks",
+            source_module="graph/health_checks/test.py",
             rules=(RULE,),
             sections=(SECTION,),
             metrics_schema=None,
             remediators=frozenset(),
         )
-    ]
+    ],
+    active_kinds=frozenset(),
 )
 
 
@@ -127,12 +130,14 @@ def test_array_identity_qualifier_round_trips_from_build_through_ingestion(
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE, array_rule),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     finding = array_rule.build(
         subject=EntitySubject(ref="dataset:a"),
@@ -183,9 +188,7 @@ def _finding(**overrides) -> AuditFinding:
 
 def _report(findings=None, accepted=None, **overrides) -> AuditReport:
     findings = (
-        findings
-        if findings is not None
-        else [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
+        findings if findings is not None else [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
     )
     accepted = accepted or []
     producers_run = sorted(
@@ -208,9 +211,7 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         unwired=[],
         totals={
             "findings_total": len(findings),
-            "findings_by_severity": dict(
-                Counter(item.finding.severity for item in findings)
-            ),
+            "findings_by_severity": dict(Counter(item.finding.severity for item in findings)),
             "accepted_total": len(accepted),
             "unwired_total": 0,
         },
@@ -251,10 +252,7 @@ def ingest_report(
         report,
         registry,
         provenance=provenance or _provenance(report),
-        context=context
-        or IngestionContext(
-            canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
-        ),
+        context=context or IngestionContext(canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})),
         actor=actor,
     )
 
@@ -318,9 +316,7 @@ def test_report_provenance_must_exactly_match_the_trusted_attestation(
             _report(),
             REGISTRY,
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -331,6 +327,7 @@ def _registry_with_second_producer():
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -339,21 +336,19 @@ def _registry_with_second_producer():
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
 
 
 def test_a_registered_producer_cannot_impersonate_the_attested_producer(tmp_path):
-    report = _report(
-        findings=[
-            ReportedFinding(producer_id="curation_lens", finding=_finding())
-        ]
-    )
+    report = _report(findings=[ReportedFinding(producer_id="curation_lens", finding=_finding())])
     provenance = IngestionProvenance(
         ingestion_ref=report.ingestion_ref,
         generated_at=report.generated_at,
@@ -366,9 +361,7 @@ def test_a_registered_producer_cannot_impersonate_the_attested_producer(tmp_path
             report,
             _registry_with_second_producer(),
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -411,9 +404,7 @@ def test_producer_attestation_set_equality_has_no_subset_fallback(
             report,
             _registry_with_second_producer(),
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -467,9 +458,7 @@ def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
             claimed,
             REGISTRY,
             provenance=current_attestation,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
 
     genuine = _report(
@@ -486,9 +475,7 @@ def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
         genuine,
         REGISTRY,
         provenance=_provenance(genuine),
-        context=IngestionContext(
-            canonical_entity_ids=frozenset({"dataset:a"})
-        ),
+        context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
     )
 
     assert outcome.records_written == 1
@@ -517,7 +504,7 @@ def test_graph_context_accepts_an_adapter_backed_entity(tmp_path):
         "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
         encoding="utf-8",
     )
-    context = _load_ingestion_context(tmp_path)
+    context, _entity_registry = _load_ingestion_context(tmp_path)
     assert "paper:Smith2024" in context.canonical_entity_ids
     report = _report(
         findings=[
@@ -564,7 +551,7 @@ def test_graph_invalid_entities_do_not_enter_the_trusted_context(tmp_path):
         "---\nid: mystery:invalid\nkind: mystery\ntitle: Invalid\n---\n",
         encoding="utf-8",
     )
-    context = _load_ingestion_context(tmp_path)
+    context, _entity_registry = _load_ingestion_context(tmp_path)
     assert "mystery:invalid" not in context.canonical_entity_ids
     report = _report(
         findings=[
@@ -687,6 +674,7 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -695,12 +683,14 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[
@@ -738,9 +728,7 @@ def test_no_arrival_order_dependence(tmp_path):
     b.mkdir()
     _seed_entity(a, "dataset:a")
     _seed_entity(b, "dataset:a")
-    first = _report(
-        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
-    )
+    first = _report(findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())])
     second = _report(
         ingestion_ref="ing:2",
         findings=[
@@ -763,6 +751,7 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -771,12 +760,14 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     a = tmp_path / "a"
     b = tmp_path / "b"
@@ -787,16 +778,12 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     early = _report(
         ingestion_ref="ing:early",
         generated_at="2026-07-27T10:00:00+00:00",
-        findings=[
-            ReportedFinding(producer_id="curation_lens", finding=_finding())
-        ],
+        findings=[ReportedFinding(producer_id="curation_lens", finding=_finding())],
     )
     late = _report(
         ingestion_ref="ing:late",
         generated_at="2026-07-27T14:00:00+00:00",
-        findings=[
-            ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
-        ],
+        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())],
     )
 
     ingest_report(a, early, registry)
@@ -819,12 +806,8 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     assert second.transitions[0].actor == "ingest"
     assert first.transitions[0].reason == "detected by curation_lens"
     assert second.transitions[0].reason == "detected by dataset_anomalies"
-    assert [
-        (occurrence.observed_at, occurrence.idempotency_key)
-        for occurrence in first.occurrences
-    ] == sorted(
-        (occurrence.observed_at, occurrence.idempotency_key)
-        for occurrence in first.occurrences
+    assert [(occurrence.observed_at, occurrence.idempotency_key) for occurrence in first.occurrences] == sorted(
+        (occurrence.observed_at, occurrence.idempotency_key) for occurrence in first.occurrences
     )
 
 
@@ -852,9 +835,7 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
         id="refs.unicode-identity",
         severities={"warn"},
         subject_types={subject["type"]},
-        identifier_namespaces=(
-            {"reference"} if subject["type"] == "identifier" else set()
-        ),
+        identifier_namespaces=({"reference"} if subject["type"] == "identifier" else set()),
         qualifier_schema=Q,
         identity_qualifiers=("field",),
         title="t",
@@ -866,12 +847,14 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(unicode_rule,),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     first_subject = (
         PathSubject(path=subject["path"])
@@ -940,9 +923,7 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
     assert left.transitions[0] == early_genesis
     assert right.transitions[0] == late_genesis
     assert left.identity_qualifiers["field"] == "année"
-    assert {
-        occurrence.qualifiers["field"] for occurrence in left.occurrences
-    } == {"année"}
+    assert {occurrence.qualifiers["field"] for occurrence in left.occurrences} == {"année"}
 
 
 def test_direct_ingestion_validates_the_canonical_identity_value_before_writing(
@@ -967,12 +948,14 @@ def test_direct_ingestion_validates_the_canonical_identity_value_before_writing(
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(rule,),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[
@@ -1274,9 +1257,7 @@ def _assert_forged_report_is_refused_without_mutation(tmp_path, report) -> None:
                 generated_at="2026-07-27T12:00:00+00:00",
                 producer_ids=frozenset({"dataset_anomalies"}),
             ),
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})),
         )
     assert not (tmp_path / "doc").exists()
 
@@ -1295,11 +1276,73 @@ def test_ingest_revalidates_a_model_copy_with_forged_totals(tmp_path):
     _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
 
 
-def test_ingest_revalidates_a_forged_report_count(tmp_path):
-    report = _report()
-    forged = report.model_copy(update={"findings": report.findings * 5001})
+def test_direct_ingestion_refuses_combined_count_before_store_creation(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
 
-    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+    finding = ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
+    accepted = AcceptedFinding(
+        producer_id="dataset_anomalies",
+        finding=_finding(),
+        acceptance_key="a" * 32,
+        reason="known",
+    )
+    half = MAX_INGESTED_REPORT_FINDINGS // 2
+    report = _report(
+        findings=[finding] * (half + 1),
+        accepted=[accepted] * (MAX_INGESTED_REPORT_FINDINGS - half),
+    )
+    with pytest.raises(IngestError, match="ceiling"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_direct_ingestion_rechecks_count_on_the_detached_snapshot(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
+
+    class LengthLiar(tuple):
+        def __len__(self):
+            return 0
+
+    report = _report()
+    actual_count = MAX_INGESTED_REPORT_FINDINGS + 1
+    forged = report.model_copy(
+        update={
+            "findings": LengthLiar(report.findings * actual_count),
+            "totals": report.totals.model_copy(
+                update={
+                    "findings_total": actual_count,
+                    "findings_by_severity": {"warn": actual_count},
+                }
+            ),
+        }
+    )
+
+    with pytest.raises(IngestError, match="ceiling"):
+        ingest_report(tmp_path, forged, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_load_report_refuses_combined_count_before_any_store_access(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
+
+    finding = ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
+    accepted = AcceptedFinding(
+        producer_id="dataset_anomalies",
+        finding=_finding(),
+        acceptance_key="a" * 32,
+        reason="known",
+    )
+    half = MAX_INGESTED_REPORT_FINDINGS // 2
+    report = _report(
+        findings=[finding] * (half + 1),
+        accepted=[accepted] * (MAX_INGESTED_REPORT_FINDINGS - half),
+    )
+    payload = report.model_dump(mode="json")
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(IngestError, match="ceiling"):
+        load_report(tmp_path, path)
+    assert not (tmp_path / CASES_DIRNAME).exists()
 
 
 def test_ingest_revalidates_nested_values_from_model_construct(tmp_path):
@@ -1365,9 +1408,7 @@ def test_ingest_wraps_a_cyclic_mutation_during_report_snapshot(tmp_path):
 def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
     # Simulate a crash after the first of two records is written, by writing the
     # first record alone and then re-ingesting the whole report.
-    first_only = _report(
-        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
-    )
+    first_only = _report(findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())])
     ingest_report(tmp_path, first_only, REGISTRY)
     both = _report(
         findings=[
@@ -1639,15 +1680,11 @@ def test_a_non_identity_qualifier_difference_still_collides(tmp_path):
         findings=[
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    qualifiers={"field": "year", "note": "first look"}
-                ),
+                finding=_finding(qualifiers={"field": "year", "note": "first look"}),
             ),
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    qualifiers={"field": "year", "note": "second look"}
-                ),
+                finding=_finding(qualifiers={"field": "year", "note": "second look"}),
             ),
         ]
     )
@@ -1677,12 +1714,14 @@ def test_a_subject_path_through_a_symlink_is_refused(tmp_path):
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE, path_rule),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[
@@ -1715,9 +1754,7 @@ def test_an_evidence_path_through_a_symlink_is_refused(tmp_path):
         findings=[
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    evidence=[LocationEvidence(path="doc/x.md", line=1)]
-                ),
+                finding=_finding(evidence=[LocationEvidence(path="doc/x.md", line=1)]),
             )
         ]
     )

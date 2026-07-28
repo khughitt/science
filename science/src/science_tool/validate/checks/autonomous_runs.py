@@ -18,23 +18,48 @@ from pathlib import Path
 
 from science_model.autonomous_runs import AutonomousRunRecord, RunRecordError
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.autonomy.git import GitError, run_git
 from science_tool.graph.autonomous_runs import RUNS_DIRNAME, load_run_records
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE = "autonomous-runs"
 TRAILER_KEY = "Science-Run"
 _SEP = "\x1e"
 
 
+SECTION, RULES = declare_validation_rules(
+    section_id="autonomous-runs",
+    section_title="autonomous runs",
+    section_order=161,
+    rule_ids=("autonomous-runs.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
 class _ScanFailed(Exception):
     """git could not be asked. Never silently an empty result -- see `_marked_commits`."""
 
 
-def _result(severity: Severity, relative: str | None, message: str) -> Result:
-    return Result(severity, Path(relative) if relative is not None else None, None, message, RULE, None)
+def _result(
+    severity: Severity,
+    relative: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(relative) if relative is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["autonomous-runs.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -82,9 +107,7 @@ def _record_added_in_range(root: Path, relative: str, base: str, head: str) -> s
     commit falls after the range, evades this. Catching that one needs a property this
     check deliberately does not have: re-deriving the basis, which is `finish`'s job.
     """
-    completed = _git(
-        root, "log", "--format=%H", "--diff-filter=A", "-1", f"{base}..{head}", "--", relative
-    )
+    completed = _git(root, "log", "--format=%H", "--diff-filter=A", "-1", f"{base}..{head}", "--", relative)
     if completed.returncode != 0:
         raise _ScanFailed(completed.stderr.strip() or f"git log failed for {relative}")
     return completed.stdout.strip() or None
@@ -105,7 +128,11 @@ def _marked_commits(root: Path) -> list[tuple[str, str]]:
     could not read.
     """
     completed = _git(
-        root, "log", "--all", "-E", f"--grep=^{TRAILER_KEY}:",
+        root,
+        "log",
+        "--all",
+        "-E",
+        f"--grep=^{TRAILER_KEY}:",
         f"--format=%H{_SEP}%(trailers:key={TRAILER_KEY},valueonly){_SEP}",
     )
     if completed.returncode != 0:
@@ -124,8 +151,8 @@ def _marked_commits(root: Path) -> list[tuple[str, str]]:
 
 # order 207 puts this after `accepted_validation` (206), the current tail. A check most
 # projects never trigger belongs at the end of the report, not ahead of the manifest.
-@Check(section="autonomous runs...", order=207)
-def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=207, producer_id="validate.autonomous-runs", rules=tuple(RULES.values()))
+def check_autonomous_runs(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Run-record integrity and coverage. Silent in projects that never run unattended."""
     root = ctx.project_root
     runs_dir = root / RUNS_DIRNAME
@@ -136,7 +163,10 @@ def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
         marked = _marked_commits(root)
     except _ScanFailed as exc:
         yield _result(
-            Severity.ERROR, None, f"could not scan history for {TRAILER_KEY} trailers: {exc}"
+            Severity.ERROR,
+            None,
+            f"could not scan history for {TRAILER_KEY} trailers: {exc}",
+            key=["history-scan-failed"],
         )
         return
 
@@ -153,18 +183,24 @@ def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
         # Covers the internally-inconsistent record too: unwired-with-a-digest fails
         # model validation inside the loader. One bad record blinds the whole check, so
         # report and stop rather than proceeding on a partial view.
-        yield _result(Severity.ERROR, RUNS_DIRNAME, f"run records could not be read: {exc}")
+        yield _result(
+            Severity.ERROR,
+            RUNS_DIRNAME,
+            f"run records could not be read: {exc}",
+            key=["records-unreadable"],
+        )
         return
 
     by_id = {record.id: record for record in records}
 
-    for commit, run_id in marked:
+    for commit, run_id in sorted(set(marked)):
         if run_id not in by_id:
             yield _result(
                 Severity.ERROR,
                 None,
                 f"commit {commit[:12]} carries {TRAILER_KEY}: {run_id} but there is no run record "
                 f"for it -- unwired: autonomous commits with no attestation",
+                key=["missing-record", run_id, commit],
             )
 
     # `_commit_exists` and `_record_added_in_range` shell out too, so the same failure the
@@ -174,11 +210,14 @@ def check_autonomous_runs(ctx: ValidateContext) -> Iterator[Result]:
             yield from _record_results(root, record)
     except _ScanFailed as exc:
         yield _result(
-            Severity.ERROR, RUNS_DIRNAME, f"could not verify the recorded commits: {exc}"
+            Severity.ERROR,
+            RUNS_DIRNAME,
+            f"could not verify the recorded commits: {exc}",
+            key=["record-verification-failed"],
         )
 
 
-def _record_results(root: Path, record: AutonomousRunRecord) -> Iterator[Result]:
+def _record_results(root: Path, record: AutonomousRunRecord) -> Iterator[CheckObservation]:
     """Everything this check can say about one record without rebuilding its basis."""
     relative = f"{RUNS_DIRNAME}/{record.slug}.md"
     reachable = True
@@ -191,17 +230,15 @@ def _record_results(root: Path, record: AutonomousRunRecord) -> Iterator[Result]
             yield _result(
                 Severity.ERROR,
                 relative,
-                f"{record.id}: {field_name} {sha[:12]} is unreachable -- the recorded "
-                "transition cannot be validated",
+                f"{record.id}: {field_name} {sha[:12]} is unreachable -- the recorded transition cannot be validated",
+                key=["unreachable-commit", field_name, sha],
             )
     if not reachable:
         # A range with an unreachable end cannot be walked, so the forgery probe below
         # would fail rather than answer. The unreachable commit is already reported.
         return
 
-    forging_commit = _record_added_in_range(
-        root, relative, record.base_commit, record.head_commit
-    )
+    forging_commit = _record_added_in_range(root, relative, record.base_commit, record.head_commit)
     if forging_commit is not None:
         yield _result(
             Severity.ERROR,
@@ -210,4 +247,5 @@ def _record_results(root: Path, record: AutonomousRunRecord) -> Iterator[Result]
             f"the range {record.base_commit[:12]}..{record.head_commit[:12]} the record itself "
             "names -- the supervisor writes a record only after that range ends, so this "
             "attestation was written by the run it attests to",
+            key=["record-added-in-range", record.id, forging_commit],
         )

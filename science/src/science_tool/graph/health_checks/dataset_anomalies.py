@@ -3,14 +3,30 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import yaml as _yaml
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import (
+    EntitySubject,
+    FindingRule,
+    FindingSection,
+    LocationEvidence,
+    Severity,
+)
 
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
-from science_tool.graph.health_checks.base import HealthCheck
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import (
+    HealthCheck,
+    HealthContext,
+    composed_result,
+    context_sources,
+)
 from science_tool.instruments import InstrumentResult
 
-DATASET_ANOMALY_CODES: tuple[str, ...] = (
+DATASET_RULE_CODES: tuple[str, ...] = (
+    "dataset_access_invalid",
     "dataset_consumed_but_unverified",
     "dataset_stale_review",
     "dataset_missing_source_url",
@@ -22,6 +38,151 @@ DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_origin_block_mismatch",
     "dataset_verified_but_unstageable",
     "dataset_research_package_asymmetric",
+)
+
+
+class NoDatasetQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class DatasetFieldQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+
+
+class DatasetCounterpartQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    counterpart: str
+
+
+class DatasetInvariantQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invariant: str
+    counterpart: str
+
+
+SECTION = FindingSection(
+    id="dataset-anomalies",
+    title="Dataset anomalies",
+    section_order=212,
+)
+
+
+def _rule(
+    *,
+    rule_id: str,
+    severity: Severity,
+    qualifier_schema: type[BaseModel],
+    identity_qualifiers: tuple[str, ...],
+    display_order: int,
+) -> FindingRule:
+    return FindingRule(
+        id=rule_id,
+        severities=frozenset({severity}),
+        subject_types=frozenset({"entity"}),
+        qualifier_schema=qualifier_schema,
+        identity_qualifiers=identity_qualifiers,
+        title=rule_id.removeprefix("dataset.").replace("-", " ").title(),
+        section=SECTION.id,
+        display_order=display_order,
+    )
+
+
+RULES = {
+    "dataset_access_invalid": _rule(
+        rule_id="dataset.access-invalid",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=1,
+    ),
+    "dataset_consumed_but_unverified": _rule(
+        rule_id="dataset.consumed-but-unverified",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=2,
+    ),
+    "dataset_stale_review": _rule(
+        rule_id="dataset.stale-review",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=3,
+    ),
+    "dataset_missing_source_url": _rule(
+        rule_id="dataset.missing-source-url",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=4,
+    ),
+    "dataset_cached_field_drift": _rule(
+        rule_id="dataset.cached-field-drift",
+        severity="warn",
+        qualifier_schema=DatasetFieldQualifiers,
+        identity_qualifiers=("field",),
+        display_order=5,
+    ),
+    "dataset_invariant_violation": _rule(
+        rule_id="dataset.invariant-violation",
+        severity="warn",
+        qualifier_schema=DatasetInvariantQualifiers,
+        identity_qualifiers=("invariant", "counterpart"),
+        display_order=6,
+    ),
+    "dataset_derived_missing_workflow_run": _rule(
+        rule_id="dataset.derived-missing-workflow-run",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=7,
+    ),
+    "dataset_derived_asymmetric_edge": _rule(
+        rule_id="dataset.derived-asymmetric-edge",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=8,
+    ),
+    "dataset_derived_input_chain_broken": _rule(
+        rule_id="dataset.derived-input-chain-broken",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=9,
+    ),
+    "dataset_origin_block_mismatch": _rule(
+        rule_id="dataset.origin-block-mismatch",
+        severity="error",
+        qualifier_schema=DatasetFieldQualifiers,
+        identity_qualifiers=("field",),
+        display_order=10,
+    ),
+    "dataset_verified_but_unstageable": _rule(
+        rule_id="dataset.verified-but-unstageable",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=11,
+    ),
+    "dataset_research_package_asymmetric": _rule(
+        rule_id="dataset.research-package-asymmetric",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=12,
+    ),
+}
+PRODUCER = FindingProducer(
+    producer_id="dataset_anomalies",
+    namespace="health_checks",
+    source_module="graph/health_checks/dataset_anomalies.py",
+    rules=tuple(RULES.values()),
+    sections=(SECTION,),
 )
 
 
@@ -163,6 +324,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                     "code": "dataset_origin_block_mismatch",
                     "severity": "error",
                     "entity_id": entity_id,
+                    "field": "derivation",
                     "file_path": str(md),
                     "message": "origin: external entity carries a derivation: block (invariant #7)",
                 }
@@ -183,6 +345,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_origin_block_mismatch",
                         "severity": "error",
                         "entity_id": entity_id,
+                        "field": ",".join(forbidden),
                         "file_path": str(md),
                         "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
                     }
@@ -308,6 +471,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_derived_missing_workflow_run",
                             "severity": "error",
                             "entity_id": entity_id,
+                            "counterpart": wf_run_id,
                             "file_path": str(md),
                             "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
                         }
@@ -320,6 +484,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                                 "code": "dataset_derived_asymmetric_edge",
                                 "severity": "error",
                                 "entity_id": entity_id,
+                                "counterpart": wf_run_id,
                                 "file_path": str(md),
                                 "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
                             }
@@ -334,6 +499,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_derived_input_chain_broken",
                             "severity": "error",
                             "entity_id": entity_id,
+                            "counterpart": str(inp),
                             "file_path": str(md),
                             "message": f"input chain broken: {msg}",
                         }
@@ -351,6 +517,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_research_package_asymmetric",
                             "severity": "error",
                             "entity_id": entity_id,
+                            "counterpart": str(cons),
                             "file_path": str(md),
                             "message": f"consumed_by lists {cons} but it doesn't resolve to a research-package",
                         }
@@ -361,6 +528,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_research_package_asymmetric",
                             "severity": "error",
                             "entity_id": entity_id,
+                            "counterpart": str(cons),
                             "file_path": str(md),
                             "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
                         }
@@ -379,6 +547,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_cached_field_drift",
                             "severity": "warning",
                             "entity_id": entity_id,
+                            "field": "license",
                             "file_path": str(md),
                             "message": f"license drift: entity={fm_license!r} runtime={rt_license!r}",
                         }
@@ -391,6 +560,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_cached_field_drift",
                             "severity": "warning",
                             "entity_id": entity_id,
+                            "field": "ontology_terms",
                             "file_path": str(md),
                             "message": f"ontology_terms drift: entity={fm_ot} runtime={rt_ot}",
                         }
@@ -403,6 +573,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_cached_field_drift",
                             "severity": "warning",
                             "entity_id": entity_id,
+                            "field": "update_cadence",
                             "file_path": str(md),
                             "message": f"update_cadence drift: entity={fm_uc!r} runtime={rt_uc!r}",
                         }
@@ -419,6 +590,8 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_invariant_violation",
                         "severity": "warning",
                         "entity_id": ds_id,
+                        "invariant": "umbrella-consumption",
+                        "counterpart": str(cons),
                         "file_path": "",
                         "message": f"umbrella {cons} appears in {ds_id}.consumed_by (invariant #1)",
                     }
@@ -435,6 +608,8 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_invariant_violation",
                         "severity": "warning",
                         "entity_id": ds_id,
+                        "invariant": "lineage-symmetry",
+                        "counterpart": sib_id_str,
                         "file_path": "",
                         "message": f"lineage drift: {ds_id} lists sibling {sib_id_str} but {sib_id_str}.parent_dataset != {ds_id}",
                     }
@@ -455,6 +630,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_research_package_asymmetric",
                         "severity": "error",
                         "entity_id": rp_id,
+                        "counterpart": ds_id,
                         "file_path": "",
                         "message": f"research-package.displays lists {ds_id} but no such dataset entity",
                     }
@@ -464,13 +640,40 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                     {
                         "code": "dataset_research_package_asymmetric",
                         "severity": "error",
-                        "entity_id": rp_id,
+                        "entity_id": ds_id,
+                        "counterpart": rp_id,
                         "file_path": "",
                         "message": f"{rp_id} displays {ds_id} but the dataset's consumed_by doesn't include the research-package",
                     }
                 )
 
     return InstrumentResult.from_rows(issues)
+
+
+def _dataset_subject(row: dict):
+    return EntitySubject(ref=str(row["entity_id"]))
+
+
+def _dataset_qualifiers(row: dict[str, object]) -> dict[str, object]:
+    rule = RULES[str(row["code"])]
+    return {field: row[field] for field in rule.qualifier_schema.model_fields}
+
+
+def run_check(context: HealthContext):
+    observed = check_dataset_anomalies(context.project_root)
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in context_sources(context).entities)
+    findings = [
+        RULES[str(row["code"])].build(
+            subject=_dataset_subject(row),
+            severity="warn" if row["severity"] == "warning" else "error",
+            qualifiers=_dataset_qualifiers(row),
+            message=str(row["message"]),
+            evidence=([LocationEvidence(path=str(row["file_path"]))] if row["file_path"] else []),
+        )
+        for row in observed.rows
+        if str(row["entity_id"]) in canonical_entity_ids
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
 
 
 def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
@@ -494,7 +697,7 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
 CHECK = HealthCheck(
     name="dataset_anomalies",
     description="Run dataset lineage, access, and package invariant checks.",
-    requires_sources=False,
-    run=lambda context: check_dataset_anomalies(context.project_root),
-    empty=lambda _root: [],
+    requires_sources=True,
+    run=run_check,
+    producer=PRODUCER,
 )

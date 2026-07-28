@@ -12,11 +12,13 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.prereg_frozen import frozen_because
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 # Word-bounded on purpose. An earlier draft used bare `thin ` and a
 # case-insensitive `ESS`; measured against the natural-systems corpus that
@@ -37,8 +39,25 @@ _REQUIRED_ROWS = ("Target geometry", "Calibration domain")
 _RULE = "prereg.schedule-calibration-domain"
 
 
-def _warn(relative: str, message: str) -> Result:
-    return Result(Severity.WARN, Path(relative), None, message, _RULE, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="prereg-schedule",
+    section_title="prereg schedule",
+    section_order=117,
+    rule_ids=("prereg.schedule-calibration-domain",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _warn(relative: str, message: str, *, key: list[str]) -> CheckObservation:
+    return validation_observation(
+        severity=Severity.WARN,
+        path=Path(relative),
+        line=None,
+        message=message,
+        rule=RULES["prereg.schedule-calibration-domain"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _section(body: str, heading_pattern: re.Pattern[str]) -> str | None:
@@ -74,8 +93,8 @@ def _unfilled_state(rows: dict[str, str], row: str) -> str | None:
     return None
 
 
-@Check(section="discussion documents...", order=13)
-def check_prereg_schedule(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=13, producer_id="validate.prereg-schedule", rules=tuple(RULES.values()))
+def check_prereg_schedule(ctx: ValidateContext) -> Iterator[CheckObservation]:
     entities_root = ctx.project_root / resolve_path_policy("pre-registration").root
     if not entities_root.is_dir():
         return
@@ -103,10 +122,12 @@ def check_prereg_schedule(ctx: ValidateContext) -> Iterator[Result]:
                         relative,
                         f"{relative} declares a sampling schedule but its Cost Gate row "
                         f"'{row}' is {state}; fill the row before freezing the schedule",
+                        key=["cost-gate-row", row, state],
                     )
             continue
         yield _warn(
             relative,
             f"{relative} declares a sampling schedule but carries no Cost Gate; "
             "the schedule's calibration domain is undeclared",
+            key=["cost-gate"],
         )

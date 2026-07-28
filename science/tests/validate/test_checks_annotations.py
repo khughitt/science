@@ -55,11 +55,11 @@ def _ctx(root: Path, *, strict: bool = False) -> ValidateContext:
 
 
 def _summary(results) -> list[tuple[Severity, str, str | None]]:
-    return [(result.severity, result.message, result.rule) for result in results]
+    return [(result.severity, result.message, result.rule_id) for result in results]
 
 
 def _located_summary(results) -> list[tuple[Severity, Path | None, str, str | None]]:
-    return [(result.severity, result.path, result.message, result.rule) for result in results]
+    return [(result.severity, result.path, result.message, result.rule_id) for result in results]
 
 
 def test_no_sidecars_emits_exact_info_message(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_no_sidecars_emits_exact_info_message(tmp_path: Path) -> None:
 
     results = list(check_annotations(_ctx(tmp_path)))
 
-    assert _summary(results) == [(Severity.INFO, "no annotation sidecars (*.anno.trig) in this project", "annotations")]
+    assert _summary(results) == [(Severity.INFO, "no annotation sidecars (*.anno.trig) in this project", None)]
 
 
 def test_broken_and_parse_errors_emit_warn_messages(tmp_path: Path, monkeypatch) -> None:
@@ -172,9 +172,7 @@ def test_clean_sidecars_emit_exact_info_message(tmp_path: Path, monkeypatch) -> 
 
     results = list(annotations_check.check_annotations(_ctx(tmp_path)))
 
-    assert _summary(results) == [
-        (Severity.INFO, "7 annotation(s) across 2 sidecar(s); all selectors clean", "annotations")
-    ]
+    assert _summary(results) == [(Severity.INFO, "7 annotation(s) across 2 sidecar(s); all selectors clean", None)]
 
 
 def test_registration_includes_annotations_after_prose_lints() -> None:
@@ -189,12 +187,12 @@ def test_registration_includes_annotations_after_prose_lints() -> None:
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        prose_lints_index = next(index for index, entry in enumerate(ordered) if entry[0] == "prose quality lints...")
-        annotations_index = next(index for index, entry in enumerate(ordered) if entry[0] == "annotation drift...")
+        prose_lints_index = next(index for index, entry in enumerate(ordered) if entry[0] == "prose lints")
+        annotations_index = next(index for index, entry in enumerate(ordered) if entry[0] == "annotations")
 
         assert annotations_index == prose_lints_index + 1
         assert ordered[annotations_index] == (
-            "annotation drift...",
+            "annotations",
             22,
             "science_tool.validate.checks.annotations",
         )

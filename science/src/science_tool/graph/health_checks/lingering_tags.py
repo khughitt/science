@@ -4,15 +4,44 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from science_tool.graph.health_checks.base import HealthCheck
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import FindingRule, FindingSection, PathSubject
+
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
 from science_tool.instruments import InstrumentResult
 
 
 class LingeringTagsRecord(TypedDict):
     file: str
     values: list[str]
+
+
+class LingeringTagsQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    values: list[str]
+
+
+SECTION = FindingSection(id="lingering-tags", title="Lingering tags", section_order=211)
+RULE = FindingRule(
+    id="tags.lingering",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"path"}),
+    qualifier_schema=LingeringTagsQualifiers,
+    title="Lingering tags",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="lingering_tags",
+    namespace="health_checks",
+    source_module="graph/health_checks/lingering_tags.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
 
 
 _FRONTMATTER_TAGS_RE = re.compile(r"^tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
@@ -104,10 +133,24 @@ def collect_lingering_tags(project_root: Path) -> InstrumentResult[LingeringTags
     return InstrumentResult.from_rows(results)
 
 
+def run_check(context: HealthContext):
+    observed = collect_lingering_tags(context.project_root)
+    findings = [
+        RULE.build(
+            subject=PathSubject(path=row["file"]),
+            severity="warn",
+            qualifiers={"values": row["values"]},
+            message=f"Legacy tags field remains: {', '.join(row['values'])}.",
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="lingering_tags",
     description="Find legacy tags fields in document and task metadata.",
     requires_sources=False,
-    run=lambda context: collect_lingering_tags(context.project_root),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

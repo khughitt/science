@@ -36,7 +36,7 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _messages(results: Iterable[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [result.message for result in results if severity is None or result.severity == severity.value]
 
 
 def _write_active(
@@ -114,13 +114,11 @@ def test_empty_active_directory_reports_exists_and_no_tasks(tmp_path: Path) -> N
     [
         (
             "legacy",
-            "tasks/active.md predates the storage split; "
-            "run `science tasks migrate-storage --apply`.",
+            "tasks/active.md predates the storage split; run `science tasks migrate-storage --apply`.",
         ),
         (
             "migrating",
-            "an interrupted storage migration is in progress; "
-            "run `science tasks migrate-storage --resume`.",
+            "an interrupted storage migration is in progress; run `science tasks migrate-storage --resume`.",
         ),
         (
             "conflict",
@@ -210,8 +208,7 @@ def test_duplicate_ids_across_active_and_done_name_both_locations(tmp_path: Path
     done.joinpath("2026-01.md").write_text(_valid_task("t001"), encoding="utf-8")
 
     assert _messages(check_tasks(_ctx(tmp_path)), Severity.ERROR) == [
-        "duplicate task ID t001 found in "
-        "tasks/active/t001-task.md:1, tasks/done/2026-01.md:1"
+        "duplicate task ID t001 found in tasks/active/t001-task.md:1, tasks/done/2026-01.md:1"
     ]
 
 
@@ -352,10 +349,10 @@ def test_loader_registry_includes_tasks_after_graph() -> None:
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        graph_index = next(index for index, entry in enumerate(ordered) if entry[0] == "knowledge graph...")
-        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "task queue...")
+        graph_index = next(index for index, entry in enumerate(ordered) if entry[0] == "graph")
+        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "tasks")
 
         assert tasks_index == graph_index + 1
-        assert ordered[tasks_index] == ("task queue...", 18, "science_tool.validate.checks.tasks")
+        assert ordered[tasks_index] == ("tasks", 18, "science_tool.validate.checks.tasks")
     finally:
         CANONICAL_CHECKS[:] = original_entries

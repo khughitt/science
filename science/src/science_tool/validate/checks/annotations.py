@@ -61,26 +61,69 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from science_tool.annotation.verify import VerifyIssue, verify_path
-from science_tool.validate.checks import Check
-from science_tool.validate.result import Result, Severity
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.annotation.verify import ISSUE_KINDS, VerifyIssue, verify_path
+from science_tool.validate.checks import Check, CheckObservation
+from science_tool.validate.observations import ValidationNotice
+from science_tool.validate.result import Severity
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
 
-def _result(severity: Severity, message: str, *, path: Path | None = None, rule: str = "annotations") -> Result:
-    return Result(severity, path, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="annotations",
+    section_title="annotations",
+    section_order=147,
+    rule_ids=(
+        "annotations.broken",
+        "annotations.degraded",
+        "annotations.fuzzy",
+        "annotations.parse-error",
+        "annotations.source-missing",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+ANNOTATION_RULES = {kind: RULES[f"annotations.{kind}"] for kind in ISSUE_KINDS}
 
 
-@Check(section="annotation drift...", order=22)
-def check_annotations(ctx: "ValidateContext") -> Iterable[Result]:
+def _result(
+    severity: Severity,
+    message: str,
+    *,
+    path: Path | None,
+    rule: FindingRule,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=path,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=22, producer_id="validate.annotations", rules=tuple(RULES.values()))
+def check_annotations(ctx: "ValidateContext") -> Iterable[CheckObservation]:
     report = verify_path(ctx.project_root)
 
     if report.sidecars == 0:
-        return [_result(Severity.INFO, "no annotation sidecars (*.anno.trig) in this project")]
+        return [
+            ValidationNotice(
+                path=None,
+                line=None,
+                message="no annotation sidecars (*.anno.trig) in this project",
+            )
+        ]
 
-    results: list[Result] = []
+    results: list[CheckObservation] = []
     included_issue_kinds = {"broken", "parse-error"}
     if ctx.strict:
         included_issue_kinds.update({"degraded", "fuzzy", "source-missing"})
@@ -97,32 +140,44 @@ def check_annotations(ctx: "ValidateContext") -> Iterable[Result]:
         and report.source_missing == 0
     ):
         results.append(
-            _result(
-                Severity.INFO,
-                f"{report.annotations} annotation(s) across {report.sidecars} sidecar(s); all selectors clean",
+            ValidationNotice(
+                path=None,
+                line=None,
+                message=(
+                    f"{report.annotations} annotation(s) across {report.sidecars} sidecar(s); all selectors clean"
+                ),
             )
         )
 
     return results
 
 
-def _issue_result(ctx: "ValidateContext", issue: VerifyIssue) -> Result:
+def _issue_result(ctx: "ValidateContext", issue: VerifyIssue) -> CheckObservation:
     path = _relative_path(ctx, issue.sidecar)
-    rule = f"annotations.{issue.kind}"
+    rule = ANNOTATION_RULES[issue.kind]
     preview = _single_line(issue.exact_preview)
     if issue.kind == "parse-error":
-        return _result(Severity.WARN, f"sidecar parse error: {preview}", path=path, rule=rule)
+        return _result(
+            Severity.WARN,
+            f"sidecar parse error: {preview}",
+            path=path,
+            rule=rule,
+            key=[issue.annotation_id, issue.source],
+        )
 
     message_kind = issue.kind.replace("-", " ")
     selector = "selector"
     if issue.kind == "source-missing":
         message = f"annotation {issue.annotation_id} source missing: {issue.source}; preview: {preview}"
     else:
-        message = (
-            f"annotation {issue.annotation_id} {message_kind} {selector} in {issue.source}; "
-            f"preview: {preview}"
-        )
-    return _result(Severity.WARN, message, path=path, rule=rule)
+        message = f"annotation {issue.annotation_id} {message_kind} {selector} in {issue.source}; preview: {preview}"
+    return _result(
+        Severity.WARN,
+        message,
+        path=path,
+        rule=rule,
+        key=[issue.annotation_id, issue.source],
+    )
 
 
 def _relative_path(ctx: "ValidateContext", path: Path) -> Path:

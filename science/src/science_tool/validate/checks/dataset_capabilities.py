@@ -11,14 +11,18 @@ from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.datasets.capability_scope import VALID_SCOPES, is_valid_scope
 from science_tool.datasets.capability_shape import capability_shape_issue
 from science_tool.entities import CLOSED_LIFECYCLE_STATUSES
 from science_tool.project_config import validated_entity_schema_version
 from science_tool.validate._helpers import entity_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _QH_PREFIXES = ("question:", "hypothesis:")
 _REQUIRED_FIELD = "required_capabilities"
@@ -40,6 +44,22 @@ _PROVIDED_FIELD = "provided_capabilities"
 _QUESTION_CLOSED = frozenset({"answered", "resolved", "closed", "rejected", "duplicate"})
 
 
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-capabilities",
+    section_title="dataset capabilities",
+    section_order=132,
+    rule_ids=(
+        "dataset-capabilities.provided-malformed",
+        "dataset-capabilities.provided-missing",
+        "dataset-capabilities.required-malformed",
+        "dataset-capabilities.required-missing",
+        "dataset-capabilities.scope-conflict",
+        "dataset-capabilities.scope-unknown",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
 def is_demand_closed(*, kind: str, status: str | None, verdict: str | None = None) -> bool:
     """Whether a question/hypothesis still exerts live pull on data. False == still demanding."""
     # The shared terminal lifecycle: closed for ANY kind, whatever the evidence said.
@@ -56,8 +76,16 @@ def is_demand_closed(*, kind: str, status: str | None, verdict: str | None = Non
     return False
 
 
-def _result(path: str | None, message: str, rule: str) -> Result:
-    return Result(Severity.WARN, Path(path) if path else None, None, message, rule, None)
+def _result(path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=Severity.WARN,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _fm_is_demand_closed(fm: Mapping[str, Any]) -> bool:
@@ -83,7 +111,7 @@ def _scope_gate(
     path_value: str | None,
     field_issue: str | None,
     field_name: str,
-) -> tuple[bool, list[Result]]:
+) -> tuple[bool, list[CheckObservation]]:
     """Resolve a `capability_scope` value.
 
     Returns (suppress_missing, results):
@@ -99,7 +127,7 @@ def _scope_gate(
             _result(
                 path_value,
                 f"{ident}: unknown capability_scope {scope!r}; allowed: {sorted(VALID_SCOPES)}",
-                "dataset-capabilities.scope-unknown",
+                RULES["dataset-capabilities.scope-unknown"],
             )
         ]
     if field_issue != "missing":
@@ -107,7 +135,7 @@ def _scope_gate(
             _result(
                 path_value,
                 f"{ident}: capability_scope {scope!r} conflicts with non-empty {field_name}",
-                "dataset-capabilities.scope-conflict",
+                RULES["dataset-capabilities.scope-conflict"],
             )
         ]
     return True, []
@@ -115,16 +143,14 @@ def _scope_gate(
 
 def evaluate_dataset_capabilities(
     entities: Iterable[dict[str, Any]], *, generation: int = 2
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     records = list(entities)
     dataset_to_targets, target_to_datasets = _frontmatter_reach(records)
     # Closure is decided PER RECORD, because it now takes the kind and the verdict -- not a status
     # looked up in one kind-blind map. An id absent from this map is treated as LIVE below, which is
     # the conservative direction: an unknown target keeps the WARN.
     closed_by_id = {
-        ident: _fm_is_demand_closed(fm)
-        for fm in records
-        if isinstance((ident := fm.get("id")), str) and ident
+        ident: _fm_is_demand_closed(fm) for fm in records if isinstance((ident := fm.get("id")), str) and ident
     }
 
     for fm in records:
@@ -146,7 +172,7 @@ def evaluate_dataset_capabilities(
                 yield _result(
                     path_value,
                     f"{ident}: {_malformed_message(_PROVIDED_FIELD, generation=generation)}",
-                    "dataset-capabilities.provided-malformed",
+                    RULES["dataset-capabilities.provided-malformed"],
                 )
             elif issue == "missing":
                 targets = dataset_to_targets.get(ident)
@@ -157,7 +183,7 @@ def evaluate_dataset_capabilities(
                     yield _result(
                         path_value,
                         f"{ident}: dataset reaches {sorted(targets)} but declares no provided_capabilities",
-                        "dataset-capabilities.provided-missing",
+                        RULES["dataset-capabilities.provided-missing"],
                     )
             continue
 
@@ -171,7 +197,7 @@ def evaluate_dataset_capabilities(
                 yield _result(
                     path_value,
                     f"{ident}: {_malformed_message(_REQUIRED_FIELD, generation=generation)}",
-                    "dataset-capabilities.required-malformed",
+                    RULES["dataset-capabilities.required-malformed"],
                 )
             # Suppress a concluded target's missing-requirement WARN: it no longer
             # needs capability annotation to gate coverage of a live decision.
@@ -179,7 +205,7 @@ def evaluate_dataset_capabilities(
                 yield _result(
                     path_value,
                     f"{ident}: target reaches {sorted(target_to_datasets[ident])} but declares no required_capabilities",
-                    "dataset-capabilities.required-missing",
+                    RULES["dataset-capabilities.required-missing"],
                 )
 
 
@@ -252,8 +278,8 @@ def _is_qh(ref: str) -> bool:
     return ref.startswith(_QH_PREFIXES)
 
 
-@Check(section="dataset capabilities", order=33)
-def check_dataset_capabilities(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=33, producer_id="validate.dataset-capabilities", rules=tuple(RULES.values()))
+def check_dataset_capabilities(ctx: ValidateContext) -> Iterator[CheckObservation]:
     # `ctx.manifest` IS the raw science.yaml dict (see `ValidateContext.from_project_root`) --
     # the same authority `validated_entity_schema_version` reads through everywhere else. Absence
     # of a pin means "unpinned", not "generation 0", so it defaults to 2 here.

@@ -15,9 +15,11 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.validate.checks import Check
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _TOPIC_SECTIONS = (
     "## Summary",
@@ -40,12 +42,35 @@ _BOOK_SECTIONS = (
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "document_structure", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="document-structure",
+    section_title="document structure",
+    section_order=107,
+    rule_ids=("document-structure.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="document structure...", order=4)
-def check_document_structure(ctx: ValidateContext) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["document-structure.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=4, producer_id="validate.document-structure", rules=tuple(RULES.values()))
+def check_document_structure(ctx: ValidateContext) -> Iterator[CheckObservation]:
     topics_dir = ctx.project_root / "entities" / "topics"
     if topics_dir.is_dir():
         yield from _check_documents(ctx, topics_dir, _TOPIC_SECTIONS)
@@ -63,7 +88,7 @@ def _check_documents(
     sections: tuple[str, ...],
     *,
     exempt_paper_kinds: set[str] | None = None,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     if not directory.is_dir():
         return
 
@@ -71,7 +96,12 @@ def _check_documents(
         if not path.is_file():
             continue
         relative = path.relative_to(ctx.project_root).as_posix()
-        yield _result(Severity.INFO, relative, f"Checking {relative}...")
+        yield _result(
+            Severity.INFO,
+            relative,
+            f"Checking {relative}...",
+            key=["progress"],
+        )
 
         if exempt_paper_kinds is not None:
             paper_kind = str(ctx.frontmatter(path).get("paper_kind") or "").strip().lower()
@@ -81,7 +111,12 @@ def _check_documents(
         headings = set(_non_fenced_lines(ctx.read_text_cached(path).splitlines()))
         for section in sections:
             if section not in headings:
-                yield _result(Severity.WARN, relative, f"{relative} missing section: {section}")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative} missing section: {section}",
+                    key=["required-section", section],
+                )
 
 
 def _non_fenced_lines(lines: list[str]) -> Iterator[str]:

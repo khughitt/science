@@ -128,6 +128,7 @@ def _isolation_report() -> tuple[AuditReport, FindingRegistry]:
     producer = FindingProducer(
         producer_id="isolation_probe",
         namespace="health_checks",
+        source_module="graph/health_checks/test.py",
         rules=(rule,),
         sections=(section,),
         metrics_schema=None,
@@ -165,7 +166,7 @@ def _isolation_report() -> tuple[AuditReport, FindingRegistry]:
             "timings": (),
         },
     )
-    return report, build_registry([producer])
+    return report, build_registry([producer], active_kinds=frozenset())
 
 
 def _named_quads(dataset: Dataset) -> set[tuple[str, str, str, str]]:
@@ -211,9 +212,7 @@ def test_ingested_case_stays_out_of_graph_attention_and_revision_inputs(
             generated_at=report.generated_at,
             producer_ids=frozenset(report.meta.producers_run),
         ),
-        context=IngestionContext(
-            canonical_entity_ids=frozenset({"hypothesis:h1"})
-        ),
+        context=IngestionContext(canonical_entity_ids=frozenset({"hypothesis:h1"})),
     )
     assert outcome.records_written == 1
     record = load_cases(tmp_path)[0]

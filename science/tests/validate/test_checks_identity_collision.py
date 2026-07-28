@@ -133,9 +133,9 @@ def test_two_markdown_owners_flagged_error(tmp_path: Path) -> None:
     _write_dataset_md(tmp_path, "x-dup.md", "dataset:x")
     results = list(check_forbidden_second_declaration(ctx))
     assert len(results) == 1
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "dataset:x" in results[0].message
-    assert results[0].rule == "forbidden-second-declaration"
+    assert results[0].rule_id == "identity.forbidden-second-declaration"
 
 
 def test_markdown_owner_with_sibling_datapackage_warns_as_rollout_debt(tmp_path: Path) -> None:
@@ -153,7 +153,7 @@ def test_markdown_owner_with_sibling_datapackage_warns_as_rollout_debt(tmp_path:
     assert len(results) == 1
     # WARN, not ERROR: one owner is deprecated, so this is visible-but-non-blocking debt, not a
     # §B1 duplicate. The severity split is the whole point of grading collisions.
-    assert results[0].severity is Severity.WARN
+    assert results[0].severity == Severity.WARN.value
     assert "dataset:x" in results[0].message
     assert "remove the stub to clear it" in results[0].message
 

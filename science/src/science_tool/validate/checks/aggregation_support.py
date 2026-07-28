@@ -12,14 +12,41 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import entity_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="aggregation-support",
+    section_title="aggregation support",
+    section_order=133,
+    rule_ids=(
+        "aggregation-support.below-expected",
+        "aggregation-support.below-floor",
+        "aggregation-support.malformed-stamp",
+        "aggregation-support.stamp-missing",
+        "aggregation-support.unit-mismatch",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _valid_count(value: Any) -> bool:
@@ -74,7 +101,7 @@ def _unsafe_datapackage_reason(datapackage: str) -> str | None:
 def evaluate_aggregation_support(
     entities: Iterable[dict[str, Any]],
     read_datapackage: Callable[[str], dict[str, Any] | None],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     records = list(entities)
     floors_by_workflow = _workflow_support_floors(records)
 
@@ -106,7 +133,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} datapackage {datapackage!r} is unsafe: {unsafe_reason}",
-                "aggregation-support.stamp-missing",
+                RULES["aggregation-support.stamp-missing"],
             )
             continue
 
@@ -117,7 +144,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} could not read datapackage {datapackage!r}: {type(exc).__name__}: {exc}",
-                "aggregation-support.stamp-missing",
+                RULES["aggregation-support.stamp-missing"],
             )
             continue
 
@@ -129,7 +156,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} declares support floor min={floor_min} but no observed support was stamped",
-                "aggregation-support.stamp-missing",
+                RULES["aggregation-support.stamp-missing"],
             )
             continue
 
@@ -139,7 +166,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} stamped unit {stamped_unit!r} != declared unit {declared_unit!r}",
-                "aggregation-support.unit-mismatch",
+                RULES["aggregation-support.unit-mismatch"],
             )
             continue
 
@@ -148,7 +175,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} stamped observed={observed!r} is not a non-negative integer",
-                "aggregation-support.malformed-stamp",
+                RULES["aggregation-support.malformed-stamp"],
             )
             continue
 
@@ -157,7 +184,7 @@ def evaluate_aggregation_support(
                 Severity.ERROR,
                 path,
                 f"{prefix} observed support {observed} < declared floor min={floor_min}",
-                "aggregation-support.below-floor",
+                RULES["aggregation-support.below-floor"],
             )
         elif (
             _valid_declared_count(floor_min)
@@ -169,12 +196,12 @@ def evaluate_aggregation_support(
                 Severity.WARN,
                 path,
                 f"{prefix} observed support {observed} < expected {floor_expected} (>= floor min={floor_min})",
-                "aggregation-support.below-expected",
+                RULES["aggregation-support.below-expected"],
             )
 
 
-@Check(section="aggregation support", order=34)
-def check_aggregation_support(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=34, producer_id="validate.aggregation-support", rules=tuple(RULES.values()))
+def check_aggregation_support(ctx: ValidateContext) -> Iterator[CheckObservation]:
     def _read(rel: str) -> dict[str, Any] | None:
         p = ctx.project_root / rel
         if not p.is_file():

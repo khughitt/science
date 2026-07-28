@@ -53,7 +53,7 @@ def test_location_coherence_passes_for_correct_home(tmp_path: Path) -> None:
         },
     )
     ctx = _ctx(tmp_path)
-    assert not [r for r in check_entity_location_coherence(ctx) if r.severity is Severity.ERROR]
+    assert not [r for r in check_entity_location_coherence(ctx) if r.severity == Severity.ERROR.value]
 
 
 def test_location_coherence_flags_kind_in_wrong_dir(tmp_path: Path) -> None:
@@ -61,14 +61,14 @@ def test_location_coherence_flags_kind_in_wrong_dir(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "kind": "hypothesis"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
-    assert any(r.severity is Severity.ERROR and "kind" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "kind" in r.message for r in results)
 
 
 def test_filename_conformance_flags_legacy_name(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/q01-x.md", {"id": "question:q01-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_filename_conformance(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_filename_conformance_flags_stem_id_mismatch(tmp_path: Path) -> None:
@@ -76,13 +76,13 @@ def test_filename_conformance_flags_stem_id_mismatch(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0002-y", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_filename_conformance(ctx))
-    assert any(r.severity is Severity.ERROR and "id" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "id" in r.message for r in results)
 
 
 def test_filename_conformance_passes_for_padded(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", {"id": "question:0001-x", "kind": "question"})
     ctx = _ctx(tmp_path)
-    assert not [r for r in check_entity_filename_conformance(ctx) if r.severity is Severity.ERROR]
+    assert not [r for r in check_entity_filename_conformance(ctx) if r.severity == Severity.ERROR.value]
 
 
 def test_location_coherence_flags_id_kind_in_wrong_dir(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_location_coherence_flags_id_kind_in_wrong_dir(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-x.md", {"id": "hypothesis:0001-x", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_location_coherence(ctx))
-    assert any(r.severity is Severity.ERROR and "id kind" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "id kind" in r.message for r in results)
 
 
 def test_frontmatter_completeness_flags_missing_fields(tmp_path: Path) -> None:
@@ -100,7 +100,7 @@ def test_frontmatter_completeness_flags_missing_fields(tmp_path: Path) -> None:
     p.write_text("**Date:** 2026-05-23\n\nbody\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     results = list(check_entity_frontmatter_completeness(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_number_hygiene_flags_duplicate(tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ def test_number_hygiene_flags_duplicate(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-b.md", {"id": "question:0001-b", "kind": "question"})
     ctx = _ctx(tmp_path)
     results = list(check_entity_number_hygiene(ctx))
-    assert any(r.severity is Severity.ERROR and "0001" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "0001" in r.message for r in results)
 
 
 def test_stray_file_flagged(tmp_path: Path) -> None:
@@ -116,7 +116,7 @@ def test_stray_file_flagged(tmp_path: Path) -> None:
     (tmp_path / "entities" / "questions" / "README.txt").write_text("notes", encoding="utf-8")
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_stray_files_ignore_paired_annotation_sidecars(tmp_path: Path) -> None:
@@ -142,7 +142,7 @@ def test_stray_files_ignore_paired_annotation_sidecars(tmp_path: Path) -> None:
     assert not [
         r
         for r in results
-        if r.severity is Severity.ERROR and str(r.path) == "entities/questions/0001-x.anno.trig"
+        if r.severity == Severity.ERROR.value and str(r.path) == "entities/questions/0001-x.anno.trig"
     ]
 
 
@@ -155,8 +155,7 @@ def test_stray_files_flag_unpaired_annotation_sidecars(tmp_path: Path) -> None:
     results = list(check_entity_stray_files(ctx))
 
     assert any(
-        r.severity is Severity.ERROR and str(r.path) == "entities/questions/missing.anno.trig"
-        for r in results
+        r.severity == Severity.ERROR.value and str(r.path) == "entities/questions/missing.anno.trig" for r in results
     )
 
 
@@ -164,14 +163,14 @@ def test_stray_subdirectory_flagged(tmp_path: Path) -> None:
     (tmp_path / "entities" / "questions" / "attachments").mkdir(parents=True)
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
-    assert any(r.severity is Severity.ERROR and "subdirectory" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "subdirectory" in r.message for r in results)
 
 
 def test_number_hygiene_passes_for_distinct_numbers(tmp_path: Path) -> None:
     _write(tmp_path, "entities/questions/0001-a.md", {"id": "question:0001-a", "kind": "question"})
     _write(tmp_path, "entities/questions/0002-b.md", {"id": "question:0002-b", "kind": "question"})
     ctx = _ctx(tmp_path)
-    assert not [r for r in check_entity_number_hygiene(ctx) if r.severity is Severity.ERROR]
+    assert not [r for r in check_entity_number_hygiene(ctx) if r.severity == Severity.ERROR.value]
 
 
 @pytest.mark.parametrize("kind", ["finding", "synthesis", "hypothesis", "method", "paper", "inquiry"])
@@ -199,7 +198,7 @@ def test_stray_files_ignores_reservation_sentinel(tmp_path: Path) -> None:
     (d / "0001-x.md").write_text("---\nid: question:0001-x\nkind: question\n---\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     results = list(check_entity_stray_files(ctx))
-    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
 
 
 def test_overlay_of_in_owner_root_flagged_as_error_at_v3(tmp_path: Path) -> None:
@@ -212,7 +211,7 @@ def test_overlay_of_in_owner_root_flagged_as_error_at_v3(tmp_path: Path) -> None
     ctx = _ctx(tmp_path)  # _ctx writes layout_version: 3 -> ERROR
     results = list(check_overlay_of_in_owner_root(ctx))
     assert any(
-        r.severity is Severity.ERROR and "overlay_of" in r.message and "entities/topics/0001-x.md" in str(r.path)
+        r.severity == Severity.ERROR.value and "overlay_of" in r.message and "entities/topics/0001-x.md" in str(r.path)
         for r in results
     )
 
@@ -224,7 +223,7 @@ def test_overlay_under_doc_is_flagged_at_v3(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)  # _ctx writes layout_version: 3 -> ERROR
     results = list(check_overlay_of_in_owner_root(ctx))
     assert any(
-        r.severity is Severity.ERROR and "overlay_of" in r.message and "doc/topics/bayesian.md" in str(r.path)
+        r.severity == Severity.ERROR.value and "overlay_of" in r.message and "doc/topics/bayesian.md" in str(r.path)
         for r in results
     )
 
@@ -267,7 +266,7 @@ def test_overlay_of_in_owner_root_warns_during_transition(tmp_path: Path) -> Non
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     results = list(check_overlay_of_in_owner_root(ctx))
     assert results
-    assert all(r.severity is Severity.WARN for r in results)
+    assert all(r.severity == Severity.WARN.value for r in results)
 
 
 def test_overlay_of_under_entities_templates_is_ignored(tmp_path: Path) -> None:

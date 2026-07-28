@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import (
+    FindingRule,
+    FindingSection,
+    PathSubject,
+    ProjectSubject,
+)
 from science_model.frontmatter import project_config_path
 
 from science_tool.boundary.gitio import BoundaryGitError, visible_paths
@@ -28,6 +35,8 @@ from science_tool.data_policy import (
     classify,
 )
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
+from science_tool.findings.producers import FindingProducer, FindingProducerResult
+from science_tool.instruments import InstrumentResult
 from science_tool.project_config import load_project_config
 
 
@@ -53,12 +62,116 @@ class AuditNote:
     message: str
 
 
+@dataclass(frozen=True)
+class DataAuditSnapshot:
+    violations: tuple[Violation, ...]
+    notes: tuple[AuditNote, ...]
+
+
+class DataViolationQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quadrant: str
+    file_class: str
+
+
+class DataAuditNoteQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+
+
+SECTION = FindingSection(id="data-audit", title="Data audit", section_order=300)
+DATA_RULES = {
+    quadrant: FindingRule(
+        id=f"data.violation.{quadrant.value.replace('_', '-')}",
+        severities=frozenset({"warn"}),
+        subject_types=frozenset({"path"}),
+        qualifier_schema=DataViolationQualifiers,
+        remediation="producer",
+        remediator="data-audit",
+        title=f"Data {quadrant.value.replace('_', ' ')}",
+        section=SECTION.id,
+        display_order=index,
+    )
+    for index, quadrant in enumerate(Quadrant, start=1)
+}
+DATA_AUDIT_NOTE_RULE = FindingRule(
+    id="data.audit-note",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"project"}),
+    qualifier_schema=DataAuditNoteQualifiers,
+    identity_qualifiers=("code",),
+    title="Data audit note",
+    section=SECTION.id,
+    display_order=5,
+)
+DATA_AUDIT_PRODUCER = FindingProducer(
+    producer_id="data-audit",
+    namespace="data_audit",
+    source_module="data_audit.py",
+    rules=(*DATA_RULES.values(), DATA_AUDIT_NOTE_RULE),
+    sections=(SECTION,),
+    remediators=frozenset({"data-audit"}),
+)
+
+
+def collect_data_audit(
+    project_root: Path,
+    policy: DataPolicy = DEFAULT_DATA_POLICY,
+    data_dirs: tuple[Path, ...] = DEFAULT_DATA_DIRS,
+) -> DataAuditSnapshot:
+    return DataAuditSnapshot(
+        violations=tuple(audit_project(project_root, policy, data_dirs)),
+        notes=tuple(audit_project_notes(project_root)),
+    )
+
+
+def _violation_message(violation: Violation) -> str:
+    return f"{violation.file_class.value} file is in the {violation.quadrant.value.replace('_', ' ')} quadrant."
+
+
+def data_audit_result(snapshot: DataAuditSnapshot) -> FindingProducerResult:
+    findings = [
+        DATA_RULES[violation.quadrant].build(
+            subject=PathSubject(path=violation.path),
+            severity="warn",
+            qualifiers={
+                "quadrant": violation.quadrant.value,
+                "file_class": violation.file_class.value,
+            },
+            message=_violation_message(violation),
+        )
+        for violation in snapshot.violations
+    ]
+    findings.extend(
+        DATA_AUDIT_NOTE_RULE.build(
+            subject=ProjectSubject(),
+            severity="warn",
+            qualifiers={"code": note.code},
+            message=note.message,
+        )
+        for note in snapshot.notes
+        if note.severity == "warning"
+    )
+    return FindingProducerResult(instrument=InstrumentResult.from_rows(findings))
+
+
+def run_data_audit(
+    project_root: Path,
+    policy: DataPolicy = DEFAULT_DATA_POLICY,
+    data_dirs: tuple[Path, ...] = DEFAULT_DATA_DIRS,
+) -> FindingProducerResult:
+    return data_audit_result(collect_data_audit(project_root, policy, data_dirs))
+
+
 def git_tracked_set(project_root: Path) -> set[str]:
     """Posix paths of all git-tracked files. Empty set if not a git repo."""
     try:
         out = subprocess.run(
             ["git", "-C", str(project_root), "ls-files", "-z"],
-            capture_output=True, check=True,
+            capture_output=True,
+            check=True,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return set()
@@ -148,9 +261,7 @@ def _workflow_slug_from_siblings(project_root: Path, rel_path: Path) -> str | No
     return None
 
 
-def propose_results_target(
-    project_root: Path, rel_path: Path, data_dirs: tuple[Path, ...]
-) -> str | None:
+def propose_results_target(project_root: Path, rel_path: Path, data_dirs: tuple[Path, ...]) -> str | None:
     """results/<nearest-exp-or-workflow>/<substructure-beneath-segment>."""
     sub = _data_subpath(rel_path, data_dirs)
     if sub is None or not sub.parts:
@@ -177,10 +288,7 @@ def _iter_project_files(project_root: Path, data_dirs: tuple[Path, ...]):
     — its records must still be *reported* (the fixer FLAGs rather than moves them)."""
     seen: set[str] = set()
     for dirpath, dirnames, filenames in os.walk(project_root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d != ".git" and not _escapes_root(project_root, Path(dirpath) / d)
-        ]
+        dirnames[:] = [d for d in dirnames if d != ".git" and not _escapes_root(project_root, Path(dirpath) / d)]
         for fn in filenames:
             abs_path = Path(dirpath) / fn
             if abs_path.is_symlink():
@@ -236,12 +344,7 @@ def audit_project(
         # descendants are not ignored, and the walk explicitly promises to
         # report their records.
         in_hydrated_data_dir = any(rel == d or d in rel.parents for d in hydrated_data_dirs)
-        if (
-            visible is not None
-            and posix not in visible
-            and not in_declared_root
-            and not in_hydrated_data_dir
-        ):
+        if visible is not None and posix not in visible and not in_declared_root and not in_hydrated_data_dir:
             continue
         try:
             size = abs_path.stat().st_size
@@ -260,12 +363,17 @@ def audit_project(
 def _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs) -> Violation | None:
     if cls is FileClass.RECORD and loc == "DATA":
         return Violation(
-            Quadrant.STRANDED_RECORD, rel.as_posix(), cls,
+            Quadrant.STRANDED_RECORD,
+            rel.as_posix(),
+            cls,
             propose_results_target(project_root, rel, data_dirs),
         )
     if cls is FileClass.PAYLOAD and is_tracked and loc != "DATA":
         return Violation(
-            Quadrant.LEAKED_PAYLOAD, rel.as_posix(), cls, "data/processed/" + rel.name,
+            Quadrant.LEAKED_PAYLOAD,
+            rel.as_posix(),
+            cls,
+            "data/processed/" + rel.name,
         )
     if cls is FileClass.PAYLOAD and is_tracked and loc == "DATA":
         # Tracked payload sitting in ignored data/ territory. Remediation is
@@ -327,9 +435,7 @@ def _tracked_paths_under_data_root(project_root: Path, data_root: Path) -> list[
         return []
     data_rel = data_root.relative_to(project_root)
     return sorted(
-        rel
-        for rel in git_tracked_set(project_root)
-        if Path(rel) == data_rel or data_rel in Path(rel).parents
+        rel for rel in git_tracked_set(project_root) if Path(rel) == data_rel or data_rel in Path(rel).parents
     )
 
 
@@ -373,8 +479,5 @@ def render_json(
         rows.append(row)
     payload = {"version": 1, "violations": rows}
     if notes:
-        payload["notes"] = [
-            {"severity": note.severity, "code": note.code, "message": note.message}
-            for note in notes
-        ]
+        payload["notes"] = [{"severity": note.severity, "code": note.code, "message": note.message} for note in notes]
     return json.dumps(payload, indent=2) + "\n"

@@ -5,6 +5,7 @@ A project entity that locally OWNS an id a commons canonical already owns
 commons entity's reference to that id resolve to nothing (surfacing as a
 misleading `unresolved_reference`). The correct form is an overlay.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -79,8 +80,8 @@ def _commons_root(tmp_path: Path, *, papers: tuple[str, ...] = (), datasets: tup
             "kind: paper\n"
             f"title: {slug}\n"
             'version: "1.0.0"\n'
-            "created: \"2026-05-13\"\n"
-            "updated: \"2026-05-13\"\n"
+            'created: "2026-05-13"\n'
+            'updated: "2026-05-13"\n'
             "ontology_terms: []\n"
             "tags: []\n"
             "---\nbody\n",
@@ -95,8 +96,8 @@ def _commons_root(tmp_path: Path, *, papers: tuple[str, ...] = (), datasets: tup
             "kind: dataset\n"
             f"title: {slug}\n"
             'version: "1.0.0"\n'
-            "created: \"2026-05-13\"\n"
-            "updated: \"2026-05-13\"\n"
+            'created: "2026-05-13"\n'
+            'updated: "2026-05-13"\n'
             "status: active\n"
             "datapackage: datapackage.yaml\n"
             "origin: derived\n"
@@ -112,9 +113,7 @@ def _commons_root(tmp_path: Path, *, papers: tuple[str, ...] = (), datasets: tup
     return commons
 
 
-def test_local_owner_shadowing_commons_canonical_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_local_owner_shadowing_commons_canonical_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, papers=("Adams2025",))))
     _local_paper(tmp_path, "Adams2025")
 
@@ -122,33 +121,27 @@ def test_local_owner_shadowing_commons_canonical_errors(
 
     assert len(results) == 1
     r = results[0]
-    assert r.severity is Severity.ERROR
+    assert r.severity == Severity.ERROR.value
     assert r.path == Path("entities/papers/Adams2025.md")
     assert "paper:Adams2025" in r.message
     assert "overlay" in r.message.lower()
 
 
-def test_overlay_of_commons_id_does_not_warn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_overlay_of_commons_id_does_not_warn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, papers=("Adams2025",))))
     _overlay_paper(tmp_path, "Adams2025")
 
     assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
 
 
-def test_local_owner_without_commons_canonical_does_not_warn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_local_owner_without_commons_canonical_does_not_warn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, papers=("Adams2025",))))
     _local_paper(tmp_path, "LocalOnly2025")
 
     assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
 
 
-def test_missing_commons_root_does_not_warn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_missing_commons_root_does_not_warn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "does-not-exist"))
     _local_paper(tmp_path, "Adams2025")
 
@@ -169,9 +162,7 @@ def test_defers_to_overlay_local_duplicate_when_overlay_present(
     assert list(check_commons_owner_collision(_ctx(tmp_path))) == []
 
 
-def test_dataset_owner_collision_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dataset_owner_collision_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_commons_root(tmp_path, datasets=("uk-biobank",))))
     _local_dataset(tmp_path, "uk-biobank")
 

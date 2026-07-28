@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from science_tool.graph.health_checks.base import HealthCheck
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import FindingRule, FindingSection, PathSubject, ProjectSubject, TextEvidence
+
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
 from science_tool.instruments import InstrumentResult
 from science_tool.tooling_dependency import (
     CANONICAL_SCIENCE_SOURCE,
@@ -19,6 +23,36 @@ class ToolingScaffoldFinding(TypedDict):
     code: str  # pyproject_missing | pyproject_unreadable | science_tool_dep_missing | science_source_*
     detail: str  # human-readable description
     fix: str  # suggested remediation command
+
+
+class ToolingScaffoldQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+
+
+SECTION = FindingSection(
+    id="tooling-scaffold",
+    title="Tooling scaffold",
+    section_order=205,
+)
+RULE = FindingRule(
+    id="tooling.scaffold",
+    severities=frozenset({"error"}),
+    subject_types=frozenset({"project", "path"}),
+    qualifier_schema=ToolingScaffoldQualifiers,
+    identity_qualifiers=("code",),
+    title="Tooling scaffold",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="tooling_scaffold",
+    namespace="health_checks",
+    source_module="graph/health_checks/tooling_scaffold.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
 
 
 def collect_tooling_scaffold_findings(project_root: Path) -> InstrumentResult[ToolingScaffoldFinding]:
@@ -88,10 +122,25 @@ def collect_tooling_scaffold_findings(project_root: Path) -> InstrumentResult[To
     return InstrumentResult.from_rows(findings)
 
 
+def run_check(context: HealthContext):
+    observed = collect_tooling_scaffold_findings(context.project_root)
+    findings = [
+        RULE.build(
+            subject=(ProjectSubject() if row["code"] == "pyproject_missing" else PathSubject(path="pyproject.toml")),
+            severity="error",
+            qualifiers={"code": row["code"]},
+            message=row["detail"],
+            evidence=[TextEvidence(label="fix", text=row["fix"])],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="tooling_scaffold",
     description="Check the project-local Science dependency and source.",
     requires_sources=False,
-    run=lambda context: collect_tooling_scaffold_findings(context.project_root),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

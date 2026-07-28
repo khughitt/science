@@ -5,15 +5,20 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence, PathSubject
 from science_model.entities import Entity
 
+from science_tool.findings.producers import FindingProducer
 from science_tool.graph.health_checks.base import (
     IDENTITY_REFERENCE_FIELDS,
     NO_ENTITIES_REASON,
     PROJECT_SOURCES_EMPTY,
     HealthCheck,
+    HealthContext,
+    composed_result,
     context_sources,
 )
 from science_tool.graph.sources import ProjectSources, load_project_sources
@@ -25,6 +30,47 @@ class IdentityPolicyFinding(TypedDict):
     entity_id: str
     source_file: str
     message: str
+
+
+class IdentityPolicyQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    check: str
+
+
+SECTION = FindingSection(id="identity-policy", title="Identity policy", section_order=200)
+RULE = FindingRule(
+    id="identity.policy-violation",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"entity", "path"}),
+    qualifier_schema=IdentityPolicyQualifiers,
+    identity_qualifiers=("check",),
+    title="Identity policy violation",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="identity_policy",
+    namespace="health_checks",
+    source_module="graph/health_checks/identity_policy.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
+
+
+def _subject(
+    row: IdentityPolicyFinding,
+    canonical_entity_ids: frozenset[str],
+):
+    if row["check"] == "relation_endpoint_disambiguation":
+        role = row["message"].split(" ", 1)[0]
+        return PathSubject(
+            path=row["source_file"],
+            pointer=f"relation/{row['entity_id']}/{role}",
+        )
+    if row["entity_id"] in canonical_entity_ids:
+        return EntitySubject(ref=row["entity_id"])
+    return PathSubject(path=row["source_file"])
 
 
 _LOCAL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -191,10 +237,30 @@ def _collect_entity_identity_findings(
             )
 
 
+def run_check(context: HealthContext):
+    sources = context_sources(context)
+    observed = collect_identity_policy_findings(
+        context.project_root,
+        sources=sources,
+    )
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in sources.entities)
+    findings = [
+        RULE.build(
+            subject=_subject(row, canonical_entity_ids),
+            severity="warn",
+            qualifiers={"check": row["check"]},
+            message=row["message"],
+            evidence=[LocationEvidence(path=row["source_file"])],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="identity_policy",
     description="Validate entity identity policy and relation endpoint disambiguation.",
     requires_sources=True,
-    run=lambda context: collect_identity_policy_findings(context.project_root, sources=context_sources(context)),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

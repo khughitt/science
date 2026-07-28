@@ -143,9 +143,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from science_tool.validate.checks import Check
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 HEADER_ANY = re.compile(r"^##\s+\[([^\]]+)\]\s+(.+)$")
 HEADER_VALID = re.compile(r"^##\s+\[(t[0-9]{3,})\]\s+(.+)$")
@@ -153,6 +155,15 @@ TASK_REF = re.compile(r"\bt\d+[A-Za-z.]*\b")
 LOCAL_PARENT = re.compile(r"^task:t[0-9]{3,}$")
 REQUIRED_FIELDS = ("aspects", "priority", "status", "created")
 REF_FIELDS = ("related", "blocked-by", "blocked_by", "parent")
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="tasks",
+    section_title="tasks",
+    section_order=122,
+    rule_ids=("tasks.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 @dataclass
@@ -163,8 +174,21 @@ class _TaskBlock:
     fields: dict[str, object] = field(default_factory=dict)
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "tasks", None)
+def _result(
+    severity: Severity,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=None,
+        line=None,
+        message=message,
+        rule=RULES["tasks.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _display_path(project_root: Path, path: Path) -> str:
@@ -193,8 +217,8 @@ def _split_list_value(raw: object) -> list[str]:
     return [value] if value else []
 
 
-@Check(section="task queue...", order=18)
-def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=18, producer_id="validate.tasks", rules=tuple(RULES.values()))
+def check_tasks(ctx: ValidateContext) -> Iterator[CheckObservation]:
     from science_tool.tasks import (
         _require_split,
         _task_search_paths,
@@ -206,10 +230,18 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
     _require_split(tasks_dir)
     active_dir = tasks_dir / "active"
     if not active_dir.is_dir():
-        yield _result(Severity.WARN, "tasks/active/ not found (use /science:tasks to create)")
+        yield _result(
+            Severity.WARN,
+            "tasks/active/ not found (use /science:tasks to create)",
+            key=["active-directory"],
+        )
         return
 
-    yield _result(Severity.INFO, "tasks/active/ exists")
+    yield _result(
+        Severity.INFO,
+        "tasks/active/ exists",
+        key=["active-directory"],
+    )
 
     declared: set[str] = set()
     blocks: list[_TaskBlock] = []
@@ -222,6 +254,7 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
                 yield _result(
                     Severity.ERROR,
                     _display_parser_error(ctx.project_root, path, exc),
+                    key=["parse", _display_path(ctx.project_root, path)],
                 )
                 continue
             fields = task.model_dump(mode="python")
@@ -242,6 +275,7 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 Severity.ERROR,
                 _display_parser_error(ctx.project_root, path, exc),
+                key=["parse", _display_path(ctx.project_root, path)],
             )
             continue
 
@@ -257,6 +291,11 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
                         Severity.ERROR,
                         f"Invalid task id '{task_id}' in {_display_path(ctx.project_root, path)}: "
                         "task ids must match tNNN. Use parent: task:t001 for fragments or subtasks.",
+                        key=[
+                            "invalid-id",
+                            _display_path(ctx.project_root, path),
+                            task_id,
+                        ],
                     )
                     current = None
                     continue
@@ -274,34 +313,47 @@ def check_tasks(ctx: ValidateContext) -> Iterator[Result]:
                     current.fields[field_match.group(1)] = field_match.group(2).strip()
 
     for task_id in sorted(declared):
-        locations = [
-            f"{block.path}:{block.line}"
-            for block in blocks
-            if block.task_id == task_id
-        ]
+        locations = [f"{block.path}:{block.line}" for block in blocks if block.task_id == task_id]
         if len(locations) > 1:
             yield _result(
                 Severity.ERROR,
                 f"duplicate task ID {task_id} found in {', '.join(locations)}",
+                key=["duplicate-id", task_id],
             )
 
     for block in blocks:
         yield from _validate_block(block, declared)
 
     if blocks:
-        yield _result(Severity.INFO, f"  {len(blocks)} task(s) validated")
+        yield _result(
+            Severity.INFO,
+            f"  {len(blocks)} task(s) validated",
+            key=["summary"],
+        )
     else:
-        yield _result(Severity.INFO, "  no tasks in active/")
+        yield _result(
+            Severity.INFO,
+            "  no tasks in active/",
+            key=["summary"],
+        )
 
 
-def _validate_block(block: _TaskBlock, declared: set[str]) -> Iterator[Result]:
+def _validate_block(block: _TaskBlock, declared: set[str]) -> Iterator[CheckObservation]:
     for field_name in REQUIRED_FIELDS:
         if field_name not in block.fields:
-            yield _result(Severity.ERROR, f"task {block.task_id} missing required field: {field_name}")
+            yield _result(
+                Severity.ERROR,
+                f"task {block.task_id} missing required field: {field_name}",
+                key=["required-field", block.task_id, field_name],
+            )
 
     parent = block.fields.get("parent", "")
     if parent and (not isinstance(parent, str) or not LOCAL_PARENT.match(parent)):
-        yield _result(Severity.ERROR, f"task {block.task_id} parent must be local task ref like task:t001")
+        yield _result(
+            Severity.ERROR,
+            f"task {block.task_id} parent must be local task ref like task:t001",
+            key=["parent", block.task_id],
+        )
 
     refs_to_check: list[str] = []
     for field_name in REF_FIELDS:
@@ -317,6 +369,14 @@ def _validate_block(block: _TaskBlock, declared: set[str]) -> Iterator[Result]:
             if raw in declared:
                 continue
             if re.fullmatch(r"t[0-9]{3,}", raw):
-                yield _result(Severity.ERROR, f"stale task ref '{raw}' in {block.path}")
+                yield _result(
+                    Severity.ERROR,
+                    f"stale task ref '{raw}' in {block.path}",
+                    key=["stale-ref", block.task_id, raw],
+                )
             elif raw.startswith("t"):
-                yield _result(Severity.ERROR, f"stale or invalid task ref '{raw}' in {block.path}")
+                yield _result(
+                    Severity.ERROR,
+                    f"stale or invalid task ref '{raw}' in {block.path}",
+                    key=["invalid-ref", block.task_id, raw],
+                )

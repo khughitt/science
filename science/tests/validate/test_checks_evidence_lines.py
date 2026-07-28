@@ -27,6 +27,7 @@ from science_tool.validate import Severity, ValidateContext
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_manifest(root: Path) -> None:
     root.joinpath("science.yaml").write_text(
         "\n".join(
@@ -130,9 +131,7 @@ def _write_paper_source_sidecar(root: Path, annotations: list[Annotation]) -> No
     )
 
 
-def test_belief_graph_loader_reuses_parsed_dataset_for_context(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_belief_graph_loader_reuses_parsed_dataset_for_context(tmp_path: Path, monkeypatch) -> None:
     from science_tool.validate.checks import evidence_lines
 
     _write(
@@ -163,6 +162,7 @@ def test_belief_graph_loader_reuses_parsed_dataset_for_context(
 # Rule: evidence.unstanced — sub-case (a): missing stance or target on a line
 # ---------------------------------------------------------------------------
 
+
 def test_unstanced_clean_line_emits_no_results(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
 
@@ -191,7 +191,7 @@ def test_unstanced_missing_stance_emits_warn(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "evidence.unstanced"
+    assert r.rule_id == "evidence.unstanced"
     assert r.path == p
     assert "stance" in r.message
 
@@ -210,9 +210,32 @@ def test_unstanced_missing_target_emits_warn(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "evidence.unstanced"
+    assert r.rule_id == "evidence.unstanced"
     assert r.path == p
     assert "target" in r.message
+
+
+def test_unstanced_missing_stance_and_target_have_distinct_finding_identities(
+    tmp_path: Path,
+) -> None:
+    from science_tool.validate.checks.evidence_lines import (
+        check_evidence_lines_unstanced,
+    )
+
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nsource: paper:x\n---\n",
+    )
+
+    results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
+    findings = [result.to_finding(tmp_path) for result in results]
+
+    assert len(findings) == 2
+    assert {tuple(finding.qualifiers["key"]) for finding in findings} == {
+        ("required-field", "stance"),
+        ("required-field", "target"),
+    }
 
 
 def test_unstanced_empty_target_emits_warn(tmp_path: Path) -> None:
@@ -229,13 +252,14 @@ def test_unstanced_empty_target_emits_warn(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "evidence.unstanced"
+    assert r.rule_id == "evidence.unstanced"
     assert r.path == p
 
 
 # ---------------------------------------------------------------------------
 # Rule: evidence.unstanced — sub-case (b): uncounted proposition source_ref
 # ---------------------------------------------------------------------------
+
 
 def test_unstanced_counted_source_ref_emits_no_results(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_evidence_lines_unstanced
@@ -276,7 +300,7 @@ def test_unstanced_uncounted_source_ref_emits_warn(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "evidence.unstanced"
+    assert r.rule_id == "evidence.unstanced"
     assert r.path == prop
     assert "paper:y" in r.message
 
@@ -304,7 +328,7 @@ def test_unstanced_valid_4d_literature_refs_are_counted_as_coverage(tmp_path: Pa
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    assert [r for r in results if r.rule == "evidence.unstanced"] == []
+    assert [r for r in results if r.rule_id == "evidence.unstanced"] == []
 
 
 def test_unstanced_4d_coverage_does_not_load_unrelated_invalid_entities(tmp_path: Path) -> None:
@@ -338,7 +362,7 @@ def test_unstanced_4d_coverage_does_not_load_unrelated_invalid_entities(tmp_path
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
+    unstanced = [r for r in results if r.rule_id == "evidence.unstanced"]
     assert unstanced == []
 
 
@@ -349,7 +373,7 @@ def test_unstanced_4d_ownership_mismatch_does_not_cover_paper_ref(tmp_path: Path
     _write_paper_source_sidecar(tmp_path, [_statement_annotation("a-1", stance="asserted")])
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
-    unstanced = [r for r in results if r.rule == "evidence.unstanced"]
+    unstanced = [r for r in results if r.rule_id == "evidence.unstanced"]
 
     assert len(unstanced) == 1
     assert unstanced[0].path == prop
@@ -364,7 +388,7 @@ def test_unstanced_4d_faulted_assertion_does_not_cover_refs(tmp_path: Path) -> N
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    messages = [r.message for r in results if r.rule == "evidence.unstanced"]
+    messages = [r.message for r in results if r.rule_id == "evidence.unstanced"]
     assert len(messages) == 2
     assert any("paper:Smith2020" in message for message in messages)
     assert any(_ANN_REF in message for message in messages)
@@ -390,7 +414,7 @@ def test_unstanced_4d_silent_skips_remain_unstanced(
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    messages = [r.message for r in results if r.rule == "evidence.unstanced"]
+    messages = [r.message for r in results if r.rule_id == "evidence.unstanced"]
     assert len(messages) == 2, case_id
     assert any("paper:Smith2020" in message for message in messages)
     assert any(_ANN_REF in message for message in messages)
@@ -399,6 +423,7 @@ def test_unstanced_4d_silent_skips_remain_unstanced(
 # ---------------------------------------------------------------------------
 # Rule: independence.ungrouped-collapse
 # ---------------------------------------------------------------------------
+
 
 def test_ungrouped_collapse_shared_source_without_group_errors(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_independence_ungrouped_collapse
@@ -414,7 +439,7 @@ def test_ungrouped_collapse_shared_source_without_group_errors(tmp_path: Path) -
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "independence.ungrouped-collapse"
+    assert r.rule_id == "independence.ungrouped-collapse"
     assert r.path == p
 
 
@@ -432,7 +457,7 @@ def test_ungrouped_collapse_circular_without_group_errors(tmp_path: Path) -> Non
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "independence.ungrouped-collapse"
+    assert r.rule_id == "independence.ungrouped-collapse"
     assert r.path == p
 
 
@@ -468,6 +493,7 @@ def test_ungrouped_collapse_independent_is_always_clean(tmp_path: Path) -> None:
 # Rule: independence.suspect-circular
 # ---------------------------------------------------------------------------
 
+
 def test_suspect_circular_two_independent_sharing_dataset_warns(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_independence_suspect_circular
 
@@ -487,7 +513,7 @@ def test_suspect_circular_two_independent_sharing_dataset_warns(tmp_path: Path) 
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "independence.suspect-circular"
+    assert r.rule_id == "independence.suspect-circular"
     assert "shared_dataset" in r.message
     assert "gse100" in r.message
 
@@ -509,7 +535,7 @@ def test_suspect_circular_two_independent_sharing_group_warns(tmp_path: Path) ->
     results = list(check_independence_suspect_circular(_ctx(tmp_path)))
 
     assert len(results) == 1
-    assert results[0].rule == "independence.suspect-circular"
+    assert results[0].rule_id == "independence.suspect-circular"
 
 
 def test_suspect_circular_single_line_emits_no_results(tmp_path: Path) -> None:
@@ -569,6 +595,7 @@ def test_suspect_circular_different_targets_do_not_trigger(tmp_path: Path) -> No
 # Rule: evidence.strength-implausible
 # ---------------------------------------------------------------------------
 
+
 def test_strength_implausible_strong_background_constraint_warns(tmp_path: Path) -> None:
     from science_tool.validate.checks.evidence_lines import check_evidence_strength_implausible
 
@@ -583,7 +610,7 @@ def test_strength_implausible_strong_background_constraint_warns(tmp_path: Path)
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.WARN
-    assert r.rule == "evidence.strength-implausible"
+    assert r.rule_id == "evidence.strength-implausible"
     assert r.path == p
 
 
@@ -619,22 +646,29 @@ def test_strength_implausible_moderate_background_constraint_is_clean(tmp_path: 
 # Rule: evidence.unscored-line
 # ---------------------------------------------------------------------------
 
+
 def test_unscored_line_warns_for_unrecognized_type(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\n"
-           "evidence_type: made_up\nevidence_role: direct_test\nstrength: strong\n---\n")
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\n"
+        "evidence_type: made_up\nevidence_role: direct_test\nstrength: strong\n---\n",
+    )
     results = list(check_evidence_unscored_line(_ctx(tmp_path)))
-    assert len(results) == 1 and results[0].severity is Severity.WARN
+    assert len(results) == 1 and results[0].severity == Severity.WARN.value
 
 
 def test_unscored_line_clean_for_fully_specified(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\n"
-           "evidence_type: empirical_data\nevidence_role: direct_test\nstrength: strong\n---\n")
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\n"
+        "evidence_type: empirical_data\nevidence_role: direct_test\nstrength: strong\n---\n",
+    )
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
 
 
@@ -642,8 +676,11 @@ def test_unscored_line_skips_diagnostic_roles(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
     # model_criticism is recognized-but-non-massed: outside EVIDENCE_ROLE_RANK, never flagged.
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n")
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: disputes\ntarget: proposition:p1\nevidence_role: model_criticism\n---\n",
+    )
     assert list(check_evidence_unscored_line(_ctx(tmp_path))) == []
 
 
@@ -652,10 +689,12 @@ def test_unscored_line_skips_authored_assertion_with_valid_confidence(tmp_path: 
 
     # An authored assertion (expert_judgment) with valid confidence and NO role/strength is
     # admitted by confidence -> not flagged unscored, not flagged invalid-confidence.
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\n"
-           "evidence_type: expert_judgment\nconfidence: 0.8\n---\n")
-    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\nconfidence: 0.8\n---\n",
+    )
+    rules = {r.rule_id for r in check_evidence_unscored_line(_ctx(tmp_path))}
     assert "evidence.unscored-line" not in rules
     assert "evidence.authored-confidence-invalid" not in rules
 
@@ -663,24 +702,31 @@ def test_unscored_line_skips_authored_assertion_with_valid_confidence(tmp_path: 
 def test_authored_assertion_missing_confidence_warned(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\n---\n")
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\n---\n",
+    )
     results = list(check_evidence_unscored_line(_ctx(tmp_path)))
-    assert any(r.rule == "evidence.authored-confidence-invalid" for r in results)
-    assert all(r.severity is Severity.WARN for r in results)
+    assert any(r.rule_id == "evidence.authored-confidence-invalid" for r in results)
+    assert all(r.severity == Severity.WARN.value for r in results)
 
 
 def test_authored_assertion_out_of_range_confidence_warned(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_evidence_unscored_line
 
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\n"
-           "evidence_type: expert_judgment\nconfidence: 1.4\n---\n")
-    rules = {r.rule for r in check_evidence_unscored_line(_ctx(tmp_path))}
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: expert_judgment\nconfidence: 1.4\n---\n",
+    )
+    rules = {r.rule_id for r in check_evidence_unscored_line(_ctx(tmp_path))}
     assert "evidence.authored-confidence-invalid" in rules
 
 
-def _ctx_with_b2_graph(tmp_path: Path, *, record_type: URIRef, authored: dict[str, str] | None = None) -> ValidateContext:
+def _ctx_with_b2_graph(
+    tmp_path: Path, *, record_type: URIRef, authored: dict[str, str] | None = None
+) -> ValidateContext:
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
@@ -730,7 +776,7 @@ def test_suspect_circular_warns_for_untagged_lines_with_derived_candidate(tmp_pa
 
     results = list(check_independence_suspect_circular(ctx))
 
-    assert [(result.severity, result.rule) for result in results] == [
+    assert [(result.severity, result.rule_id) for result in results] == [
         (Severity.WARN, "independence.suspect-circular")
     ]
 
@@ -746,7 +792,7 @@ def test_committed_dataset_dependence_errors_when_line_authored_independent(tmp_
 
     results = list(check_independence_suspect_circular(ctx))
 
-    assert [(result.severity, result.rule) for result in results] == [
+    assert [(result.severity, result.rule_id) for result in results] == [
         (Severity.ERROR, "independence.dataset-derived-contradiction")
     ]
 
@@ -766,12 +812,13 @@ def test_authored_shared_dataset_refuted_only_when_line_has_direct_b2_usage(tmp_
 
     results = list(check_independence_suspect_circular(ctx))
 
-    assert any(result.rule == "independence.shared-dataset-refuted" for result in results)
+    assert any(result.rule_id == "independence.shared-dataset-refuted" for result in results)
 
 
 # ---------------------------------------------------------------------------
 # Rule: evidence.reference-basis-no-identification-strength (A2/A-D4)
 # ---------------------------------------------------------------------------
+
 
 def _write_reference_basis_graph(
     root: Path,
@@ -814,7 +861,7 @@ def test_reference_basis_without_identification_strength_warns(tmp_path: Path) -
 
     _write_reference_basis_graph(tmp_path, has_identification_strength=False)
     results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
-    rules = [(r.severity, r.rule) for r in results]
+    rules = [(r.severity, r.rule_id) for r in results]
     assert (Severity.WARN, "evidence.reference-basis-no-identification-strength") in rules
 
 
@@ -825,7 +872,7 @@ def test_reference_basis_with_identification_strength_is_silent(tmp_path: Path) 
 
     _write_reference_basis_graph(tmp_path, has_identification_strength=True)
     results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
-    rules = [r.rule for r in results]
+    rules = [r.rule_id for r in results]
     assert "evidence.reference-basis-no-identification-strength" not in rules
 
 
@@ -834,11 +881,9 @@ def test_non_reference_source_does_not_nudge(tmp_path: Path) -> None:
         check_reference_basis_no_identification_strength,
     )
 
-    _write_reference_basis_graph(
-        tmp_path, has_identification_strength=False, source_class="observational"
-    )
+    _write_reference_basis_graph(tmp_path, has_identification_strength=False, source_class="observational")
     results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
-    rules = [r.rule for r in results]
+    rules = [r.rule_id for r in results]
     assert "evidence.reference-basis-no-identification-strength" not in rules
 
 
@@ -849,13 +894,14 @@ def test_reference_basis_no_graph_is_silent(tmp_path: Path) -> None:
 
     # No knowledge/graph.trig present → tolerant early-return, zero results, no crash.
     results = list(check_reference_basis_no_identification_strength(_ctx(tmp_path)))
-    rules = [r.rule for r in results]
+    rules = [r.rule_id for r in results]
     assert "evidence.reference-basis-no-identification-strength" not in rules
 
 
 # ---------------------------------------------------------------------------
 # Task 8: dual-root — entities/evidence-lines and entities/propositions
 # ---------------------------------------------------------------------------
+
 
 def test_entities_evidence_line_is_discovered(tmp_path: Path) -> None:
     """entities/evidence-lines/0001-x.md is found and checked for stance/target."""
@@ -869,7 +915,7 @@ def test_entities_evidence_line_is_discovered(tmp_path: Path) -> None:
 
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    rules = [r.rule for r in results]
+    rules = [r.rule_id for r in results]
     assert "evidence.unstanced" in rules, results
 
 
@@ -885,7 +931,7 @@ def test_entities_proposition_source_ref_is_checked(tmp_path: Path) -> None:
     # No evidence-line covers paper:missing → should warn
     results = list(check_evidence_lines_unstanced(_ctx(tmp_path)))
 
-    rules = [r.rule for r in results]
+    rules = [r.rule_id for r in results]
     assert "evidence.unstanced" in rules, results
 
 
@@ -893,32 +939,44 @@ def test_dataset_usage_check_flags_canonical_empirical_spelling(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import (
         check_belief_eligible_empirical_has_dataset_usage,
     )
+
     # Canonical 'empirical_data' (no _evidence suffix), belief-eligible, NO dataset_usage -> must flag.
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data\n---\n")
-    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
-    assert "evidence.empirical.requires_dataset_usage" in rules
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data\n---\n",
+    )
+    rules = {r.rule_id for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires-dataset-usage" in rules
 
 
 def test_dataset_usage_check_flags_suffixed_empirical_spelling(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import (
         check_belief_eligible_empirical_has_dataset_usage,
     )
+
     # Suffixed 'empirical_data_evidence' (un-re-materialized graph) still flagged.
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data_evidence\n---\n")
-    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
-    assert "evidence.empirical.requires_dataset_usage" in rules
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: empirical_data_evidence\n---\n",
+    )
+    rules = {r.rule_id for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires-dataset-usage" in rules
 
 
 def test_dataset_usage_check_ignores_non_empirical(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import (
         check_belief_eligible_empirical_has_dataset_usage,
     )
-    _write(tmp_path, "entities/evidence-lines/el01.md",
-           "---\nstance: supports\ntarget: proposition:p1\nevidence_type: literature_evidence\n---\n")
-    rules = {r.rule for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
-    assert "evidence.empirical.requires_dataset_usage" not in rules
+
+    _write(
+        tmp_path,
+        "entities/evidence-lines/el01.md",
+        "---\nstance: supports\ntarget: proposition:p1\nevidence_type: literature_evidence\n---\n",
+    )
+    rules = {r.rule_id for r in check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path))}
+    assert "evidence.empirical.requires-dataset-usage" not in rules
 
 
 def test_run_refs_only_line_still_fails_dataset_usage_check(tmp_path: Path):
@@ -941,12 +999,13 @@ def test_run_refs_only_line_still_fails_dataset_usage_check(tmp_path: Path):
         "run_refs: [workflow-run:r1]\n---\n",
     )
     results = list(check_belief_eligible_empirical_has_dataset_usage(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["evidence.empirical.requires_dataset_usage"]
+    assert [r.rule_id for r in results] == ["evidence.empirical.requires-dataset-usage"]
 
 
 # ---------------------------------------------------------------------------
 # Rule: belief.nonreproducible — golden snapshot comparison of qa_dataset_capped
 # ---------------------------------------------------------------------------
+
 
 def _nonrepro_line(p, k, uri, target, **meta):
     k.add((uri, RDF.type, SCI_NS.EvidenceLine))
@@ -989,7 +1048,7 @@ def test_nonreproducible_errors_when_qa_dataset_capped_mismatches(tmp_path: Path
     corrupted = rows[0] | {"qa_dataset_capped": True}
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_silent_when_qa_dataset_capped_absent(tmp_path: Path):

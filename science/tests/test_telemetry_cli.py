@@ -14,6 +14,7 @@ from science_tool.cli import main
 from science_tool.telemetry import append_event, read_events
 from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
+from science_tool.validate.findings import declare_validation_rules
 
 
 @pytest.fixture
@@ -69,16 +70,36 @@ def test_click_parse_error_records_command_error(tmp_path: Path) -> None:
     assert events[0]["exit_code"] == 2
 
 
-def test_telemetry_group_preserves_nonzero_ctx_exit(
-    tmp_path: Path, isolated_check_registry: None
-) -> None:
+def test_telemetry_group_preserves_nonzero_ctx_exit(tmp_path: Path, isolated_check_registry: None) -> None:
     # The fixture clears the registry (so `demo_check` is the ONLY check this run sees) and RESTORES
     # it afterwards. Clearing without restoring silently disarms every later `runner.run` in the
     # session -- see the fixture's docstring.
 
-    @Check(section="demo", order=10)
+    section, rules = declare_validation_rules(
+        section_id="demo",
+        section_title="demo",
+        section_order=10,
+        rule_ids=("demo.error",),
+    )
+
+    @Check(
+        section=section,
+        order=10,
+        producer_id="validate.demo",
+        rules=tuple(rules.values()),
+    )
     def demo_check(ctx: ValidateContext) -> list[Result]:
-        return [Result(Severity.ERROR, Path("science.yaml"), 1, "broken", "demo.error", None)]
+        return [
+            Result(
+                severity=Severity.ERROR,
+                path=Path("science.yaml"),
+                line=1,
+                message="broken",
+                rule=rules["demo.error"],
+                task=None,
+                qualifiers={"key": ["broken"]},
+            )
+        ]
 
     project = tmp_path / "project"
     project.mkdir()
@@ -149,7 +170,9 @@ def test_telemetry_report_json_summarizes_local_events(tmp_path: Path) -> None:
         },
     )
 
-    result = CliRunner().invoke(main, ["telemetry", "report", "--format", "json"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)})
+    result = CliRunner().invoke(
+        main, ["telemetry", "report", "--format", "json"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+    )
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -246,7 +269,9 @@ def test_telemetry_export_jsonl_prints_events(tmp_path: Path) -> None:
         },
     )
 
-    result = CliRunner().invoke(main, ["telemetry", "export", "--format", "jsonl"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)})
+    result = CliRunner().invoke(
+        main, ["telemetry", "export", "--format", "jsonl"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+    )
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output.splitlines()[0])["event_id"] == "finish"

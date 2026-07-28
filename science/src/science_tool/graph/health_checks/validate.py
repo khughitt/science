@@ -1,83 +1,53 @@
-"""Validate health check: run canonical project validation and surface warnings/errors.
-
-NOTE: this module's own name shadows the unrelated top-level ``science_tool.validate``
-package. The imports below are ABSOLUTE (``from science_tool.validate import ...``),
-never relative, so they resolve to that top-level package rather than to this module.
-"""
+"""Validation health producer: envelope canonical validation observations."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TypedDict
+from science_model.audit import ProducerMetrics
 
-from science_tool.graph.health_checks.base import HealthCheck
+from science_tool.findings.producers import FindingProducer, FindingProducerResult
+from science_tool.graph.health_checks.base import HealthCheck, HealthContext
 from science_tool.instruments import InstrumentResult
+from science_tool.validate.checks.prose_lints import NumericVerificationMetrics
 
 
-class ValidationFinding(TypedDict):
-    severity: str
-    path: str | None
-    line: int | None
-    message: str
-    rule: str | None
-    task: str | None
+PRODUCER = FindingProducer(
+    producer_id="validate",
+    namespace="health_checks",
+    source_module="graph/health_checks/validate.py",
+    rules=(),
+    metrics_schema=NumericVerificationMetrics,
+)
 
 
-def collect_validation_findings(project_root: Path) -> InstrumentResult[ValidationFinding]:
-    """Run canonical validation and return its warnings/errors as findings.
-
-    This check has NO unwired state. A ``ValidateContextError`` — the one way it can
-    fail to reach the validators — is already a RESULT: it is reported as an error
-    finding, not laundered into "could not run".
-    """
+def run_check(context: HealthContext) -> FindingProducerResult:
     from science_tool.validate import runner as validate_runner
-    from science_tool.validate.context import ValidateContextError
-    from science_tool.validate.result import Severity
 
-    try:
-        run_result = validate_runner.run(project_root, strict=False, verbose=False, enable_python_sidecar=False)
-    except ValidateContextError as exc:
-        return InstrumentResult.ok(
-            [
-                {
-                    "severity": "error",
-                    "path": None,
-                    "line": None,
-                    "message": str(exc),
-                    "rule": "validate.context",
-                    "task": None,
-                }
-            ]
+    run_result = validate_runner.run(
+        context.project_root,
+        strict=False,
+        verbose=False,
+        enable_python_sidecar=False,
+    )
+    numeric_result = run_result.producer_results["validate.prose-lints"]
+    if numeric_result.instrument.status == "unwired":
+        return FindingProducerResult(
+            instrument=InstrumentResult.unwired(
+                code=numeric_result.instrument.code or "check-error",
+                reason=numeric_result.instrument.reason,
+            )
         )
-    findings: list[ValidationFinding] = [
-        {
-            "severity": _validation_health_severity(result.severity),
-            "path": str(result.path) if result.path is not None else None,
-            "line": result.line,
-            "message": result.message,
-            "rule": result.rule,
-            "task": result.task,
-        }
-        for result in run_result.results
-        if result.severity is not Severity.INFO
-    ]
-    return InstrumentResult.from_rows(findings)
-
-
-def _validation_health_severity(severity: object) -> str:
-    from science_tool.validate.result import Severity
-
-    if severity is Severity.WARN:
-        return "warning"
-    if severity is Severity.ERROR:
-        return "error"
-    raise ValueError(f"unsupported validation severity: {severity!r}")
+    findings = [finding for finding in run_result.results if finding.severity != "info"]
+    numeric = numeric_result.metrics
+    return FindingProducerResult(
+        instrument=InstrumentResult.from_rows(findings),
+        metrics=ProducerMetrics.model_validate(numeric.model_dump(mode="json")),
+    )
 
 
 CHECK = HealthCheck(
     name="validate",
     description="Run canonical project validation and surface warnings/errors.",
     requires_sources=False,
-    run=lambda context: collect_validation_findings(context.project_root),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

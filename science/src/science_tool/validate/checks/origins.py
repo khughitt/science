@@ -17,17 +17,43 @@ Severities mirror the existing reference/bibliography checks: an unresolved
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate._helpers import resolve_reference
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "origins", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="origins",
+    section_title="origins",
+    section_order=151,
+    rule_ids=("origins.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    path: Path,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=path,
+        line=None,
+        message=message,
+        rule=RULES["origins.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _known_entity_ids(ctx: ValidateContext) -> set[str]:
@@ -61,8 +87,8 @@ def _paper_unresolved(ctx: ValidateContext, ref: str, known_ids: set[str]) -> bo
     return resolve_reference(ctx, ref) is None
 
 
-@Check(section="entity origin references...", order=22)
-def check_origin_refs(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=22, producer_id="validate.origins", rules=tuple(RULES.values()))
+def check_origin_refs(ctx: ValidateContext) -> Iterator[CheckObservation]:
     entities_dir = ctx.project_root / "entities"
     if not entities_dir.is_dir():
         return
@@ -75,6 +101,7 @@ def check_origin_refs(ctx: ValidateContext) -> Iterator[Result]:
             continue
 
         records = [record for record in origins if isinstance(record, dict)]
+        reported_refs: set[tuple[str, str]] = set()
 
         for record in records:
             if record.get("type") != "literature":
@@ -82,23 +109,33 @@ def check_origin_refs(ctx: ValidateContext) -> Iterator[Result]:
             ref = record.get("ref")
             if not isinstance(ref, str):
                 continue
-            if ref.startswith("cite:") and _cite_unresolved(ctx, ref):
+            category = "unresolved-citation" if ref.startswith("cite:") else "unresolved-paper"
+            identity = (category, ref)
+            if identity in reported_refs:
+                continue
+            reported_refs.add(identity)
+            if category == "unresolved-citation" and _cite_unresolved(ctx, ref):
                 yield _result(
                     Severity.WARN,
+                    path,
                     f"Unresolved origin citation '{ref}' in {path.name}: "
                     "bibliography key not found in papers/references.bib",
+                    key=[category, ref],
                 )
-            elif ref.startswith("paper:") and _paper_unresolved(ctx, ref, known_ids):
+            elif category == "unresolved-paper" and ref.startswith("paper:") and _paper_unresolved(ctx, ref, known_ids):
                 yield _result(
                     Severity.WARN,
+                    path,
                     f"Unresolved origin reference '{ref}' in {path.name}: no matching paper/entity",
+                    key=[category, ref],
                 )
 
         if len(records) == 1 and _is_truthy(records[0].get("independent")):
             yield _result(
                 Severity.WARN,
-                f"Lone origin marked independent in {path.name}: "
-                "'independent' is only meaningful with 2+ origins",
+                path,
+                f"Lone origin marked independent in {path.name}: 'independent' is only meaningful with 2+ origins",
+                key=["lone-independent"],
             )
 
 

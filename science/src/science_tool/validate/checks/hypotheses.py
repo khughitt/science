@@ -16,24 +16,52 @@ from typing import Any
 import yaml
 from science_model.entity_schema.resolution import check_resolution
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.graph.identity_table import build_identity_table
 from science_tool.graph.reference_resolution import ReferenceResolver
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.kind_severity import severity_for_kind
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _STATUS_RE = re.compile(r"^status:")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "hypotheses", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="hypotheses",
+    section_title="hypotheses",
+    section_order=108,
+    rule_ids=(
+        "hypotheses.check",
+        "hypothesis.dangling-lineage",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="hypotheses...", order=5)
-def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["hypotheses.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=5, producer_id="validate.hypotheses.hypotheses", rules=tuple(RULES.values()))
+def check_hypotheses(ctx: ValidateContext) -> Iterator[CheckObservation]:
     roots = (ctx.project_root / "entities" / "hypotheses",)
     for target in roots:
         if not target.is_dir():
@@ -45,25 +73,44 @@ def check_hypotheses(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_review_horizon_days(ctx)
 
 
-def _check_hypothesis(ctx: ValidateContext, path: Path) -> Iterator[Result]:
+def _check_hypothesis(ctx: ValidateContext, path: Path) -> Iterator[CheckObservation]:
     relative = path.relative_to(ctx.project_root).as_posix()
     text = ctx.read_text_cached(path)
     lines = text.splitlines()
 
-    yield _result(Severity.INFO, relative, f"Checking {relative}...")
+    yield _result(
+        Severity.INFO,
+        relative,
+        f"Checking {relative}...",
+        key=["progress"],
+    )
 
     if not _has_falsifiability_heading(lines):
-        yield _result(Severity.ERROR, relative, f"{relative} missing ## Falsifiability section")
+        yield _result(
+            Severity.ERROR,
+            relative,
+            f"{relative} missing ## Falsifiability section",
+            key=["falsifiability"],
+        )
     elif _is_falsifiability_empty(lines):
-        yield _result(Severity.WARN, relative, f"{relative} has empty Falsifiability section")
+        yield _result(
+            Severity.WARN,
+            relative,
+            f"{relative} has empty Falsifiability section",
+            key=["falsifiability"],
+        )
 
     try:
         frontmatter = ctx.frontmatter(path)
     except yaml.YAMLError:
         frontmatter = {}
     if not _has_status(frontmatter, lines):
-        yield _result(Severity.WARN, relative, f"{relative} missing Status field")
-
+        yield _result(
+            Severity.WARN,
+            relative,
+            f"{relative} missing Status field",
+            key=["status"],
+        )
 
 
 def _has_falsifiability_heading(lines: list[str]) -> bool:
@@ -120,9 +167,7 @@ def _has_status(frontmatter: dict[str, Any], lines: list[str]) -> bool:
     return "status" in frontmatter or any(line.startswith("- **Status:**") or _STATUS_RE.match(line) for line in lines)
 
 
-
-
-def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
+def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[CheckObservation]:
     # review_state lives only on epistemic entities, which the Plan 3 cutover
     # relocated to entities/. Scan there (the legacy doc/specs roots are gone).
     for root in (ctx.project_root / "entities",):
@@ -145,6 +190,7 @@ def _check_review_horizon_days(ctx: ValidateContext) -> Iterator[Result]:
                 Severity.WARN,
                 relative,
                 f"{relative}: review_state.review_horizon_days must be positive (got {horizon:g})",
+                key=["review-horizon-days"],
             )
 
 
@@ -152,8 +198,8 @@ RULE_DANGLING_LINEAGE = "hypothesis.dangling-lineage"
 _LINEAGE_KIND = "hypothesis"
 
 
-@Check(section="hypotheses...", order=6)
-def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=6, producer_id="validate.hypotheses.dangling-lineage", rules=())
+def check_dangling_lineage(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """A closed hypothesis's successor must resolve to a real, live, OTHER entity.
 
     The schema validates one record in isolation, so it can only see that `superseded_by:` is
@@ -200,20 +246,23 @@ def check_dangling_lineage(ctx: ValidateContext) -> Iterator[Result]:
         # already owns. Interpretation lineage debt is that check's, by kind; this one is hypotheses'.
         if entity.kind != _LINEAGE_KIND:
             continue
+        emitted: set[tuple[str, str]] = set()
         for violation in check_resolution(
             entity.model_dump(mode="json"), targets=resolver, live_hypotheses=live_hypotheses
         ):
+            identity = (violation.field, violation.ref)
+            if identity in emitted:
+                continue
+            emitted.add(identity)
             path = path_by_id.get(violation.entity_id)
-            yield Result(
-                # KIND-graded: `hypothesis` is certified, so this is ERROR and gated. The loop is
-                # hypothesis-only (guard above), so the kind is fixed; the call still goes through
-                # `severity_for_kind` so this emitter and the other two share one authority.
-                severity_for_kind(_LINEAGE_KIND),
-                Path(path) if path else None,
-                None,
-                violation.message,
-                RULE_DANGLING_LINEAGE,
-                None,
+            yield validation_observation(
+                severity=severity_for_kind(_LINEAGE_KIND),
+                path=Path(path) if path else None,
+                line=None,
+                message=violation.message,
+                rule=RULES["hypothesis.dangling-lineage"],
+                task=None,
+                qualifiers={"key": list(identity)},
             )
 
 
@@ -236,9 +285,7 @@ def _live_lineage_targets(sources) -> set[str]:
     the kind from the directory, and there is no `hypotheses/` one. A commons entity therefore can
     never be a hypothesis, so no separate locality filter is needed; adding one would be dead code.
     """
-    return {
-        entity.canonical_id for entity in sources.entities if entity.kind == _LINEAGE_KIND
-    }
+    return {entity.canonical_id for entity in sources.entities if entity.kind == _LINEAGE_KIND}
 
 
 def _review_horizon_days(frontmatter: dict[str, Any]) -> float | None:

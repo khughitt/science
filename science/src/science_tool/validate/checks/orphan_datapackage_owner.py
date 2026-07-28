@@ -18,14 +18,25 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.identity_table import ParticipationMode
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-@Check(section="orphan datapackage owner (no entity-file owner)...", order=49)
-def check_orphan_datapackage_owner(ctx: ValidateContext) -> Iterator[Result]:
+SECTION, RULES = declare_validation_rules(
+    section_id="orphan-datapackage-owner",
+    section_title="orphan datapackage owner",
+    section_order=137,
+    rule_ids=("dataset.orphan-datapackage-owner",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+@Check(section=SECTION, order=49, producer_id="validate.orphan-datapackage-owner", rules=tuple(RULES.values()))
+def check_orphan_datapackage_owner(ctx: ValidateContext) -> Iterator[CheckObservation]:
     # Non-strict + no commons: a diagnostic must not abort on unrelated strictness
     # failures, and commons owners are a different scope (never this-project orphans).
     sources = ctx.project_sources(
@@ -44,13 +55,12 @@ def check_orphan_datapackage_owner(ctx: ValidateContext) -> Iterator[Result]:
         if decl.adapter != "datapackage" or decl.canonical_id in owned_elsewhere:
             continue
         path = Path(decl.source_ref.path) if decl.source_ref else None
-        yield Result(
-            Severity.ERROR,
-            path,
-            None,
-            f"{decl.canonical_id}: datapackage has no entity-file owner "
-            "(orphan datapackage); create an entities/datasets/<id>.md owner "
-            "with a datapackage pointer",
-            "orphan-datapackage-owner",
-            None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=path,
+            line=None,
+            message=f"{decl.canonical_id}: datapackage has no entity-file owner (orphan datapackage); create an entities/datasets/<id>.md owner with a datapackage pointer",
+            rule=RULES["dataset.orphan-datapackage-owner"],
+            task=None,
+            qualifiers={"key": []},
         )

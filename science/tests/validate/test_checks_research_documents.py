@@ -55,13 +55,13 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
     importlib.reload(bias_audits)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-7:]] == [
-        ("hypotheses...", 5),
-        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
-        ("project README conventions...", 10),
-        ("discussion documents...", 11),
-        ("discussion documents...", 12),
-        ("discussion documents...", 13),
-        ("discussion documents...", 14),
+        ("hypotheses", 5),
+        ("hypotheses", 6),  # check_dangling_lineage -- the cross-record lineage layer
+        ("project readme", 10),
+        ("discussions", 11),
+        ("prereg", 12),
+        ("hypothesis comparisons", 13),
+        ("bias audits", 14),
     ]
 
 
@@ -161,10 +161,16 @@ def test_discussions_double_blind_mode_requires_addendum_sections(tmp_path: Path
         "entities/discussions/0001-double.md double-blind mode missing section: ## Double-Blind Addendum (If mode = double-blind)"
         in messages
     )
-    assert "entities/discussions/0001-double.md double-blind mode missing section: ### Agent Independent Draft" in messages
-    assert "entities/discussions/0001-double.md double-blind mode missing section: ### User Independent Draft" in messages
+    assert (
+        "entities/discussions/0001-double.md double-blind mode missing section: ### Agent Independent Draft" in messages
+    )
+    assert (
+        "entities/discussions/0001-double.md double-blind mode missing section: ### User Independent Draft" in messages
+    )
     assert "entities/discussions/0001-double.md double-blind mode missing section: ### Comparison" in messages
-    assert "entities/discussions/0001-double.md double-blind mode missing section: ### Combined Synthesis" not in messages
+    assert (
+        "entities/discussions/0001-double.md double-blind mode missing section: ### Combined Synthesis" not in messages
+    )
 
 
 def test_prereg_warns_for_missing_sections_and_required_frontmatter_fields(tmp_path: Path) -> None:
@@ -255,7 +261,9 @@ def test_hypothesis_comparisons_warn_for_missing_sections(tmp_path: Path) -> Non
     messages = _messages(check_hypothesis_comparisons(ctx))
 
     assert "Comparison entities/discussions/0001-comparison-a.md missing section: Evidence Inventory" in messages
-    assert "Comparison entities/discussions/0001-comparison-a.md missing section: Discriminating Predictions" in messages
+    assert (
+        "Comparison entities/discussions/0001-comparison-a.md missing section: Discriminating Predictions" in messages
+    )
     assert "Comparison entities/discussions/0001-comparison-a.md missing section: Current Verdict" in messages
 
 
@@ -284,6 +292,7 @@ def test_hypothesis_comparisons_normalizes_required_section_headings(tmp_path: P
 # Task 8: dual-root tests — entities/ locations are discovered (prereg)
 # ---------------------------------------------------------------------------
 
+
 def test_prereg_discovers_entities_pre_registrations(tmp_path: Path) -> None:
     """entities/pre-registrations/0001-x.md is found and section-checked."""
     from science_tool.validate.checks.prereg import check_prereg
@@ -293,8 +302,7 @@ def test_prereg_discovers_entities_pre_registrations(tmp_path: Path) -> None:
     ent_dir.mkdir(parents=True)
     # Only has one section → should warn for the missing three
     ent_dir.joinpath("0001-x.md").write_text(
-        "---\nkind: pre-registration\ncommitted: 2026-01-01\nspec: ''\n---\n"
-        "## Hypotheses Under Test\n",
+        "---\nkind: pre-registration\ncommitted: 2026-01-01\nspec: ''\n---\n## Hypotheses Under Test\n",
         encoding="utf-8",
     )
 
@@ -308,6 +316,7 @@ def test_prereg_discovers_entities_pre_registrations(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Task 8: dual-root tests — entities/ locations are discovered (comparisons)
 # ---------------------------------------------------------------------------
+
 
 def test_hypothesis_comparisons_entities_marker_based_detection(tmp_path: Path) -> None:
     """A migrated comparison at entities/discussions/NNNN-slug.md with the
@@ -408,7 +417,7 @@ def test_research_question_found_in_entities(tmp_path: Path) -> None:
     entities_dir.joinpath("research-question.md").write_text("# Research Question\n", encoding="utf-8")
 
     results = list(check_research_scope(ctx))
-    assert not any(r.severity is Severity.ERROR and "research-question" in r.message for r in results)
+    assert not any(r.severity == Severity.ERROR.value and "research-question" in r.message for r in results)
 
 
 def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:

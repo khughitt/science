@@ -5,20 +5,37 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
+from science_model.audit import FindingRule, FindingSection
+
+from science_tool.findings.producers import (
+    FindingProducer,
+    FindingProducerResult,
+    KindRuleFactory,
+)
+from science_tool.validate.observations import (
+    ValidationMetricObservation,
+    ValidationNotice,
+    ValidationObservationBatch,
+)
 from science_tool.validate.result import Result
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
 
-CheckFn = Callable[["ValidateContext"], Iterable[Result]]
+CheckObservation = Result | ValidationMetricObservation | ValidationNotice
+InternalCheckFn = Callable[["ValidateContext"], Iterable[CheckObservation]]
+RegisteredCheckFn = Callable[[ValidationObservationBatch], FindingProducerResult]
 
 
 @dataclass(frozen=True)
 class CheckEntry:
     section: str
     order: int
-    fn: CheckFn
+    fn: InternalCheckFn
+    produce: RegisteredCheckFn
+    producer: FindingProducer
 
 
 CANONICAL_CHECKS: list[CheckEntry] = []
@@ -89,12 +106,46 @@ CANONICAL_CHECK_MODULES = (
 
 
 class Check:
-    def __init__(self, section: str, order: int) -> None:
+    def __init__(
+        self,
+        section: FindingSection,
+        order: int,
+        *,
+        producer_id: str,
+        rules: tuple[FindingRule, ...],
+        metrics_schema: type[BaseModel] | None = None,
+        kind_rule_factory: KindRuleFactory | None = None,
+    ) -> None:
         self.section = section
         self.order = order
+        self.producer_id = producer_id
+        self.rules = rules
+        self.metrics_schema = metrics_schema
+        self.kind_rule_factory = kind_rule_factory
 
-    def __call__(self, fn: CheckFn) -> CheckFn:
-        CANONICAL_CHECKS.append(CheckEntry(section=self.section, order=self.order, fn=fn))
+    def __call__(self, fn: InternalCheckFn) -> InternalCheckFn:
+        producer = FindingProducer(
+            producer_id=self.producer_id,
+            namespace="validate_checks",
+            source_module=(fn.__module__.removeprefix("science_tool.").replace(".", "/") + ".py"),
+            rules=self.rules,
+            sections=(self.section,),
+            metrics_schema=self.metrics_schema,
+            kind_rule_factory=self.kind_rule_factory,
+        )
+
+        def produce(batch: ValidationObservationBatch) -> FindingProducerResult:
+            return batch.producer_result()
+
+        CANONICAL_CHECKS.append(
+            CheckEntry(
+                section=self.section.title,
+                order=self.order,
+                fn=fn,
+                produce=produce,
+                producer=producer,
+            )
+        )
         CANONICAL_CHECKS.sort(key=lambda entry: entry.order)
         return fn
 

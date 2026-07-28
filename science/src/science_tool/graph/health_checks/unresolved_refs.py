@@ -7,10 +7,21 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TypedDict, cast
 
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import (
+    FindingRule,
+    FindingSection,
+    IdentifierSubject,
+    LocationEvidence,
+)
+
+from science_tool.findings.producers import FindingProducer
 from science_tool.graph.health_checks.base import (
     NO_ENTITIES_REASON,
     PROJECT_SOURCES_EMPTY,
     HealthCheck,
+    HealthContext,
+    composed_result,
     context_sources,
 )
 from science_tool.graph.migrate import audit_project_sources
@@ -23,6 +34,33 @@ class UnresolvedRef(TypedDict):
     mention_count: int
     sources: list[str]
     looks_like: str  # "semantic-triage" | "task" | "hypothesis" | "question" | "unknown"
+
+
+class UnresolvedRefQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mention_count: int
+    looks_like: str
+
+
+SECTION = FindingSection(id="unresolved-refs", title="Unresolved references", section_order=209)
+RULE = FindingRule(
+    id="refs.unresolved",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"identifier"}),
+    identifier_namespaces=frozenset({"reference"}),
+    qualifier_schema=UnresolvedRefQualifiers,
+    title="Unresolved reference",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="unresolved_refs",
+    namespace="health_checks",
+    source_module="graph/health_checks/unresolved_refs.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
 
 
 # Heuristic patterns for classifying mis-prefixed `topic:` refs.
@@ -94,10 +132,31 @@ def collect_unresolved_refs(
     return InstrumentResult.from_rows(result)
 
 
+def run_check(context: HealthContext):
+    observed = collect_unresolved_refs(
+        context.project_root,
+        sources=context_sources(context),
+    )
+    findings = [
+        RULE.build(
+            subject=IdentifierSubject(namespace="reference", value=row["target"]),
+            severity="warn",
+            qualifiers={
+                "mention_count": row["mention_count"],
+                "looks_like": row["looks_like"],
+            },
+            message=f"Unresolved reference {row['target']} ({row['mention_count']} mention(s)).",
+            evidence=[LocationEvidence(path=path) for path in row["sources"]],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="unresolved_refs",
     description="Find project references that do not resolve to known entities.",
     requires_sources=True,
-    run=lambda context: collect_unresolved_refs(context.project_root, sources=context_sources(context)),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

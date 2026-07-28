@@ -68,12 +68,8 @@ def _edge(**extra: object) -> dict[str, object]:
     }
 
 
-def _rules(results: list[Result]) -> list[str]:
-    rules: list[str] = []
-    for result in results:
-        assert result.rule is not None
-        rules.append(result.rule)
-    return rules
+def _rules(results: list[Result]) -> list[str | None]:
+    return [result.rule_id for result in results]
 
 
 def _write_reference_graph_datapackage(
@@ -312,7 +308,7 @@ def test_check_reference_graphs_reports_malformed_node_rows(tmp_path: Path) -> N
     results = list(check_reference_graphs(_ctx(tmp_path)))
 
     assert _rules(results) == ["reference-graph.node-index-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_valid_reference_graph_passes_silently() -> None:
@@ -345,7 +341,7 @@ def test_malformed_reference_graph_collection_errors() -> None:
     )
 
     assert _rules(results) == ["reference-graph.collection-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 @pytest.mark.parametrize(
@@ -369,7 +365,7 @@ def test_malformed_reference_graph_collection_rejects_member_key_space_schema_mi
     )
 
     assert _rules(results) == ["reference-graph.collection-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_missing_graph_resource_does_not_suppress_node_validation() -> None:
@@ -384,10 +380,10 @@ def test_missing_graph_resource_does_not_suppress_node_validation() -> None:
     )
 
     assert _rules(results) == [
-        "reference-graph.graph-resource-unavailable",
+        None,
         "reference-graph.member-count-mismatch",
     ]
-    assert results[0].severity is Severity.INFO
+    assert results[0].severity == Severity.INFO.value
 
 
 def test_missing_node_index_is_info_not_silent() -> None:
@@ -401,8 +397,8 @@ def test_missing_node_index_is_info_not_silent() -> None:
         )
     )
 
-    assert _rules(results) == ["reference-graph.node-index-unavailable"]
-    assert results[0].severity is Severity.INFO
+    assert _rules(results) == [None]
+    assert results[0].severity == Severity.INFO.value
 
 
 def test_node_index_malformed_errors() -> None:
@@ -417,7 +413,7 @@ def test_node_index_malformed_errors() -> None:
     )
 
     assert _rules(results) == ["reference-graph.node-index-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_member_count_counts_deprecated_rows() -> None:
@@ -465,7 +461,7 @@ def test_member_count_mismatch_still_allows_promoted_member_resolution() -> None
         "reference-graph.member-count-mismatch",
         "reference-graph.member-unresolved",
     ]
-    assert all(result.severity is Severity.ERROR for result in results)
+    assert all(result.severity == Severity.ERROR.value for result in results)
 
 
 def test_edge_count_mismatch_errors_when_edge_resource_declared() -> None:
@@ -595,7 +591,7 @@ def test_deprecated_promoted_member_warns_with_replaced_by() -> None:
     )
 
     assert _rules(results) == ["reference-graph.member-deprecated"]
-    assert results[0].severity is Severity.WARN
+    assert results[0].severity == Severity.WARN.value
     assert "MONDO:0005148" in results[0].message
 
 
@@ -631,7 +627,7 @@ def test_malformed_promoted_member_derivation_errors_without_raising(
     )
 
     assert _rules(results) == ["reference-graph.member-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert message_part in results[0].message
 
 
@@ -697,4 +693,4 @@ def test_unresolved_promoted_member_errors() -> None:
     )
 
     assert _rules(results) == ["reference-graph.member-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value

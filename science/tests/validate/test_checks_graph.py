@@ -40,7 +40,7 @@ def _ctx(root: Path, *, verbose: bool = False, peers: str = "") -> ValidateConte
 
 
 def _messages(results: list[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [result.message for result in results if severity is None or result.severity == severity.value]
 
 
 def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
@@ -195,9 +195,7 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
 
 
-def test_graph_validate_skip_status_is_info_not_a_crash(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_graph_validate_skip_status_is_info_not_a_crash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A `skip` row must not abort the section.
 
     `causal_acyclicity` emits `skip` whenever a project has no scic:causes edges
@@ -285,9 +283,7 @@ def test_graph_validate_fallback_renders_rows_and_skips_dataset_followups(
     monkeypatch.setattr(
         graph,
         "validate_graph",
-        lambda _path: ValidationVerdict.passed(
-            [{"check": "parseable", "status": "pass", "details": "fallback ok"}]
-        ),
+        lambda _path: ValidationVerdict.passed([{"check": "parseable", "status": "pass", "details": "fallback ok"}]),
     )
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", fail_followup)
     monkeypatch.setattr(graph, "list_inquiries_dataset", fail_followup)
@@ -323,9 +319,7 @@ def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
-        lambda dataset: ValidationVerdict.passed(
-            [{"check": "parseable_trig", "status": "pass", "details": "ok"}]
-        ),
+        lambda dataset: ValidationVerdict.passed([{"check": "parseable_trig", "status": "pass", "details": "ok"}]),
         raising=False,
     )
     monkeypatch.setattr(
@@ -384,9 +378,8 @@ def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.Monkey
 
     results = list(graph.check_graph(_ctx(tmp_path)))
 
-    assert (
-        "graph validate: could not run (unparseable): graph.trig did not parse: bad syntax"
-        in _messages(results, Severity.ERROR)
+    assert "graph validate: could not run (unparseable): graph.trig did not parse: bad syntax" in _messages(
+        results, Severity.ERROR
     )
 
 
@@ -427,9 +420,7 @@ def test_graph_validate_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
-        lambda _dataset: ValidationVerdict.passed(
-            [{"check": "parseable", "status": "mystery", "details": "ok"}]
-        ),
+        lambda _dataset: ValidationVerdict.passed([{"check": "parseable", "status": "mystery", "details": "ok"}]),
     )
 
     with pytest.raises(ValueError, match="graph validate returned unknown status: mystery"):
@@ -600,9 +591,7 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(
         graph,
         "validate_inquiry_dataset",
-        lambda _dataset, _slug: InstrumentResult.from_rows(
-            [{"check": "shape", "status": "mystery", "message": "ok"}]
-        ),
+        lambda _dataset, _slug: InstrumentResult.from_rows([{"check": "shape", "status": "mystery", "message": "ok"}]),
     )
 
     with pytest.raises(ValueError, match="inquiry validate returned unknown status: mystery"):
@@ -646,9 +635,9 @@ def test_registry_loads_graph_after_notes_at_order_17() -> None:
         importlib.reload(graph)
 
         sections = [entry.section for entry in CANONICAL_CHECKS]
-        graph_index = sections.index("knowledge graph...")
+        graph_index = sections.index("graph")
 
-        assert sections[graph_index - 1] == "notes..."
+        assert sections[graph_index - 1] == "notes"
         assert CANONICAL_CHECKS[graph_index].order == 17
     finally:
         clear_checks_for_tests()

@@ -21,7 +21,7 @@ def test_labnote_export_view_missing_entity_types_is_error() -> None:
         )
     )
 
-    assert [(result.severity, result.rule) for result in results] == [
+    assert [(result.severity, result.rule_id) for result in results] == [
         (Severity.ERROR, "labnote-export.view-entity-types-missing")
     ]
     assert "proposition" in results[0].message

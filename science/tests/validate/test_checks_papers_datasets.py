@@ -41,7 +41,7 @@ def _write_paper(root: Path, slug: str, datasets: list[str]) -> None:
 
 
 def _warnings(results: Iterable[Result]) -> list[str]:
-    return [r.message for r in results if r.severity is Severity.WARN]
+    return [r.message for r in results if r.severity == Severity.WARN.value]
 
 
 def test_paper_datasets_are_not_checked_by_paper_summary_check(tmp_path: Path) -> None:

@@ -35,7 +35,7 @@ def _results(root: Path) -> list:
 
 
 def _rules(root: Path) -> list[str]:
-    return [r.rule for r in _results(root)]
+    return [r.rule_id for r in _results(root)]
 
 
 def _hash_blob(repo: Path, body: bytes) -> str:
@@ -250,7 +250,7 @@ def test_mm30_bare_archive_still_fires_despite_the_allowlist(tmp_path: Path):
     repo = _repo(tmp_path)
     (repo / ".gitignore").write_text("\n".join(DEFAULT_UNMANAGED_ALLOW) + "\narchive\n")
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
-    findings = [r for r in _results(repo) if r.rule == "boundary.unanchored-pattern"]
+    findings = [r for r in _results(repo) if r.rule_id == "boundary.unanchored-pattern"]
     assert [f.line for f in findings] == [len(DEFAULT_UNMANAGED_ALLOW) + 1]
 
 
@@ -319,7 +319,7 @@ def test_correct_root_gitignore_must_be_a_tracked_governed_source(tmp_path: Path
     assert b".gitignore" not in indexed
     assert b"data/raw/secret.bin" not in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.generated-drift"]
 
     assert len(findings) == 1
     assert findings[0].severity is Severity.ERROR
@@ -344,7 +344,7 @@ def test_generated_drift_requires_durable_root_index_blob(
     (repo / ".gitignore").write_text(correct, encoding="utf-8")
     _install_invalid_root_index_entry(repo, index_kind, correct)
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.generated-drift"]
 
     assert len(findings) == 1
     assert findings[0].severity is Severity.ERROR
@@ -363,7 +363,7 @@ def test_generated_drift_rejects_symlinked_root_gitignore_without_following(tmp_
     (repo / ".gitignore").symlink_to(outside)
     subprocess.run(["git", "-C", str(repo), "add", "-f", ".gitignore"], check=True)
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.generated-drift"]
 
     assert len(findings) == 1
     assert "symlink" in findings[0].message
@@ -375,7 +375,7 @@ def test_generated_drift_rejects_nonregular_root_gitignore(tmp_path: Path):
     repo = _repo(tmp_path, decl)
     (repo / ".gitignore").mkdir()
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.generated-drift"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.generated-drift"]
 
     assert len(findings) == 1
     assert "not a regular file" in findings[0].message
@@ -407,7 +407,7 @@ def test_payload_index_invariant_catches_untracked_nested_negations(tmp_path: Pa
     assert b"data/raw/secret.bin" in indexed
     assert b"data/.gitignore" not in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
         ("data/raw/secret.bin", Severity.ERROR)
@@ -438,7 +438,7 @@ def test_payload_index_invariant_catches_indexed_root_symlink(tmp_path: Path):
     ).stdout.split(b"\0")
     assert b"data/raw" in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [("data/raw", Severity.ERROR)]
 
@@ -481,7 +481,7 @@ def test_manifest_index_invariant_catches_only_nonmatching_staged_path(tmp_path:
     assert b"data/external/ds/part.parquet" in indexed
     assert b"data/.gitignore" not in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
         ("data/external/ds/part.parquet", Severity.ERROR)
@@ -533,7 +533,7 @@ def test_index_invariant_uses_effective_git_casefolding(tmp_path: Path):
     assert b"data/external/ds/datapackage.json" in indexed
     assert b"data/external/ds/part.parquet" in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
         ("data/external/ds/part.parquet", Severity.ERROR),
@@ -595,7 +595,7 @@ def test_index_invariant_does_not_expand_unicode_in_tracked_globs(tmp_path: Path
     assert b"data/external/ds/STRASSE.JSON" in indexed
     assert b"data/.gitignore" not in indexed
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert [(finding.path.as_posix(), finding.severity) for finding in findings] == [
         ("data/external/ds/STRASSE.JSON", Severity.ERROR)
@@ -636,7 +636,7 @@ def test_index_invariant_does_not_expand_unicode_in_root_prefixes(tmp_path: Path
     assert ignored.returncode == 1, "Git must not equate Straße with STRASSE"
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.index-violation"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.index-violation"]
 
     assert findings == []
 
@@ -685,7 +685,7 @@ def test_nested_marker_region_is_hand_owned_and_conflicts_with_declaration(tmp_p
         check=True,
     )
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.declaration-conflict"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.declaration-conflict"]
 
     assert [(finding.path.as_posix(), finding.line) for finding in findings] == [("inc/.gitignore", 2)]
 
@@ -704,7 +704,7 @@ def test_exact_name_rule_conflicts_with_directory_symlink_leaf(tmp_path: Path):
     )
     subprocess.run(["git", "-C", str(repo), "add", "-f", ".gitignore"], check=True)
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.declaration-conflict"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.declaration-conflict"]
 
     assert [(finding.path.as_posix(), finding.line) for finding in findings] == [(".gitignore", 1)]
 
@@ -787,7 +787,7 @@ def test_declaration_conflict_sees_a_rule_shadowed_by_a_hand_written_negation(
     (repo / "data/raw/x.csv").write_text("x")
     (repo / ".gitignore").write_text(splice_managed_block("/data/raw/**\n!/data/raw/**\n", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
-    findings = [r for r in _results(repo) if r.rule == "boundary.declaration-conflict"]
+    findings = [r for r in _results(repo) if r.rule_id == "boundary.declaration-conflict"]
     assert sorted(f.line for f in findings) == [
         1,
         2,
@@ -922,7 +922,7 @@ def test_allowlist_is_source_scoped(tmp_path: Path):
     (repo / "inc/.gitignore").write_text("build/\n")
     subprocess.run(["git", "-C", str(repo), "add", ".gitignore", "inc/.gitignore"], check=True)
     ctx = ValidateContext.from_project_root(repo, strict=False, verbose=False)
-    findings = [r for r in check_boundary(ctx) if r.rule == "boundary.ignored-undeclared"]
+    findings = [r for r in check_boundary(ctx) if r.rule_id == "boundary.ignored-undeclared"]
     assert len(findings) == 1
     assert "inc/.gitignore" in str(findings[0].path)
 
@@ -982,7 +982,7 @@ def test_allowlist_rejects_previously_committed_intent_to_add_source(tmp_path: P
     ).stdout.split(b"\0")
     assert b"inc/.gitignore" not in names
 
-    findings = [result for result in _results(repo) if result.rule == "boundary.invalid-declaration"]
+    findings = [result for result in _results(repo) if result.rule_id == "boundary.invalid-declaration"]
 
     assert len(findings) == 1
     assert findings[0].severity is Severity.ERROR

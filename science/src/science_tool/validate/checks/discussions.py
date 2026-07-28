@@ -14,9 +14,11 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.validate.checks import Check
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _REQUIRED_SECTIONS = (
     "## Focus",
@@ -44,12 +46,35 @@ _DOUBLE_BLIND_RE = re.compile(r'^mode:\s*"?double-blind"?', re.MULTILINE)
 _RAW_FIELD_RE = re.compile(r"^{field}:\s*['\"]?([^'\"\n]*)['\"]?\s*$", re.MULTILINE)
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "discussions", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="discussions",
+    section_title="discussions",
+    section_order=114,
+    rule_ids=("discussions.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="discussion documents...", order=11)
-def check_discussions(ctx: ValidateContext) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["discussions.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=11, producer_id="validate.discussions", rules=tuple(RULES.values()))
+def check_discussions(ctx: ValidateContext) -> Iterator[CheckObservation]:
     roots = (ctx.project_root / "entities" / "discussions",)
     for discussions_dir in roots:
         if not discussions_dir.is_dir():
@@ -64,23 +89,38 @@ def check_discussions(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_synthesis_frontmatter(ctx)
 
 
-def _check_discussion(ctx: ValidateContext, path: Path, relative: str) -> Iterator[Result]:
+def _check_discussion(ctx: ValidateContext, path: Path, relative: str) -> Iterator[CheckObservation]:
     text = ctx.read_text_cached(path)
-    yield _result(Severity.INFO, relative, f"Checking {relative}...")
+    yield _result(
+        Severity.INFO,
+        relative,
+        f"Checking {relative}...",
+        key=["progress"],
+    )
 
     for section in _REQUIRED_SECTIONS:
         if section not in text:
-            yield _result(Severity.WARN, relative, f"{relative} missing section: {section}")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative} missing section: {section}",
+                key=["required-section", section],
+            )
 
     if _DOUBLE_BLIND_RE.search(text) is None:
         return
 
     for section in _DOUBLE_BLIND_SECTIONS:
         if section not in text:
-            yield _result(Severity.WARN, relative, f"{relative} double-blind mode missing section: {section}")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative} double-blind mode missing section: {section}",
+                key=["double-blind-section", section],
+            )
 
 
-def _check_synthesis_frontmatter(ctx: ValidateContext) -> Iterator[Result]:
+def _check_synthesis_frontmatter(ctx: ValidateContext) -> Iterator[CheckObservation]:
     synth_roots = (ctx.project_root / "entities" / "synthesis",)
     candidates = [p for root in synth_roots if root.is_dir() for p in sorted(root.glob("*.md"))]
     for path in candidates:
@@ -96,28 +136,73 @@ def _check_synthesis_frontmatter(ctx: ValidateContext) -> Iterator[Result]:
         if parsed_report_kind in _VALID_SYNTHESIS_KINDS:
             pass
         elif parsed_report_kind == "":
-            yield _result(Severity.WARN, relative, f"{relative}: missing report_kind")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative}: missing report_kind",
+                key=["field", "report_kind"],
+            )
         else:
-            yield _result(Severity.WARN, relative, f"{relative}: invalid report_kind '{parsed_report_kind}'")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative}: invalid report_kind '{parsed_report_kind}'",
+                key=["field", "report_kind"],
+            )
 
         if not _has_raw_key(text, "source_commit"):
-            yield _result(Severity.WARN, relative, f"{relative}: missing source_commit")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"{relative}: missing source_commit",
+                key=["field", "source_commit"],
+            )
 
         if parsed_report_kind == "synthesis-rollup":
             if not _has_raw_key(text, "synthesized_from"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing synthesized_from")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing synthesized_from",
+                    key=["field", "synthesized_from"],
+                )
         elif parsed_report_kind == "hypothesis-synthesis":
             if not _has_raw_key(text, "hypothesis"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing hypothesis")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing hypothesis",
+                    key=["field", "hypothesis"],
+                )
             if not _has_raw_key(text, "provenance_coverage"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing provenance_coverage")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing provenance_coverage",
+                    key=["field", "provenance_coverage"],
+                )
         elif parsed_report_kind == "emergent-threads":
             if not _has_raw_key(text, "orphan_question_count"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing orphan_question_count")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing orphan_question_count",
+                    key=["field", "orphan_question_count"],
+                )
             if not _has_raw_key(text, "orphan_interpretation_count"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing orphan_interpretation_count")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing orphan_interpretation_count",
+                    key=["field", "orphan_interpretation_count"],
+                )
             if not _has_raw_key(text, "orphan_ids"):
-                yield _result(Severity.WARN, relative, f"{relative}: missing orphan_ids")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative}: missing orphan_ids",
+                    key=["field", "orphan_ids"],
+                )
 
 
 def _raw_field_value(text: str, field: str) -> str:

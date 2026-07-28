@@ -31,36 +31,76 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
 from science_tool.consolidation import build_supersedes_graph, load_supersession_inputs
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.findings import (
+    ValidationQualifiers,
+    declare_validation_rules,
+    rule_kind_segment,
+)
 from science_tool.validate.kind_severity import severity_for_kind
-from science_tool.validate.result import Result
 
 
-@Check(section="supersession lineage", order=29)
-def check_supersession(ctx: ValidateContext) -> Iterator[Result]:
+SECTION, RULES = declare_validation_rules(
+    section_id="supersession",
+    section_title="supersession",
+    section_order=157,
+    rule_ids=(),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def supersession_rules(active_kinds: frozenset[str]) -> tuple[FindingRule, ...]:
+    segments = [rule_kind_segment(kind) for kind in active_kinds]
+    if len(segments) != len(set(segments)):
+        raise ValueError("active kind names collide after kebab rule normalization")
+    return tuple(
+        supersession_rule(kind, display_order=SECTION.section_order * 100 + index)
+        for index, kind in enumerate(sorted(active_kinds), start=1)
+    )
+
+
+def supersession_rule(
+    kind: str,
+    *,
+    display_order: int | None = None,
+) -> FindingRule:
+    return FindingRule(
+        id=f"{rule_kind_segment(kind)}.unbacked-inverse",
+        severities=frozenset({severity_for_kind(kind).value}),
+        subject_types=frozenset({"path"}),
+        qualifier_schema=ValidationQualifiers,
+        identity_qualifiers=("key",),
+        title=f"{kind} unbacked inverse",
+        section=SECTION.id,
+        display_order=display_order or SECTION.section_order * 100 + 1,
+        default_visibility="visible",
+    )
+
+
+@Check(
+    section=SECTION,
+    order=29,
+    producer_id="validate.supersession",
+    rules=tuple(RULES.values()),
+    kind_rule_factory=supersession_rules,
+)
+def check_supersession(ctx: ValidateContext) -> Iterator[CheckObservation]:
     graph = build_supersedes_graph(load_supersession_inputs(ctx.project_root))
 
     for unbacked in graph.unbacked_inverses:
         entity_id = unbacked["id"]
         kind = graph.kind_by_id[entity_id]
-        yield Result(
-            # PER FINDING -- `severity_for_kind(kind)`, not `severity_for_kind("hypothesis")`: this
-            # emitter fires for EVERY kind, and only the certified ones may ERROR. `hypothesis` is
-            # certified, so its unbacked inverses are ERROR and gated. The four live NON-hypothesis
-            # records (one `3d-attention-bias` interpretation, three `natural-systems`) stay WARN and
-            # ungated: their real lineage is written in the WITHDRAWN top-level `supersedes:` spelling
-            # the Entity model silently drops, an uncertified kind's defect with no migration yet.
-            severity_for_kind(kind),
-            # `Result` reports a FILE -- it has no `entity_id` field -- which is why the graph
-            # carries `path_by_id`: the check must not re-derive the canonicalization that produced
-            # the key it looks up. An inverse is a field on a RECORD, not an edge in a carrier file,
-            # so this one is located by id and not by `source_path`.
-            graph.path_by_id[entity_id],
-            None,
-            f"superseded_by: {unbacked['superseder']} has no canonical sci:supersedes edge behind "
-            f"it; author the edge on {unbacked['superseder']} or drop the field",
-            f"{kind}.unbacked-inverse",
-            None,
+        yield validation_observation(
+            severity=severity_for_kind(kind),
+            path=graph.path_by_id[entity_id],
+            line=None,
+            message=f"superseded_by: {unbacked['superseder']} has no canonical sci:supersedes edge behind it; author the edge on {unbacked['superseder']} or drop the field",
+            rule=supersession_rule(kind),
+            task=None,
+            qualifiers={"key": []},
         )

@@ -33,6 +33,7 @@ from science_tool.validate.checks.evidence_lines import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write(root: Path, rel: str, body: str) -> Path:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -66,20 +67,22 @@ def _write_proposition(root: Path, id_suffix: str = "p1") -> str:
     _write(
         root,
         f"entities/propositions/{id_suffix}.md",
-        "\n".join([
-            "---",
-            f"id: {entity_id!r}",
-            "kind: proposition",
-            "title: 'Test Proposition'",
-            "project: e2e-test",
-            "ontology_terms: []",
-            "related: []",
-            "source_refs: []",
-            "created: 2026-05-01",
-            "updated: 2026-05-01",
-            "---",
-            "",
-        ]),
+        "\n".join(
+            [
+                "---",
+                f"id: {entity_id!r}",
+                "kind: proposition",
+                "title: 'Test Proposition'",
+                "project: e2e-test",
+                "ontology_terms: []",
+                "related: []",
+                "source_refs: []",
+                "created: 2026-05-01",
+                "updated: 2026-05-01",
+                "---",
+                "",
+            ]
+        ),
     )
     return entity_id
 
@@ -90,20 +93,22 @@ def _write_paper(root: Path, id_suffix: str = "x") -> str:
     _write(
         root,
         f"entities/papers/{id_suffix}.md",
-        "\n".join([
-            "---",
-            f"id: {entity_id!r}",
-            "kind: paper",
-            "title: 'Test Paper'",
-            "project: e2e-test",
-            "ontology_terms: []",
-            "related: []",
-            "source_refs: []",
-            "created: 2026-05-01",
-            "updated: 2026-05-01",
-            "---",
-            "",
-        ]),
+        "\n".join(
+            [
+                "---",
+                f"id: {entity_id!r}",
+                "kind: paper",
+                "title: 'Test Paper'",
+                "project: e2e-test",
+                "ontology_terms: []",
+                "related: []",
+                "source_refs: []",
+                "created: 2026-05-01",
+                "updated: 2026-05-01",
+                "---",
+                "",
+            ]
+        ),
     )
     return entity_id
 
@@ -140,6 +145,7 @@ def _write_evidence_line(root: Path, *, id_suffix: str = "e1", **extra: object) 
 # Part A: entity create evidence-line
 # ---------------------------------------------------------------------------
 
+
 def test_entity_create_evidence_line_writes_template(tmp_path: Path) -> None:
     """``science entity create evidence-line`` should write a valid template file."""
     runner = CliRunner()
@@ -149,8 +155,7 @@ def test_entity_create_evidence_line_writes_template(tmp_path: Path) -> None:
         # Provide an explicit id because no sibling exists yet for auto-numbering.
         result = runner.invoke(
             main,
-            ["entity", "create", "evidence-line", "My first evidence line",
-             "--id", "evidence-line:0001-first"],
+            ["entity", "create", "evidence-line", "My first evidence line", "--id", "evidence-line:0001-first"],
         )
         assert result.exit_code == 0, f"entity create failed:\n{result.output}"
         assert "evidence-line:0001-first" in result.output
@@ -206,6 +211,7 @@ def test_evidence_lines_create_accepts_independence_group_and_belief_eligible(tm
 # Part A: graph build — cito edge, provenance, line metadata
 # ---------------------------------------------------------------------------
 
+
 def test_graph_build_evidence_line_supports_cito_edge(tmp_path: Path) -> None:
     """stance: supports → cito:supports edge in knowledge graph after graph build."""
     _seed_project(tmp_path)
@@ -219,9 +225,7 @@ def test_graph_build_evidence_line_supports_cito_edge(tmp_path: Path) -> None:
     line_uri = URIRef(PROJECT_NS["evidence-line/e1"])
     target_uri = URIRef(PROJECT_NS["proposition/p1"])
 
-    assert (line_uri, CITO_NS.supports, target_uri) in knowledge, (
-        "Expected cito:supports in knowledge graph"
-    )
+    assert (line_uri, CITO_NS.supports, target_uri) in knowledge, "Expected cito:supports in knowledge graph"
     assert (line_uri, CITO_NS.disputes, target_uri) not in knowledge
 
 
@@ -238,9 +242,7 @@ def test_graph_build_evidence_line_disputes_cito_edge(tmp_path: Path) -> None:
     line_uri = URIRef(PROJECT_NS["evidence-line/e1"])
     target_uri = URIRef(PROJECT_NS["proposition/p1"])
 
-    assert (line_uri, CITO_NS.disputes, target_uri) in knowledge, (
-        "Expected cito:disputes in knowledge graph"
-    )
+    assert (line_uri, CITO_NS.disputes, target_uri) in knowledge, "Expected cito:disputes in knowledge graph"
     assert (line_uri, CITO_NS.supports, target_uri) not in knowledge
 
 
@@ -297,6 +299,7 @@ def test_graph_build_evidence_line_metadata_predicates(tmp_path: Path) -> None:
 # Part A: QA checks — clean project + corruption
 # ---------------------------------------------------------------------------
 
+
 def test_qa_checks_all_pass_on_clean_project(tmp_path: Path) -> None:
     """All four evidence-line QA checks emit no results for a well-formed project."""
     _seed_project(tmp_path)
@@ -323,4 +326,4 @@ def test_qa_check_fires_on_shared_source_without_group(tmp_path: Path) -> None:
     results = list(check_independence_ungrouped_collapse(ctx))
     assert len(results) == 1, f"Expected 1 result, got {len(results)}: {results}"
     assert results[0].severity == Severity.ERROR
-    assert results[0].rule == "independence.ungrouped-collapse"
+    assert results[0].rule_id == "independence.ungrouped-collapse"

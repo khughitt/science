@@ -77,24 +77,25 @@ def test_unknown_fingerprint_version_is_refused():
 
 def test_report_support_types_are_exported_from_the_audit_package():
     from science_model.audit import (
-        MAX_REPORT_FINDINGS,
+        ProducerCaveat,
         ProducerMetrics,
         ReportMeta,
         ReportTotals,
         UnwiredProducer,
     )
 
-    assert MAX_REPORT_FINDINGS == 5000
     assert [
         ProducerMetrics.__name__,
         UnwiredProducer.__name__,
         ReportTotals.__name__,
         ReportMeta.__name__,
+        ProducerCaveat.__name__,
     ] == [
         "ProducerMetrics",
         "UnwiredProducer",
         "ReportTotals",
         "ReportMeta",
+        "ProducerCaveat",
     ]
 
 
@@ -227,14 +228,9 @@ def test_the_wire_form_refuses_the_nul_the_stored_hashes_refuse():
         ReportedFinding(producer_id="p\0q", finding=_finding())
 
 
-def test_the_finding_ceiling_applies_across_both_channels():
-    from science_model.audit.report import MAX_REPORT_FINDINGS, AcceptedFinding
-
-    half = MAX_REPORT_FINDINGS // 2
-    findings = [
-        ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}"))
-        for i in range(half + 1)
-    ]
+def test_trusted_reports_can_contain_more_than_the_ingestion_ceiling():
+    half = 2500
+    findings = [ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}")) for i in range(half + 1)]
     accepted = [
         AcceptedFinding(
             producer_id="p",
@@ -244,15 +240,74 @@ def test_the_finding_ceiling_applies_across_both_channels():
         )
         for i in range(half + 1)
     ]
-    with pytest.raises(ValidationError, match="ceiling"):
+    report = _report(
+        findings=findings,
+        accepted=accepted,
+        totals={
+            "findings_total": len(findings),
+            "findings_by_severity": {"warn": len(findings)},
+            "accepted_total": len(accepted),
+            "unwired_total": 0,
+        },
+        meta={
+            "producers_run": ["p"],
+            "total_duration_seconds": 0.5,
+            "timings": [],
+        },
+    )
+    assert len(report.findings) + len(report.accepted) > 5000
+
+
+def test_a_wired_producer_caveat_round_trips():
+    from science_model.audit import ProducerCaveat
+
+    report = _report(
+        caveats=[
+            ProducerCaveat(
+                producer_id="dataset_anomalies",
+                code="partial",
+                reason="some input skipped",
+            )
+        ]
+    )
+    assert report.caveats[0].model_dump() == {
+        "producer_id": "dataset_anomalies",
+        "code": "partial",
+        "reason": "some input skipped",
+    }
+
+
+@pytest.mark.parametrize(
+    "caveats, producers_run, match",
+    [
+        (
+            [
+                {"producer_id": "dataset_anomalies", "code": "a"},
+                {"producer_id": "dataset_anomalies", "reason": "b"},
+            ],
+            ["dataset_anomalies"],
+            "duplicate caveat",
+        ),
+        (
+            [{"producer_id": "other", "code": "a"}],
+            ["dataset_anomalies"],
+            "producers_run",
+        ),
+        (
+            [{"producer_id": "dataset_anomalies", "code": " ", "reason": ""}],
+            ["dataset_anomalies"],
+            "nonblank",
+        ),
+    ],
+)
+def test_caveats_must_be_distinct_wired_and_meaningful(caveats, producers_run, match):
+    with pytest.raises(ValidationError, match=match):
         _report(
-            findings=findings,
-            accepted=accepted,
-            totals={
-                "findings_total": len(findings),
-                "findings_by_severity": {"warn": len(findings)},
-                "accepted_total": len(accepted),
-                "unwired_total": 0,
+            caveats=caveats,
+            meta={
+                "producers_run": producers_run,
+                "total_duration_seconds": 0.5,
+                "timings": [],
             },
         )
 
@@ -310,9 +365,7 @@ def test_successful_and_unwired_producer_sets_are_disjoint_and_unique():
 def test_every_output_producer_is_named_in_producers_run(channel):
     overrides = {}
     if channel == "findings":
-        overrides["findings"] = [
-            ReportedFinding(producer_id="other", finding=_finding())
-        ]
+        overrides["findings"] = [ReportedFinding(producer_id="other", finding=_finding())]
     elif channel == "accepted":
         overrides["accepted"] = [
             AcceptedFinding(

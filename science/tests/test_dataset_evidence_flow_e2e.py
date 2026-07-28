@@ -284,7 +284,7 @@ def test_unregistered_dataset_ref_warns_ref_unresolved(tmp_path: Path, monkeypat
         )
     )
 
-    rule_pairs = [(r.severity, r.rule) for r in results]
+    rule_pairs = [(r.severity, r.rule_id) for r in results]
     assert (Severity.WARN, "dataset-influence.ref-unresolved") in rule_pairs, (
         f"Expected dataset-influence.ref-unresolved WARN; got {rule_pairs}"
     )
@@ -318,7 +318,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             row_usage_refs=[],
         )
     )
-    rule_pairs_omitted = [(r.severity, r.rule) for r in results_omitted]
+    rule_pairs_omitted = [(r.severity, r.rule_id) for r in results_omitted]
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") in rule_pairs_omitted, (
         f"Expected overlap-unknown-candidate WARN for omitted overlap; got {rule_pairs_omitted}"
     )
@@ -338,7 +338,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             row_usage_refs=[],
         )
     )
-    rule_pairs_explicit = [(r.severity, r.rule) for r in results_explicit]
+    rule_pairs_explicit = [(r.severity, r.rule_id) for r in results_explicit]
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") in rule_pairs_explicit, (
         f"Expected overlap-unknown-candidate WARN for explicit overlap=unknown; got {rule_pairs_explicit}"
     )
@@ -358,7 +358,7 @@ def test_dependence_role_with_unknown_overlap_warns(tmp_path: Path) -> None:
             row_usage_refs=[],
         )
     )
-    rule_pairs_full = [(r.severity, r.rule) for r in results_full]
+    rule_pairs_full = [(r.severity, r.rule_id) for r in results_full]
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs_full, (
         f"overlap=full must NOT trigger overlap-unknown-candidate; got {rule_pairs_full}"
     )

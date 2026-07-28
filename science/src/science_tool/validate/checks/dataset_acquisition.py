@@ -12,13 +12,24 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def evaluate_dataset_acquisition(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-acquisition",
+    section_title="dataset acquisition",
+    section_order=130,
+    rule_ids=("dataset.acquired-without-pointer",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def evaluate_dataset_acquisition(datasets: Iterable[dict[str, Any]]) -> Iterator[CheckObservation]:
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
     for fm in datasets:
         if fm.get("kind") != "dataset":
@@ -29,18 +40,17 @@ def evaluate_dataset_acquisition(datasets: Iterable[dict[str, Any]]) -> Iterator
             continue  # acquired and pointed
         ident = fm.get("id", "?")
         path = fm.get("_path")
-        yield Result(
-            Severity.ERROR,
-            Path(path) if path else None,
-            None,
-            f"{ident}: acquired dataset (status={fm.get('status')!r}) has no "
-            f"datapackage or local_path; set status: candidate if not yet acquired, "
-            f"or add a datapackage/local_path pointer",
-            "dataset.acquired-without-pointer",
-            None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=Path(path) if path else None,
+            line=None,
+            message=f"{ident}: acquired dataset (status={fm.get('status')!r}) has no datapackage or local_path; set status: candidate if not yet acquired, or add a datapackage/local_path pointer",
+            rule=RULES["dataset.acquired-without-pointer"],
+            task=None,
+            qualifiers={"key": []},
         )
 
 
-@Check(section="dataset acquisition", order=32)
-def check_dataset_acquisition(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=32, producer_id="validate.dataset-acquisition", rules=tuple(RULES.values()))
+def check_dataset_acquisition(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_dataset_acquisition(dataset_frontmatters(ctx))

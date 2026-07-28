@@ -13,22 +13,71 @@ from science_model.packages.schema import (
     BENCHMARK_TASK_SUPPORT_REASON_RE,
     BENCHMARK_TASK_SUPPORT_STATES,
 )
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.datasets.semantics import dataset_class_for
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _TASK_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="benchmark-metadata",
+    section_title="benchmark metadata",
+    section_order=134,
+    rule_ids=(
+        "benchmark.block-malformed",
+        "benchmark.facets-lack-task-or-limitation",
+        "benchmark.perturbation-context-missing",
+        "benchmark.pointer-block",
+        "benchmark.task-id-duplicate",
+        "benchmark.task-id-invalid",
+        "benchmark.task-sparse",
+        "benchmark.task-support-checked-at-invalid",
+        "benchmark.task-support-evidence-invalid",
+        "benchmark.task-support-field-invalid",
+        "benchmark.task-support-notes-invalid",
+        "benchmark.task-support-reason-invalid",
+        "benchmark.task-support-reason-required",
+        "benchmark.task-support-state-invalid",
+        "benchmark.timepoints-missing",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+SUPPORT_FIELD_RULES = {
+    "evidence": RULES["benchmark.task-support-evidence-invalid"],
+    "notes": RULES["benchmark.task-support-notes-invalid"],
+}
 
 
 def _valid_task_id(value: str) -> bool:
     return 2 <= len(value) <= 64 and _TASK_ID_RE.fullmatch(value) is not None
 
 
-def _result(severity: Severity, path: object, message: str, rule: str) -> Result:
+def _result(
+    severity: Severity,
+    path: object,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str],
+) -> CheckObservation:
     result_path = Path(path) if isinstance(path, str | Path) else None
-    return Result(severity, result_path, None, message, rule, None)
+    return validation_observation(
+        severity=severity,
+        path=result_path,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _nonempty_str(value: object) -> bool:
@@ -71,7 +120,7 @@ def _dataset_class(fm: Mapping[str, Any]) -> str:
         return "deposit"
 
 
-def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
+def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[CheckObservation]:
     for fm in datasets:
         if fm.get("kind") != "dataset":
             continue
@@ -87,7 +136,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.INFO,
                 path,
                 f"{ident}: pointer dataset carries benchmark metadata",
-                "benchmark.pointer-block",
+                RULES["benchmark.pointer-block"],
+                key=["benchmark"],
             )
 
         if not isinstance(benchmark, Mapping):
@@ -95,7 +145,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: benchmark block must be a mapping",
-                "benchmark.block-malformed",
+                RULES["benchmark.block-malformed"],
+                key=["benchmark"],
             )
             continue
 
@@ -109,7 +160,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: benchmark kinds are listed without tasks or limitations",
-                "benchmark.facets-lack-task-or-limitation",
+                RULES["benchmark.facets-lack-task-or-limitation"],
+                key=["benchmark-kinds"],
             )
 
         valid_tasks: list[Mapping[str, Any]] = []
@@ -122,7 +174,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                     Severity.ERROR,
                     path,
                     f"{ident}: benchmark task id {raw_task_id!r} must be 2-64 chars of lowercase kebab-case",
-                    "benchmark.task-id-invalid",
+                    RULES["benchmark.task-id-invalid"],
+                    key=["task-id", repr(raw_task_id)],
                 )
                 continue
 
@@ -137,7 +190,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.ERROR,
                 path,
                 f"{ident}: duplicate benchmark task id {task_id!r}",
-                "benchmark.task-id-duplicate",
+                RULES["benchmark.task-id-duplicate"],
+                key=["task-id", task_id],
             )
 
         for task in valid_tasks:
@@ -148,7 +202,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support field {key!r} is invalid",
-                        "benchmark.task-support-field-invalid",
+                        RULES["benchmark.task-support-field-invalid"],
+                        key=[str(task["id"]), key],
                     )
 
                 state = support.get("state")
@@ -157,7 +212,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support state {state!r} is invalid",
-                        "benchmark.task-support-state-invalid",
+                        RULES["benchmark.task-support-state-invalid"],
+                        key=[str(task["id"])],
                     )
 
                 has_reason = "reason" in support
@@ -168,21 +224,24 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support reason is required for state {state!r}",
-                        "benchmark.task-support-reason-required",
+                        RULES["benchmark.task-support-reason-required"],
+                        key=[str(task["id"])],
                     )
                 if has_reason and not isinstance(reason, str):
                     yield _result(
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support reason {reason!r} must be a string",
-                        "benchmark.task-support-reason-invalid",
+                        RULES["benchmark.task-support-reason-invalid"],
+                        key=[str(task["id"])],
                     )
                 elif reason_text and BENCHMARK_TASK_SUPPORT_REASON_RE.fullmatch(reason_text) is None:
                     yield _result(
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support reason {reason_text!r} must be lowercase kebab-case",
-                        "benchmark.task-support-reason-invalid",
+                        RULES["benchmark.task-support-reason-invalid"],
+                        key=[str(task["id"])],
                     )
 
                 has_checked_at = "checked_at" in support
@@ -193,14 +252,16 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support checked_at {checked_at!r} must be a string",
-                        "benchmark.task-support-checked-at-invalid",
+                        RULES["benchmark.task-support-checked-at-invalid"],
+                        key=[str(task["id"])],
                     )
                 elif checked_at_text and BENCHMARK_TASK_SUPPORT_DATE_RE.fullmatch(checked_at_text) is None:
                     yield _result(
                         Severity.ERROR,
                         path,
                         f"{ident}: benchmark task {task['id']!r} support checked_at {checked_at_text!r} must be an ISO date",
-                        "benchmark.task-support-checked-at-invalid",
+                        RULES["benchmark.task-support-checked-at-invalid"],
+                        key=[str(task["id"])],
                     )
 
                 for key in ("evidence", "notes"):
@@ -209,7 +270,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                             Severity.ERROR,
                             path,
                             f"{ident}: benchmark task {task['id']!r} support {key} must be a list of nonempty strings",
-                            f"benchmark.task-support-{key}-invalid",
+                            SUPPORT_FIELD_RULES[key],
+                            key=[str(task["id"])],
                         )
 
             if not (_nonempty_str(task.get("task_type")) and _nonempty_str(task.get("prediction_target"))):
@@ -217,7 +279,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                     Severity.WARN,
                     path,
                     f"{ident}: benchmark task {task['id']!r} is missing task_type or prediction_target",
-                    "benchmark.task-sparse",
+                    RULES["benchmark.task-sparse"],
+                    key=[str(task["id"])],
                 )
 
         if "perturbation-response" in benchmark_kinds and not any(
@@ -227,7 +290,8 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: perturbation-response benchmark needs an intervention or contexts",
-                "benchmark.perturbation-context-missing",
+                RULES["benchmark.perturbation-context-missing"],
+                key=["perturbation-response"],
             )
 
         if "time-series" in benchmark_kinds and not any(
@@ -237,10 +301,11 @@ def evaluate_benchmark_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: time-series benchmark needs task timepoints",
-                "benchmark.timepoints-missing",
+                RULES["benchmark.timepoints-missing"],
+                key=["time-series"],
             )
 
 
-@Check(section="benchmark metadata", order=34)
-def check_benchmark_metadata(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=34, producer_id="validate.benchmark-metadata", rules=tuple(RULES.values()))
+def check_benchmark_metadata(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_benchmark_metadata(dataset_frontmatters(ctx))

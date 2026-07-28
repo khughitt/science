@@ -48,9 +48,7 @@ def prereg_schedule_registered() -> Generator[None]:
     yield
     checks.clear_checks_for_tests()
     for module_name in CANONICAL_CHECK_MODULES:
-        importlib.reload(
-            importlib.import_module(f"science_tool.validate.checks.{module_name}")
-        )
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
 
 def _ctx(root: Path) -> ValidateContext:
@@ -125,7 +123,7 @@ def _results(root: Path) -> list[Result]:
 def _assert_schedule_warning(results: list[Result]) -> Result:
     assert len(results) == 1
     assert results[0].severity.value == "warn"
-    assert results[0].rule == "prereg.schedule-calibration-domain"
+    assert results[0].rule_id == "prereg.schedule-calibration-domain"
     return results[0]
 
 
@@ -205,10 +203,7 @@ def test_no_schedule_declared_emits_nothing(project: Path) -> None:
 def test_ordinary_prose_does_not_trip_the_antecedent(project: Path) -> None:
     _write_prereg(
         project,
-        body=(
-            "We assess each process within its habitat unless the registered "
-            "exclusion criterion applies."
-        ),
+        body=("We assess each process within its habitat unless the registered exclusion criterion applies."),
     )
 
     assert _results(project) == []
@@ -226,6 +221,6 @@ def test_schedule_warning_surfaces_through_runner(project: Path) -> None:
 
     _write_prereg(project, body=_SCHEDULE)
 
-    rules = [result.rule for result in run(project, strict=False, verbose=False).results]
+    rules = [result.rule_id for result in run(project, strict=False, verbose=False).results]
 
     assert "prereg.schedule-calibration-domain" in rules

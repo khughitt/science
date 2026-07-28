@@ -155,95 +155,42 @@ def test_emit_query_rows_default_has_no_ansi(capsys) -> None:
     assert ANSI_RE.search(captured.out) is None
 
 
-def _health_report_with_managed_artifact_issue() -> dict:
-    return {
-        "total_issues": 1,
-        "managed_artifacts": [
-            {
-                "name": "AGENTS.md",
-                "install_target": "AGENTS.md",
-                "version": "1",
-                "status": "drifted",
-                "detail": "managed artifact differs",
-                "counts_as_issue": True,
-            }
+def test_health_never_strips_markup_and_ansi(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        [
+            "--color",
+            "never",
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "tooling_scaffold",
         ],
-        "tooling_scaffold": [],
-        "agent_context": [],
-        "unregistered_ref_kinds": [],
-        "unresolved_refs": [],
-        "lingering_tags_lines": [],
-        "identity_policy": [],
-        "entity_identity": [],
-        "dataset_anomalies": [],
-        "schema_invalid": [],
-        "validation": [],
-        "accepted_validation": [],
-        "unwired_checks": [],
-        "legacy_task_type": [],
-        "invalid_entity_aspects": [],
-        "layered_claims": {
-            "migration_issues": [],
-            "rival_model_packets_missing_discriminating_predictions": [],
-            "proposition_claim_layer_coverage": {
-                "numerator": 0,
-                "denominator": 0,
-                "fraction": 1.0,
-            },
-            "causal_leaning_identification_coverage": {
-                "numerator": 0,
-                "denominator": 0,
-                "fraction": 1.0,
-            },
-        },
-        "cross_paper_evidence": {
-            "status": "ok",
-            "empty_state": "no_propositions",
-            "summary": {},
-            "findings": [],
-            "propositions": [],
-        },
-        "prose_epistemics": {
-            "applicable": False,
-            "summary": {},
-            "coverage": {},
-            "sources": [],
-            "findings": [],
-        },
-    }
-
-
-def test_health_never_strips_markup_and_ansi(monkeypatch) -> None:
-    from science_tool.graph import health as health_module
-
-    monkeypatch.setattr(
-        health_module,
-        "build_health_report",
-        lambda _root: _health_report_with_managed_artifact_issue(),
     )
 
-    result = CliRunner().invoke(main, ["--color", "never", "health"])
-
     assert result.exit_code == 0, result.output
-    assert "Next:" in result.output
-    assert "science project artifacts check" in result.output
-    assert "[cyan]" not in result.output
+    assert "Tooling scaffold" in result.output
+    assert "tooling.scaffold" in result.output
     assert ANSI_RE.search(result.output) is None
 
 
-def test_health_always_emits_ansi(monkeypatch) -> None:
-    from science_tool.graph import health as health_module
-
-    monkeypatch.setattr(
-        health_module,
-        "build_health_report",
-        lambda _root: _health_report_with_managed_artifact_issue(),
+def test_health_always_emits_ansi(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        [
+            "--color",
+            "always",
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "tooling_scaffold",
+        ],
     )
 
-    result = CliRunner().invoke(main, ["--color", "always", "health"])
-
     assert result.exit_code == 0, result.output
-    assert "science project artifacts check" in result.output
+    assert "tooling.scaffold" in result.output
     assert ANSI_RE.search(result.output) is not None
 
 

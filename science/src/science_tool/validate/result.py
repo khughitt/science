@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+
+from science_model.audit import AuditFinding, Evidence, FindingRule
+
+from science_tool.validate.findings import build_validation_finding
 
 
 class Severity(str, Enum):
@@ -26,15 +30,30 @@ class Result:
     path: Path | None
     line: int | None
     message: str
-    rule: str | None
+    rule: FindingRule
     task: str | None
+    qualifiers: Mapping[str, object]
+    evidence: tuple[Evidence, ...] = ()
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "severity": self.severity.value,
-            "path": str(self.path) if self.path is not None else None,
-            "line": self.line,
-            "message": self.message,
-            "rule": self.rule,
-            "task": self.task,
-        }
+    def __post_init__(self) -> None:
+        if not isinstance(self.rule, FindingRule):
+            raise TypeError(f"Result.rule must be FindingRule, got {type(self.rule).__name__}")
+
+    @property
+    def rule_id(self) -> str:
+        return self.rule.id
+
+    def to_finding(self, project_root: Path) -> AuditFinding:
+        observed = dict(self.qualifiers)
+        if self.task is not None and "task" not in observed:
+            observed["task"] = self.task
+        return build_validation_finding(
+            project_root=project_root,
+            rule=self.rule,
+            severity=self.severity.value,
+            path=self.path,
+            line=self.line,
+            message=self.message,
+            qualifiers=observed,
+            evidence=self.evidence,
+        )

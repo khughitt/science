@@ -95,7 +95,7 @@ def test_a_HYPOTHESIS_status_violation_is_ERROR_and_kind_scoped_and_GATED(tmp_pa
     results = _results(tmp_path)
 
     assert len(results) == 1
-    assert results[0].rule == "hypothesis.status-vocabulary"
+    assert results[0].rule_id == "hypothesis.status-vocabulary"
     assert results[0].severity == "error"
     assert "hypothesis.status-vocabulary" in cumulative_rules("hygiene")
 
@@ -117,7 +117,7 @@ def test_an_INTERPRETATION_status_violation_stays_WARN_and_UNGATED(tmp_path: Pat
     results = _results(tmp_path)
 
     assert len(results) == 1
-    assert results[0].rule == "interpretation.status-vocabulary"
+    assert results[0].rule_id == "interpretation.status-vocabulary"
     assert results[0].severity == "warn"
     assert "interpretation.status-vocabulary" not in cumulative_rules("hygiene")
 
@@ -134,7 +134,7 @@ def test_the_generic_status_vocabulary_rule_is_NEVER_emitted(tmp_path: Path) -> 
         status="weakened",
     )
 
-    rules = {r.rule for r in _results(tmp_path)}
+    rules = {r.rule_id for r in _results(tmp_path)}
 
     assert "status-vocabulary" not in rules
     assert rules == {"hypothesis.status-vocabulary", "interpretation.status-vocabulary"}

@@ -30,6 +30,7 @@ from science_tool.graph.health_checks.base import (
     HealthTiming,
     context_sources,
 )
+from science_tool.graph.health_checks.schema_invalid import SCHEMA_INVALID_PRODUCER
 
 HEALTH_CHECKS: tuple[HealthCheck, ...] = (
     identity_policy.CHECK,
@@ -54,5 +55,6 @@ __all__ = [
     "HealthCheck",
     "HealthContext",
     "HealthTiming",
+    "SCHEMA_INVALID_PRODUCER",
     "context_sources",
 ]

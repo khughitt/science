@@ -32,7 +32,7 @@ def _load_checks_with_dataset_metadata_fresh() -> None:
 
 
 def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
-    return [(r.severity, r.rule) for r in evaluate_dataset_metadata(datasets)]
+    return [(r.severity, r.rule_id) for r in evaluate_dataset_metadata(datasets)]
 
 
 def _results(datasets: list[dict]):
@@ -72,9 +72,7 @@ def test_sentinel_license_clears_missing_without_unrecognized() -> None:
 
 
 def test_unrecognized_license_warns() -> None:
-    assert (Severity.WARN, "dataset.license-unrecognized") in _rules(
-        [_ds(origin="external", license="cc-by-4.0")]
-    )
+    assert (Severity.WARN, "dataset.license-unrecognized") in _rules([_ds(origin="external", license="cc-by-4.0")])
 
 
 def test_unrecognized_tier_warns() -> None:
@@ -107,16 +105,12 @@ def test_non_dataset_rows_ignored() -> None:
 
 def test_non_string_license_is_unrecognized_not_crash() -> None:
     # license: 123 must not raise AttributeError on .strip(); treat as unrecognized.
-    assert (Severity.WARN, "dataset.license-unrecognized") in _rules(
-        [_ds(origin="external", license=123)]
-    )
+    assert (Severity.WARN, "dataset.license-unrecognized") in _rules([_ds(origin="external", license=123)])
 
 
 def test_non_string_tier_is_unrecognized_not_crash() -> None:
     # tier: [] must not raise TypeError on set membership; treat as unrecognized.
-    assert (Severity.WARN, "dataset.tier-unrecognized") in _rules(
-        [_ds(origin="external", license="MIT", tier=[])]
-    )
+    assert (Severity.WARN, "dataset.tier-unrecognized") in _rules([_ds(origin="external", license="MIT", tier=[])])
 
 
 def test_non_string_cadence_is_unrecognized_not_crash() -> None:
@@ -129,7 +123,7 @@ def test_missing_dataset_class_is_info_advisory() -> None:
     ds = _ds(origin="external", license="MIT")
     ds.pop("dataset_class")
 
-    assert (Severity.INFO, "dataset.legacy-missing-class") in _rules([ds])
+    assert (Severity.INFO, None) in _rules([ds])
 
 
 def test_source_class_reference_does_not_imply_dataset_class_reference() -> None:
@@ -187,7 +181,7 @@ def test_reference_missing_source_url_uses_access_block_only() -> None:
         ]
     )
 
-    assert any(result.rule == "dataset.reference-missing-source-url" for result in results)
+    assert any(result.rule_id == "dataset.reference-missing-source-url" for result in results)
 
 
 def test_reference_and_pointer_runtime_artifacts_warn() -> None:
@@ -221,20 +215,20 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
     ds_dir = tmp_path / "entities" / "datasets"
     ds_dir.mkdir(parents=True)
     (ds_dir / "x.md").write_text(
-        '---\n'
+        "---\n"
         'id: "dataset:x"\n'
         'kind: "dataset"\n'
         'title: "X"\n'
         'status: "active"\n'
         'origin: "external"\n'
-        'ontology_terms: []\n'
-        '---\n\n# X\n',
+        "ontology_terms: []\n"
+        "---\n\n# X\n",
         encoding="utf-8",
     )
 
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert any(r.rule == "dataset.license-missing" for r in result.results)
+    assert any(r.rule_id == "dataset.license-missing" for r in result.results)
 
 
 def _schema(name: str) -> dict:

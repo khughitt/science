@@ -8,6 +8,10 @@ from pathlib import Path
 from statistics import median
 from typing import Any, TypeGuard
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
@@ -36,9 +40,9 @@ from science_tool.commons.protein_crosswalk import (
     SUPPORTED_PROTEIN_NAMESPACES,
 )
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _SUPPORTED_BY_TIER = {
     "gene": (SUPPORTED_GENE_NAMESPACES, GENE_CROSSWALK_ID, "+bio.gene_crosswalk/", GENE_KEY_COLUMN),
@@ -51,8 +55,35 @@ _SUPPORTED_BY_TIER = {
 }
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="genesets",
+    section_title="genesets",
+    section_order=142,
+    rule_ids=(
+        "geneset.collection-malformed",
+        "geneset.identifier-declared-unresolved",
+        "geneset.identifier-namespace-unsupported",
+        "geneset.identifier-registry-invalid",
+        "geneset.identifier-registry-unavailable",
+        "geneset.members-resource-malformed",
+        "geneset.members-resource-unavailable",
+        "geneset.n-sets-mismatch",
+        "geneset.set-size-summary-mismatch",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _is_geneset(fm: dict[str, Any]) -> bool:
@@ -142,7 +173,7 @@ def evaluate_geneset_collections(
     *,
     rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception],
     registry_meta_by_id: dict[str, dict[str, Any] | None],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     for fm in datasets:
         if not _is_geneset(fm):
             continue
@@ -154,7 +185,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: malformed bio.geneset collection -- {defect}",
-                "geneset.collection-malformed",
+                RULES["geneset.collection-malformed"],
             )
             continue
         raw_rows = rows_by_dataset_id.get(ident)
@@ -163,7 +194,7 @@ def evaluate_geneset_collections(
                 Severity.INFO,
                 path,
                 f"{ident}: members_resource is unavailable; row contract cannot be verified",
-                "geneset.members-resource-unavailable",
+                RULES["geneset.members-resource-unavailable"],
             )
             continue
         if isinstance(raw_rows, Exception):
@@ -171,7 +202,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: members_resource malformed -- {raw_rows}",
-                "geneset.members-resource-malformed",
+                RULES["geneset.members-resource-malformed"],
             )
             continue
         try:
@@ -181,7 +212,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: members_resource malformed -- {exc}",
-                "geneset.members-resource-malformed",
+                RULES["geneset.members-resource-malformed"],
             )
             continue
         if len(rows) != fm["n_sets"]:
@@ -189,7 +220,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: n_sets={fm['n_sets']} but members_resource has {len(rows)} rows",
-                "geneset.n-sets-mismatch",
+                RULES["geneset.n-sets-mismatch"],
             )
             continue
         if not _summary_matches(fm["set_size_summary"], rows):
@@ -197,7 +228,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: set_size_summary does not match members_resource member counts",
-                "geneset.set-size-summary-mismatch",
+                RULES["geneset.set-size-summary-mismatch"],
             )
             continue
         ident_space = fm["identifier_space"]
@@ -209,7 +240,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: identifier_space namespace {namespace!r} is not supported for {tier}",
-                "geneset.identifier-namespace-unsupported",
+                RULES["geneset.identifier-namespace-unsupported"],
             )
             continue
         if ident_space.get("resolution_status") == "declared_unresolved":
@@ -217,7 +248,7 @@ def evaluate_geneset_collections(
                 Severity.INFO,
                 path,
                 f"{ident}: identifier_space declared_unresolved (honoured, RCM-D2)",
-                "geneset.identifier-declared-unresolved",
+                RULES["geneset.identifier-declared-unresolved"],
             )
             continue
         registry_id = _registry_id(ident_space)
@@ -227,7 +258,7 @@ def evaluate_geneset_collections(
                 Severity.INFO,
                 path,
                 f"{ident}: identifier registry {registry_id!r} unavailable; namespace cannot be verified",
-                "geneset.identifier-registry-unavailable",
+                RULES["geneset.identifier-registry-unavailable"],
             )
             continue
         if not _is_expected_registry(meta, tier=tier):
@@ -235,7 +266,7 @@ def evaluate_geneset_collections(
                 Severity.ERROR,
                 path,
                 f"{ident}: identifier registry {registry_id!r} is not a {tier} crosswalk collection",
-                "geneset.identifier-registry-invalid",
+                RULES["geneset.identifier-registry-invalid"],
             )
 
 
@@ -263,8 +294,8 @@ def _load_registry_meta(
     return meta
 
 
-@Check(section="gene-set collections", order=34)
-def check_genesets(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=34, producer_id="validate.genesets", rules=tuple(RULES.values()))
+def check_genesets(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = dataset_frontmatters(ctx)
     genesets = [fm for fm in datasets if _is_geneset(fm)]
     local_by_id = {fm["id"]: fm for fm in datasets if isinstance(fm.get("id"), str) and fm["id"]}

@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from science_tool.graph.health_checks.base import HealthCheck
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence, PathSubject
+
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import (
+    HealthCheck,
+    HealthContext,
+    composed_result,
+    context_sources,
+)
 from science_tool.instruments import InstrumentResult
 
 
@@ -13,6 +22,42 @@ class InvalidEntityAspectsFinding(TypedDict):
     entity_id: str
     source_file: str
     message: str
+
+
+class InvalidEntityAspectsQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+SECTION = FindingSection(
+    id="invalid-entity-aspects",
+    title="Invalid entity aspects",
+    section_order=214,
+)
+RULE = FindingRule(
+    id="entity.invalid-aspects",
+    severities=frozenset({"error"}),
+    subject_types=frozenset({"entity", "path"}),
+    qualifier_schema=InvalidEntityAspectsQualifiers,
+    title="Invalid entity aspects",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="invalid_entity_aspects",
+    namespace="health_checks",
+    source_module="graph/health_checks/invalid_entity_aspects.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
+
+
+def _subject(
+    row: InvalidEntityAspectsFinding,
+    canonical_entity_ids: frozenset[str],
+):
+    if row["entity_id"] in canonical_entity_ids:
+        return EntitySubject(ref=row["entity_id"])
+    return PathSubject(path=row["source_file"])
 
 
 def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[InvalidEntityAspectsFinding]:
@@ -80,10 +125,26 @@ def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[Inval
     return InstrumentResult.from_rows(findings)
 
 
+def run_check(context: HealthContext):
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in context_sources(context).entities)
+    observed = collect_invalid_entity_aspects(context.project_root)
+    findings = [
+        RULE.build(
+            subject=_subject(row, canonical_entity_ids),
+            severity="error",
+            qualifiers={},
+            message=row["message"],
+            evidence=[LocationEvidence(path=row["source_file"])],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="invalid_entity_aspects",
     description="Validate explicit entity aspects against the project aspect catalog.",
-    requires_sources=False,
-    run=lambda context: collect_invalid_entity_aspects(context.project_root),
-    empty=lambda _root: [],
+    requires_sources=True,
+    run=run_check,
+    producer=PRODUCER,
 )

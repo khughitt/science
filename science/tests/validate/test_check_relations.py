@@ -44,9 +44,7 @@ def _dataset(root: Path, name: str) -> None:
     path = root / "entities" / "datasets" / f"{name}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "---\n"
-        + yaml.safe_dump({"id": f"dataset:{name}", "kind": "dataset", "title": name})
-        + "---\n\nbody\n",
+        "---\n" + yaml.safe_dump({"id": f"dataset:{name}", "kind": "dataset", "title": name}) + "---\n\nbody\n",
         encoding="utf-8",
     )
 
@@ -66,36 +64,40 @@ def _results(root: Path) -> list:
 
 
 def _rules(root: Path) -> list[str]:
-    return [r.rule for r in _results(root)]
+    return [r.rule_id for r in _results(root)]
 
 
 def test_a_SELF_SUPERSESSION_is_an_ERROR_through_the_runner(tmp_path: Path) -> None:
     # `materialize` raises `self-referential authored relation` on this corpus, so it does not build
     # a graph -- and before this rule existed, `validate` said NOTHING about it.
     _seed(tmp_path)
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "relations": [_supersedes("interpretation:i1")]})
+    _write(
+        tmp_path,
+        "i1",
+        {"id": "interpretation:i1", "kind": "interpretation", "relations": [_supersedes("interpretation:i1")]},
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_an_ILLEGAL_KIND_PAIR_is_an_ERROR_through_the_runner(tmp_path: Path) -> None:
     # `interpretation -> dataset` is not an allowed `sci:supersedes` pair. Reported against the file
     # that AUTHORED the edge -- the superseder -- because that is the line that has to change.
     _seed(tmp_path)
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "relations": [_supersedes("dataset:d")]})
+    _write(
+        tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation", "relations": [_supersedes("dataset:d")]}
+    )
     _dataset(tmp_path, "d")
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.illegal-kind-pair"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.illegal-kind-pair"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_a_BARE_AMENDS_SELF_EDGE_is_an_ERROR_though_NOBODY_WROTE_THAT_RULE(tmp_path: Path) -> None:
@@ -106,14 +108,21 @@ def test_a_BARE_AMENDS_SELF_EDGE_is_an_ERROR_though_NOBODY_WROTE_THAT_RULE(tmp_p
     # the rejection. That is the whole mechanism, and it generalizes to every predicate in the
     # profile.
     _seed(tmp_path)
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "relations": [{"predicate": "sci:amends", "target": "interpretation:i1"}]})
+    _write(
+        tmp_path,
+        "i1",
+        {
+            "id": "interpretation:i1",
+            "kind": "interpretation",
+            "relations": [{"predicate": "sci:amends", "target": "interpretation:i1"}],
+        },
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_an_UNSUPPORTED_GRAPH_LAYER_is_REPORTED_and_does_not_CRASH_the_CHECK(tmp_path: Path) -> None:
@@ -125,16 +134,23 @@ def test_an_UNSUPPORTED_GRAPH_LAYER_is_REPORTED_and_does_not_CRASH_the_CHECK(tmp
     _seed(tmp_path)
     _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation"})
     _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation"})
-    _relations_yaml(tmp_path, [
-        {"subject": "interpretation:i1", "predicate": "sci:supersedes",
-         "object": "interpretation:i2", "graph_layer": "graph/not-a-layer"},
-    ])
+    _relations_yaml(
+        tmp_path,
+        [
+            {
+                "subject": "interpretation:i1",
+                "predicate": "sci:supersedes",
+                "object": "interpretation:i2",
+                "graph_layer": "graph/not-a-layer",
+            },
+        ],
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.unsupported-graph-layer"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.unsupported-graph-layer"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
     assert "graph/not-a-layer" in findings[0].message
 
 
@@ -152,21 +168,21 @@ def test_an_ARCHIVED_SUBJECT_is_an_ERROR_because_a_FROZEN_record_cannot_AUTHOR(t
     from science_tool.archive import archive_entities
 
     _seed(tmp_path)
-    _write(tmp_path, "live", {"id": "interpretation:live", "kind": "interpretation",
-                              "status": "active"})
-    _write(tmp_path, "gone", {"id": "interpretation:gone", "kind": "interpretation",
-                              "status": "archived"})
+    _write(tmp_path, "live", {"id": "interpretation:live", "kind": "interpretation", "status": "active"})
+    _write(tmp_path, "gone", {"id": "interpretation:gone", "kind": "interpretation", "status": "archived"})
     archive_entities(tmp_path, apply=True)
-    _relations_yaml(tmp_path, [
-        {"subject": "interpretation:gone", "predicate": "sci:supersedes",
-         "object": "interpretation:live"},
-    ])
+    _relations_yaml(
+        tmp_path,
+        [
+            {"subject": "interpretation:gone", "predicate": "sci:supersedes", "object": "interpretation:live"},
+        ],
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.unknown-subject"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.unknown-subject"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
 
 
 def test_an_ARCHIVED_OBJECT_is_FINE_because_a_LIVE_record_MAY_POINT_AT_HISTORY(tmp_path: Path) -> None:
@@ -177,11 +193,17 @@ def test_an_ARCHIVED_OBJECT_is_FINE_because_a_LIVE_record_MAY_POINT_AT_HISTORY(t
     from science_tool.archive import archive_entities
 
     _seed(tmp_path)
-    _write(tmp_path, "gone", {"id": "interpretation:gone", "kind": "interpretation",
-                              "status": "archived"})
-    _write(tmp_path, "live", {"id": "interpretation:live", "kind": "interpretation",
-                              "status": "active",
-                              "relations": [_supersedes("interpretation:gone")]})
+    _write(tmp_path, "gone", {"id": "interpretation:gone", "kind": "interpretation", "status": "archived"})
+    _write(
+        tmp_path,
+        "live",
+        {
+            "id": "interpretation:live",
+            "kind": "interpretation",
+            "status": "active",
+            "relations": [_supersedes("interpretation:gone")],
+        },
+    )
     archive_entities(tmp_path, apply=True)
 
     assert not [r for r in _rules(tmp_path) if r.startswith("relation.")]
@@ -195,32 +217,37 @@ def test_a_SELF_SUPERSESSION_in_RELATIONS_YAML_is_an_ERROR_at_THAT_FILE(tmp_path
     # finding pointing at a file that does not contain the defect cannot be acted on.
     _seed(tmp_path)
     _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation"})
-    _relations_yaml(tmp_path, [
-        {"subject": "interpretation:i1", "predicate": "sci:supersedes",
-         "object": "interpretation:i1"},
-    ])
+    _relations_yaml(
+        tmp_path,
+        [
+            {"subject": "interpretation:i1", "predicate": "sci:supersedes", "object": "interpretation:i1"},
+        ],
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
 
 
 def test_an_ILLEGAL_KIND_PAIR_in_RELATIONS_YAML_is_an_ERROR_at_THAT_FILE(tmp_path: Path) -> None:
     _seed(tmp_path)
     _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation"})
     _dataset(tmp_path, "d")
-    _relations_yaml(tmp_path, [
-        {"subject": "interpretation:i1", "predicate": "sci:supersedes", "object": "dataset:d"},
-    ])
+    _relations_yaml(
+        tmp_path,
+        [
+            {"subject": "interpretation:i1", "predicate": "sci:supersedes", "object": "dataset:d"},
+        ],
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.illegal-kind-pair"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.illegal-kind-pair"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
-    assert "interpretation:i1" in findings[0].message   # the SUBJECT, not just the file
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
+    assert "interpretation:i1" in findings[0].message  # the SUBJECT, not just the file
 
 
 def test_a_CYCLE_is_an_ERROR_on_EVERY_EDGE_that_forms_it(tmp_path: Path) -> None:
@@ -230,18 +257,24 @@ def test_a_CYCLE_is_an_ERROR_on_EVERY_EDGE_that_forms_it(tmp_path: Path) -> None
     #
     # One finding per authored edge: either edge is a place to break the cycle, so both name a file.
     _seed(tmp_path)
-    _write(tmp_path, "a", {"id": "interpretation:a", "kind": "interpretation",
-                           "relations": [_supersedes("interpretation:b")]})
-    _write(tmp_path, "b", {"id": "interpretation:b", "kind": "interpretation",
-                           "relations": [_supersedes("interpretation:a")]})
+    _write(
+        tmp_path,
+        "a",
+        {"id": "interpretation:a", "kind": "interpretation", "relations": [_supersedes("interpretation:b")]},
+    )
+    _write(
+        tmp_path,
+        "b",
+        {"id": "interpretation:b", "kind": "interpretation", "relations": [_supersedes("interpretation:a")]},
+    )
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.cycle"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.cycle"]
 
     assert len(findings) == 2
-    assert {f.severity for f in findings} == {Severity.ERROR}
-    assert {f.path for f in findings} == {
-        tmp_path / "entities/interpretations/a.md",
-        tmp_path / "entities/interpretations/b.md",
+    assert {f.severity for f in findings} == {Severity.ERROR.value}
+    assert {f.subject.path for f in findings} == {
+        "entities/interpretations/a.md",
+        "entities/interpretations/b.md",
     }
 
 
@@ -250,16 +283,26 @@ def test_a_MIXED_amends_supersedes_CYCLE_is_an_ERROR_through_the_runner(tmp_path
     # corpus still has no graph: `_validate_no_amendment_cycles` walks {sci:amends, sci:supersedes}
     # as ONE relation. A supersedes-only cycle scan reports a clean linear chain here.
     _seed(tmp_path)
-    _write(tmp_path, "a", {"id": "interpretation:a", "kind": "interpretation",
-                           "relations": [_supersedes("interpretation:b")]})
-    _write(tmp_path, "b", {"id": "interpretation:b", "kind": "interpretation",
-                           "relations": [{"predicate": "sci:amends", "target": "interpretation:a"}]})
+    _write(
+        tmp_path,
+        "a",
+        {"id": "interpretation:a", "kind": "interpretation", "relations": [_supersedes("interpretation:b")]},
+    )
+    _write(
+        tmp_path,
+        "b",
+        {
+            "id": "interpretation:b",
+            "kind": "interpretation",
+            "relations": [{"predicate": "sci:amends", "target": "interpretation:a"}],
+        },
+    )
 
     rules = _rules(tmp_path)
 
     assert rules.count("relation.cycle") == 2
     assert "relation.self-referential" not in rules
-    assert "relation.illegal-kind-pair" not in rules   # both pairs are legal -- that is the trap
+    assert "relation.illegal-kind-pair" not in rules  # both pairs are legal -- that is the trap
 
 
 def test_a_BRANCH_raises_NO_CYCLE_ERROR(tmp_path: Path) -> None:
@@ -268,10 +311,16 @@ def test_a_BRANCH_raises_NO_CYCLE_ERROR(tmp_path: Path) -> None:
     # `mark_superseded`'s business to skip it, and none of `validate`'s to fail it.
     _seed(tmp_path)
     _write(tmp_path, "v1", {"id": "interpretation:v1", "kind": "interpretation"})
-    _write(tmp_path, "a", {"id": "interpretation:a", "kind": "interpretation",
-                           "relations": [_supersedes("interpretation:v1")]})
-    _write(tmp_path, "b", {"id": "interpretation:b", "kind": "interpretation",
-                           "relations": [_supersedes("interpretation:v1")]})
+    _write(
+        tmp_path,
+        "a",
+        {"id": "interpretation:a", "kind": "interpretation", "relations": [_supersedes("interpretation:v1")]},
+    )
+    _write(
+        tmp_path,
+        "b",
+        {"id": "interpretation:b", "kind": "interpretation", "relations": [_supersedes("interpretation:v1")]},
+    )
 
     assert "relation.cycle" not in _rules(tmp_path)
 
@@ -282,9 +331,20 @@ def test_a_LEGAL_CHAIN_raises_NO_relation_ERROR_AT_ALL(tmp_path: Path) -> None:
     # `relation.*` fires here, the check is "any authored relation is a finding" wearing a better
     # name.
     _seed(tmp_path)
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "status": "superseded", "superseded_by": "interpretation:i2"})
-    _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation",
-                            "relations": [_supersedes("interpretation:i1")]})
+    _write(
+        tmp_path,
+        "i1",
+        {
+            "id": "interpretation:i1",
+            "kind": "interpretation",
+            "status": "superseded",
+            "superseded_by": "interpretation:i2",
+        },
+    )
+    _write(
+        tmp_path,
+        "i2",
+        {"id": "interpretation:i2", "kind": "interpretation", "relations": [_supersedes("interpretation:i1")]},
+    )
 
     assert not [r for r in _rules(tmp_path) if r.startswith("relation.")]

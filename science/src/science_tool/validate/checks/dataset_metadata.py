@@ -13,12 +13,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import cast
 
 from science_model.licenses import LICENSE_SENTINELS, is_recognized, suggest
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.observations import ValidationNotice
 from science_tool.validate.result import Result, Severity
 from science_tool.datasets.semantics import dataset_class_for, has_runtime_artifact
 
@@ -36,13 +42,49 @@ _REFERENCE_METHODS = {"", "credential-confirmed", "landing-confirmed", "metadata
 _POINTER_METHODS = {"", "landing-confirmed", "metadata-confirmed"}
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-metadata",
+    section_title="dataset metadata",
+    section_order=131,
+    rule_ids=(
+        "dataset.cadence-unrecognized",
+        "dataset.class-unrecognized",
+        "dataset.legacy-missing-class",
+        "dataset.license-missing",
+        "dataset.license-unrecognized",
+        "dataset.method-class-mismatch",
+        "dataset.pointer-runtime-artifact",
+        "dataset.reference-missing-source-url",
+        "dataset.reference-runtime-artifact",
+        "dataset.tier-unrecognized",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    rule: FindingRule,
+) -> Result | ValidationNotice:
+    return cast(
+        Result | ValidationNotice,
+        validation_observation(
+            severity=severity,
+            path=Path(path) if path else None,
+            line=None,
+            message=message,
+            rule=rule,
+            task=None,
+            qualifiers={"key": []},
+        ),
+    )
 
 
 def _enum_finding(
-    value: object, allowed: set[str], *, path: str | None, ident: str, field: str, rule: str
-) -> Result | None:
+    value: object, allowed: set[str], *, path: str | None, ident: str, field: str, rule: FindingRule
+) -> Result | ValidationNotice | None:
     """Warn when a present value is non-string or outside `allowed`. Absent
     (None / "" / whitespace-only string) → no finding. Never raises on odd types."""
     if value is None:
@@ -63,7 +105,9 @@ def _enum_finding(
     )
 
 
-def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
+def evaluate_dataset_metadata(
+    datasets: Iterable[dict],
+) -> Iterator[Result | ValidationNotice]:
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`).
 
     Defensive against malformed raw frontmatter: non-string license/tier/cadence
@@ -92,7 +136,7 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                     path,
                     f"{ident}: external dataset declares no license "
                     f"(set an SPDX id, or a sentinel: {sorted(LICENSE_SENTINELS)})",
-                    "dataset.license-missing",
+                    RULES["dataset.license-missing"],
                 )
         elif license_value is None or not is_recognized(license_value):
             hint = suggest(license_value) if isinstance(license_value, str) else None
@@ -102,20 +146,28 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: unrecognized license {display!r}{suffix}",
-                "dataset.license-unrecognized",
+                RULES["dataset.license-unrecognized"],
             )
 
         # --- tier / update_cadence (present-but-unrecognized only) ---
         tier_finding = _enum_finding(
-            fm.get("tier"), _ALLOWED_TIERS,
-            path=path, ident=ident, field="tier", rule="dataset.tier-unrecognized",
+            fm.get("tier"),
+            _ALLOWED_TIERS,
+            path=path,
+            ident=ident,
+            field="tier",
+            rule=RULES["dataset.tier-unrecognized"],
         )
         if tier_finding is not None:
             yield tier_finding
 
         cadence_finding = _enum_finding(
-            fm.get("update_cadence"), _ALLOWED_CADENCES,
-            path=path, ident=ident, field="update_cadence", rule="dataset.cadence-unrecognized",
+            fm.get("update_cadence"),
+            _ALLOWED_CADENCES,
+            path=path,
+            ident=ident,
+            field="update_cadence",
+            rule=RULES["dataset.cadence-unrecognized"],
         )
         if cadence_finding is not None:
             yield cadence_finding
@@ -126,13 +178,13 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.INFO,
                 path,
                 f"{ident}: dataset_class is missing; defaulting to deposit until the row is touched",
-                "dataset.legacy-missing-class",
+                RULES["dataset.legacy-missing-class"],
             )
 
         try:
             dataset_class = dataset_class_for(fm)
         except ValueError as exc:
-            yield _result(Severity.WARN, path, f"{ident}: {exc}", "dataset.class-unrecognized")
+            yield _result(Severity.WARN, path, f"{ident}: {exc}", RULES["dataset.class-unrecognized"])
             continue
 
         access = fm.get("access")
@@ -148,9 +200,8 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
             yield _result(
                 Severity.WARN,
                 path,
-                f"{ident}: verification_method {method_value!r} is incompatible with "
-                f"dataset_class {dataset_class!r}",
-                "dataset.method-class-mismatch",
+                f"{ident}: verification_method {method_value!r} is incompatible with dataset_class {dataset_class!r}",
+                RULES["dataset.method-class-mismatch"],
             )
 
         if dataset_class in {"reference", "pointer"} and not (
@@ -160,7 +211,7 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: {dataset_class} dataset requires access.source_url",
-                "dataset.reference-missing-source-url",
+                RULES["dataset.reference-missing-source-url"],
             )
 
         if dataset_class == "reference" and has_runtime_artifact(fm):
@@ -168,17 +219,17 @@ def evaluate_dataset_metadata(datasets: Iterable[dict]) -> Iterator[Result]:
                 Severity.WARN,
                 path,
                 f"{ident}: reference dataset has a runtime artifact; convert it to dataset_class deposit",
-                "dataset.reference-runtime-artifact",
+                RULES["dataset.reference-runtime-artifact"],
             )
         if dataset_class == "pointer" and has_runtime_artifact(fm):
             yield _result(
                 Severity.WARN,
                 path,
                 f"{ident}: pointer dataset has a runtime artifact; convert it to dataset_class deposit",
-                "dataset.pointer-runtime-artifact",
+                RULES["dataset.pointer-runtime-artifact"],
             )
 
 
-@Check(section="dataset metadata", order=32)
-def check_dataset_metadata(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=32, producer_id="validate.dataset-metadata", rules=tuple(RULES.values()))
+def check_dataset_metadata(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_dataset_metadata(dataset_frontmatters(ctx))

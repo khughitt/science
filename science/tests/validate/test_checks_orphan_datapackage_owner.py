@@ -54,7 +54,7 @@ def test_orphan_datapackage_owner_errors_regardless_of_layout_version(tmp_path: 
     _write_datapackage(tmp_path, "ds1", "dataset:ds1")
     results = list(check_orphan_datapackage_owner(ctx))
     assert len(results) == 1
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "dataset:ds1" in results[0].message
     assert "entities/datasets/<id>.md owner" in results[0].message
 

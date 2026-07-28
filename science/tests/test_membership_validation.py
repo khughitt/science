@@ -54,25 +54,38 @@ def test_bare_string_has_no_errors(tmp_path: Path):
 def test_unknown_role_is_error(tmp_path: Path):
     ctx = _project(tmp_path, '[{frame: "hypothesis:h1", role: "rebuttal"}]')
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.role" for r in errs)
+    assert any(r.rule_id == "proposition.membership.role" for r in errs)
 
 
 def test_missing_frame_is_error(tmp_path: Path):
     ctx = _project(tmp_path, '[{role: "core"}]')
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.frame" for r in errs)
+    assert any(r.rule_id == "proposition.membership.frame" for r in errs)
+
+
+def test_repeated_missing_frame_collapses_to_one_semantic_finding(
+    tmp_path: Path,
+) -> None:
+    ctx = _project(tmp_path, '[{role: "core"}, {role: "rival"}]')
+
+    findings = [
+        result.to_finding(tmp_path) for result in _errors(ctx) if result.rule_id == "proposition.membership.frame"
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].qualifiers["key"] == ("required-field", "frame")
 
 
 def test_top_level_scalar_discusses_is_error(tmp_path: Path):
     ctx = _project(tmp_path, '"hypothesis:h1"')
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.shape" for r in errs)
+    assert any(r.rule_id == "proposition.membership.shape" for r in errs)
 
 
 def test_top_level_mapping_discusses_is_error(tmp_path: Path):
     ctx = _project(tmp_path, '{frame: "hypothesis:h1", role: "core"}')
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.shape" for r in errs)
+    assert any(r.rule_id == "proposition.membership.shape" for r in errs)
 
 
 def test_conflicting_duplicate_frame_is_error(tmp_path: Path):
@@ -81,13 +94,13 @@ def test_conflicting_duplicate_frame_is_error(tmp_path: Path):
         '[{frame: "hypothesis:h1", role: "core"}, {frame: "hypothesis:h1", role: "rival"}]',
     )
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.duplicate" for r in errs)
+    assert any(r.rule_id == "proposition.membership.duplicate" for r in errs)
 
 
 def test_string_and_object_same_frame_conflict_is_error(tmp_path: Path):
     ctx = _project(tmp_path, '["hypothesis:h1", {frame: "hypothesis:h1", role: "rival"}]')
     errs = _errors(ctx)
-    assert any(r.rule == "proposition.membership.duplicate" for r in errs)
+    assert any(r.rule_id == "proposition.membership.duplicate" for r in errs)
 
 
 # ---------------------------------------------------------------------------
@@ -167,16 +180,19 @@ def test_role_on_cito_supports_is_error(tmp_path: Path):
     local_sources = _write_minimal_project(tmp_path)
     _write_hyp(tmp_path, "h1")
     _write_prop(tmp_path, "p1")
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:supports",
-        "    object: hypothesis:h1",
-        "    role: background",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:supports",
+            "    object: hypothesis:h1",
+            "    role: background",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.non-discusses" for r in errs)
+    assert any(r.rule_id == "relation.role.non-discusses" for r in errs)
 
 
 def test_role_to_topic_object_is_error(tmp_path: Path):
@@ -196,16 +212,19 @@ def test_role_to_topic_object_is_error(tmp_path: Path):
             "related: []",
         ],
     )
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: topic:t1",
-        "    role: background",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: topic:t1",
+            "    role: background",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.non-membership" for r in errs)
+    assert any(r.rule_id == "relation.role.non-membership" for r in errs)
 
 
 def test_role_on_paper_to_hypothesis_is_error(tmp_path: Path):
@@ -213,16 +232,19 @@ def test_role_on_paper_to_hypothesis_is_error(tmp_path: Path):
     local_sources = _write_minimal_project(tmp_path)
     _write_hyp(tmp_path, "h1")
     _write_paper(tmp_path, "doe2024")
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: paper:doe2024",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-        "    role: background",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: paper:doe2024",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+            "    role: background",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.non-membership" for r in errs)
+    assert any(r.rule_id == "relation.role.non-membership" for r in errs)
 
 
 def test_cross_surface_role_conflict_is_error(tmp_path: Path):
@@ -232,16 +254,19 @@ def test_cross_surface_role_conflict_is_error(tmp_path: Path):
     # Frontmatter says background
     _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "background"}]')
     # relations.yaml says core
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-        "    role: core",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+            "    role: core",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.cross-surface-conflict" for r in errs)
+    assert any(r.rule_id == "relation.role.cross-surface-conflict" for r in errs)
 
 
 def test_no_role_in_relations_yaml_no_error(tmp_path: Path):
@@ -249,12 +274,15 @@ def test_no_role_in_relations_yaml_no_error(tmp_path: Path):
     local_sources = _write_minimal_project(tmp_path)
     _write_hyp(tmp_path, "h1")
     _write_prop(tmp_path, "p1")
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
     assert errs == []
@@ -265,13 +293,16 @@ def test_matching_role_in_frontmatter_and_relations_no_error(tmp_path: Path):
     local_sources = _write_minimal_project(tmp_path)
     _write_hyp(tmp_path, "h1")
     _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "background"}]')
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-        "    role: background",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+            "    role: background",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
     assert errs == []
@@ -312,16 +343,19 @@ def test_alias_frame_ref_conflict_now_detected(tmp_path: Path):
     # Frontmatter uses the ALIAS, not the canonical id.
     _write_prop(tmp_path, "p1", '[{frame: "h-focal", role: "background"}]')
     # relations.yaml uses the CANONICAL id with a conflicting role.
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-        "    role: core",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+            "    role: core",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+    assert any(r.rule_id == "relation.role.cross-surface-conflict" for r in errs), (
         "Expected a cross-surface-conflict error but got: " + str([r.message for r in errs])
     )
 
@@ -337,16 +371,19 @@ def test_unresolvable_frame_ref_is_loud_error(tmp_path: Path):
     # Frontmatter references a frame that does NOT exist in the project.
     _write_prop(tmp_path, "p1", '[{frame: "hypothesis:nonexistent", role: "background"}]')
     # relations.yaml has a valid role entry (triggering rule-3 path).
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-        "    role: core",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+            "    role: core",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.unresolved-frame" for r in errs), (
+    assert any(r.rule_id == "relation.role.unresolved-frame" for r in errs), (
         "Expected an unresolved-frame error but got: " + str([r.message for r in errs])
     )
 
@@ -369,15 +406,18 @@ def test_frontmatter_background_vs_unlabeled_relations_conflict_is_error(tmp_pat
     # Frontmatter explicitly labels this pair as 'background'.
     _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "background"}]')
     # relations.yaml has the SAME edge but with NO role → implicit core.
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+    assert any(r.rule_id == "relation.role.cross-surface-conflict" for r in errs), (
         "Expected a cross-surface-conflict error (frontmatter=background vs implicit core) "
         "but got: " + str([r.message for r in errs])
     )
@@ -392,15 +432,18 @@ def test_frontmatter_core_vs_unlabeled_relations_no_error(tmp_path: Path):
     # Frontmatter explicitly labels this pair as 'core' (same as the implicit default).
     _write_prop(tmp_path, "p1", '[{frame: "hypothesis:h1", role: "core"}]')
     # relations.yaml has the SAME edge with NO role → implicit core → no conflict.
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert not any(r.rule == "relation.role.cross-surface-conflict" for r in errs), (
+    assert not any(r.rule_id == "relation.role.cross-surface-conflict" for r in errs), (
         "Expected no conflict error but got: " + str([r.message for r in errs])
     )
 
@@ -414,15 +457,15 @@ def test_no_frontmatter_membership_unlabeled_relations_no_error(tmp_path: Path):
     # Proposition has no discusses at all.
     _write_prop(tmp_path, "p1")
     # relations.yaml has a role-less cito:discusses edge.
-    _write_relations(local_sources, [
-        "relations:",
-        "  - subject: proposition:p1",
-        "    predicate: cito:discusses",
-        "    object: hypothesis:h1",
-    ])
+    _write_relations(
+        local_sources,
+        [
+            "relations:",
+            "  - subject: proposition:p1",
+            "    predicate: cito:discusses",
+            "    object: hypothesis:h1",
+        ],
+    )
     ctx = ValidateContext.from_project_root(tmp_path, strict=True, verbose=False)
     errs = _relation_role_errors(ctx)
-    assert errs == [], (
-        "Expected no errors for single-surface role-less edge but got: "
-        + str([r.message for r in errs])
-    )
+    assert errs == [], "Expected no errors for single-surface role-less edge but got: " + str([r.message for r in errs])

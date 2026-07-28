@@ -10,8 +10,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError, PromoteCandidateError, PromoteResourceMissingError
@@ -20,22 +24,57 @@ from science_tool.commons.promote import (
     _validate_datapackage_resources,
 )
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 
 PROMOTABLE_ENTITY_PROFILE = "science-pkg-entity-1.0"
 
 
-def _result(path: str | None, message: str, rule: str) -> Result:
-    return Result(Severity.ERROR, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-promotion-contract",
+    section_title="dataset promotion contract",
+    section_order=136,
+    rule_ids=(
+        "dataset-promotion.datapackage-unresolved",
+        "dataset-promotion.pin-mismatch",
+        "dataset-promotion.pin-missing",
+        "dataset-promotion.pin-unresolved",
+        "dataset-promotion.pin-version-mismatch",
+        "dataset-promotion.qa-resource-missing",
+        "dataset-promotion.reference-access-invalid",
+        "dataset-promotion.required-field-missing",
+        "dataset-promotion.source-refs-missing",
+        "dataset-promotion.source-unresolved",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    path: str | None,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str],
+) -> Result:
+    return cast(
+        Result,
+        validation_observation(
+            severity=Severity.ERROR,
+            path=Path(path) if path else None,
+            line=None,
+            message=message,
+            rule=rule,
+            task=None,
+            qualifiers={"key": key},
+        ),
+    )
 
 
 def _is_dataset_descriptor(fm: Mapping[str, Any]) -> bool:
     path = fm.get("_path")
-    return isinstance(path, str) and (
-        path.startswith("entities/datasets/") or path.startswith("overlays/datasets/")
-    )
+    return isinstance(path, str) and (path.startswith("entities/datasets/") or path.startswith("overlays/datasets/"))
 
 
 def _profile_names(value: Any) -> set[str]:
@@ -64,7 +103,7 @@ def _dataset_class(fm: Mapping[str, Any]) -> str:
     return "deposit"
 
 
-def _reference_access_result(fm: Mapping[str, Any]) -> Result | None:
+def _reference_access_result(fm: Mapping[str, Any]) -> CheckObservation | None:
     dataset_class = _dataset_class(fm)
     if dataset_class not in {"reference", "pointer"}:
         return None
@@ -76,7 +115,8 @@ def _reference_access_result(fm: Mapping[str, Any]) -> Result | None:
         return _result(
             rel_path,
             f"{ident}: {dataset_class} promotion requires an access block",
-            "dataset-promotion.reference-access-invalid",
+            RULES["dataset-promotion.reference-access-invalid"],
+            key=["access"],
         )
     source_url = access.get("source_url")
     method = access.get("verification_method")
@@ -96,7 +136,8 @@ def _reference_access_result(fm: Mapping[str, Any]) -> Result | None:
             rel_path,
             f"{ident}: {dataset_class} promotion requires verified access.source_url "
             f"and verification_method in {{{allowed}}}",
-            "dataset-promotion.reference-access-invalid",
+            RULES["dataset-promotion.reference-access-invalid"],
+            key=["access"],
         )
     return None
 
@@ -106,7 +147,7 @@ def _validate_datapackage_ref(
     ctx: ValidateContext,
     fm: Mapping[str, Any],
     field: str,
-    rule: str,
+    rule: FindingRule,
 ) -> tuple[Path, dict[str, Any]] | Result:
     path = fm.get("_path")
     ident = _ident(fm)
@@ -121,12 +162,14 @@ def _validate_datapackage_ref(
             path if isinstance(path, str) else None,
             f"{ident}: {field} datapackage resource is missing: {exc}",
             rule,
+            key=[field],
         )
     except PromoteCandidateError as exc:
         return _result(
             path if isinstance(path, str) else None,
             f"{ident}: {field} datapackage is not promotable: {exc}",
             rule,
+            key=[field],
         )
     return datapackage_path, datapackage_doc
 
@@ -154,11 +197,7 @@ def _source_refs_missing(fm: Mapping[str, Any]) -> bool:
 
 
 def _missing_candidate_fields(fm: Mapping[str, Any]) -> list[str]:
-    missing = [
-        field
-        for field in ("origin", "tier")
-        if field not in fm or fm[field] in (None, "")
-    ]
+    missing = [field for field in ("origin", "tier") if field not in fm or fm[field] in (None, "")]
     origin = fm.get("origin")
     if origin == "external" and ("access" not in fm or fm["access"] in (None, "")):
         missing.append("access")
@@ -167,7 +206,7 @@ def _missing_candidate_fields(fm: Mapping[str, Any]) -> list[str]:
     return missing
 
 
-def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | None]:
+def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[CheckObservation | None, str | None]:
     path = fm.get("_path")
     rel_path = path if isinstance(path, str) else None
     ident = _ident(fm)
@@ -178,7 +217,8 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | N
             _result(
                 rel_path,
                 f"{ident}: pinned dataset overlay requires overlay_of",
-                "dataset-promotion.pin-missing",
+                RULES["dataset-promotion.pin-missing"],
+                key=["overlay_of"],
             ),
             None,
         )
@@ -187,7 +227,8 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | N
             _result(
                 rel_path,
                 f"{ident}: pinned dataset overlay requires pin_version",
-                "dataset-promotion.pin-missing",
+                RULES["dataset-promotion.pin-missing"],
+                key=["pin_version"],
             ),
             None,
         )
@@ -196,7 +237,8 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | N
             _result(
                 rel_path,
                 f"{ident}: overlay_of {overlay_of!r} does not match descriptor id",
-                "dataset-promotion.pin-mismatch",
+                RULES["dataset-promotion.pin-mismatch"],
+                key=["overlay_of"],
             ),
             None,
         )
@@ -210,7 +252,8 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | N
             _result(
                 rel_path,
                 f"{ident}: commons canonical could not be resolved for pinned overlay: {exc}",
-                "dataset-promotion.pin-unresolved",
+                RULES["dataset-promotion.pin-unresolved"],
+                key=["overlay_of"],
             ),
             None,
         )
@@ -220,7 +263,8 @@ def _validate_overlay_pin(fm: Mapping[str, Any]) -> tuple[Result | None, str | N
             _result(
                 rel_path,
                 f"{ident}: pins {pin_version} but commons canonical is {canonical_version}",
-                "dataset-promotion.pin-version-mismatch",
+                RULES["dataset-promotion.pin-version-mismatch"],
+                key=["pin_version"],
             ),
             None,
         )
@@ -231,7 +275,7 @@ def evaluate_dataset_promotion_contract(
     datasets: list[dict[str, Any]],
     *,
     ctx: ValidateContext,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     for fm in datasets:
         if fm.get("kind") != "dataset" or not _is_dataset_descriptor(fm):
             continue
@@ -247,7 +291,8 @@ def evaluate_dataset_promotion_contract(
             yield _result(
                 rel_path,
                 f"{ident}: promotable dataset descriptor requires non-empty source_refs",
-                "dataset-promotion.source-refs-missing",
+                RULES["dataset-promotion.source-refs-missing"],
+                key=["source_refs"],
             )
 
         if _is_pinned_overlay(fm):
@@ -260,7 +305,7 @@ def evaluate_dataset_promotion_contract(
                 ctx=ctx,
                 fm=fm,
                 field="source",
-                rule="dataset-promotion.source-unresolved",
+                rule=RULES["dataset-promotion.source-unresolved"],
             )
             if isinstance(result, Result):
                 yield result
@@ -270,7 +315,8 @@ def evaluate_dataset_promotion_contract(
             yield _result(
                 rel_path,
                 f"{ident}: dataset promotion candidate missing required field {field!r}",
-                "dataset-promotion.required-field-missing",
+                RULES["dataset-promotion.required-field-missing"],
+                key=[field],
             )
 
         if _dataset_class(fm) in {"reference", "pointer"}:
@@ -283,7 +329,7 @@ def evaluate_dataset_promotion_contract(
             ctx=ctx,
             fm=fm,
             field="datapackage",
-            rule="dataset-promotion.datapackage-unresolved",
+            rule=RULES["dataset-promotion.datapackage-unresolved"],
         )
         if isinstance(result, Result):
             yield result
@@ -293,10 +339,11 @@ def evaluate_dataset_promotion_contract(
             yield _result(
                 rel_path,
                 f"{ident}: datapackage has no QA resource; include a resource with qa in its name or path",
-                "dataset-promotion.qa-resource-missing",
+                RULES["dataset-promotion.qa-resource-missing"],
+                key=["qa-resource"],
             )
 
 
-@Check(section="dataset promotion contract", order=33)
-def check_dataset_promotion_contract(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=33, producer_id="validate.dataset-promotion-contract", rules=tuple(RULES.values()))
+def check_dataset_promotion_contract(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_dataset_promotion_contract(dataset_frontmatters(ctx), ctx=ctx)

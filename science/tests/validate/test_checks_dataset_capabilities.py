@@ -42,7 +42,7 @@ def _results(entities: list[dict]):
 
 
 def _rules(entities: list[dict]) -> list[tuple[Severity, str]]:
-    return [(result.severity, result.rule) for result in _results(entities)]
+    return [(result.severity, result.rule_id) for result in _results(entities)]
 
 
 def _dataset(**kw) -> dict:
@@ -127,7 +127,7 @@ def test_gen3_legacy_map_input_warns_malformed_with_new_message() -> None:
         )
     )
 
-    malformed = [r for r in results if r.rule == "dataset-capabilities.required-malformed"]
+    malformed = [r for r in results if r.rule_id == "dataset-capabilities.required-malformed"]
     assert len(malformed) == 1
     assert "must be a list of {data_product, qualifiers} objects" in malformed[0].message
     assert "string mappings" not in malformed[0].message
@@ -142,7 +142,7 @@ def test_gen2_legacy_map_input_does_not_warn_malformed() -> None:
         )
     )
 
-    assert not any(r.rule == "dataset-capabilities.required-malformed" for r in results)
+    assert not any(r.rule_id == "dataset-capabilities.required-malformed" for r in results)
 
 
 def test_unreached_dataset_without_provided_capabilities_does_not_warn() -> None:
@@ -252,8 +252,8 @@ def test_capability_warning_surfaces_through_runner(tmp_path: Path) -> None:
 
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert any(r.rule == "dataset-capabilities.provided-missing" for r in result.results)
-    assert any(r.rule == "dataset-capabilities.required-missing" for r in result.results)
+    assert any(r.rule_id == "dataset-capabilities.provided-missing" for r in result.results)
+    assert any(r.rule_id == "dataset-capabilities.required-missing" for r in result.results)
 
 
 def test_valid_scope_suppresses_dataset_provided_missing() -> None:

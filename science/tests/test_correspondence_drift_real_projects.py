@@ -15,7 +15,7 @@ def test_detector_fires_on_multiple_myeloma():
     if not (_MM / "science.yaml").is_file():
         pytest.skip(f"multiple-myeloma not present at {_MM}")
     ctx = ValidateContext.from_project_root(_MM, strict=False, verbose=False)
-    results = [r for r in check_correspondence_drift(ctx) if r.rule == "plan.correspondence-drift"]
+    results = [r for r in check_correspondence_drift(ctx) if r.rule_id == "plan.correspondence-drift"]
     assert len(results) >= 1
     assert all(r.severity.value == "warn" for r in results)
     assert all(not r.path.is_absolute() for r in results)

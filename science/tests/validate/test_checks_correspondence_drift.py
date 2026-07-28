@@ -16,8 +16,7 @@ def _plan(root: Path, rel: str, *, entity_id: str, status: str, body: str, secti
     p = root / "entities" / "plans" / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
-        f'---\nid: "{entity_id}"\nkind: plan\ntitle: "T"\nstatus: "{status}"\n---\n\n'
-        f"## {section}\n\n{body}\n",
+        f'---\nid: "{entity_id}"\nkind: plan\ntitle: "T"\nstatus: "{status}"\n---\n\n## {section}\n\n{body}\n',
         encoding="utf-8",
     )
 
@@ -37,7 +36,7 @@ def test_draft_with_present_deliverable_fires_under_claim(tmp_path: Path):
     results = _run(tmp_path)
     assert len(results) == 1
     r = results[0]
-    assert r.rule == "plan.correspondence-drift"
+    assert r.rule_id == "plan.correspondence-drift"
     assert r.severity.value == "warn"
     assert not r.path.is_absolute()  # project-relative
     assert "plan:0001" in r.message and "draft" in r.message and "complete" in r.message
@@ -49,7 +48,10 @@ def test_draft_with_partial_deliverables_fires_as_active(tmp_path: Path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
     _plan(
-        tmp_path, "0005-x.md", entity_id="plan:0005", status="draft",
+        tmp_path,
+        "0005-x.md",
+        entity_id="plan:0005",
+        status="draft",
         body="Builds `src/a.py` and `src/b.py`.",
     )
     results = _run(tmp_path)
@@ -87,7 +89,10 @@ def test_complete_claim_with_partial_deliverables_is_silent_not_over_claim(tmp_p
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
     _plan(
-        tmp_path, "0007-x.md", entity_id="plan:0007", status="complete",
+        tmp_path,
+        "0007-x.md",
+        entity_id="plan:0007",
+        status="complete",
         body="Built `src/a.py` and `src/b.py`.",
     )
     assert not _run(tmp_path)
@@ -117,7 +122,10 @@ def test_plan_naming_no_probeable_file_is_silent(tmp_path: Path):
 def test_non_plan_kind_is_ignored(tmp_path: Path):
     p = tmp_path / "entities" / "hypotheses" / "0001-x.md"
     p.parent.mkdir(parents=True)
-    p.write_text('---\nid: "hypothesis:0001"\nkind: hypothesis\ntitle: "T"\nstatus: "draft"\n---\n\nBuilds `src/a.py`.\n', encoding="utf-8")
+    p.write_text(
+        '---\nid: "hypothesis:0001"\nkind: hypothesis\ntitle: "T"\nstatus: "draft"\n---\n\nBuilds `src/a.py`.\n',
+        encoding="utf-8",
+    )
     assert not _run(tmp_path)
 
 
@@ -151,8 +159,7 @@ def test_a_plan_with_no_declared_region_is_silent(tmp_path: Path):
     p = tmp_path / "entities" / "plans" / "0097-x.md"
     p.parent.mkdir(parents=True)
     p.write_text(
-        '---\nid: "plan:0097"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\n'
-        "## Background\n\nExtends `src/a.py`.\n",
+        '---\nid: "plan:0097"\nkind: plan\ntitle: "T"\nstatus: "draft"\n---\n\n## Background\n\nExtends `src/a.py`.\n',
         encoding="utf-8",
     )
     assert not _run(tmp_path)

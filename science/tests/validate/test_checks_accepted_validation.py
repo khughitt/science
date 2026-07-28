@@ -23,7 +23,7 @@ def test_unscoped_entry_for_scoped_rule_warns(tmp_path: Path):
     )
     results = list(check_accepted_validation(ctx))
     assert len(results) == 1
-    assert results[0].rule == "accepted-validation.evidence-scope-required"
+    assert results[0].rule_id == "accepted-validation.evidence-scope-required"
     assert results[0].severity.value == "warn"
     assert not results[0].path.is_absolute()
 
@@ -49,14 +49,13 @@ def test_signature_present_but_absolute_path_warns(tmp_path: Path):
     )
     results = list(check_accepted_validation(ctx))
     assert len(results) == 1
-    assert results[0].rule == "accepted-validation.evidence-scope-required"
+    assert results[0].rule_id == "accepted-validation.evidence-scope-required"
 
 
 def test_unrelated_rule_entry_is_silent(tmp_path: Path):
     ctx = _ctx(
         tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "code.metadata-gap"\n'
-        '      path: "x.py"\n      reason: "x"\n',
+        'health:\n  accepted_validation:\n    - rule: "code.metadata-gap"\n      path: "x.py"\n      reason: "x"\n',
     )
     assert not list(check_accepted_validation(ctx))
 

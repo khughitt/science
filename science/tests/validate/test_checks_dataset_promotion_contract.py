@@ -67,9 +67,9 @@ def _write_commons_dataset(root: Path, *, slug: str = "demo-dataset", version: s
         f"id: dataset:{slug}\n"
         "kind: dataset\n"
         "title: Demo Dataset\n"
-        f"version: \"{version}\"\n"
-        "created: \"2026-01-01\"\n"
-        "updated: \"2026-01-01\"\n"
+        f'version: "{version}"\n'
+        'created: "2026-01-01"\n'
+        'updated: "2026-01-01"\n'
         "status: active\n"
         "datapackage: datapackage.yaml\n"
         "origin: derived\n"
@@ -127,7 +127,7 @@ def _write_descriptor(
 
 
 def _rules(results: list) -> list[str | None]:
-    return [result.rule for result in results]
+    return [result.rule_id for result in results]
 
 
 def test_clean_candidate_dataset_descriptor_passes_contract(tmp_path: Path) -> None:
@@ -248,7 +248,7 @@ def test_candidate_descriptor_requires_resolvable_datapackage(tmp_path: Path) ->
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.datapackage-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "datapackage file does not exist" in results[0].message
 
 
@@ -266,7 +266,7 @@ def test_candidate_descriptor_requires_qa_resource(tmp_path: Path) -> None:
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.qa-resource-missing"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "no QA resource" in results[0].message
 
 
@@ -300,7 +300,7 @@ def test_candidate_descriptor_requires_source_refs(tmp_path: Path) -> None:
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.source-refs-missing"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_pinned_overlay_requires_resolvable_source_datapackage(
@@ -315,16 +315,14 @@ def test_pinned_overlay_requires_resolvable_source_datapackage(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/missing/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/missing/datapackage.json\n'
         ),
     )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.source-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_pinned_deposit_overlay_requires_source_datapackage(
@@ -338,10 +336,7 @@ def test_pinned_deposit_overlay_requires_source_datapackage(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_commons_dataset(tmp_path)))
     _write_descriptor(
         tmp_path,
-        extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-        ),
+        extra_frontmatter=('overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\n'),
     )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
@@ -363,16 +358,14 @@ def test_pinned_overlay_requires_resolvable_commons_canonical(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.pin-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "commons canonical could not be resolved" in results[0].message
 
 
@@ -392,16 +385,14 @@ def test_pinned_overlay_requires_matching_commons_version(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.pin-version-mismatch"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "pins 1.0.0 but commons canonical is 2.0.0" in results[0].message
 
 
@@ -418,9 +409,7 @@ def test_pinned_overlay_with_resolvable_source_passes_contract(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import click
 from rich.text import Text
+from science_model.audit import AuditFinding, LocationEvidence, PathSubject
 
 if TYPE_CHECKING:
     from science_tool.budget.sink import BoundedSink
@@ -18,11 +19,10 @@ from science_tool.validate._helpers import section_banner
 from science_tool.validate.acceptance import filter_accepted_warnings
 from science_tool.validate.context import ValidateContextError
 from science_tool.validate.gates import GATE_TIERS, gated_findings
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.observations import ValidationNotice
 from science_tool.validate.runner import VALIDATE_PROFILES, RunResult, ValidationProfile, run
 
 BANNER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-_VISIBLE_INFO_RULES = frozenset({"prose_lints.config"})
 
 
 @click.command(name="validate")
@@ -129,8 +129,8 @@ def validate_cmd(
     # Visibility is FORMAT-SPECIFIC and MUST be applied before the cap: INFO rows must never
     # consume the cap, and each format's omission count must reflect what that format shows.
     # (JSON drops all INFO; text keeps only "visible info" per _display_filter.)
-    json_visible = [item for item in result.results if item.severity is not Severity.INFO]
-    text_visible = [item for item in result.results if _display_filter(item, verbose=verbose)]
+    json_visible = [item for item in result.results if item.severity != "info"]
+    text_visible = [item for item in result.results if _display_filter(item, result, verbose=verbose)]
     if output_path is not None:
         json_results, json_omitted = json_visible, 0
         text_results, text_omitted = text_visible, 0
@@ -142,7 +142,7 @@ def validate_cmd(
     # narrows only the displayed `results`. results_omitted is added only when it projected.
     payload = {
         "summary": _json_payload(result)["summary"],
-        "results": [item.to_dict() for item in json_results],
+        "results": [_legacy_result_projection(item) for item in json_results],
     }
     if json_omitted:
         payload["results_omitted"] = json_omitted
@@ -187,20 +187,20 @@ def _record_validation_summary(
         warnings=result.warnings,
         infos=result.infos,
         gated=bool(result.gated),
-        rule_ids=[item.rule for item in result.results],
+        rule_ids=[item.rule_id for item in result.results],
     )
     append_event(get_telemetry_dir(), event)
 
 
 def _json_payload(result: RunResult) -> dict[str, Any]:
-    emitted_results = [item for item in result.results if item.severity is not Severity.INFO]
+    emitted_results = [item for item in result.results if item.severity != "info"]
     return {
         "summary": {
-            "errors": sum(1 for item in emitted_results if item.severity is Severity.ERROR),
-            "warnings": sum(1 for item in emitted_results if item.severity is Severity.WARN),
-            "infos": sum(1 for item in emitted_results if item.severity is Severity.INFO),
+            "errors": sum(1 for item in emitted_results if item.severity == "error"),
+            "warnings": sum(1 for item in emitted_results if item.severity == "warn"),
+            "infos": sum(1 for item in emitted_results if item.severity == "info"),
         },
-        "results": [item.to_dict() for item in emitted_results],
+        "results": [_legacy_result_projection(item) for item in emitted_results],
     }
 
 
@@ -211,16 +211,16 @@ def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> R
     return replace(
         result,
         results=filtered_results,
-        errors=sum(1 for item in filtered_results if item.severity is Severity.ERROR),
-        warnings=sum(1 for item in filtered_results if item.severity is Severity.WARN),
-        infos=sum(1 for item in filtered_results if item.severity is Severity.INFO),
+        errors=sum(1 for item in filtered_results if item.severity == "error"),
+        warnings=sum(1 for item in filtered_results if item.severity == "warn"),
+        infos=sum(1 for item in filtered_results if item.severity == "info"),
         gated=tuple(gated_findings(filtered_results, result.gate_tier)),
     )
 
 
 def _emit_text(
     result: RunResult,
-    shown_results: list[Result],
+    shown_results: list[AuditFinding],
     omitted: int,
     sink: BoundedSink,
     *,
@@ -243,6 +243,10 @@ def _emit_text(
     for item in shown_results:
         console.print(_format_result(item), soft_wrap=True)
 
+    if verbose:
+        for notice in result.notices:
+            console.print(_format_validation_notice(notice), soft_wrap=True)
+
     if omitted:
         sink.echo(f"showing {len(shown_results)} of {len(shown_results) + omitted} findings")
         sink.echo(f"  complete output:  {sink.complete_via}")
@@ -261,77 +265,92 @@ def _format_check_coverage(result: RunResult) -> str:
     return f"Checks: {included_count} included, 0 skipped (profile: {result.profile})"
 
 
-def _display_filter(item: Result, *, verbose: bool) -> bool:
+def _display_filter(
+    item: AuditFinding,
+    run_result: RunResult,
+    *,
+    verbose: bool,
+) -> bool:
     if verbose:
-        return not _is_visible_info(item)
-    return item.severity is not Severity.INFO
+        return not _is_visible_info(item, run_result)
+    return item.severity != "info"
 
 
-def _notice_results(result: RunResult) -> list[Result]:
-    return [item for item in result.results if _is_visible_info(item)]
+def _notice_results(result: RunResult) -> list[AuditFinding]:
+    return [item for item in result.results if _is_visible_info(item, result)]
 
 
-def _is_visible_info(result: Result) -> bool:
-    return result.severity is Severity.INFO and result.rule in _VISIBLE_INFO_RULES
+def _is_visible_info(finding: AuditFinding, run_result: RunResult | None = None) -> bool:
+    if finding.severity != "info":
+        return False
+    if run_result is None:
+        raise ValueError("RunResult registry is required to resolve INFO visibility")
+    return run_result.registry.rule(finding.rule_id).default_visibility == "visible"
 
 
 def _section_names(result: RunResult) -> list[str]:
     return list(result.sections)
 
 
-def _format_notice(result: Result) -> Text:
+def _format_notice(result: AuditFinding) -> Text:
     text = Text()
     text.append("NOTE")
     text.append(f" {result.message}")
-    if result.task:
-        text.append(f" ({result.task})")
+    task = result.qualifiers.get("task")
+    if isinstance(task, str):
+        text.append(f" ({task})")
     return text
 
 
-def _format_result(result: Result) -> Text:
+def _format_result(result: AuditFinding) -> Text:
     if _is_checking_info(result):
         return _format_checking_info_result(result)
 
     style = _severity_style(result.severity)
     text = Text(style=style)
-    text.append(result.severity.name)
+    text.append(result.severity.upper())
 
     location = _location(result)
     if location:
         text.append(f" {location}")
-        if result.rule:
-            text.append(f" [{result.rule}]")
+        text.append(f" [{result.rule_id}]")
         text.append(f" {result.message}")
     else:
         text.append(f" {result.message}")
-        if result.rule:
-            text.append(f" [{result.rule}]")
-    if result.task:
-        text.append(f" ({result.task})")
+        text.append(f" [{result.rule_id}]")
+    task = result.qualifiers.get("task")
+    if isinstance(task, str):
+        text.append(f" ({task})")
     return text
 
 
-def _format_checking_info_result(result: Result) -> Text:
+def _format_checking_info_result(result: AuditFinding) -> Text:
     text = Text(style=_severity_style(result.severity))
-    text.append(result.severity.name)
-    if result.rule:
-        text.append(f" [{result.rule}]")
+    text.append(result.severity.upper())
+    text.append(f" [{result.rule_id}]")
     text.append(f" {result.message}")
-    if result.task:
-        text.append(f" ({result.task})")
+    task = result.qualifiers.get("task")
+    if isinstance(task, str):
+        text.append(f" ({task})")
     return text
 
 
-def _is_checking_info(result: Result) -> bool:
-    return result.severity is Severity.INFO and result.path is not None and result.message.startswith("Checking ")
+def _is_checking_info(result: AuditFinding) -> bool:
+    return (
+        result.severity == "info" and isinstance(result.subject, PathSubject) and result.message.startswith("Checking ")
+    )
 
 
-def _location(result: Result) -> str | None:
-    if result.path is None:
+def _location(result: AuditFinding) -> str | None:
+    if not isinstance(result.subject, PathSubject):
         return None
-    if result.line is None:
-        return str(result.path)
-    return f"{result.path}:{result.line}"
+    line = next(
+        (evidence.line for evidence in result.evidence if isinstance(evidence, LocationEvidence)),
+        None,
+    )
+    if line is None:
+        return result.subject.path
+    return f"{result.subject.path}:{line}"
 
 
 def _format_summary(result: RunResult) -> Text:
@@ -340,8 +359,7 @@ def _format_summary(result: RunResult) -> Text:
         style = ERROR_STYLE
     elif result.gated:
         status = (
-            f"FAILED: {len(result.gated)} finding(s) gated at tier "
-            f"'{result.gate_tier}', {result.warnings} warning(s)"
+            f"FAILED: {len(result.gated)} finding(s) gated at tier '{result.gate_tier}', {result.warnings} warning(s)"
         )
         style = ERROR_STYLE
     elif result.warnings:
@@ -356,9 +374,38 @@ def _format_summary(result: RunResult) -> Text:
     return text
 
 
-def _severity_style(severity: Severity) -> str:
-    if severity is Severity.ERROR:
+def _severity_style(severity: str) -> str:
+    if severity == "error":
         return ERROR_STYLE
-    if severity is Severity.WARN:
+    if severity == "warn":
         return WARNING_STYLE
     return ""
+
+
+def _legacy_result_projection(finding: AuditFinding) -> dict[str, object]:
+    path = finding.subject.path if isinstance(finding.subject, PathSubject) else None
+    line = next(
+        (evidence.line for evidence in finding.evidence if isinstance(evidence, LocationEvidence)),
+        None,
+    )
+    task = finding.qualifiers.get("task")
+    return {
+        "severity": finding.severity,
+        "path": path,
+        "line": line,
+        "message": finding.message,
+        "rule": finding.rule_id,
+        "task": task if isinstance(task, str) else None,
+    }
+
+
+def _format_validation_notice(notice: ValidationNotice) -> Text:
+    text = Text()
+    if notice.path is not None:
+        location = str(notice.path)
+        if notice.line is not None:
+            location = f"{location}:{notice.line}"
+        text.append(f"INFO {location} {notice.message}")
+    else:
+        text.append(f"INFO {notice.message}")
+    return text

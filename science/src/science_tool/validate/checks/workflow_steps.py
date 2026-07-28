@@ -12,10 +12,14 @@ from pathlib import Path
 
 from science_model.entities import Entity, MethodEntity, Stochasticity, WorkflowStepEntity
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.reference_resolution import ReferenceResolver
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE_STOCHASTICITY_MISSING = "workflow-step.method-stochasticity-missing"
 RULE_SEED_BINDING_MISSING = "workflow-step.seed-binding-missing"
@@ -25,23 +29,50 @@ RULE_BINDING_UNKNOWN_PARAM = "workflow-step.seed-binding-unknown-param"
 RULE_METHOD_MISSING = "workflow-step.method-missing"
 
 
-def _warn(path: Path, message: str, rule: str) -> Result:
-    return Result(severity=Severity.WARN, path=path, line=None, message=message, rule=rule, task=None)
+SECTION, RULES = declare_validation_rules(
+    section_id="workflow-steps",
+    section_title="workflow steps",
+    section_order=154,
+    rule_ids=(
+        "workflow-step.method-missing",
+        "workflow-step.method-stochasticity-missing",
+        "workflow-step.rationale-missing",
+        "workflow-step.seed-binding-missing",
+        "workflow-step.seed-binding-on-deterministic-method",
+        "workflow-step.seed-binding-unknown-param",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) -> Iterator[Result]:
+def _warn(
+    path: Path,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=Severity.WARN,
+        path=path,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) -> Iterator[CheckObservation]:
     if method.stochasticity is None:
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=path,
             line=None,
-            message=(
-                f"{step.canonical_id} applies {method.canonical_id}, which declares no "
-                "stochasticity; classify the method as deterministic, seedable, or "
-                "nondeterministic."
-            ),
-            rule=RULE_STOCHASTICITY_MISSING,
+            message=f"{step.canonical_id} applies {method.canonical_id}, which declares no stochasticity; classify the method as deterministic, seedable, or nondeterministic.",
+            rule=RULES["workflow-step.method-stochasticity-missing"],
             task=None,
+            qualifiers={"key": []},
         )
         return
 
@@ -51,16 +82,17 @@ def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) ->
                 path,
                 f"{step.canonical_id} binds seeds for {method.canonical_id}, which is "
                 "deterministic; no binding is meaningful.",
-                RULE_BINDING_ON_DETERMINISTIC,
+                RULES["workflow-step.seed-binding-on-deterministic-method"],
+                key=["method", method.canonical_id],
             )
         return
 
     if method.stochasticity is Stochasticity.NONDETERMINISTIC and not step.rationale:
         yield _warn(
             path,
-            f"{step.canonical_id} applies {method.canonical_id}, which is nondeterministic, "
-            "and supplies no rationale.",
-            RULE_RATIONALE_MISSING,
+            f"{step.canonical_id} applies {method.canonical_id}, which is nondeterministic, and supplies no rationale.",
+            RULES["workflow-step.rationale-missing"],
+            key=["method", method.canonical_id],
         )
 
     if not method.seed_params and method.stochasticity is Stochasticity.SEEDABLE:
@@ -73,24 +105,24 @@ def _step_results(step: WorkflowStepEntity, method: MethodEntity, path: Path) ->
     for param in sorted(set(step.seed_bindings) - set(method.seed_params)):
         yield _warn(
             path,
-            f"{step.canonical_id} binds {param!r}, which is not among "
-            f"{method.canonical_id}'s seed_params.",
-            RULE_BINDING_UNKNOWN_PARAM,
+            f"{step.canonical_id} binds {param!r}, which is not among {method.canonical_id}'s seed_params.",
+            RULES["workflow-step.seed-binding-unknown-param"],
+            key=["param", param],
         )
 
     if method.stochasticity is Stochasticity.SEEDABLE:
-        for param in method.seed_params:
+        for param in sorted(set(method.seed_params)):
             if param not in step.seed_bindings:
                 yield _warn(
                     path,
-                    f"{step.canonical_id} applies seedable {method.canonical_id} and leaves "
-                    f"{param!r} unbound.",
-                    RULE_SEED_BINDING_MISSING,
+                    f"{step.canonical_id} applies seedable {method.canonical_id} and leaves {param!r} unbound.",
+                    RULES["workflow-step.seed-binding-missing"],
+                    key=["param", param],
                 )
 
 
-@Check(section="workflow steps", order=54)
-def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=54, producer_id="validate.workflow-steps", rules=tuple(RULES.values()))
+def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """A step's seed bindings must agree with the method it applies."""
     sources = ctx.project_sources()
     resolver = ReferenceResolver.from_entities(
@@ -104,16 +136,14 @@ def check_workflow_step_seed_bindings(ctx: ValidateContext) -> Iterator[Result]:
             continue
         path = ctx.project_root / step.file_path
         if not step.method:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=path,
                 line=None,
-                message=(
-                    f"{step.canonical_id} declares no method; seed_policy cannot be derived "
-                    f"from it. Add `method: method:<slug>` to {step.file_path}."
-                ),
-                rule=RULE_METHOD_MISSING,
+                message=f"{step.canonical_id} declares no method; seed_policy cannot be derived from it. Add `method: method:<slug>` to {step.file_path}.",
+                rule=RULES["workflow-step.method-missing"],
                 task=None,
+                qualifiers={"key": []},
             )
             continue
         resolution = resolver.resolve(step.method)

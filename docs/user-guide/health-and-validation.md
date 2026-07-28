@@ -45,8 +45,8 @@ summary through the same belief reducer used for evidence summaries.
 Projects may mark a validation warning as reviewed in `science.yaml` when the
 warning is an intentional, documented residual risk rather than an unresolved
 defect. Accepted warnings are omitted from `science validate` output/counts and
-from `health.total_issues`; `science health` reports them in
-`accepted_validation` so the audit trail remains visible.
+from `totals.findings_total`; `science health` reports them in `accepted` so the
+audit trail remains visible.
 
 ```yaml
 health:
@@ -61,6 +61,18 @@ health:
 
 Use narrow match criteria and a concrete reason. Do not accept a warning until
 the project has decided that the residual state is honest and useful to track.
+
+Health JSON uses the shared audit-report schema. Its channels remain distinct:
+
+- `findings` contains current validated issues; `totals.findings_total` is
+  exactly their row count.
+- `accepted` contains reviewed validation warnings without counting them as
+  current findings.
+- `metrics` contains numeric coverage and inventory observations. Metrics are
+  never reconstructed into findings.
+- `caveats` records diagnostics that ran with a disclosed limitation.
+- `unwired` records diagnostics that could not run. An unwired report is never
+  described as clean, even when it contains no findings.
 
 ## Needs Review And Freshness
 

@@ -35,8 +35,8 @@ def test_dangling_produced_by_is_flagged(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     results = list(check_produced_by_unresolved(ctx))
     assert len(results) == 1
-    assert results[0].rule == "code.produced-by-unresolved"
-    assert results[0].severity is Severity.WARN
+    assert results[0].rule_id == "code.produced-by-unresolved"
+    assert results[0].severity == Severity.WARN.value
 
 
 def test_resolved_produced_by_is_not_flagged(tmp_path: Path) -> None:

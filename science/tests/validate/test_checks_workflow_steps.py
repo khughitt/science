@@ -14,9 +14,7 @@ def _project(
     method_frontmatter: str,
     step_frontmatter: str,
 ) -> Path:
-    (root / "science.yaml").write_text(
-        "name: seed-check-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
-    )
+    (root / "science.yaml").write_text("name: seed-check-test\nknowledge_profiles:\n  local: local\n", encoding="utf-8")
     methods = root / "entities" / "methods"
     methods.mkdir(parents=True, exist_ok=True)
     (methods / "leiden.md").write_text(
@@ -37,7 +35,7 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _rules(results) -> list[tuple[str, Severity]]:
-    return [(r.rule, r.severity) for r in results]
+    return [(r.rule_id, r.severity) for r in results]
 
 
 def test_step_applying_unclassified_method_is_an_error(tmp_path: Path) -> None:
@@ -77,6 +75,23 @@ def test_partial_binding_warns_once_per_unbound_param(tmp_path: Path) -> None:
         ("workflow-step.seed-binding-missing", Severity.WARN),
         ("workflow-step.seed-binding-missing", Severity.WARN),
     ]
+    assert {tuple(result.qualifiers["key"]) for result in results} == {
+        ("param", "b"),
+        ("param", "c"),
+    }
+
+
+def test_duplicate_seed_param_emits_one_semantic_finding(tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: seedable\nseed_params: [a, a]\n",
+        step_frontmatter="method: method:leiden\n",
+    )
+
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+
+    assert _rules(results) == [("workflow-step.seed-binding-missing", Severity.WARN)]
+    assert results[0].qualifiers["key"] == ["param", "a"]
 
 
 def test_nondeterministic_method_without_rationale_warns(tmp_path: Path) -> None:
@@ -105,9 +120,7 @@ def test_binding_on_deterministic_method_warns(tmp_path: Path) -> None:
         step_frontmatter='method: method:leiden\nseed_bindings:\n  random_state: "literal:42"\n',
     )
     results = list(check_workflow_step_seed_bindings(_ctx(root)))
-    assert _rules(results) == [
-        ("workflow-step.seed-binding-on-deterministic-method", Severity.WARN)
-    ]
+    assert _rules(results) == [("workflow-step.seed-binding-on-deterministic-method", Severity.WARN)]
 
 
 def test_binding_naming_an_unknown_param_warns(tmp_path: Path) -> None:
@@ -196,9 +209,7 @@ def test_seedable_method_with_no_seed_params_reports_the_gap_only_once(tmp_path:
         step_frontmatter='method: method:leiden\nseed_bindings:\n  typo: "literal:1"\n',
     )
     assert list(check_workflow_step_seed_bindings(_ctx(root))) == []
-    assert _rules(list(check_method_seed_params(_ctx(root)))) == [
-        ("method.seed-params-missing", Severity.WARN)
-    ]
+    assert _rules(list(check_method_seed_params(_ctx(root)))) == [("method.seed-params-missing", Severity.WARN)]
 
 
 def test_nondeterministic_method_does_not_warn_about_unbound_params(tmp_path: Path) -> None:

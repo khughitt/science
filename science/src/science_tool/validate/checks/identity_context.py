@@ -22,6 +22,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.assembly import AssemblyRegistryError, available_assembly_keys
 from science_tool.commons.assembly_compatibility import (
@@ -49,9 +53,9 @@ from science_tool.commons.protein_crosswalk import (
     SUPPORTED_PROTEIN_NAMESPACES,
 )
 from science_tool.validate._helpers import dataset_frontmatters, raw_frontmatter
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 # bio extensions whose data are assembly-anchored (coordinate-bearing).
 _COORDINATE_EXTENSIONS = ("bio.rnaseq", "bio.scrna", "bio.cna")
@@ -59,8 +63,77 @@ _GENE_TIER_EXTENSIONS = ("bio.geneset", "bio.gene_crosswalk")
 _PROTEIN_TIER_EXTENSIONS = ("bio.protein_crosswalk",)
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="identity-context",
+    section_title="identity context",
+    section_order=128,
+    rule_ids=(
+        "identity.assembly-declared-unresolved",
+        "identity.assembly-malformed",
+        "identity.assembly-undeclared",
+        "identity.assembly-unresolved",
+        "identity.cross-dataset-assembly-mismatch",
+        "identity.datapackage-stamp-disagreement",
+        "identity.gene-declared-unresolved",
+        "identity.gene-malformed",
+        "identity.gene-namespace-unsupported",
+        "identity.gene-registry-invalid",
+        "identity.gene-registry-unavailable",
+        "identity.gene-undeclared",
+        "identity.protein-declared-unresolved",
+        "identity.protein-malformed",
+        "identity.protein-namespace-unsupported",
+        "identity.protein-registry-invalid",
+        "identity.protein-registry-unavailable",
+        "identity.protein-undeclared",
+        "identity.provenance-mixed-build-unstructured",
+        "identity.provenance-reference-missing",
+        "identity.provenance-reference-role-missing",
+        "identity.provenance-source-role-missing",
+        "identity.registry-unavailable",
+        "identity.taxon-undeclared",
+        "identity.variant-undeclared",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+TIER_DECLARATION_RULES = {
+    "assembly": RULES["identity.assembly-undeclared"],
+    "gene": RULES["identity.gene-undeclared"],
+    "protein": RULES["identity.protein-undeclared"],
+    "variant": RULES["identity.variant-undeclared"],
+}
+MOLECULAR_SPEC_RULES = {
+    ("gene", "malformed"): RULES["identity.gene-malformed"],
+    ("gene", "namespace-unsupported"): RULES["identity.gene-namespace-unsupported"],
+    ("gene", "declared-unresolved"): RULES["identity.gene-declared-unresolved"],
+    ("gene", "registry-unavailable"): RULES["identity.gene-registry-unavailable"],
+    ("gene", "registry-invalid"): RULES["identity.gene-registry-invalid"],
+    ("protein", "malformed"): RULES["identity.protein-malformed"],
+    ("protein", "namespace-unsupported"): RULES["identity.protein-namespace-unsupported"],
+    ("protein", "declared-unresolved"): RULES["identity.protein-declared-unresolved"],
+    ("protein", "registry-unavailable"): RULES["identity.protein-registry-unavailable"],
+    ("protein", "registry-invalid"): RULES["identity.protein-registry-invalid"],
+}
+
+
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str] | None = None,
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key or []},
+    )
 
 
 def _is_coordinate_bearing(profile: str) -> bool:
@@ -123,7 +196,7 @@ def _declaration_gate_results(
     fm: dict[str, Any],
     required_tiers: set[str],
     identity_context: Any,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     if not required_tiers:
         return
     path = fm.get("_path")
@@ -133,7 +206,7 @@ def _declaration_gate_results(
             Severity.ERROR,
             path,
             f"{ident}: identity-bearing dataset does not declare identity_context.taxon",
-            "identity.taxon-undeclared",
+            RULES["identity.taxon-undeclared"],
         )
     for tier in sorted(required_tiers):
         if not _has_tier_decl(identity_context, tier):
@@ -141,7 +214,7 @@ def _declaration_gate_results(
                 Severity.ERROR,
                 path,
                 f"{ident}: identity-bearing dataset does not declare {_tier_decl_path(tier)}",
-                f"identity.{tier}-undeclared",
+                TIER_DECLARATION_RULES[tier],
             )
 
 
@@ -171,7 +244,7 @@ def _assembly_defect(assembly: Any) -> str | None:
 
 def evaluate_identity_context(
     datasets: Iterable[dict[str, Any]], *, registry_keys_by_id: Mapping[str, set[str] | None]
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Pure core of check 1. `datasets` are raw frontmatter dicts (with `_path`).
 
     `registry_keys_by_id` maps each declared registry id to its seqcol-digest key
@@ -205,7 +278,7 @@ def evaluate_identity_context(
                 Severity.ERROR,
                 path,
                 f"{ident}: malformed identity_context.assembly — {defect}",
-                "identity.assembly-malformed",
+                RULES["identity.assembly-malformed"],
             )
             continue
 
@@ -217,7 +290,7 @@ def evaluate_identity_context(
                 Severity.INFO,
                 path,
                 f"{ident}: assembly seqcol_digest declared_unresolved (honoured, RCM-D2)",
-                "identity.assembly-declared-unresolved",
+                RULES["identity.assembly-declared-unresolved"],
             )
             continue
         digest = str(digest_value)
@@ -230,14 +303,14 @@ def evaluate_identity_context(
                 Severity.ERROR,
                 path,
                 f"{ident}: assembly seqcol_digest {digest!r} does not resolve in {registry_id!r}",
-                "identity.assembly-unresolved",
+                RULES["identity.assembly-unresolved"],
             )
         elif state is ResolutionState.DECLARED_UNRESOLVED:
             yield _result(
                 Severity.INFO,
                 path,
                 f"{ident}: assembly seqcol_digest declared_unresolved (honoured, RCM-D2)",
-                "identity.assembly-declared-unresolved",
+                RULES["identity.assembly-declared-unresolved"],
             )
         elif state is ResolutionState.UNKNOWN and not known and registry_id not in reported_registries:
             reported_registries.add(registry_id)
@@ -245,7 +318,7 @@ def evaluate_identity_context(
                 Severity.INFO,
                 path,
                 f"{ident}: registry {registry_id!r} unavailable; declared seqcol digest cannot be verified",
-                "identity.registry-unavailable",
+                RULES["identity.registry-unavailable"],
             )
         # RESOLVED passes silently.
 
@@ -253,7 +326,7 @@ def evaluate_identity_context(
 def evaluate_datapackage_identity_stamps(
     datasets: Iterable[dict[str, Any]],
     datapackages_by_dataset_id: Mapping[str, tuple[str, dict[str, Any]]],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Report present datapackage identity_context stamps that disagree.
 
     Absence is intentionally silent for P1 adoption; the entity frontmatter
@@ -278,7 +351,7 @@ def evaluate_datapackage_identity_stamps(
             Severity.ERROR,
             datapackage_path,
             f"{ident}: datapackage science.identity_context disagrees with owning entity identity_context",
-            "identity.datapackage-stamp-disagreement",
+            RULES["identity.datapackage-stamp-disagreement"],
         )
 
 
@@ -292,8 +365,13 @@ def _local_datapackage_path(fm: dict[str, Any]) -> Path | None:
     return None
 
 
-@Check(section="identity datapackage stamps", order=24)
-def check_datapackage_identity_stamps(ctx: ValidateContext) -> Iterator[Result]:
+@Check(
+    section=SECTION,
+    order=24,
+    producer_id="validate.identity-context.datapackage-identity-stamps",
+    rules=tuple(RULES.values()),
+)
+def check_datapackage_identity_stamps(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = dataset_frontmatters(ctx)
     datapackages_by_dataset_id: dict[str, tuple[str, dict[str, Any]]] = {}
     for fm in datasets:
@@ -310,8 +388,8 @@ def check_datapackage_identity_stamps(ctx: ValidateContext) -> Iterator[Result]:
     yield from evaluate_datapackage_identity_stamps(datasets, datapackages_by_dataset_id)
 
 
-@Check(section="assembly identity", order=25)
-def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=25, producer_id="validate.identity-context.identity-context-assembly", rules=())
+def check_identity_context_assembly(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = dataset_frontmatters(ctx)
     # Load keys for each registry actually declared (no default fallback): a
     # dataset's digest is verified only against the registry it names.
@@ -389,13 +467,13 @@ def _identity_proxy_source_datasets(identity_context: Any) -> Iterator[tuple[str
     sources = proxy.get("sources") if isinstance(proxy, dict) else None
     if not isinstance(sources, list):
         return
-    for index, source in enumerate(sources):
+    for source in sources:
         if not isinstance(source, dict):
             continue
         dataset_id = _lineage_dataset_ref(source.get("dataset"))
         if dataset_id is None:
             continue
-        yield f"identity_context.assembly.proxy.sources[{index}].dataset", dataset_id
+        yield "identity_context.assembly.proxy.sources.dataset", dataset_id
 
 
 def _assembly_has_structured_lineage(identity_context: Any) -> bool:
@@ -435,7 +513,7 @@ def _input_assembly_digests(inputs: set[str], by_id: Mapping[str, dict[str, Any]
     return digests
 
 
-def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator[CheckObservation]:
     """Validate identity_context lineage declarations against derivation roles.
 
     Reference machinery (`transform.dataset`, `proxy.via`) must be real dataset
@@ -453,29 +531,32 @@ def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator
         inputs = _derivation_inputs(derivation)
         transformation_datasets = _derivation_transformation_datasets(derivation)
 
-        for loc, dataset_id in _identity_reference_datasets(identity_context):
+        for loc, dataset_id in sorted(set(_identity_reference_datasets(identity_context))):
             if dataset_id not in by_id:
                 yield _result(
                     Severity.ERROR,
                     fm.get("_path"),
                     f"{ident}: {loc} {dataset_id!r} does not resolve to a dataset entity",
-                    "identity.provenance-reference-missing",
+                    RULES["identity.provenance-reference-missing"],
+                    key=[loc, dataset_id],
                 )
             if dataset_id not in transformation_datasets:
                 yield _result(
                     Severity.ERROR,
                     fm.get("_path"),
                     f"{ident}: {loc} {dataset_id!r} must appear in derivation.transformations[].dataset",
-                    "identity.provenance-reference-role-missing",
+                    RULES["identity.provenance-reference-role-missing"],
+                    key=[loc, dataset_id],
                 )
 
-        for loc, dataset_id in _identity_proxy_source_datasets(identity_context):
+        for loc, dataset_id in sorted(set(_identity_proxy_source_datasets(identity_context))):
             if dataset_id not in inputs:
                 yield _result(
                     Severity.ERROR,
                     fm.get("_path"),
                     f"{ident}: {loc} {dataset_id!r} must appear in derivation.inputs",
-                    "identity.provenance-source-role-missing",
+                    RULES["identity.provenance-source-role-missing"],
+                    key=[loc, dataset_id],
                 )
 
         if (
@@ -487,12 +568,12 @@ def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator
                 Severity.ERROR,
                 fm.get("_path"),
                 f"{ident}: mixed-build declared_unresolved assembly requires proxy or transform provenance",
-                "identity.provenance-mixed-build-unstructured",
+                RULES["identity.provenance-mixed-build-unstructured"],
             )
 
 
-@Check(section="identity provenance", order=26)
-def check_identity_provenance(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=26, producer_id="validate.identity-context.identity-provenance", rules=())
+def check_identity_provenance(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_identity_provenance(dataset_frontmatters(ctx))
 
 
@@ -544,7 +625,7 @@ def evaluate_cross_dataset_assembly(
     datasets: Iterable[dict[str, Any]],
     *,
     compatibility_relations_by_dataset_id: dict[str, list[CompatibilityRelation] | None] | None = None,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Pure core of check 3: flag a derived dataset whose inputs span assemblies.
 
     A declared liftover transformation remedies a parent-vs-derived mismatch
@@ -590,7 +671,7 @@ def evaluate_cross_dataset_assembly(
                 f"{fm.get('id', '?')}: derivation inputs span distinct assemblies "
                 f"{sorted(observed_digests)} without resolved declared liftover relations for "
                 f"{unresolved_pairs}",
-                "identity.cross-dataset-assembly-mismatch",
+                RULES["identity.cross-dataset-assembly-mismatch"],
             )
         elif not parent_pairs and len(observed_digests) >= 2:
             yield _result(
@@ -598,7 +679,7 @@ def evaluate_cross_dataset_assembly(
                 fm.get("_path"),
                 f"{fm.get('id', '?')}: derivation inputs span distinct assemblies {sorted(observed_digests)} "
                 f"with no derived target assembly to remedy",
-                "identity.cross-dataset-assembly-mismatch",
+                RULES["identity.cross-dataset-assembly-mismatch"],
             )
 
 
@@ -638,8 +719,8 @@ def _load_relations_for_datasets(
     return relations_by_dataset_id
 
 
-@Check(section="assembly identity", order=26)
-def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=26, producer_id="validate.identity-context.cross-dataset-assembly", rules=())
+def check_cross_dataset_assembly(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = list(dataset_frontmatters(ctx))
     relations = _load_relations_for_datasets(datasets)
     yield from evaluate_cross_dataset_assembly(datasets, compatibility_relations_by_dataset_id=relations)
@@ -698,7 +779,7 @@ def evaluate_tier_identity(
     *,
     spec: _TierSpec,
     registry_meta_by_id: Mapping[str, dict[str, Any] | None],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Pure core of the declaration-level identity check, parameterized per tier.
 
     For each dataset declaring identity_context.molecular_ids.<spec.tier>, verify
@@ -723,12 +804,20 @@ def evaluate_tier_identity(
         ident = fm.get("id", "?")
         loc = f"identity_context.molecular_ids.{spec.tier}"
         if not isinstance(decl, dict):
-            yield _result(Severity.ERROR, path, f"{ident}: {loc} must be an object", f"{spec.rule_prefix}-malformed")
+            yield _result(
+                Severity.ERROR,
+                path,
+                f"{ident}: {loc} must be an object",
+                MOLECULAR_SPEC_RULES[(spec.tier, "malformed")],
+            )
             continue
         defect = tier_declaration_defect(decl)
         if defect is not None:
             yield _result(
-                Severity.ERROR, path, f"{ident}: malformed {loc} -- {defect}", f"{spec.rule_prefix}-malformed"
+                Severity.ERROR,
+                path,
+                f"{ident}: malformed {loc} -- {defect}",
+                MOLECULAR_SPEC_RULES[(spec.tier, "malformed")],
             )
             continue
         namespace = str(decl["namespace"])  # tier_declaration_defect guaranteed present + non-blank str
@@ -738,7 +827,7 @@ def evaluate_tier_identity(
                 path,
                 f"{ident}: {spec.tier} namespace {namespace!r} is not crosswalk-supported "
                 f"(expected one of {sorted(spec.supported_namespaces)})",
-                f"{spec.rule_prefix}-namespace-unsupported",
+                MOLECULAR_SPEC_RULES[(spec.tier, "namespace-unsupported")],
             )
             continue
         if decl.get("resolution_status") == "declared_unresolved":
@@ -746,7 +835,7 @@ def evaluate_tier_identity(
                 Severity.INFO,
                 path,
                 f"{ident}: {spec.tier} identity declared_unresolved (honoured, RCM-D2)",
-                f"{spec.rule_prefix}-declared-unresolved",
+                MOLECULAR_SPEC_RULES[(spec.tier, "declared-unresolved")],
             )
             continue
         registry_id = decl["registry"] if isinstance(decl.get("registry"), str) else spec.default_registry
@@ -759,7 +848,7 @@ def evaluate_tier_identity(
                     path,
                     f"{ident}: {spec.tier} registry {registry_id!r} unavailable; "
                     f"declared {spec.tier} namespace cannot be verified",
-                    f"{spec.rule_prefix}-registry-unavailable",
+                    MOLECULAR_SPEC_RULES[(spec.tier, "registry-unavailable")],
                 )
             continue
         if not _is_crosswalk(meta, profile_token=spec.profile_token, key_column=spec.key_column):
@@ -768,7 +857,7 @@ def evaluate_tier_identity(
                 path,
                 f"{ident}: {spec.tier} registry {registry_id!r} is not a {spec.profile_token[1:-1]} collection "
                 f"with member_key_column={spec.key_column!r}",
-                f"{spec.rule_prefix}-registry-invalid",
+                MOLECULAR_SPEC_RULES[(spec.tier, "registry-invalid")],
             )
         # supported namespace + valid crosswalk -> passes silently.
 
@@ -805,7 +894,7 @@ def _load_registry_meta(
     return meta
 
 
-def _run_tier_check(ctx: ValidateContext, spec: _TierSpec) -> Iterator[Result]:
+def _run_tier_check(ctx: ValidateContext, spec: _TierSpec) -> Iterator[CheckObservation]:
     """Gather raw frontmatter, load metadata for each registry a supported,
     non-declared_unresolved tier declares (or defaults to), then evaluate."""
     datasets = dataset_frontmatters(ctx)
@@ -848,23 +937,23 @@ _PROTEIN_SPEC = _TierSpec(
 
 def evaluate_gene_identity(
     datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: Mapping[str, dict[str, Any] | None]
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """C2 gene declaration-level evaluator (thin wrapper over the generalized core)."""
     yield from evaluate_tier_identity(datasets, spec=_GENE_SPEC, registry_meta_by_id=registry_meta_by_id)
 
 
 def evaluate_protein_identity(
     datasets: Iterable[dict[str, Any]], *, registry_meta_by_id: Mapping[str, dict[str, Any] | None]
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """C3 protein declaration-level evaluator (thin wrapper over the generalized core)."""
     yield from evaluate_tier_identity(datasets, spec=_PROTEIN_SPEC, registry_meta_by_id=registry_meta_by_id)
 
 
-@Check(section="gene identity", order=27)
-def check_gene_identity(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=27, producer_id="validate.identity-context.gene-identity", rules=())
+def check_gene_identity(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from _run_tier_check(ctx, _GENE_SPEC)
 
 
-@Check(section="protein identity", order=28)
-def check_protein_identity(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=28, producer_id="validate.identity-context.protein-identity", rules=())
+def check_protein_identity(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from _run_tier_check(ctx, _PROTEIN_SPEC)

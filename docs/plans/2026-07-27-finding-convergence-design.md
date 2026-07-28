@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 7. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 22. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -25,12 +25,6 @@
 > matches its guarantee (§8), section ordering (§6, §11), the `dataset.anomaly.*`
 > enumeration (§9), fingerprint type constraints and filename validation (§3), and two
 > internal contradictions (§Out of scope, §Open questions).
->
-> **Revision 7** closes final-review trust and persistence gaps: independent exact
-> ingestion attestation and graph-arbitrated entity context (§2, §8, §11),
-> append-only real genesis history (§4), aggregate case-leaf validation (§5),
-> descriptor-relative path judgment plus NUL refusal (§2, §8), and independent golden
-> vectors for every persisted hash (§Testing).
 >
 > **Revision 4** closes five narrow contract issues: the acceptance key omitted matching
 > fields the matcher actually consults (§10), `evidence` had no wire schema despite
@@ -59,6 +53,148 @@
 > `Transition`, `Review`, `ReportedFinding`, and `AcceptedFinding` also stay — none of
 > them collides with an entity kind, and the two renamed types are the ones that persist
 > to disk.
+>
+> **Revision 7** closes final-review trust and persistence gaps: independent exact
+> ingestion attestation and graph-arbitrated entity context (§2, §8, §11),
+> append-only real genesis history (§4), aggregate case-leaf validation (§5),
+> descriptor-relative path judgment plus NUL refusal (§2, §8), and independent golden
+> vectors for every persisted hash (§Testing).
+>
+> **Revision 8 composes producer output rather than widening instrument state.**
+> A registered producer returns `FindingProducerResult`, which contains an unchanged
+> `InstrumentResult[AuditFinding]` plus `ProducerMetrics` from the same observation
+> pass (§6). Adding metrics directly to `InstrumentResult` was rejected because that
+> type governs instruments across the toolkit, most of which are not finding producers;
+> a mutable `HealthContext` metrics side channel was rejected because it would make the
+> producer contract implicit. This revision also corrects the §11 pseudocode to use the
+> revision-6 name `AuditFinding`.
+>
+> **Revision 9 fixes the Plan 2 / Plan 3 acceptance boundary.** Plan 2 must preserve
+> today's accepted-validation exclusion while changing the public report schema, so it
+> implements matching for the current entry shape plus the frozen pre-migration
+> acceptance key (§10). Plan 3 still owns the migration command and fingerprint-keyed
+> configuration. In the Plan 3 landing, health stops matching the old shape rather than
+> retaining two permanent readers; old entries remain readable only by the explicit
+> migration command.
+>
+> **Revision 10 closes the two seams revision 9 exposed.** Five dynamic validation-rule
+> families now have explicit keep-or-collapse rulings that preserve kind certification,
+> gate tiers, evidence scoping, and the live `paper.status-vocabulary` acceptance (§6,
+> §9). Plan 2 acceptance is validation-producer-only and preserves health's existing
+> warning-or-error behavior, including wildcard severity, without widening to other
+> producers (§10). Metrics validation moves from the health drain to the generic
+> producer boundary; unwired producers omit metrics and skip schema validation (§6,
+> §11). The composition is described as fixed, not deeply immutable.
+>
+> **Revision 11 closes four planning ambiguities.** Prose lint warnings and INFO
+> advisories receive separate rules so per-rule visibility preserves today's rendering
+> (§6, §9, §11). The registry is explicitly project-scoped and active-kind-derived while
+> family policy remains toolkit-owned; test 4 and failure condition 6 use that same
+> distinction, and inactive-rule case behavior is defined (§3, §6). Test 31 compares
+> declarations to active-kind expansion rather than to sparse emissions. The fixed
+> hypothesis lineage rule and the deliberate override of correspondence drift's
+> derived-ID comment are recorded (§6).
+>
+> **Revision 12 restores the R1 boundary for prose-lint coverage.**
+> `prose_lints.numeric-verification.coverage` is a four-way measurement and remains a
+> producer metric, not a declared rule (§6, §9, §11). The distinct INFO advisory remains
+> a finding because it reports that configured policy demoted detected lint issues; it
+> uses `ProjectSubject`, keys identity on `check`, and records the changing `count` only
+> on the occurrence. Plan 2 also removes `_result`'s unused default rule string (§6).
+>
+> **Revision 13 corrects the Plan 2 baseline.** `archive_lag` was retired by
+> `4162196f` on 2026-07-26, before this design's grounding commit, and the tree explicitly
+> tests that health omits it. It is therefore removed from the migration ledger and from
+> R3's examples rather than reintroduced as a producer (§Grounding, §9, §Out of scope).
+>
+> **Revision 14 closes the static validation-ID grammar seam.** Two live validation
+> findings use underscores and therefore cannot be declared under §3's frozen
+> dotted-kebab rule grammar:
+> `evidence.empirical.requires_dataset_usage` and
+> `proposition.claim_layer.canonical`. Plan 2 renames them to
+> `evidence.empirical.requires-dataset-usage` and
+> `proposition.claim-layer.canonical`, respectively (§6, §9). Neither ID appears in a
+> gate tier or in the 50-entry surveyed acceptance corpus, so the change is count- and
+> suppression-neutral for the verified projects. Unknown external corpora remain covered
+> by Plan 3's fail-loud migration contract rather than by an undeclared compatibility
+> alias.
+>
+> **Revision 15 corrects revision 14's incomplete rule-ID survey and closes the
+> validation-notice seam.** Revision 14 inspected explicit `rule=` arguments but missed
+> fixed strings captured inside helpers such as `_result(..., "manifest", ...)`. An AST
+> pass following each helper's rule parameter finds 30 nonconforming fixed IDs: 29 carry
+> WARN/ERROR observations and receive exact dotted-kebab mappings in §6; `papers` is
+> INFO-only and declares no rule. Command-only INFO observations are now explicitly
+> `ValidationNotice`, preserved for `science validate --verbose` but absent from
+> `FindingProducerResult`, health, cases, and counts. A frozen
+> `ValidationObservationBatch` makes findings, metrics, and notices products of one pass;
+> its producer projection still returns exactly `FindingProducerResult`, so the uniform
+> channel is not widened.
+>
+> **Revision 16 closes the active-kind grammar collision.** The canonical entity
+> registry contains underscore-bearing trusted kinds such as `canonical_parameter` and
+> `parameter_binding`; interpolating those names verbatim produces rule IDs §3 rejects.
+> Kind-derived validation families now use
+> `rule_kind_segment(kind) = kind.replace("_", "-")` and fail registry construction if
+> two active kind names map to one segment (§6). Existing `paper.*` and `hypothesis.*`
+> identities are unchanged, so the live acceptance and certified gate tier remain exact.
+>
+> **Revision 17 closes the wired-caveat report seam.** `InstrumentResult` deliberately
+> permits `ok` / `empty` results to carry `code` / `reason` caveats, and
+> `dataset_anomalies` exercises that state today, but revision 2's `AuditReport` had no
+> place to retain it. Schema v2 now includes `caveats: list[ProducerCaveat]`; caveats are
+> neither findings nor unwired failures, never affect totals, remain uncapped in
+> projection, and are rendered even on an otherwise clean report (§6, §11). This revision
+> also removes an invalid `remediation="producer"` from the illustrative cached-field
+> rule; actual producer remediation requires the registered handler §6 already enforces.
+> The exhaustive rule-ID table also includes the runner-owned
+> `validate.sidecar.legacy_removed` → `validate.sidecar-removed` mapping that revision
+> 15's `validate/checks/` pass could not see.
+>
+> **Revision 18 closes the finite-dispatch rule-string surface.** The five
+> policy-sensitive families are not the only f-strings in validation: benchmark support
+> fields, identity tiers/spec defects, relation-audit defect codes, and workflow
+> fingerprint codes also format IDs at emission. Their existing IDs remain exact, but
+> Plan 2 replaces each formatter with a toolkit-owned `key -> FindingRule` map and an
+> equality guard against its upstream finite key authority (§6). Unknown keys fail;
+> emission never constructs a rule string.
+>
+> **Revision 19 closes validation-row identity.** Existing umbrella validation rules can
+> emit several rows for one path, so `(rule, subject)` alone would collide and reduce
+> counts. Every ordinary validation rule now uses the required ordered identity qualifier
+> `key: list[str]`; producers build it only from stable semantic components such as
+> predicate code, field name, canonical ref, or relation endpoints. Message, severity,
+> line, and list position remain forbidden (§3, §6, §9). Rules with already-frozen
+> special identity (`prose-lints.*`, correspondence evidence signature, and other
+> explicitly enumerated schemas) keep their specific keys rather than acquiring a
+> redundant generic one.
+>
+> **Revision 20 makes the pre-migration key fail on every dead text matcher.**
+> `_text_matches` rejects both a non-string/non-list `message_contains` and a list
+> containing any non-string member. The frozen key now rejects both shapes instead of
+> filtering invalid list members into a key for an entry that cannot suppress (§10).
+>
+> **Revision 21 moves the observation-count ceiling to trusted ingestion.**
+> `AuditReport` is both the public in-process result of `science health` and the wire
+> input to trusted ingestion. A model-level 5,000-observation ceiling made a large
+> trusted diagnostic fail to report anything, although health has no hostile-input
+> boundary and today's report is uncapped. The combined `findings + accepted` ceiling is
+> now `MAX_INGESTED_REPORT_FINDINGS` in ingestion, enforced for both bounded file loads
+> and direct in-memory ingestion before any store operation. The existing 8 MiB bounded
+> file read still caps untrusted parsing; `AuditReport` itself retains all structural and
+> total-consistency validation but has no volume policy (§8, §11).
+>
+> **Revision 22 resolves the prose-hit identity impossibility.** A rule whose subject is
+> only the document path and whose sole identity qualifier is `check` cannot preserve two
+> same-check hits in that document: the generic producer boundary must reject the second
+> row as a duplicate identity. Making line, span, scan order, or an occurrence ordinal
+> identity-bearing would only exchange the collision for unstable cases. The authorized
+> identity is therefore `(PathSubject.path, check, normalized match)`, where match
+> normalization is NFKC, whitespace collapse, and case-folding. Different normalized
+> matches remain distinct. Repeated semantically identical matches group into one finding
+> carrying all location evidence; groups over the evidence bound are summarized rather
+> than truncated. Section 9 permits this one count reduction because the grouped rows are
+> semantically indistinguishable. Every other no-count-reduction ruling remains intact.
 
 ## Motivation
 
@@ -113,18 +249,20 @@ Spec 1 generalizes that distinction to the whole surface rather than inventing o
 > absorbed silently.
 
 R3 exists because R1 as stated in revision 1 contradicted the tree: `count_issues`
-currently derives issues from coverage metrics and from archive lag (§Grounding).
+currently derives issues from coverage metrics (§Grounding).
 
 ## Grounding findings that shape the design
 
-Verified against the tree at `8db7aad9`.
+Verified against the source tree at `bbff18fd`; revisions 8–13 change this design only.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
-  (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is well-formed and the uniform
-  channel needs no new machinery.
+  (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is the unchanged status-and-row
+  component of the producer channel. Metrics are orthogonal to whether an instrument ran,
+  so §6 composes the instrument result with producer metrics rather than widening this
+  toolkit-wide primitive.
 
 - **A partial migration is already in flight, and its tolerance branch is why it
-  stalled.** `_drain_instrument_results` (`graph/health.py:108`) unpacks
+  stalled.** `_drain_instrument_results` (`graph/health.py:106`) unpacks
   `InstrumentResult`s and diverts unwired ones, but documents that *"Checks that do not
   (yet) return an `InstrumentResult` pass through untouched."* The drain accepting both
   shapes is precisely why the dialects coexist. Converging without removing that branch
@@ -137,11 +275,18 @@ Verified against the tree at `8db7aad9`.
 
 - **`count_issues` is not a row count, and it derives issues from measurements.**
   Its own docstring (`graph/health_count.py:126`) says so: *"``managed_artifacts`` uses
-  ``counts_as_issue``, coverage gaps are derived from metrics, and non-zero archive lag
-  contributes one issue."* Concretely, `_count_layered_claim_issues` adds `issues += 1`
+  ``counts_as_issue``, coverage gaps are derived from metrics, and nested finding sections
+  have their own issue rules."* Concretely, `_count_layered_claim_issues` adds `issues += 1`
   for each of `proposition_claim_layer_coverage` and
   `causal_leaning_identification_coverage` whose `denominator > 0 and numerator <
-  denominator`, and the total adds `(1 if lag_total else 0)`.
+  denominator`.
+
+- **`archive_lag` is not a Plan 2 producer.** Commit `4162196f` retired the tasks archive
+  command and archive-lag health surface on 2026-07-26, before the `bbff18fd` grounding
+  stamp. `test_build_health_report_omits_archive_lag` and
+  `test_health_checks_package.py`'s absent-module assertion preserve that removal. Plan 2
+  must not reconstruct a retired diagnostic merely because an earlier design revision
+  mistakenly listed it.
 
 - **Two producers emit rows that count as zero, and it is an omission.**
   `legacy_task_type` and `invalid_entity_aspects` appear in `count_issues`'s
@@ -398,6 +543,15 @@ not equal `slug(record.rule_id)`, or whose filename digest does not equal
 its own immutable fields, is a **load error** — never a silent repair or rename. A renamed
 or hand-edited case file must fail loudly rather than acquire a new identity.
 
+**Stored identity does not depend on current registry activity.** If a project drops an
+ontology catalog or profile and a previously active kind-derived rule disappears from
+the project-scoped registry, its existing case still loads: filename/content binding is
+self-contained and the storage loader does not consult current rule declarations.
+Re-ingestion of that rule is refused as undeclared, and no new occurrence is appended.
+The historical case may still be reviewed or dismissed; reactivating the same canonical
+kind deterministically restores the same rule ID and permits later observations to dedup
+onto it.
+
 ### 4. `AuditFindingRecord` — the canonical stored case
 
 `AuditFindingRecord` carries immutable identity fields plus append-only history. **It does not
@@ -544,20 +698,34 @@ is created.
 
 ### 6. Rules — declared beside the producer, registry derived
 
-Rules are declared next to the code that emits them, and **one frozen registry is derived
-from those declarations**. There is no hand-maintained central list, and therefore no
-repeated ID string to drift — while ingestion still gets exactly one immutable lookup
-authority.
+Rules and rule-family policy are declared next to the code that emits them. For each
+project source context, **one frozen project-scoped registry** is derived from those
+toolkit declarations plus the trusted active `EntityKind` descriptors supplied by graph
+loading. There is no hand-maintained central rule list and no project-authored policy;
+report construction and ingestion each receive exactly one immutable lookup authority
+for that same source context.
+
+Project configuration therefore has one narrow, existing role: by activating a trusted
+profile or ontology catalog, it contributes canonical kind descriptors to the active-kind
+set over which toolkit-owned rule families expand. It does **not** author finding rules
+or override a family's severity function, section, presentation metadata, subject
+contract, identity qualifiers, or any other policy field.
+
+This is Plan 2 work, not a property of Plan 1's current stub:
+`findings.producers.build_registry()` today is a pure function of a producer list and
+`findings.cli._registry()` builds it with no project input. Plan 2 threads the canonical
+source context into registry construction so kind-family expansion and entity-subject
+arbitration cannot observe different active profiles or ontology catalogs.
 
 ```python
 FindingRule(
     id="dataset.cached-field-drift",
-    severities={"warning"},
+    severities={"warn"},
     subject_types={"entity"},
     identifier_namespaces=set(),
     qualifier_schema=DatasetFieldQualifier,
     identity_qualifiers=("field",),
-    remediation="producer",
+    remediation="none",
     # presentation metadata — so renderers stop hardcoding sections and order
     title="Cached dataset field drifted from source",
     section="datasets",
@@ -573,10 +741,73 @@ alphabetize and destroy the order `HEALTH_CHECKS` encodes today:
 FindingSection(id="datasets", title="Datasets", section_order=300)
 ```
 
+**One composed result is the producer return contract.** A producer must return findings,
+instrument status, and metrics from one observation pass:
+
+```python
+class FindingProducerResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument: InstrumentResult[AuditFinding]
+    metrics: ProducerMetrics = Field(default_factory=ProducerMetrics)
+
+    @model_validator(mode="after")
+    def _unwired_has_no_metrics(self) -> FindingProducerResult:
+        if self.instrument.status == "unwired" and self.metrics.model_dump():
+            raise ValueError("an unwired producer cannot report metrics")
+        return self
+```
+
+`InstrumentResult` keeps its toolkit-wide meaning: `ok`, `empty`, or `unwired`, with
+typed rows and an optional reason/code. It does not acquire a metrics field merely
+because one family of its callers needs measurements. `FindingProducerResult` is the
+generic producer boundary shared by health checks, validation modules, `data_audit`,
+and later Pi lenses; it is not `HealthCheck`-specific.
+
+Composition also closes two less explicit alternatives:
+
+- A producer does not mutate `HealthContext` to publish metrics. Findings and metrics
+  cannot come from different passes or be separated by a hidden side channel.
+- A producer does not return a tuple. The named model is the one runtime type the
+  uniform-channel ratchet can enforce and the registry can validate.
+
+`frozen=True` fixes assignment to the composition's two fields; it does **not** claim to
+deep-freeze the nested `InstrumentResult`, whose `rows` list remains mutable. Plan 2 does
+not widen or freeze that toolkit-wide type. The generic producer boundary validates and
+consumes the result immediately; the durable/public snapshot is the deeply frozen
+`AuditReport` (§11).
+
+An `unwired` instrument carries no rows by `InstrumentResult`'s existing invariant and
+must carry empty producer metrics: measurements from an instrument that did not run are
+not observations. An `ok` or `empty` result may carry a caveat in `reason` and validated
+metrics, preserving the existing partial-input semantics.
+
 **Producer registration carries a metrics schema.** A producer that emits metrics declares
 their type at registration, and the derived registry validates each producer's metrics
 object against it. Without this, §11's `ProducerMetrics` would be an untyped escape hatch —
 which is the same defect as `dataset_anomalies: list[dict]`, reintroduced one layer up.
+
+Metrics validation belongs to the **generic producer boundary** in
+`findings/producers.py`, not to the health drain. Every registered health check,
+validation module, `data_audit` producer, and later lens crosses that one boundary. It
+enforces:
+
+- A wired producer with a metrics schema is validated strictly against it. Required
+  fields remain required.
+- A wired producer with no metrics schema must emit an empty mapping.
+- An unwired producer must emit an empty mapping, is omitted from
+  `AuditReport.metrics`, and skips schema validation. A required metrics schema therefore
+  does not make `unwired` unrepresentable.
+
+`AuditReport.metrics` contains each **wired** producer that declared a metrics schema,
+including `{}` when that schema permits an empty object. Producers with no schema and
+unwired producers are absent. `meta.producers_run` and `unwired` separately state which
+producers were attempted and which could not run.
+
+An `ok` / `empty` producer with non-empty `code` or `reason` contributes one
+`ProducerCaveat` to `AuditReport.caveats`. Caveats preserve partial-input and
+intentional-empty explanations without pretending the producer was unwired. They do not
+enter findings, metrics, or totals.
 
 - **`severities` is a permitted set, not a single default.** Existing rules legitimately
   vary by context.
@@ -586,9 +817,9 @@ which is the same defect as `dataset_anomalies: list[dict]`, reintroduced one la
   tuple currently encodes display order as import order, which the §11 rewrite would
   otherwise destroy; `display_order` carries it explicitly, and `default_visibility`
   replaces `validate/cli.py:25`'s hardcoded `_VISIBLE_INFO_RULES`.
-- **Dynamic rule strings are retired.** `prose_lints.<check>` becomes a declared
-  `prose-lints.hit` rule with `check` as a typed identity qualifier. A wildcard family
-  cannot be ratcheted, and defeats the registry.
+- **Ad hoc dynamic rule strings are retired; policy-bearing parameterized IDs are
+  derived.** The five live families have explicit rulings below. A producer never
+  constructs an unregistered string at emission time.
 - Producers export their declarations and construct findings from those objects. A
   **generic producer registration** — not `HealthCheck` specifically — contributes them
   to the frozen registry, so health checks, validation modules, `data_audit`, and later
@@ -597,6 +828,186 @@ which is the same defect as `dataset_anomalies: list[dict]`, reintroduced one la
   definitions. The `validate` health check aggregates declarations from the canonical
   validation producers it wraps.
 
+**The five parameterized validation families are not one case.**
+
+| Current family | Plan 2 rule identity | Existing policy preserved |
+|---|---|---|
+| `f"{kind}.status-vocabulary"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; `gates.py` continues naming certified full IDs; the live `paper.status-vocabulary` acceptance continues matching. |
+| `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. This deliberately overrides the source comment at `correspondence_drift.py:71-74` that kept the ID derived for a future kind: evidence scope is current policy, while a hypothetical no-rename convenience is not. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
+| `f"{kind}.unbacked-inverse"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
+| `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
+| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit` with typed identity qualifiers `check` and normalized `match`; configured-non-warn INFO summaries become hidden `prose-lints.advisory` with identity qualifier `check`. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. Semantically identical WARN matches in one path group as the one §9-approved count reduction; INFO never entered `count_issues`. |
+
+**Four additional finite dispatch surfaces preserve their IDs through explicit maps.**
+They do not carry the gate/severity/acceptance policy that makes the five families above
+distinct, but they still may not format strings at emission:
+
+| Source | Frozen declaration map |
+|---|---|
+| `benchmark_metadata.py` support list fields | Keys exactly `{"evidence", "notes"}`; values `benchmark.task-support-evidence-invalid` and `benchmark.task-support-notes-invalid`. |
+| `identity_context.py` required tiers | Keys exactly `{"assembly", "gene", "protein", "variant"}`; values `identity.<tier>-undeclared`. |
+| `identity_context.py` molecular specs | Cartesian product of prefixes `{"identity.gene", "identity.protein"}` and suffixes `{"malformed", "namespace-unsupported", "declared-unresolved", "registry-unavailable", "registry-invalid"}`. |
+| `relations.py` relation defects | Keys equal the relation-audit module's declared defect-code authority; values retain `relation.<code>`. |
+| `workflow_runs.py` fingerprint findings | Keys equal the workflow-fingerprint finding-code authority; values retain the existing `run.*` IDs. |
+
+Each map is declared once beside its producer. Tests assert key-set equality with the
+upstream authority (or the exact frozen finite set where no exported authority exists).
+The emission site performs a lookup and raises on a missing key. These are declarations
+derived from toolkit code, not a license for a generic rule-string factory.
+
+**Ordinary validation rows have one uniform semantic identity key.**
+
+```python
+class ValidationQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: list[str]
+    task: str | None = None
+```
+
+Every ordinary validation `FindingRule` declares
+`identity_qualifiers=("key",)`, and every emission supplies the key explicitly. The
+ordered components state *which semantic instance of the predicate* this row reports:
+
+- one possible row per subject uses `[]`;
+- a missing manifest field uses `["missing-field", field_name]`;
+- an unresolved task reference uses `["unresolved-task", task_id]`;
+- an authored relation defect uses `[subject_ref, predicate, object_ref]`; and
+- a repeated field/ref family uses the stable field/ref value, never its loop index.
+
+The key is not a message slug and no generic helper hashes prose. Rule-specific schemas
+may replace this standard only when §6/§9 already freezes their identity fields (for
+example `check` plus normalized `match` for prose lint hits, `check` for prose
+advisories, or `evidence_signature` for correspondence drift).
+Producer duplicate-identity validation is the enforcement backstop: if two old rows
+would still collapse, that producer fails its own run before report assembly.
+
+`prose-lints.hit` uses `PathSubject` and the explicit identity qualifiers `check` and
+`match`. The stored match is normalized with NFKC, whitespace collapse, and case-folding.
+Line, span, scan/list position, and occurrence ordinal remain non-identity. Different
+normalized matches in one document therefore remain separate findings. Repeated hits
+with the same normalized match are one semantic defect and become one finding with every
+location represented as evidence. When the 100-entry evidence bound would be exceeded,
+the producer replaces the unbounded location list with a range-and-count summary; it
+never silently keeps only the first locations.
+
+The adjacent `prose_lints.numeric-verification.coverage` INFO site is **not** a
+finding-rule declaration. Its verified / unverifiable / mismatch / error values are a
+four-way tally with no policy threshold or violation predicate, so R1 classifies it as
+producer metrics (§9). Its current hidden presentation does not justify turning a
+measurement into a case.
+
+`prose-lints.advisory` is different: it reports that the project configured a lint check
+to detect issues without warning on them — a policy-relevant advisory that preserves
+today's rendering. It uses `ProjectSubject`; `check` is its sole identity qualifier; and
+the observed `count` is a required **non-identity** qualifier stored on the occurrence.
+A changed count therefore updates one durable case rather than forking its identity.
+
+`hypothesis.dangling-lineage` is the third kind-graded emitter named by
+`kind_severity.py`, but it is **not** a parameterized family: the check is semantically
+hypothesis-only and already emits the hard-coded `RULE_DANGLING_LINEAGE`. It stays one
+literal declared rule, continues calling `severity_for_kind("hypothesis")`, and remains
+the literal third hypothesis entry in `gates.py`. Plan 2 must not derive dangling-lineage
+rules for other active kinds.
+
+Plan 2 also deletes `_result`'s default `rule="prose_lints"` argument. Every current call
+site supplies a rule explicitly; retaining an unused default would preserve exactly the
+undeclared-string construction path this registry removes.
+
+**Static validation IDs must also satisfy the frozen grammar.** Most current IDs already
+do. Plan 2 applies these exact one-time mappings to the complete nonconforming fixed-ID
+set:
+
+| Current ID | Declared Plan 2 ID | Gate / surveyed acceptance effect |
+|---|---|---|
+| `autonomous-runs` | `autonomous-runs.check` | none |
+| `bias_audits` | `bias-audits.check` | none |
+| `cross-references` | `cross-references.check` | none |
+| `directory_structure` | `directory-structure.check` | none |
+| `discussions` | `discussions.check` | none |
+| `document_structure` | `document-structure.check` | none |
+| `entity-conformance` | `entity-conformance.check` | none |
+| `evidence.empirical.requires_dataset_usage` | `evidence.empirical.requires-dataset-usage` | none |
+| `gap_analysis` | `gap-analysis.check` | none |
+| `graph` | `graph.check` | none |
+| `hypotheses` | `hypotheses.check` | none |
+| `hypothesis_comparisons` | `hypothesis-comparisons.check` | none |
+| `id-prefixes` | `id-prefixes.check` | none |
+| `forbidden-second-declaration` | `identity.forbidden-second-declaration` | none |
+| `lens_views` | `lens-views.check` | none |
+| `manifest` | `manifest.check` | none |
+| `non-materializing-field` | `materialization.non-materializing-field` | none |
+| `notes` | `notes.check` | none |
+| `origins` | `origins.check` | none |
+| `orphan-datapackage-owner` | `dataset.orphan-datapackage-owner` | none |
+| `papers` | —; INFO-only command notice | none |
+| `prereg` | `prereg.check` | none |
+| `project_readme` | `project-readme.check` | none |
+| `proposition.claim_layer.canonical` | `proposition.claim-layer.canonical` | none |
+| `references` | `references.check` | none |
+| `registration` | `registration.check` | none |
+| `research_scope` | `research-scope.check` | none |
+| `tasks` | `tasks.check` | none |
+| `tooling` | `tooling.check` | none |
+| `unresolved_markers` | `unresolved-markers.check` | none |
+| `validate.sidecar.legacy_removed` | `validate.sidecar-removed` | none |
+
+The nearby `prose_lints.*` spellings are governed by the semantic split above, and
+`prose_lints.numeric-verification.coverage` becomes metrics rather than a rule. These are
+the complete nonconforming rule spellings in the current validation finding stream.
+Plan 2 adds an emitted-ID grammar guard; it must not normalize arbitrary strings or retain
+aliases. A future invalid ID is a producer declaration failure, not a reason to widen the
+wire grammar.
+
+**Command notices are explicit producer-internal observations.** Sixty-five current
+validation sites emit INFO. Only `prose-lints.config` and `prose-lints.advisory` are the
+policy-bearing INFO findings ruled above; numeric-verification coverage is metrics. Every
+other INFO site is a `ValidationNotice`: progress, pass confirmation, skipped optional
+work, or a descriptive tally shown only by the command's verbose renderer. Notices have
+typed path / line / message fields but no `rule_id`, never enter
+`FindingProducerResult.instrument.rows`, and never enter health or case ingestion.
+
+The one-pass mechanism is explicit rather than a mutable side channel:
+
+1. a canonical check is executed once, converts its typed issue observations through
+   declarations, and freezes a `ValidationObservationBatch` containing
+   `AuditFinding`s, optional metrics, and notices;
+2. its registered producer projection consumes that batch and returns exactly
+   `FindingProducerResult`;
+3. the runner immediately validates that result at the generic boundary; and
+4. `RunResult.notices` carries the same batch's notices only to
+   `science validate --verbose`.
+
+Focused check functions may still yield typed observations and be wrapped into the batch
+once. A check is never executed twice. JSON validation output remains WARN/ERROR-only as
+today; normal text preserves per-rule INFO visibility (`prose-lints.config` visible,
+`prose-lints.advisory` hidden); verbose text retains notice messages, although the old
+bracketed pseudo-rule label is removed because a notice is deliberately not a rule.
+
+The per-kind rules are derived when the project-scoped registry is built from the same
+trusted active entity-kind registry used by graph loading. The **family declaration** —
+suffix, section, presentation metadata, subject contract, and the call to
+`severity_for_kind` — is toolkit-owned and frozen. A project may contribute a canonical
+kind descriptor through the existing profile/adapter boundary, but it cannot author or
+override finding-rule policy. After the active kinds are expanded, the resulting
+`FindingRegistry` is immutable. Trusted ingestion and report construction use registries
+derived from that same source context; report content can never mint a kind or rule.
+
+`rule_kind_segment` is a frozen wire mapping, not a display slug:
+
+```python
+def rule_kind_segment(kind: str) -> str:
+    return kind.replace("_", "-")
+```
+
+The original kind remains the input to `severity_for_kind` and the active-registry
+membership check. Only the rule-ID segment is mapped. Registry derivation groups active
+kinds by this segment and fails before registration when the mapping is not injective
+(for example, simultaneous `parameter_binding` and `parameter-binding`). It never picks
+one by order. Kinds already in kebab case are unchanged; therefore
+`paper.status-vocabulary`, `hypothesis.status-vocabulary`,
+`hypothesis.unbacked-inverse`, and their acceptance/gate policy remain exact. No surveyed
+acceptance names an underscore-bearing family ID.
+
 The derived registry **fails early** on:
 
 1. Duplicate rule IDs.
@@ -604,8 +1015,13 @@ The derived registry **fails early** on:
 3. A finding whose severity, subject type, identifier namespace, or qualifiers violate
    its rule.
 4. A rule declaring producer remediation without a registered trusted handler.
-5. A registered producer returning anything except the uniform result channel.
-6. Project configuration attempting to add or override a toolkit rule.
+5. A registered producer returning anything except `FindingProducerResult`, including a
+   bare `InstrumentResult`, tuple, row list, or report mapping.
+6. Project configuration attempting to author or override toolkit-owned family policy.
+   Activating a trusted canonical kind descriptor and thereby selecting its derived rule
+   instances is permitted; supplying a rule declaration or changing its severity
+   function, section, presentation metadata, subject contract, identity qualifiers, or
+   other family field is refused.
 7. Two rules claiming the same `display_order` within a `section`, or two sections
    claiming the same `section_order`.
 
@@ -637,7 +1053,7 @@ producer (check | validation | data_audit | Spec 2 lens)
     ↓ emits shared AuditFinding
 one gated report path                     ← the only surface an untrusted actor writes
     ↓ science findings ingest <report>    ← trusted; validates, fingerprints, upserts
-canonical FindingRecord under doc/audits/cases/
+canonical AuditFindingRecord under doc/audits/cases/
     ↓ explicit promotion (Spec 3 or human)
 task
 ```
@@ -689,8 +1105,12 @@ Ingestion additionally enforces:
 - **Schema and version validation.** The report declares `schema_version` and
   `fingerprint_version`; unknown or unimplemented values are refused outright, never
   coerced.
-- **Size limits.** A maximum report byte size and a maximum finding count, both
-  configured in the toolkit, not by the project.
+- **Size limits at ingestion.** A maximum report byte size and a maximum combined
+  `findings + accepted` count, both configured in the toolkit, not by the project.
+  `load_report` applies both to actor-authored files, and direct `ingest_report` applies
+  both to its detached snapshot before the case store is opened. These are ingestion
+  policies, not `AuditReport` model constraints: trusted in-process health reporting is
+  not capped.
 - **Path safety.** Every path in a subject or evidence entry must be relative,
   normalized, free of `..`, and resolve inside the project root. Absolute paths are
   refused.
@@ -744,9 +1164,9 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(rows)` | one rule per canonical validation rule id | — | `prose_lints.<check>` collapses to `prose-lints.hit` + `check` qualifier |
-| `accepted_validation` | excluded | same rules, reported in the `accepted` channel (§11) | — | remains excluded from the finding total |
-| `archive_lag` | `1 if total else 0` | `tasks.archive-lag`, `ProjectSubject`, emitted **iff** total > 0 | `done_in_active`, `retired_in_active`, `missing_completed` retained as metrics | net count unchanged (1 ↔ 1); the measurement is no longer the issue |
+| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families; ordinary rules use the required semantic `key` | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` with `check` + normalized `match`; different matches remain one-to-one, while repeated semantically identical `(path, check, normalized match)` hits group with all locations as evidence. This is the sole approved WARN/ERROR count reduction because no stable identity can distinguish those duplicate rows without using forbidden position. INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; every other semantic key prevents same-rule/same-subject rows from collapsing; INFO never entered health `count_issues` |
+| `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
+| `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
 | `layered_claims.rival_model_packets_…` | `len()` | `layered-claim.rival-model-gap` | — | — |
 | `layered_claims.*_coverage` (×2) | `+1` each when incomplete | `layered-claim.coverage-incomplete`, `ProjectSubject`, qualifier = which coverage | both coverage metrics retained | net count unchanged; the metric stops being the issue |
@@ -788,20 +1208,91 @@ The §1 rule — at most one `ReportedFinding` per `(producer_id, finding_id)` �
 makes this checkable at the producer rather than at ingestion: a missing qualifier shows
 up as two findings colliding in one report, in the producer's own tests.
 
+**Validation-family count effect.** The §6 family rulings are count-neutral except for
+the explicit prose duplicate grouping below.
+Kind-scoped status and inverse IDs, the five annotation IDs, and
+`plan.correspondence-drift` retain their exact emitted identities. Prose lint WARN hits
+and configured-non-warn INFO summaries are renamed separately: different normalized
+WARN matches still produce one finding each, while semantically identical matches in the
+same path/check group into one finding with all location evidence. That grouping is the
+only approved count reduction; line, span, list position, and occurrence ordinal cannot
+provide stable identity, so preserving separate indistinguishable rows is impossible
+under the producer uniqueness invariant. WARN hits retain visible presentation, INFO
+advisories retain hidden presentation, and INFO never entered `count_issues`. No gate
+tier or acceptance in the surveyed 50-entry corpus names either affected ID. The one surveyed
+acceptance that does name a parameterized family, `paper.status-vocabulary` in
+post-acute-infection, keeps that exact ID and therefore remains excluded. A future family
+collapse that changes an accepted or gated full ID requires a new ledger row; it cannot
+be absorbed as registry population.
+
+The numeric-verification coverage row is not part of that rename: its four counts move
+unchanged into producer metrics and produce no `AuditFinding`.
+
+The static validation-ID mappings are also count-neutral. None of the old IDs is named by
+a gate tier or by any of the 50 surveyed acceptance entries. Plan 2 therefore changes no
+verified suppression or exit-code behavior. The INFO-only `papers` observation never
+entered health counts and remains a command notice. Plan 2 deliberately does not add
+aliases: repositories outside the surveyed corpus are handled by Plan 3's
+stale/ambiguous reporting before configuration is rewritten.
+
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
-class. Two are net-neutral reclassifications (`archive_lag`, layered-claim coverage).
-**No entry reduces counts.** Everything else preserves observable counts exactly.
+class. Layered-claim coverage is a net-neutral reclassification.
+The approved prose duplicate grouping reduces one finding per repeated semantically
+identical `(path, check, normalized match)` hit while retaining every location as
+evidence. **No other entry reduces counts.** Everything else preserves observable counts
+exactly.
 
 ### 10. Acceptance migration
 
 Acceptance is re-keyed from `message_contains` prose onto fingerprints. Spec 1 ships
 `science findings migrate-acceptances`, **dry-run by default**, with `--apply`.
 
+**Implementation is deliberately split across Plans 2 and 3.** Plan 2 cannot defer every
+line of this section: the new §11 report has only `findings` and `accepted` channels, and
+moving today's accepted warnings into `findings` would silently change totals. Therefore:
+
+- **Plan 2** applies the current health call site's `entry_suppresses` semantics to the
+  raw eligible validation stream, computes the frozen **pre-migration** acceptance key
+  defined below, and emits matching observations through §11's `accepted` channel. It
+  does not write `science.yaml`, accept the replacement entry shape, or ship
+  `migrate-acceptances`.
+- **Plan 3** ships the dry-run/apply migration, switches health to the replacement
+  fingerprint entry shape, and removes Plan 2's pre-migration matcher from the health
+  path in that same landing. The migration command remains the sole reader of the old
+  shape because reading the input one is explicitly its job.
+
+There is no steady state with dual health matchers and no compatibility layer retained
+after migration. Before Plan 3, health accepts the current shape. After Plan 3, health
+fails loud on the current shape and instructs the operator to run the migration command;
+the command can still classify and rewrite it under the four-outcome contract below.
+
+**Plan 2 preserves the health call site's exact acceptance scope.**
+
+- The only eligible producer is the canonical validation health producer, `validate`.
+  Findings from health checks, `data_audit`, or any later lens are never offered to
+  `accepted_validation` entries. Extending acceptance beyond validation is a separate
+  count-reduction decision and requires a §9 ledger row.
+- Both canonical `warn` and `error` validation findings are eligible, because
+  `_partition_accepted_validation_findings` applies `entry_suppresses` to both today.
+  An entry with an explicit severity matches only that severity; an absent or non-string
+  severity remains a wildcard and may match either. The current `"warning"` spelling is
+  normalized to `"warn"` at the shared finding boundary. `INFO` results never enter the
+  validation health producer's finding stream.
+- `science validate` keeps its separate warn-only behavior:
+  `filter_accepted_warnings` continues refusing to suppress `Severity.ERROR`. Plan 2
+  converges the health report; it does not silently redefine the validate CLI.
+
+All 50 surveyed entries carry an explicit warning severity, so preserving this behavior
+changes no live count. The explicit producer/severity boundary also prevents the
+converged raw stream from turning existing validation metadata into a suppressor for
+non-validation findings.
+
 **Correctness conditions:**
 
-- **Match against the raw, unsuppressed finding stream.** Matching against a
-  already-filtered stream cannot find what current acceptances suppress.
+- **Match against the raw, unsuppressed eligible validation stream.** Matching against
+  an already-filtered stream cannot find what current acceptances suppress; widening
+  "eligible" beyond producer `validate` would change counts and is forbidden above.
 - **Preserve severity scope.** Severity is excluded from identity, so a fingerprint alone
   would let an acceptance written for a warning silently suppress a later error at the
   same rule and subject. The rewritten entry carries an explicit severity scope.
@@ -876,7 +1367,7 @@ identically:
 | `severity` | **Omitted when the entry's `severity` is absent *or* not a string** — `_severity_matches` returns `True` for anything non-string, so both are wildcards and behave identically. Otherwise the normalized value (`warning`→`warn`). |
 | `path` | Omitted when absent or non-string (wildcard, per `isinstance` guard); otherwise as-is. |
 | `task` | Same rule as `path`. |
-| `message_contains` | **Omitted when absent or `None`** — `_text_matches` returns `True` for `None`. When a `str`, a one-element list; when a list, the string members in **original order**. |
+| `message_contains` | **Omitted when absent or `None`** — `_text_matches` returns `True` for `None`. When a `str`, a one-element list; when a list whose every member is a string, those members in **original order**. A list containing any non-string is unrepresentable because `_text_matches` returns `False`. |
 
 Per §3, an omitted field is omitted rather than encoded as null, so wildcard and
 non-wildcard entries cannot collide.
@@ -884,9 +1375,10 @@ non-wildcard entries cannot collide.
 **The two wildcard asymmetries are deliberate, and one of them blocks migration.**
 `_severity_matches` treats a malformed `severity` as a wildcard, so it is representable
 and migratable. `_text_matches` returns **`False`** for a `message_contains` that is
-present but neither a string nor a list of strings — such an entry matches nothing by
-construction, lands in the `stale` outcome, and aborts the migration (§10) rather than
-acquiring a sentinel representation. Fail-loud on an entry that was already dead.
+present but neither a string nor a list containing only strings — such an entry matches
+nothing by construction, lands in the `stale` outcome, and aborts the migration (§10)
+rather than acquiring a sentinel representation. Fail-loud on an entry that was already
+dead.
 
 Collapsing "absent severity" and "malformed severity" onto one key is intentional: they
 are the same acceptance, so §10's duplicate-`(finding_id, severity_scope)` rejection will
@@ -910,13 +1402,18 @@ report.
 ```python
 class ReportedFinding(TypedDict):
     producer_id: str                 # which producer observed it
-    finding: Finding
+    finding: AuditFinding
 
 class AcceptedFinding(TypedDict):
     producer_id: str
-    finding: Finding
+    finding: AuditFinding
     acceptance_key: str              # §10 — the accepting entry's frozen key
     reason: str                      # the acceptance's own recorded reason
+
+class ProducerCaveat(TypedDict):
+    producer_id: str
+    code: str | None
+    reason: str | None                # at least one of code/reason is nonblank
 
 class AuditReport(TypedDict):
     schema_version: int              # 2
@@ -926,6 +1423,7 @@ class AuditReport(TypedDict):
     findings: list[ReportedFinding]  # unsuppressed, ordered (below)
     accepted: list[AcceptedFinding]
     metrics: dict[str, ProducerMetrics]   # keyed by producer_id, validated per §6
+    caveats: list[ProducerCaveat]     # wired ok/empty code/reason; never a finding
     unwired: list[UnwiredProducer]   # {producer_id, code, reason}
     totals: ReportTotals
     meta: ReportMeta                 # timings, duration, producers_run
@@ -939,7 +1437,16 @@ class AuditReport(TypedDict):
   exactly with independent attestation. Accepted findings carry the same claimed
   provenance, plus the key of the entry that accepted them.
 - **`ProducerMetrics` is validated, not free-form** — against the metrics schema the
-  producer declared at registration (§6).
+  producer declared at registration (§6). The report builder receives those metrics
+  through the same `FindingProducerResult` that carried the producer's instrument
+  status and findings; it never re-runs a producer or reads mutable context state.
+  Unwired producers are omitted from `metrics` and skip schema validation. A wired
+  producer with no declared schema may emit no metrics and is likewise omitted.
+- **Wired caveats survive.** A wired result with `code` or `reason` contributes one
+  `ProducerCaveat`. The report validator requires its producer in
+  `meta.producers_run`, rejects duplicate producer caveats, and requires at least one
+  nonblank field. Projection never caps caveats. A caveat is rendered as a note and does
+  not prevent a true zero from being called clean; unwired still does.
 - **`totals`** carries `findings_by_severity`, `findings_total`, `accepted_total`, and
   `unwired_total`. `accepted` and `unwired` are **not** in `findings_total`, preserving
   today's exclusions. `total_issues` is replaced by `totals.findings_total`; §9
@@ -950,24 +1457,39 @@ class AuditReport(TypedDict):
   Sorting on the section *identifier* would alphabetize, discarding the order
   `HEALTH_CHECKS`'s hand-ordered tuple encodes today; `section_order` (§6) carries it.
 - **Visibility comes from `default_visibility`**, retiring
-  `validate/cli.py:25`'s hardcoded rule set.
+  `validate/cli.py:25`'s hardcoded rule set. The split prose-lint rules preserve its
+  current distinction: WARN `prose-lints.hit` and INFO `prose-lints.config` are visible;
+  INFO `prose-lints.advisory` is hidden. Numeric-verification coverage is metrics and
+  therefore has no finding visibility.
 - **The unwired invariant survives the rewrite**: a non-empty `unwired` forbids any
   "clean" rendering, asserted directly on rendered output (§Testing 5).
+- **Health never truncates or refuses by finding count.** `AuditReport` validates its
+  structure and exact totals but carries no observation ceiling. The 5,000-observation
+  bound belongs only to trusted ingestion (§8), where both accepted and unsuppressed
+  observations create stored occurrences.
 
 ## Testing
 
-1. **Uniform-channel ratchet** — a registered producer returning anything but the uniform
-   result channel fails. The `_drain_instrument_results` non-`InstrumentResult`
-   passthrough is removed, not deprecated.
+1. **Uniform-channel ratchet** — a registered producer returning anything but
+   `FindingProducerResult` fails. A bare `InstrumentResult`, tuple, row list, or report
+   mapping is refused. The `_drain_instrument_results` non-`InstrumentResult`
+   passthrough is removed, not deprecated. Runtime type, rule, and metrics validation
+   happen in the generic producer boundary before any namespace-specific reader receives
+   the result; the health drain only assembles already-validated results.
 2. **Rule-completeness ratchet** — undeclared rule id, duplicate rule id, producer
    remediation without a registered handler, and colliding `display_order` within a
    section each fail.
 3. **Constraint validation** — a finding whose severity, subject type, identifier
    namespace, or qualifiers violate its rule fails.
-4. **Project config cannot add or override a toolkit rule.**
+4. **Project config can select kind instances, never family policy.** Activating a
+   trusted profile or ontology catalog expands the exact rule instances implied by its
+   canonical kind descriptors. A project-authored rule or attempted override of severity
+   function, section, presentation metadata, subject contract, identity qualifiers, or
+   another toolkit-owned family field fails.
 5. **Renderer clean-refusal** — a non-empty unwired channel forbids "Project is clean",
    asserted on rendered output, not on a boolean. The invariant lives in the layer being
-   rewritten, and this is the guard-in-one-reader failure shape.
+   rewritten, and this is the guard-in-one-reader failure shape. A wired caveat is
+   rendered but does not forbid a true-zero clean result.
 6. **Persisted hashes are frozen** — golden-vector tests pin fingerprint canonical
    encoding plus the exact occurrence-key and review-id domain prefixes, field order,
    NUL separators, UTF-8 encoding, and 64-hex SHA-256 output against independent
@@ -1001,8 +1523,13 @@ class AuditReport(TypedDict):
     two `ReportedFinding`s sharing a
     `(producer_id, finding_id)` in one report are refused at the producer boundary, not
     at occurrence upsert.
-15. **Producer metrics are validated** — a metrics object violating the schema the
-    producer declared at registration fails.
+15. **Producer metrics are validated** — a wired metrics object violating the declared
+    schema fails; a wired producer with no schema and non-empty metrics fails; an unwired
+    result with non-empty metrics fails; and an unwired producer with a required metrics
+    schema succeeds with empty metrics, skips schema validation, and is absent from
+    `report.metrics`. A wired `code` / `reason` round-trips through one
+    `ProducerCaveat`; a duplicate caveat, a caveat for an unlisted producer, or a caveat
+    with neither field fails.
 16. **Evidence is typed, frozen, and bounded** — a `LocationEvidence` path that is
     absolute, traverses `..`, or resolves through a symlink is refused; `line` and `span`
     together are refused; a `span` with `end_line < start_line`, with equal lines and
@@ -1029,36 +1556,77 @@ class AuditReport(TypedDict):
     `reviewer_kind == "agent"` fails.
 21. **Ingestion hardening** — absolute path, NUL, `..` traversal, symlinked path
     (including parent-swap and dangling-link cases), unknown `schema_version`,
-    unimplemented `fingerprint_version`, oversize report, excess finding count, and any
-    invalid Markdown leaf in the aggregate case store are each refused, and a
-    *validation* failure writes nothing.
+    unimplemented `fingerprint_version`, oversize report, excess combined ingestion
+    observation count, and any invalid Markdown leaf in the aggregate case store are
+    each refused, and a *validation* failure writes nothing. The same `AuditReport`
+    constructed by trusted `science health` may exceed that ingestion-only count.
 22. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
 23. **Graph isolation** — no finding triple appears in any named graph; cases are absent
     from attention candidates; ingesting cases does not stale the revision manifest.
-24. **Acceptance-key wildcards** — an entry with absent `severity` and one with a
-    non-string `severity` produce the same key and are reported as duplicates; an entry
-    with absent `message_contains` keys as a wildcard and matches; an entry whose
-    `message_contains` is present but malformed is reported `stale` and aborts.
+24. **Acceptance-key wildcards** — Plan 2 pins that an entry with absent `severity` and
+    one with non-string `severity` produce the same pre-migration key, that absent
+    `message_contains` keys as a wildcard and matches, and that both a non-list
+    malformed value and a list containing a non-string fail key construction and do not
+    match. Plan 3 additionally proves the equal keys are reported as duplicates and
+    each malformed entry is reported `stale` and aborts.
 25. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
     accepted warning does not suppress a later error at the same fingerprint); the
     unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
     aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
     `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
     problem entry rather than the first.
-26. **Count ledger** — a test asserting the §9 table: for a fixture project, each
-    producer's contribution to `totals.findings_total` matches the enumerated
-    expectation. This is what makes the count changes approved rather than absorbed.
+26. **Count ledger** — real converter fixtures assert every §9 row, including each
+    layered-claim subrow, numeric-verification metrics, accepted and unwired channels,
+    both data-audit row classes, and the prose semantic-duplicate exception. Each
+    contribution to `totals.findings_total` matches the enumerated expectation. This is
+    what makes the count changes approved rather than absorbed.
 27. **Presentation order is preserved** — rendering order matches the current
     `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
     a section identifier.
-28. **Metrics are not findings** — coverage, counts, and nested summaries survive as
-    metrics and are absent from the finding stream.
+28. **Metrics are not findings** — measurement-only coverage, standalone tallies, and
+    nested summaries survive as metrics and are absent from the finding stream. A
+    finding occurrence may still record a measured count as non-identity observation
+    data when the finding itself states a policy-relevant condition. In particular,
+    `prose_lints.numeric-verification.coverage` retains its four tallies in producer
+    metrics and declares no finding rule. Command-only pass/progress/skip INFO
+    observations are `ValidationNotice`, not metrics and not findings; they remain
+    available only to the verbose validation renderer from the same frozen observation
+    batch.
 29. **Producer-namespace completeness** — every namespace contributing to the derived
-    registry has a filesystem-derived guard.
+    registry has a filesystem-derived guard, and each namespace's execution path crosses
+    the generic result-validation boundary rather than validating in its own reader.
 30. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
     the declared-rule set, asserted as equality rather than as a subset, which is the
     assertion shape that let `dataset_access_invalid` drift.
+31. **Parameterized validation families are complete and policy-preserving** — declared
+    status/inverse rule IDs equal the deterministic `rule_kind_segment` expansion over
+    the project's active canonical kinds; an active-kind segment collision fails before
+    registration; every emitted family ID is declared, and every emission site's
+    original kind is a member of that same active-kind registry. Sparse fixture
+    emissions need only be a subset of declarations. Annotation rule IDs equal `ISSUE_KINDS`;
+    `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
+    and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
+    advisories map to their distinct canonical rules with their current visibility.
+    WARN-hit identity is exactly path + `check` + normalized `match`; different matches
+    stay distinct, semantically identical matches group with complete bounded evidence,
+    and line/span/list position/occurrence ordinal never enter identity.
+    Every emitted validation rule satisfies the frozen dotted-kebab grammar; the current
+    static mappings equal the complete §6 table across canonical checks and runner-owned
+    findings, and every old nonconforming ID is absent from declarations and emissions.
+    All non-policy INFO sites emit
+    `ValidationNotice`, not an `AuditFinding`; the check executes once and its notice and
+    producer result derive from the same frozen observation batch. Benchmark,
+    identity-context, relation, and workflow finite-dispatch key sets equal their
+    declaration maps, and their emission sites perform lookups rather than formatting
+    rule strings. Ordinary validation declarations require `key`; fixture rows are
+    one-to-one with distinct `(rule_id, subject, key)` tuples. Metamorphic tests vary
+    message text, severity, line, and input-list position without changing `key`, while
+    changing a declared semantic component changes it.
+32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
+    eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
+    wildcard-severity entry can suppress either validation severity; no entry suppresses
+    a non-validation finding; and `science validate` remains warn-only.
 
 ## Out of scope
 
@@ -1068,10 +1636,10 @@ class AuditReport(TypedDict):
 - **Converting measurements themselves into findings.** A coverage fraction, a lag count,
   or a corpus tally stays a metric; making the shared type carry measurements would make
   it broad enough to mean nothing. This does **not** exclude the enumerated
-  policy-violation findings of R3 — `layered-claim.coverage-incomplete` and
-  `tasks.archive-lag` are findings *about* a measurement crossing a policy threshold, and
-  the measurement is retained alongside. §9 is the exhaustive list; no producer may add
-  another without a ledger row.
+  policy-violation findings of R3 — `layered-claim.coverage-incomplete` is a finding
+  *about* a measurement crossing a policy threshold, and the measurement is retained
+  alongside. §9 is the exhaustive list; no producer may add another without a ledger
+  row.
 - Retiring `doc/curations/` ledgers. The curation sweep's narrative output is a Spec 2
   question; Spec 1 only removes the reason it needs prose carry-over parsing.
 

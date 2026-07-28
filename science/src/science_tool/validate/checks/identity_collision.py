@@ -24,14 +24,25 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.identity_table import (
     IdentityCollision,
     IdentityTable,
     build_identity_table,
 )
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="identity-collision",
+    section_title="identity collision",
+    section_order=138,
+    rule_ids=("identity.forbidden-second-declaration",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def graded_collisions(table: IdentityTable) -> list[tuple[Severity, IdentityCollision]]:
@@ -45,8 +56,8 @@ def graded_collisions(table: IdentityTable) -> list[tuple[Severity, IdentityColl
     return [(Severity.ERROR if collision.is_genuine else Severity.WARN, collision) for collision in table.collisions()]
 
 
-@Check(section="forbidden second owner declaration (identity collision)...", order=50)
-def check_forbidden_second_declaration(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=50, producer_id="validate.identity-collision", rules=tuple(RULES.values()))
+def check_forbidden_second_declaration(ctx: ValidateContext) -> Iterator[CheckObservation]:
     # Non-strict + no commons, matching the orphan check: a diagnostic must not abort
     # on the collision it reports, and a commons owner + a local owner of the same id
     # are two DIFFERENT keys (different owner_scope), never a same-scope collision.
@@ -71,11 +82,12 @@ def check_forbidden_second_declaration(ctx: ValidateContext) -> Iterator[Result]
                 "§C3) — rollout debt carried until §B5 retirement; remove the stub "
                 "to clear it."
             )
-        yield Result(
-            severity,
-            first,
-            None,
-            f"{collision.canonical_id}: two owner declarations in scope '{collision.owner_scope}' ({joined}); {detail}",
-            "forbidden-second-declaration",
-            None,
+        yield validation_observation(
+            severity=severity,
+            path=first,
+            line=None,
+            message=f"{collision.canonical_id}: two owner declarations in scope '{collision.owner_scope}' ({joined}); {detail}",
+            rule=RULES["identity.forbidden-second-declaration"],
+            task=None,
+            qualifiers={"key": []},
         )

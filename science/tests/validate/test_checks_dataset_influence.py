@@ -12,7 +12,7 @@ _MANIFEST = "name: demo\nknowledge_profiles:\n  local: local\n"
 
 
 def _rules(results):
-    return [(r.severity, r.rule) for r in results]
+    return [(r.severity, r.rule_id) for r in results]
 
 
 def _ctx(root: Path) -> ValidateContext:
@@ -202,7 +202,7 @@ def test_unresolved_refs_use_pinned_severities() -> None:
     )
 
     assert _rules(results) == [
-        (Severity.INFO, "dataset-influence.ref-unresolved-unavailable"),
+        (Severity.INFO, None),
         (Severity.WARN, "dataset-influence.ref-unresolved"),
     ]
 
@@ -285,9 +285,7 @@ def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
 
 
-def test_check_dataset_influence_paper_datasets_field_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_paper_datasets_field_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
@@ -498,7 +496,7 @@ def test_check_dataset_influence_unbuilt_commons_ref_infos(tmp_path: Path, monke
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
-    assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
+    assert _rules(results) == [(Severity.INFO, None)]
 
 
 def test_check_dataset_influence_empty_commons_dir_ref_infos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -512,7 +510,7 @@ def test_check_dataset_influence_empty_commons_dir_ref_infos(tmp_path: Path, mon
 
     results = list(check_dataset_influence(_ctx(tmp_path)))
 
-    assert _rules(results) == [(Severity.INFO, "dataset-influence.ref-unresolved-unavailable")]
+    assert _rules(results) == [(Severity.INFO, None)]
 
 
 def test_check_dataset_influence_built_commons_missing_ref_warns(
@@ -539,7 +537,7 @@ def test_dataset_influence_registration_after_genesets() -> None:
     importlib.reload(dataset_influence)
 
     ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
-    genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "gene-set collections")
+    genesets_index = next(index for index, entry in enumerate(ordered) if entry[0] == "genesets")
     influence_index = next(index for index, entry in enumerate(ordered) if entry[0] == "dataset influence")
     assert influence_index == genesets_index + 1
 
@@ -562,7 +560,7 @@ def test_row_usage_refs_unresolved_uses_pinned_severities() -> None:
     )
 
     assert _rules(results) == [
-        (Severity.INFO, "dataset-influence.ref-unresolved-unavailable"),
+        (Severity.INFO, None),
         (Severity.WARN, "dataset-influence.ref-unresolved"),
     ]
 
@@ -715,4 +713,3 @@ def test_non_dependence_role_with_omitted_overlap_does_not_warn(role: str) -> No
 
     rule_pairs = _rules(results)
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
-

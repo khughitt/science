@@ -6,22 +6,41 @@ import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.tooling_dependency import (
     CANONICAL_SCIENCE_SOURCE,
     ScienceSourceKind,
     inspect_science_dependency,
 )
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "tooling", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="tooling",
+    section_title="tooling",
+    section_order=101,
+    rule_ids=("tooling.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="tooling scaffold...", order=0)
-def check_tooling(ctx: ValidateContext) -> Iterator[Result]:
+def _result(severity: Severity, path: str | None, message: str) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["tooling.check"],
+        task=None,
+        qualifiers={"key": []},
+    )
+
+
+@Check(section=SECTION, order=0, producer_id="validate.tooling", rules=tuple(RULES.values()))
+def check_tooling(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Validate static tooling scaffold files.
 
     The optional bash smoke test for `uv run science --help` is intentionally

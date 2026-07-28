@@ -49,10 +49,10 @@ def test_no_broken_refs_emits_exact_info_and_no_warns(tmp_path: Path, monkeypatc
 
     results = list(references.check_references(_ctx(tmp_path)))
 
-    assert [(result.severity, result.message, result.rule) for result in results] == [
-        (Severity.INFO, "Reference integrity check complete (no broken refs)", "references")
+    assert [(result.severity, result.message, result.rule_id) for result in results] == [
+        (Severity.INFO, "Reference integrity check complete (no broken refs)", None)
     ]
-    assert not any(result.severity is Severity.WARN for result in results)
+    assert not any(result.severity == Severity.WARN.value for result in results)
 
 
 def test_broken_refs_are_grouped_by_type_and_sorted(tmp_path: Path, monkeypatch) -> None:
@@ -71,9 +71,9 @@ def test_broken_refs_are_grouped_by_type_and_sorted(tmp_path: Path, monkeypatch)
 
     results = list(references.check_references(_ctx(tmp_path)))
 
-    assert [(result.severity, result.message, result.rule) for result in results] == [
-        (Severity.WARN, "1 broken refs: citation", "references"),
-        (Severity.WARN, "2 broken refs: link", "references"),
+    assert [(result.severity, result.message, result.rule_id) for result in results] == [
+        (Severity.WARN, "1 broken refs: citation", "references.check"),
+        (Severity.WARN, "2 broken refs: link", "references.check"),
     ]
 
 
@@ -101,8 +101,8 @@ def test_registration_includes_references_between_hypotheses_and_papers() -> Non
     importlib.reload(papers)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-4:]] == [
-        ("hypotheses...", 5),
-        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
-        ("reference integrity...", 7),
-        ("paper summaries...", 7),
+        ("hypotheses", 5),
+        ("hypotheses", 6),  # check_dangling_lineage -- the cross-record lineage layer
+        ("references", 7),
+        ("papers", 7),
     ]

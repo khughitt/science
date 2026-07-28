@@ -13,12 +13,14 @@ REGISTRY = build_registry(
         FindingProducer(
             producer_id="dataset_anomalies",
             namespace="health_checks",
+            source_module="graph/health_checks/test.py",
             rules=(),
             sections=(),
             metrics_schema=None,
             remediators=frozenset(),
         )
-    ]
+    ],
+    active_kinds=frozenset(),
 )
 
 
@@ -58,7 +60,7 @@ def _attestation_args() -> list[str]:
 
 
 def test_ingest_reports_what_it_did(tmp_path, monkeypatch):
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
     result = CliRunner().invoke(
@@ -126,7 +128,7 @@ def test_ingest_requires_each_explicit_attestation_flag(tmp_path, missing_option
 
 
 def test_ingest_refuses_a_report_attestation_mismatch(tmp_path, monkeypatch):
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
     result = CliRunner().invoke(
@@ -154,7 +156,7 @@ def test_ingest_cli_refuses_graph_identity_collisions_before_case_writes(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
     for name in ("q1.md", "q1-duplicate.md"):
         path = tmp_path / "entities" / "questions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,7 +187,7 @@ def test_ingest_cli_wraps_malformed_graph_configuration_as_a_refusal(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
     (tmp_path / "science.yaml").write_text(
         "name: [unterminated\n",
         encoding="utf-8",
@@ -268,9 +270,7 @@ def test_ingest_cli_wraps_commons_context_failures_as_zero_write_refusals(
 
 
 def test_list_on_a_project_with_no_cases_is_empty_and_exits_zero(tmp_path):
-    result = CliRunner().invoke(
-        findings_group, ["list", "--project-root", str(tmp_path), "--format", "json"]
-    )
+    result = CliRunner().invoke(findings_group, ["list", "--project-root", str(tmp_path), "--format", "json"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == []
 
@@ -281,9 +281,7 @@ def test_list_refuses_every_markdown_leaf_that_is_not_a_bound_case(tmp_path, nam
     cases.mkdir(parents=True)
     (cases / name).write_text("not a case", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        findings_group, ["list", "--project-root", str(tmp_path)]
-    )
+    result = CliRunner().invoke(findings_group, ["list", "--project-root", str(tmp_path)])
 
     assert result.exit_code == 2
     assert name in result.output

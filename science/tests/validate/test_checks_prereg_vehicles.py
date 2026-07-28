@@ -76,7 +76,7 @@ def _write_prereg(
 
 
 def _rules(results: list[Result]) -> list[str]:
-    return [result.rule or "" for result in results]
+    return [result.rule_id or "" for result in results]
 
 
 def _vehicle_block(path: str, digest: str) -> str:
@@ -390,10 +390,7 @@ def test_candidate_paths_rejects_root_level_names_in_every_normalized_form() -> 
     """
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
 
-    body = (
-        "`input.parquet` and `./input.parquet` and `input.parquet/` "
-        "and `././input.parquet` and `build/./`"
-    )
+    body = "`input.parquet` and `./input.parquet` and `input.parquet/` and `././input.parquet` and `build/./`"
 
     assert _candidate_paths(body) == []
 
@@ -582,9 +579,7 @@ def test_an_ignored_directory_holding_a_force_added_file_is_treated_as_durable(
     assert _nondurable_state(project, "build") is None
 
 
-def test_nondurable_state_is_silent_when_the_ignore_query_fails(
-    project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_nondurable_state_is_silent_when_the_ignore_query_fails(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """First query fails: a git failure must never become a finding."""
     from science_tool.validate.checks import prereg_vehicles
 
@@ -655,7 +650,7 @@ def test_the_prose_message_does_not_assert_the_path_is_a_substrate(project: Path
     _write_prereg(project, body="results land in `build/out.json`\n")
 
     results = list(check_prereg_vehicles(_ctx(project)))
-    prose = [r for r in results if r.rule == "prereg.prose-path-nondurable"]
+    prose = [r for r in results if r.rule_id == "prereg.prose-path-nondurable"]
 
     assert len(prose) == 1
     message = prose[0].message
@@ -684,7 +679,7 @@ def test_a_tracked_prose_path_is_silent(project: Path) -> None:
 
 
 def test_a_prose_path_that_does_not_resolve_is_silent(project: Path) -> None:
-    """"Destroyed", "illustrative" and "renamed" are indistinguishable."""
+    """\"Destroyed\", \"illustrative\" and \"renamed\" are indistinguishable."""
     _write_prereg(project, body="once lived at `pipeline/gone/export.json`\n")
 
     assert _rules(list(check_prereg_vehicles(_ctx(project)))) == ["prereg.vehicle-undeclared"]
@@ -767,9 +762,7 @@ def test_prose_paths_outside_a_git_repository_are_silent(tmp_path: Path) -> None
     assert _rules(list(check_prereg_vehicles(_ctx(tmp_path)))) == ["prereg.vehicle-undeclared"]
 
 
-def test_the_rule_is_silent_when_git_cannot_answer(
-    project: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_the_rule_is_silent_when_git_cannot_answer(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The caller's half of the tri-state contract."""
     from science_tool.validate.checks import prereg_vehicles
 

@@ -5,7 +5,7 @@ from science_tool.validate.result import Severity
 
 
 def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
-    return [(r.severity, r.rule) for r in evaluate_dataset_taxonomy(datasets)]
+    return [(r.severity, r.rule_id) for r in evaluate_dataset_taxonomy(datasets)]
 
 
 def _ds(**kw) -> dict:

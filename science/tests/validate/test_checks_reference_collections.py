@@ -291,7 +291,7 @@ def test_member_with_existing_parent_passes(
     # Parent is LOCAL; an empty commons is present but irrelevant.
     _empty_commons(tmp_path, monkeypatch)
     results = list(check_reference_collections(_ctx(refcoll_project)))
-    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
 
 
 def test_member_with_missing_parent_errors(
@@ -300,10 +300,10 @@ def test_member_with_missing_parent_errors(
     # Parent is NON-local; empty commons is a dir but lacks the id → unresolved ERROR.
     _empty_commons(tmp_path, monkeypatch)
     results = list(check_reference_collections(_ctx(refcoll_project_missing_parent)))
-    errors = [r for r in results if r.severity is Severity.ERROR]
+    errors = [r for r in results if r.severity == Severity.ERROR.value]
     assert len(errors) == 1
     assert "parent_dataset" in errors[0].message
-    assert errors[0].rule == "reference-collection.unresolved-parent"
+    assert errors[0].rule_id == "reference-collection.unresolved-parent"
 
 
 def test_declared_unresolved_with_present_parent_infos(
@@ -312,8 +312,8 @@ def test_declared_unresolved_with_present_parent_infos(
     # Parent EXISTS locally + member declares declared_unresolved → no ERROR, one INFO.
     _empty_commons(tmp_path, monkeypatch)
     results = list(check_reference_collections(_ctx(refcoll_project_declared_unresolved)))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    infos = [r for r in results if r.rule == "reference-collection.declared-unresolved"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
 
 
@@ -325,9 +325,9 @@ def test_declared_unresolved_does_not_bypass_missing_parent(
     # Parent is NON-local; empty commons is a dir but lacks the id → unresolved ERROR.
     _empty_commons(tmp_path, monkeypatch)
     results = list(check_reference_collections(_ctx(refcoll_project_declared_unresolved_missing_parent)))
-    errors = [r for r in results if r.severity is Severity.ERROR]
+    errors = [r for r in results if r.severity == Severity.ERROR.value]
     assert len(errors) == 1
-    assert errors[0].rule == "reference-collection.unresolved-parent"
+    assert errors[0].rule_id == "reference-collection.unresolved-parent"
 
 
 def test_non_member_datasets_ignored(
@@ -345,9 +345,9 @@ def test_malformed_member_yields_error_not_crash(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "empty-commons"))
     (tmp_path / "empty-commons").mkdir()
     results = list(check_reference_collections(_ctx(refcoll_project_malformed_member)))  # must not raise
-    malformed = [r for r in results if r.rule == "reference-collection.malformed-member"]
+    malformed = [r for r in results if r.rule_id == "reference-collection.malformed-member"]
     assert len(malformed) == 1
-    assert malformed[0].severity is Severity.ERROR
+    assert malformed[0].severity == Severity.ERROR.value
 
 
 def test_commons_unavailable_yields_info_not_error(
@@ -356,8 +356,8 @@ def test_commons_unavailable_yields_info_not_error(
     # F2: non-local parent + commons root that does not exist → INFO, never crash/ERROR.
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "does-not-exist"))
     results = list(check_reference_collections(_ctx(refcoll_project_missing_parent)))  # must not raise
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    infos = [r for r in results if r.rule == "reference-collection.commons-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
 
 
@@ -368,8 +368,8 @@ def test_commons_hosted_parent_resolves(
     project_root, commons_root = refcoll_project_commons_parent
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
     results = list(check_reference_collections(_ctx(project_root)))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    assert not [r for r in results if r.rule == "reference-collection.commons-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    assert not [r for r in results if r.rule_id is None]
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +417,6 @@ def test_parent_mismatch_warns(
     # derivation.parent_dataset (dataset:parent-collection) is LOCAL → only the WARN fires.
     _empty_commons(tmp_path, monkeypatch)
     results = list(check_reference_collections(_ctx(refcoll_project_parent_mismatch)))
-    warns = [r for r in results if r.rule == "reference-collection.parent-mismatch"]
+    warns = [r for r in results if r.rule_id == "reference-collection.parent-mismatch"]
     assert len(warns) == 1
-    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]

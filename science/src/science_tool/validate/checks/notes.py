@@ -77,9 +77,11 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.validate.checks import Check
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _NOTE_DIRS = (
     ("topics", "topic"),
@@ -104,8 +106,31 @@ _COMMON_SECTIONS = ("## Summary", "## Thoughts", "## Connections to Project", "#
 _TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*:")
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "notes", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="notes",
+    section_title="notes",
+    section_order=120,
+    rule_ids=("notes.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["notes.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _field_value(frontmatter: list[str], field: str) -> str | None:
@@ -137,21 +162,31 @@ def _datasets_is_list(frontmatter: list[str]) -> bool:
     return _has_block_list(frontmatter, "datasets")
 
 
-@Check(section="notes...", order=16)
-def check_notes(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=16, producer_id="validate.notes", rules=tuple(RULES.values()))
+def check_notes(ctx: ValidateContext) -> Iterator[CheckObservation]:
     notes_dir = ctx.project_root / "notes"
     if not notes_dir.is_dir():
         return
 
     if not (notes_dir / "index.md").is_file():
-        yield _result(Severity.WARN, "notes/index.md", "notes/index.md missing — add a notes coverage index")
+        yield _result(
+            Severity.WARN,
+            "notes/index.md",
+            "notes/index.md missing — add a notes coverage index",
+            key=["index"],
+        )
 
     for directory, expected_type in _NOTE_DIRS:
         for path in sorted((notes_dir / directory).glob("*.md")):
             if not path.is_file():
                 continue
             relative = path.relative_to(ctx.project_root).as_posix()
-            yield _result(Severity.INFO, relative, f"Checking {relative}...")
+            yield _result(
+                Severity.INFO,
+                relative,
+                f"Checking {relative}...",
+                key=["progress"],
+            )
 
             text = ctx.read_text_cached(path)
             lines = text.splitlines()
@@ -160,6 +195,7 @@ def check_notes(ctx: ValidateContext) -> Iterator[Result]:
                     Severity.WARN,
                     relative,
                     f"{relative} missing YAML frontmatter start marker (---)",
+                    key=["frontmatter", "start"],
                 )
                 continue
 
@@ -170,6 +206,7 @@ def check_notes(ctx: ValidateContext) -> Iterator[Result]:
                     Severity.WARN,
                     relative,
                     f"{relative} missing YAML frontmatter end marker (---)",
+                    key=["frontmatter", "end"],
                 )
                 continue
 
@@ -180,10 +217,16 @@ def check_notes(ctx: ValidateContext) -> Iterator[Result]:
                         Severity.WARN,
                         relative,
                         f"{relative} frontmatter missing field: {field}",
+                        key=["field", field],
                     )
 
             if any(line.startswith("datasets:") for line in frontmatter) and not _datasets_is_list(frontmatter):
-                yield _result(Severity.WARN, relative, f"{relative} datasets field should be an array/list")
+                yield _result(
+                    Severity.WARN,
+                    relative,
+                    f"{relative} datasets field should be an array/list",
+                    key=["field", "datasets"],
+                )
 
             parsed_type = _field_value(frontmatter, "type")
             if parsed_type and parsed_type != expected_type:
@@ -191,6 +234,7 @@ def check_notes(ctx: ValidateContext) -> Iterator[Result]:
                     Severity.WARN,
                     relative,
                     f"{relative} type '{parsed_type}' does not match expected '{expected_type}'",
+                    key=["field", "type"],
                 )
 
             parsed_id = _field_value(frontmatter, "id")
@@ -199,8 +243,14 @@ def check_notes(ctx: ValidateContext) -> Iterator[Result]:
                     Severity.WARN,
                     relative,
                     f"{relative} id '{parsed_id}' should start with '{expected_type}:'",
+                    key=["field", "id-prefix"],
                 )
 
             for section in _COMMON_SECTIONS:
                 if section not in text:
-                    yield _result(Severity.WARN, relative, f"{relative} missing section: {section}")
+                    yield _result(
+                        Severity.WARN,
+                        relative,
+                        f"{relative} missing section: {section}",
+                        key=["required-section", section],
+                    )

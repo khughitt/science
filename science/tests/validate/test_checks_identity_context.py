@@ -49,7 +49,7 @@ def test_datapackage_identity_stamp_disagreement_errors() -> None:
 
     results = list(evaluate_datapackage_identity_stamps([ds], {"dataset:x": ("data/x/datapackage.yaml", datapackage)}))
 
-    assert [(r.severity, r.rule) for r in results] == [(Severity.ERROR, "identity.datapackage-stamp-disagreement")]
+    assert [(r.severity, r.rule_id) for r in results] == [(Severity.ERROR, "identity.datapackage-stamp-disagreement")]
 
 
 def test_datapackage_identity_stamp_absent_is_skipped() -> None:
@@ -69,10 +69,12 @@ def test_resolved_assembly_passes_silently() -> None:
 def test_unresolved_assembly_errors() -> None:
     ds = _ds(_COORD_PROFILE, identity_context={"taxon": 9606, "assembly": _assembly("NOT_IN_REGISTRY")})
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
     assert len(errors) == 1
-    assert errors[0].rule == "identity.assembly-unresolved"
+    assert errors[0].rule_id == "identity.assembly-unresolved"
 
 
 def test_declared_unresolved_assembly_infos() -> None:
@@ -81,8 +83,8 @@ def test_declared_unresolved_assembly_infos() -> None:
         identity_context={"taxon": 9606, "assembly": _assembly("WHATEVER", status="declared_unresolved")},
     )
     results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    assert [r for r in results if r.rule == "identity.assembly-declared-unresolved"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    assert [r for r in results if r.rule_id is None]
 
 
 def test_cna_without_assembly_errors() -> None:
@@ -92,10 +94,12 @@ def test_cna_without_assembly_errors() -> None:
     )
 
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
 
-    assert [r.rule for r in errors] == ["identity.assembly-undeclared"]
+    assert [r.rule_id for r in errors] == ["identity.assembly-undeclared"]
 
 
 def test_declared_unresolved_assembly_without_seqcol_digest_passes_declaration_gate() -> None:
@@ -112,7 +116,8 @@ def test_declared_unresolved_assembly_without_seqcol_digest_passes_declaration_g
     assert not [
         r
         for r in results
-        if r.severity is Severity.ERROR and r.rule in {"identity.assembly-undeclared", "identity.assembly-malformed"}
+        if r.severity == Severity.ERROR.value
+        and r.rule_id in {"identity.assembly-undeclared", "identity.assembly-malformed"}
     ]
 
 
@@ -131,7 +136,7 @@ def test_declared_unresolved_assembly_with_unknown_seqcol_digest_passes_malforme
 
     results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
 
-    assert not [r for r in results if r.severity is Severity.ERROR and r.rule == "identity.assembly-malformed"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value and r.rule_id == "identity.assembly-malformed"]
 
 
 def test_geneset_without_gene_tier_errors() -> None:
@@ -141,10 +146,12 @@ def test_geneset_without_gene_tier_errors() -> None:
     )
 
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
 
-    assert [r.rule for r in errors] == ["identity.gene-undeclared"]
+    assert [r.rule_id for r in errors] == ["identity.gene-undeclared"]
 
 
 def test_base_profile_clinical_table_requires_no_identity_context() -> None:
@@ -160,10 +167,12 @@ def test_identity_bearing_profile_without_taxon_errors() -> None:
     )
 
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
 
-    assert [r.rule for r in errors] == ["identity.taxon-undeclared"]
+    assert [r.rule_id for r in errors] == ["identity.taxon-undeclared"]
 
 
 def test_variant_declaration_requires_taxon() -> None:
@@ -175,11 +184,13 @@ def test_variant_declaration_requires_taxon() -> None:
     )
 
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
 
     assert required_identity_tiers(ds["schema_profile"], ds["identity_context"]) == {"variant"}
-    assert [r.rule for r in errors] == ["identity.taxon-undeclared"]
+    assert [r.rule_id for r in errors] == ["identity.taxon-undeclared"]
 
 
 def test_required_identity_tiers_from_schema_profile_and_variant_presence() -> None:
@@ -201,9 +212,11 @@ def test_required_identity_tiers_from_schema_profile_and_variant_presence() -> N
 def test_freetext_reference_genome_without_identity_context_errors() -> None:
     ds = _ds("science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0", reference_genome="GRCh38")
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert [r.rule for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
+    assert [r.rule_id for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
 
 
 def test_non_coordinate_dataset_ignored() -> None:
@@ -222,9 +235,9 @@ def test_foreign_registry_is_not_validated_against_default() -> None:
         },
     )
     results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    assert not [r for r in results if r.rule == "identity.assembly-declared-unresolved"]
-    assert [r for r in results if r.rule == "identity.registry-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    assert not [r for r in results if "declared_unresolved" in r.message]
+    assert [r for r in results if "registry" in r.message and "unavailable" in r.message]
 
 
 def test_registry_unavailable_cannot_falsely_error() -> None:
@@ -234,16 +247,18 @@ def test_registry_unavailable_cannot_falsely_error() -> None:
         _COORD_PROFILE, identity_context={"taxon": 9606, "assembly": _assembly("g04lKdxiYtG3dOGeUC5AdKEifw65G0Wp")}
     )
     results = list(evaluate_identity_context([ds], registry_keys_by_id={_REGISTRY: None}))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    assert [r for r in results if r.rule == "identity.registry-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    assert [r for r in results if r.rule_id is None]
 
 
 def test_malformed_assembly_not_a_dict_errors() -> None:
     ds = _ds(_COORD_PROFILE, identity_context={"taxon": 9606, "assembly": "GRCh38"})
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errors) == 1 and errors[0].rule == "identity.assembly-malformed"
+    assert len(errors) == 1 and errors[0].rule_id == "identity.assembly-malformed"
 
 
 def test_missing_seqcol_digest_errors() -> None:
@@ -252,9 +267,11 @@ def test_missing_seqcol_digest_errors() -> None:
         identity_context={"taxon": 9606, "assembly": {"registry": _REGISTRY, "resolution_status": "resolved"}},
     )
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errors) == 1 and errors[0].rule == "identity.assembly-malformed"
+    assert len(errors) == 1 and errors[0].rule_id == "identity.assembly-malformed"
 
 
 def test_missing_registry_errors() -> None:
@@ -263,17 +280,21 @@ def test_missing_registry_errors() -> None:
         identity_context={"taxon": 9606, "assembly": {"seqcol_digest": "X", "resolution_status": "resolved"}},
     )
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errors) == 1 and errors[0].rule == "identity.assembly-malformed"
+    assert len(errors) == 1 and errors[0].rule_id == "identity.assembly-malformed"
 
 
 def test_bad_resolution_status_errors() -> None:
     ds = _ds(_COORD_PROFILE, identity_context={"taxon": 9606, "assembly": _assembly("X", status="maybe")})
     errors = [
-        r for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errors) == 1 and errors[0].rule == "identity.assembly-malformed"
+    assert len(errors) == 1 and errors[0].rule_id == "identity.assembly-malformed"
 
 
 def _with_assembly(id_: str, digest: str, **extra) -> dict:
@@ -298,7 +319,7 @@ def test_inputs_spanning_two_assemblies_warns() -> None:
     warns = [
         r
         for r in evaluate_cross_dataset_assembly([a, b, derived])
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -434,7 +455,7 @@ def test_cross_dataset_mismatch_with_liftover_transform_but_no_exact_digests_war
             [source, derived],
             compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: relations},
         )
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -463,7 +484,7 @@ def test_cross_dataset_mismatch_with_frontmatter_only_still_warns() -> None:
         for r in evaluate_cross_dataset_assembly(
             [a, derived], compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: []}
         )
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -493,7 +514,7 @@ def test_cross_dataset_mismatch_with_wrong_liftover_target_warns() -> None:
             [a, derived],
             compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]},
         )
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -574,7 +595,7 @@ def test_cross_dataset_mismatch_with_partial_lifted_parents_warns() -> None:
             [a, b, derived],
             compatibility_relations_by_dataset_id={_LIFTOVER_DATASET: [_relation("DIGEST_37", "DIGEST_38")]},
         )
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -610,7 +631,7 @@ def test_load_relations_fallback_keeps_warning_when_dataset_unresolvable() -> No
     warns = [
         r
         for r in evaluate_cross_dataset_assembly([a, derived], compatibility_relations_by_dataset_id=relation_map)
-        if r.rule == "identity.cross-dataset-assembly-mismatch"
+        if r.rule_id == "identity.cross-dataset-assembly-mismatch"
     ]
     assert len(warns) == 1
 
@@ -720,9 +741,9 @@ def test_transform_dataset_missing_real_dataset_entity_errors() -> None:
         },
     )
 
-    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-reference-missing"]
 
 
 def test_proxy_via_missing_real_dataset_entity_errors() -> None:
@@ -747,9 +768,9 @@ def test_proxy_via_missing_real_dataset_entity_errors() -> None:
         },
     )
 
-    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([source, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-reference-missing"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-reference-missing"]
 
 
 def test_transform_dataset_in_inputs_but_not_transformations_errors() -> None:
@@ -773,9 +794,11 @@ def test_transform_dataset_in_inputs_but_not_transformations_errors() -> None:
         derivation={"inputs": ["dataset:source-a", "dataset:liftover-chain"]},
     )
 
-    errors = [r for r in evaluate_identity_provenance([source, liftover, derived]) if r.severity is Severity.ERROR]
+    errors = [
+        r for r in evaluate_identity_provenance([source, liftover, derived]) if r.severity == Severity.ERROR.value
+    ]
 
-    assert [r.rule for r in errors] == ["identity.provenance-reference-role-missing"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-reference-role-missing"]
 
 
 def test_proxy_source_absent_from_derivation_inputs_errors() -> None:
@@ -789,9 +812,9 @@ def test_proxy_source_absent_from_derivation_inputs_errors() -> None:
         },
     )
 
-    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-source-role-missing"]
 
 
 def test_proxy_source_only_in_transformations_not_inputs_errors() -> None:
@@ -808,9 +831,9 @@ def test_proxy_source_only_in_transformations_not_inputs_errors() -> None:
         },
     )
 
-    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([source, via, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-source-role-missing"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-source-role-missing"]
 
 
 def test_mixed_build_derived_output_without_proxy_or_transform_errors() -> None:
@@ -828,9 +851,9 @@ def test_mixed_build_derived_output_without_proxy_or_transform_errors() -> None:
         derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
     )
 
-    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-mixed-build-unstructured"]
 
 
 def test_mixed_build_derived_output_with_empty_proxy_errors_as_unstructured() -> None:
@@ -849,9 +872,9 @@ def test_mixed_build_derived_output_with_empty_proxy_errors_as_unstructured() ->
         derivation={"inputs": ["dataset:source-a", "dataset:source-b"]},
     )
 
-    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([a, b, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-mixed-build-unstructured"]
 
 
 def test_mixed_build_proxy_with_blank_source_dataset_errors_as_unstructured() -> None:
@@ -878,9 +901,9 @@ def test_mixed_build_proxy_with_blank_source_dataset_errors_as_unstructured() ->
         },
     )
 
-    errors = [r for r in evaluate_identity_provenance([a, b, proxy, derived]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_identity_provenance([a, b, proxy, derived]) if r.severity == Severity.ERROR.value]
 
-    assert [r.rule for r in errors] == ["identity.provenance-mixed-build-unstructured"]
+    assert [r.rule_id for r in errors] == ["identity.provenance-mixed-build-unstructured"]
 
 
 def test_identity_context_not_a_dict_treated_as_undeclared_errors() -> None:
@@ -888,8 +911,8 @@ def test_identity_context_not_a_dict_treated_as_undeclared_errors() -> None:
     # not crash; it falls through to declaration-gate errors.
     ds = _ds(_COORD_PROFILE, identity_context="GRCh38")
     results = list(evaluate_identity_context([ds], registry_keys_by_id=_KEYS_BY_ID))
-    errors = [r for r in results if r.severity is Severity.ERROR]
-    assert [r.rule for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
+    errors = [r for r in results if r.severity == Severity.ERROR.value]
+    assert [r.rule_id for r in errors] == ["identity.taxon-undeclared", "identity.assembly-undeclared"]
 
 
 # ---------------------------------------------------------------------------
@@ -938,16 +961,18 @@ def test_gene_default_registry_used_when_unspecified() -> None:
 def test_gene_unsupported_namespace_errors() -> None:
     ds = _gene_ds({"namespace": "refseq"})
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-namespace-unsupported"
 
 
 def test_gene_declared_unresolved_infos() -> None:
     ds = _gene_ds({"namespace": "hgnc_id", "resolution_status": "declared_unresolved"})
     res = list(evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID))
-    assert not [r for r in res if r.severity is Severity.ERROR]
-    assert [r for r in res if r.rule == "identity.gene-declared-unresolved"]
+    assert not [r for r in res if r.severity == Severity.ERROR.value]
+    assert [r for r in res if r.rule_id is None]
 
 
 def test_gene_declared_unresolved_with_unsupported_namespace_still_errors() -> None:
@@ -955,9 +980,11 @@ def test_gene_declared_unresolved_with_unsupported_namespace_still_errors() -> N
     # is validated FIRST. The gene tier must use a recognized gene namespace.
     ds = _gene_ds({"namespace": "refseq", "resolution_status": "declared_unresolved"})
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-namespace-unsupported"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-namespace-unsupported"
 
 
 def test_gene_wrong_registry_type_errors() -> None:
@@ -969,31 +996,35 @@ def test_gene_wrong_registry_type_errors() -> None:
         }
     }
     ds = _gene_ds({"namespace": "hgnc_id", "registry": "dataset:assembly-registry"})
-    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=meta) if r.severity is Severity.ERROR]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-registry-invalid"
+    errs = [r for r in evaluate_gene_identity([ds], registry_meta_by_id=meta) if r.severity == Severity.ERROR.value]
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-registry-invalid"
 
 
 def test_gene_unloadable_registry_infos_not_errors() -> None:
     ds = _gene_ds({"namespace": "hgnc_id"})
     res = list(evaluate_gene_identity([ds], registry_meta_by_id={_GENE_REGISTRY: None}))
-    assert not [r for r in res if r.severity is Severity.ERROR]
-    assert [r for r in res if r.rule == "identity.gene-registry-unavailable"]
+    assert not [r for r in res if r.severity == Severity.ERROR.value]
+    assert [r for r in res if r.rule_id is None]
 
 
 def test_gene_not_a_dict_errors() -> None:
     ds = _gene_ds("hgnc_id")  # the gene tier must be an object
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-malformed"
 
 
 def test_gene_missing_namespace_errors() -> None:
     ds = _gene_ds({"canonical": True})
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-malformed"
 
 
 def test_gene_malformed_registry_errors() -> None:
@@ -1001,18 +1032,22 @@ def test_gene_malformed_registry_errors() -> None:
     # as malformed, not degrade to a misleading registry-unavailable INFO.
     ds = _gene_ds({"namespace": "hgnc_id", "registry": "gene-crosswalk-hgnc"})
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-malformed"
 
 
 def test_gene_bad_resolution_status_errors() -> None:
     # 'maybe' must not be treated like 'resolved' and pass silently.
     ds = _gene_ds({"namespace": "hgnc_id", "resolution_status": "maybe"})
     errs = [
-        r for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID) if r.severity is Severity.ERROR
+        r
+        for r in evaluate_gene_identity([ds], registry_meta_by_id=_GENE_META_BY_ID)
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.gene-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.gene-malformed"
 
 
 def test_dataset_without_gene_decl_ignored() -> None:
@@ -1063,16 +1098,16 @@ def test_protein_unsupported_namespace_errors() -> None:
     errs = [
         r
         for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
-        if r.severity is Severity.ERROR
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-namespace-unsupported"
 
 
 def test_protein_declared_unresolved_infos() -> None:
     ds = _protein_ds({"namespace": "uniprot", "resolution_status": "declared_unresolved"})
     res = list(evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID))
-    assert not [r for r in res if r.severity is Severity.ERROR]
-    assert [r for r in res if r.rule == "identity.protein-declared-unresolved"]
+    assert not [r for r in res if r.severity == Severity.ERROR.value]
+    assert [r for r in res if r.rule_id is None]
 
 
 def test_protein_declared_unresolved_with_unsupported_namespace_still_errors() -> None:
@@ -1080,9 +1115,9 @@ def test_protein_declared_unresolved_with_unsupported_namespace_still_errors() -
     errs = [
         r
         for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
-        if r.severity is Severity.ERROR
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-namespace-unsupported"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-namespace-unsupported"
 
 
 def test_protein_wrong_registry_type_errors() -> None:
@@ -1093,15 +1128,15 @@ def test_protein_wrong_registry_type_errors() -> None:
         }
     }
     ds = _protein_ds({"namespace": "uniprot", "registry": "dataset:gene-crosswalk-hgnc"})
-    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=meta) if r.severity is Severity.ERROR]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-registry-invalid"
+    errs = [r for r in evaluate_protein_identity([ds], registry_meta_by_id=meta) if r.severity == Severity.ERROR.value]
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-registry-invalid"
 
 
 def test_protein_unloadable_registry_infos_not_errors() -> None:
     ds = _protein_ds({"namespace": "uniprot"})
     res = list(evaluate_protein_identity([ds], registry_meta_by_id={_PROTEIN_REGISTRY: None}))
-    assert not [r for r in res if r.severity is Severity.ERROR]
-    assert [r for r in res if r.rule == "identity.protein-registry-unavailable"]
+    assert not [r for r in res if r.severity == Severity.ERROR.value]
+    assert [r for r in res if r.rule_id is None]
 
 
 def test_protein_malformed_registry_errors() -> None:
@@ -1109,9 +1144,9 @@ def test_protein_malformed_registry_errors() -> None:
     errs = [
         r
         for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
-        if r.severity is Severity.ERROR
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-malformed"
 
 
 def test_protein_bad_resolution_status_errors() -> None:
@@ -1119,9 +1154,9 @@ def test_protein_bad_resolution_status_errors() -> None:
     errs = [
         r
         for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
-        if r.severity is Severity.ERROR
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-malformed"
 
 
 def test_protein_not_a_dict_errors() -> None:
@@ -1129,9 +1164,9 @@ def test_protein_not_a_dict_errors() -> None:
     errs = [
         r
         for r in evaluate_protein_identity([ds], registry_meta_by_id=_PROTEIN_META_BY_ID)
-        if r.severity is Severity.ERROR
+        if r.severity == Severity.ERROR.value
     ]
-    assert len(errs) == 1 and errs[0].rule == "identity.protein-malformed"
+    assert len(errs) == 1 and errs[0].rule_id == "identity.protein-malformed"
 
 
 def test_dataset_without_protein_decl_ignored() -> None:

@@ -23,9 +23,7 @@ from science_tool.cli import main
 from science_tool.graph.store import INITIAL_GRAPH_TEMPLATE, _graph_uri, _load_dataset, _resolve_term, _save_dataset
 
 TASK_IDS = {f"t{i:03d}" for i in range(400)}
-DATA_RECORD_PATHS = {
-    f"data/stranded-record-with-a-long-name-{i:05d}.md" for i in range(3_000)
-}
+DATA_RECORD_PATHS = {f"data/stranded-record-with-a-long-name-{i:05d}.md" for i in range(3_000)}
 
 
 @pytest.fixture
@@ -47,10 +45,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             # creating an unresolved graph edge now that split tasks materialize.
             parent="bad",
             created=date(2026, 1, 1),
-            description=(
-                f"Body paragraph for task {i}, long enough to matter multiplied "
-                "by the backlog size."
-            ),
+            description=(f"Body paragraph for task {i}, long enough to matter multiplied by the backlog size."),
         )
         (active_dir / f"{task.id}-task-{i}.md").write_text(
             task_module.render_task_file(task),
@@ -66,8 +61,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     hypotheses = tmp_path / "entities" / "hypotheses"
     hypotheses.mkdir()
     (hypotheses / "0000-h.md").write_text(
-        "---\nid: hypothesis:h0000-another-long-slug\nkind: hypothesis\n"
-        "title: Referenced hypothesis\n---\n\n"
+        "---\nid: hypothesis:h0000-another-long-slug\nkind: hypothesis\ntitle: Referenced hypothesis\n---\n\n"
     )
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -95,7 +89,6 @@ def _scope_project(args: list[str], project: Path) -> list[str]:
         ("tasks list", ["tasks", "list", "--status", "proposed"]),
         ("tasks list", ["tasks", "list", "--status", "proposed", "--format", "json"]),
         ("health", ["health"]),
-        ("health", ["health", "--format", "json"]),
         ("health", ["health", "--severity", "all"]),
         ("project index", ["project", "index"]),
         ("project index", ["project", "index", "--format", "json"]),
@@ -114,6 +107,7 @@ def test_command_stays_within_its_ceiling(project: Path, command_path: str, args
         ("entities inventory", ["entities", "inventory"]),
         ("data audit", ["data", "audit"]),
         ("data audit", ["data", "audit", "--format", "json"]),
+        ("health", ["health", "--format", "json"]),
     ],
 )
 def test_bulk_dump_refuses_rather_than_flooding(project: Path, command_path: str, args: list[str]) -> None:
@@ -164,10 +158,13 @@ def test_health_json_output_file_is_complete_and_unprojected(project: Path) -> N
     written = target.read_text()
     payload = json.loads(written)
     assert _task_ids(written) == TASK_IDS
-    assert len(payload["validation"]) > 40
-    assert payload["total_issues"] > 40
-    assert "section_omitted" not in payload
-    assert "displayed_issues" not in payload
+    assert payload["schema_version"] == 2
+    assert len(payload["findings"]) > 40
+    assert payload["totals"]["findings_total"] == len(payload["findings"])
+    check_errors = [item for item in payload["findings"] if item["finding"]["rule_id"] == "validate.check-error"]
+    assert all("duplicate" not in item["finding"]["message"].lower() for item in check_errors)
+    assert "section_omitted" not in written
+    assert "displayed_issues" not in written
 
 
 def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> None:
@@ -178,7 +175,7 @@ def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> 
     written = target.read_text()
     assert _task_ids(written) == TASK_IDS
     assert "finding(s) hidden" not in written
-    assert "showing " not in written
+    assert "Findings displayed:" in written
 
 
 def test_inventory_output_file_contains_every_entity(project: Path) -> None:
@@ -220,9 +217,7 @@ def test_data_audit_json_output_file_contains_every_record(project: Path) -> Non
 
     payload = json.loads(target.read_text())
     data_paths = [
-        row["path"]
-        for row in payload["violations"]
-        if row["path"].startswith("data/stranded-record-with-a-long-name-")
+        row["path"] for row in payload["violations"] if row["path"].startswith("data/stranded-record-with-a-long-name-")
     ]
     assert payload["version"] == 1
     assert len(data_paths) == 3_000
@@ -847,7 +842,8 @@ def _invoke_explore_ideas_gaps(*args: str):
 
 
 def test_explore_ideas_gaps_stdout_stays_within_its_ceiling_and_reports_truncation(
-    explore_ideas_gaps_overflow_project: Path, monkeypatch: pytest.MonkeyPatch,
+    explore_ideas_gaps_overflow_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(explore_ideas_gaps_overflow_project)
     result = _invoke_explore_ideas_gaps("--from", "report")
@@ -866,7 +862,8 @@ def test_explore_ideas_gaps_stdout_stays_within_its_ceiling_and_reports_truncati
 
 
 def test_explore_ideas_gaps_output_file_is_complete(
-    explore_ideas_gaps_overflow_project: Path, monkeypatch: pytest.MonkeyPatch,
+    explore_ideas_gaps_overflow_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(explore_ideas_gaps_overflow_project)
     target = explore_ideas_gaps_overflow_project / "gaps.json"
@@ -940,9 +937,7 @@ def peers_list_overflow_project(tmp_path: Path) -> Path:
 
 
 def _invoke_peers_list(project_root: Path, *args: str):
-    return CliRunner().invoke(
-        main, ["peers", "list", "--project-root", str(project_root), *args], prog_name="science"
-    )
+    return CliRunner().invoke(main, ["peers", "list", "--project-root", str(project_root), *args], prog_name="science")
 
 
 def test_peers_list_stdout_stays_within_its_ceiling_and_reports_truncation(peers_list_overflow_project: Path) -> None:

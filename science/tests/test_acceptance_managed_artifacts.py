@@ -179,15 +179,23 @@ def test_full_lifecycle(tmp_path: Path) -> None:
 
 
 def test_health_surfaces_managed_artifact_status(tmp_path: Path) -> None:
-    """End-to-end via science health: managed_artifacts present, total_issues right."""
+    """End-to-end via science health: managed-artifact findings are reported."""
     from science_tool.graph.health import build_health_report
 
     project = tmp_path / "health"
     project.mkdir()
     project.joinpath("science.yaml").write_text("name: x\n", encoding="utf-8")
-    report = build_health_report(project)
-    assert "managed_artifacts" in report
-    missing = [f for f in report["managed_artifacts"] if f["status"] == "missing"]
+    report = build_health_report(
+        project,
+        ingestion_ref="health:test",
+        generated_at="2026-07-28T12:00:00+00:00",
+        checks={"managed_artifacts"},
+    )
+    missing = [
+        item
+        for item in report.findings
+        if item.producer_id == "managed_artifacts" and item.finding.qualifiers["status"] == "missing"
+    ]
     assert len(missing) >= 1
 
 

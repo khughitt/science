@@ -23,17 +23,28 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsEntityError, CommonsError
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import REGISTRY_FILENAME
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate._helpers import entity_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE = "commons.owner-collision"
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="commons-owner-collision",
+    section_title="commons owner collision",
+    section_order=139,
+    rule_ids=("commons.owner-collision",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def _project_overlay_ids(ctx: ValidateContext) -> set[str]:
@@ -49,8 +60,8 @@ def _project_overlay_ids(ctx: ValidateContext) -> set[str]:
     return ids
 
 
-@Check(section="commons owner collision (local owner shadows a commons canonical)", order=1)
-def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=1, producer_id="validate.commons-owner-collision", rules=tuple(RULES.values()))
+def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[CheckObservation]:
     commons_root = resolve_commons_root()
     # No commons store, or no built index: this project cannot collide with what
     # it cannot resolve. Skipping here is not a silent fail-open — the graph load
@@ -84,18 +95,12 @@ def check_commons_owner_collision(ctx: ValidateContext) -> Iterator[Result]:
             return  # registry unreadable -> cannot audit; do not emit phantom findings
         version = record.frontmatter.get("version")
         version_note = f" (v{version})" if isinstance(version, str) and version else ""
-        yield Result(
-            Severity.ERROR,
-            Path(path),
-            None,
-            (
-                f"{canonical_id}: owned locally by {path} but a commons canonical of "
-                f"the same id already exists{version_note}. A local owner shadows the "
-                f"canonical: it is never contributed, so references to {canonical_id} "
-                f"from commons entities resolve to nothing. Convert this entity to an "
-                f"overlay (overlay_of: {canonical_id}) to keep any project-specific "
-                f"content, or give it a distinct id."
-            ),
-            RULE,
-            None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=Path(path),
+            line=None,
+            message=f"{canonical_id}: owned locally by {path} but a commons canonical of the same id already exists{version_note}. A local owner shadows the canonical: it is never contributed, so references to {canonical_id} from commons entities resolve to nothing. Convert this entity to an overlay (overlay_of: {canonical_id}) to keep any project-specific content, or give it a distinct id.",
+            rule=RULES["commons.owner-collision"],
+            task=None,
+            qualifiers={"key": []},
         )

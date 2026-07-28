@@ -13,10 +13,15 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+from science_model.audit.fingerprint import canonical_json
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _SOURCE_CLASSES = ("observational", "derived", "reference")
 _DERIVED_KINDS = ("aggregate", "transform", "model_output")
@@ -33,8 +38,40 @@ _USAGE_OVERLAPS = ("full", "partial", "unknown")
 _DEPENDENCE_PROVENANCE_ROLES = ("upstream", "training")
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-taxonomy",
+    section_title="dataset taxonomy",
+    section_order=129,
+    rule_ids=(
+        "taxonomy.dataset-usage-malformed",
+        "taxonomy.derived-kind-invalid",
+        "taxonomy.derived-kind-misplaced",
+        "taxonomy.derived-kind-missing",
+        "taxonomy.external-derived-no-provenance",
+        "taxonomy.source-class-invalid",
+        "taxonomy.source-class-undeclared",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str] | None = None,
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key or []},
+    )
 
 
 def _usage_defect(entry: Any) -> str | None:
@@ -52,7 +89,7 @@ def _usage_defect(entry: Any) -> str | None:
     return None
 
 
-def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[CheckObservation]:
     """Pure core: `datasets` are raw frontmatter dicts (each with `_path`)."""
     for fm in datasets:
         if fm.get("kind") != "dataset":
@@ -70,14 +107,14 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                 f"{ident}: dataset declares no source_class "
                 f"(observational|derived|reference); epistemic weighting cannot apply "
                 f"(note: source_class=derived additionally requires derived_kind)",
-                "taxonomy.source-class-undeclared",
+                RULES["taxonomy.source-class-undeclared"],
             )
         elif source_class not in _SOURCE_CLASSES:
             yield _result(
                 Severity.ERROR,
                 path,
                 f"{ident}: source_class {source_class!r} invalid (expected one of {list(_SOURCE_CLASSES)})",
-                "taxonomy.source-class-invalid",
+                RULES["taxonomy.source-class-invalid"],
             )
 
         # --- derived_kind consistency ---
@@ -87,21 +124,21 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                     Severity.ERROR,
                     path,
                     f"{ident}: source_class=derived requires derived_kind ({list(_DERIVED_KINDS)})",
-                    "taxonomy.derived-kind-missing",
+                    RULES["taxonomy.derived-kind-missing"],
                 )
             elif derived_kind not in _DERIVED_KINDS:
                 yield _result(
                     Severity.ERROR,
                     path,
                     f"{ident}: derived_kind {derived_kind!r} invalid (expected one of {list(_DERIVED_KINDS)})",
-                    "taxonomy.derived-kind-invalid",
+                    RULES["taxonomy.derived-kind-invalid"],
                 )
         elif derived_kind is not None:
             yield _result(
                 Severity.ERROR,
                 path,
                 f"{ident}: derived_kind is only allowed when source_class=derived (source_class={source_class!r})",
-                "taxonomy.derived-kind-misplaced",
+                RULES["taxonomy.derived-kind-misplaced"],
             )
 
         # --- dataset_usage well-formedness ---
@@ -117,16 +154,22 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                 Severity.ERROR,
                 path,
                 f"{ident}: dataset_usage must be a list of usage entries, got {type(usage).__name__}",
-                "taxonomy.dataset-usage-malformed",
+                RULES["taxonomy.dataset-usage-malformed"],
             )
+        seen_malformed_entries: set[str] = set()
         for entry in entries:
             defect = _usage_defect(entry)
             if defect is not None:
+                entry_key = canonical_json(entry).decode("utf-8")
+                if entry_key in seen_malformed_entries:
+                    continue
+                seen_malformed_entries.add(entry_key)
                 yield _result(
                     Severity.ERROR,
                     path,
                     f"{ident}: malformed dataset_usage entry — {defect}",
-                    "taxonomy.dataset-usage-malformed",
+                    RULES["taxonomy.dataset-usage-malformed"],
+                    key=["dataset-usage-entry", entry_key],
                 )
 
         # --- A-D3: external-produced derived artifact must record its inputs ---
@@ -141,10 +184,10 @@ def evaluate_dataset_taxonomy(datasets: Iterable[dict[str, Any]]) -> Iterator[Re
                     path,
                     f"{ident}: external derived artifact has no dataset_usage with "
                     f"role upstream|training; independence cannot be derived (A-D3)",
-                    "taxonomy.external-derived-no-provenance",
+                    RULES["taxonomy.external-derived-no-provenance"],
                 )
 
 
-@Check(section="dataset taxonomy", order=31)
-def check_dataset_taxonomy(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=31, producer_id="validate.dataset-taxonomy", rules=tuple(RULES.values()))
+def check_dataset_taxonomy(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_dataset_taxonomy(dataset_frontmatters(ctx))
