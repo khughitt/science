@@ -5,6 +5,7 @@ from collections import Counter
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 from science_model.audit import (
+    AcceptedFinding,
     AuditFinding,
     AuditReport,
     EntitySubject,
@@ -1312,11 +1313,73 @@ def test_ingest_revalidates_a_model_copy_with_forged_totals(tmp_path):
     _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
 
 
-def test_ingest_revalidates_a_forged_report_count(tmp_path):
-    report = _report()
-    forged = report.model_copy(update={"findings": report.findings * 5001})
+def test_direct_ingestion_refuses_combined_count_before_store_creation(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
 
-    _assert_forged_report_is_refused_without_mutation(tmp_path, forged)
+    finding = ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
+    accepted = AcceptedFinding(
+        producer_id="dataset_anomalies",
+        finding=_finding(),
+        acceptance_key="a" * 32,
+        reason="known",
+    )
+    half = MAX_INGESTED_REPORT_FINDINGS // 2
+    report = _report(
+        findings=[finding] * (half + 1),
+        accepted=[accepted] * (MAX_INGESTED_REPORT_FINDINGS - half),
+    )
+    with pytest.raises(IngestError, match="ceiling"):
+        ingest_report(tmp_path, report, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_direct_ingestion_rechecks_count_on_the_detached_snapshot(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
+
+    class LengthLiar(tuple):
+        def __len__(self):
+            return 0
+
+    report = _report()
+    actual_count = MAX_INGESTED_REPORT_FINDINGS + 1
+    forged = report.model_copy(
+        update={
+            "findings": LengthLiar(report.findings * actual_count),
+            "totals": report.totals.model_copy(
+                update={
+                    "findings_total": actual_count,
+                    "findings_by_severity": {"warn": actual_count},
+                }
+            ),
+        }
+    )
+
+    with pytest.raises(IngestError, match="ceiling"):
+        ingest_report(tmp_path, forged, REGISTRY)
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_load_report_refuses_combined_count_before_any_store_access(tmp_path):
+    from science_tool.findings.ingest import MAX_INGESTED_REPORT_FINDINGS
+
+    finding = ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
+    accepted = AcceptedFinding(
+        producer_id="dataset_anomalies",
+        finding=_finding(),
+        acceptance_key="a" * 32,
+        reason="known",
+    )
+    half = MAX_INGESTED_REPORT_FINDINGS // 2
+    report = _report(
+        findings=[finding] * (half + 1),
+        accepted=[accepted] * (MAX_INGESTED_REPORT_FINDINGS - half),
+    )
+    payload = report.model_dump(mode="json")
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(IngestError, match="ceiling"):
+        load_report(tmp_path, path)
+    assert not (tmp_path / CASES_DIRNAME).exists()
 
 
 def test_ingest_revalidates_nested_values_from_model_construct(tmp_path):

@@ -55,6 +55,7 @@ from science_tool.findings.storage import (
 )
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_INGESTED_REPORT_FINDINGS = 5000
 SUPPORTED_FINGERPRINT_VERSIONS = frozenset({1})
 
 
@@ -68,6 +69,16 @@ class IngestOutcome(BaseModel):
     records_written: int
     occurrences_appended: int
     occurrences_skipped: int
+
+
+def _assert_ingested_report_finding_ceiling(report: AuditReport) -> None:
+    count = len(report.findings) + len(report.accepted)
+    if count > MAX_INGESTED_REPORT_FINDINGS:
+        raise IngestError(
+            f"{len(report.findings)} findings + {len(report.accepted)} accepted exceeds "
+            f"the {MAX_INGESTED_REPORT_FINDINGS} ceiling; both channels are ingested, so "
+            "the bound is on their sum"
+        )
 
 
 class IngestionProvenance(BaseModel):
@@ -155,7 +166,9 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
             f"toolkit implements {REPORT_SCHEMA_VERSION} and refuses to coerce"
         )
     try:
-        return AuditReport.model_validate(raw)
+        report = AuditReport.model_validate(raw)
+        _assert_ingested_report_finding_ceiling(report)
+        return report
     except ValidationError as exc:
         raise IngestError(f"{path} is not a valid audit report: {exc}") from exc
 
@@ -170,8 +183,10 @@ def _snapshot_report(report: AuditReport) -> AuditReport:
     both detaches mutable aliases and re-establishes every report invariant.
     """
     try:
+        _assert_ingested_report_finding_ceiling(report)
         payload = report.model_dump(mode="json", warnings="error")
         snapshot = AuditReport.model_validate(payload, strict=True)
+        _assert_ingested_report_finding_ceiling(snapshot)
         canonical = json.dumps(
             snapshot.model_dump(mode="json", warnings="error"),
             sort_keys=True,

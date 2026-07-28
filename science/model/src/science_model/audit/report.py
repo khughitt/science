@@ -39,11 +39,6 @@ from science_model.audit.finding import (
 
 REPORT_SCHEMA_VERSION = 2
 
-#: The ceiling applies to `findings + accepted` TOGETHER. Both channels are ingested
-#: (design §8), so a bound on one alone is a bound on nothing: 5000 accepted
-#: observations cost exactly what 5000 unsuppressed ones cost.
-MAX_REPORT_FINDINGS = 5000
-
 
 def _nonblank_producer_id(value: str) -> str:
     if not value.strip():
@@ -104,6 +99,21 @@ class UnwiredProducer(_Base):
     reason: str | None = None
 
 
+class ProducerCaveat(_Base):
+    producer_id: ProducerId
+    code: str | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _has_meaningful_detail(self) -> "ProducerCaveat":
+        if not any(
+            value is not None and value.strip()
+            for value in (self.code, self.reason)
+        ):
+            raise ValueError("producer caveat requires a nonblank code or reason")
+        return self
+
+
 class ProducerMetrics(BaseModel):
     """Validated against the schema the producer declared at registration (§6).
 
@@ -153,6 +163,10 @@ AcceptedArray = Annotated[
 ]
 UnwiredArray = Annotated[
     tuple[UnwiredProducer, ...],
+    BeforeValidator(_tuple_input),
+]
+ProducerCaveatArray = Annotated[
+    tuple[ProducerCaveat, ...],
     BeforeValidator(_tuple_input),
 ]
 ProducerIdArray = Annotated[
@@ -205,11 +219,10 @@ class AuditReport(BaseModel):
     #: ingestion requires exact equality with supervisor attestation and turns the
     #: attested value into `observed_at`.
     generated_at: str = Field(min_length=1)
-    findings: ReportedArray = Field(max_length=MAX_REPORT_FINDINGS)
-    accepted: AcceptedArray = Field(
-        default=(), max_length=MAX_REPORT_FINDINGS, validate_default=True
-    )
+    findings: ReportedArray
+    accepted: AcceptedArray = Field(default=(), validate_default=True)
     metrics: FrozenMetrics = Field(default_factory=dict, validate_default=True)
+    caveats: ProducerCaveatArray = Field(default=(), validate_default=True)
     unwired: UnwiredArray = Field(default=(), validate_default=True)
     totals: ReportTotals
     meta: ReportMeta
@@ -234,12 +247,6 @@ class AuditReport(BaseModel):
         # with identical identity and different prose -- precisely the collision the
         # rule exists to prevent. Ingestion enforces it after computing fingerprints
         # (`science_tool.findings.ingest._plan`).
-        if len(self.findings) + len(self.accepted) > MAX_REPORT_FINDINGS:
-            raise ValueError(
-                f"{len(self.findings)} findings + {len(self.accepted)} accepted exceeds "
-                f"the {MAX_REPORT_FINDINGS} ceiling; both channels are ingested, so the "
-                "bound is on their sum"
-            )
         if self.totals.findings_total != len(self.findings):
             raise ValueError(
                 f"totals.findings_total {self.totals.findings_total} != "
@@ -270,10 +277,14 @@ class AuditReport(BaseModel):
                 f"producer ids cannot appear in both producers_run and unwired: "
                 f"{sorted(overlap)}"
             )
+        caveat_producers = [item.producer_id for item in self.caveats]
+        if len(caveat_producers) != len(set(caveat_producers)):
+            raise ValueError("duplicate caveat producer ids are forbidden")
         output_producers = {
             *(item.producer_id for item in self.findings),
             *(item.producer_id for item in self.accepted),
             *self.metrics,
+            *caveat_producers,
         }
         missing = output_producers - producers_run
         if missing:

@@ -19,11 +19,11 @@ from science_model.audit.record import (
     review_id,
 )
 from science_model.audit.report import (
-    MAX_REPORT_FINDINGS,
     REPORT_SCHEMA_VERSION,
     AcceptedFinding,
     AuditReport,
     ProducerMetrics,
+    ProducerCaveat,
     ReportMeta,
     ReportTotals,
     ReportedFinding,
@@ -42,7 +42,6 @@ __all__ = [
     "CASE_STATUSES",
     "DOC_KIND",
     "FINGERPRINT_VERSION",
-    "MAX_REPORT_FINDINGS",
     "REPORT_SCHEMA_VERSION",
     "AcceptedFinding",
     "AuditReport",
@@ -60,6 +59,7 @@ __all__ = [
     "PathSubject",
     "ProjectSubject",
     "ProducerMetrics",
+    "ProducerCaveat",
     "ReportMeta",
     "ReportTotals",
     "ReportedFinding",
