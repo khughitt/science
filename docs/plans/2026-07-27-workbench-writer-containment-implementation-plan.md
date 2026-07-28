@@ -1129,7 +1129,9 @@ Every guard in this plan must be shown to fail by a **named** test. A guard nobo
 
 Change `_proposition_title` to `f"{row.subject} {row.object}"` (drop the predicate).
 Run: `cd science && uv run --frozen pytest tests/test_workbench_writer_containment.py -q`
-Expected: `test_proposition_title_is_the_triple` FAILS. **Revert.**
+Expected: **two** failures — `test_proposition_title_is_the_triple` and
+`test_generated_titles_are_whitespace_collapsed`. Both assert the triple format, so dropping the
+predicate breaks each independently; the format is pinned twice, not once. **Revert.**
 
 - [ ] **Step 2: Mutation B — the evidence-line qualifier**
 
@@ -1144,7 +1146,7 @@ Expected: `test_empty_triple_terms_fail_at_PARSE_time[subject]` FAILS. **Revert.
 - [ ] **Step 4: Mutation D — title in the update set**
 
 Add `"title"` to `PROPOSITION_OWNED_KEYS` in `entity_frontmatter.py`.
-Expected: **three** failures — `test_title_is_CREATE_ONLY` (set arithmetic), `test_update_preserves_an_authors_replacement_title` (apply path), and `test_recompiling_preserves_an_authors_title_and_body` (compile path). The two behavioural ones are what matter; the set assertion alone would be an equality with no consequence attached. Both write paths failing is the point — a create-only key that leaks into the update set breaks every writer, not one. **Revert.**
+Expected: **four** failures — `test_title_is_CREATE_ONLY` (set arithmetic), `test_update_preserves_an_authors_replacement_title` (apply path), `test_recompiling_preserves_an_authors_title_and_body` (compile path), and `test_update_of_an_empty_title_record_is_REJECTED`. The three behavioural ones are what matter; the set assertion alone would be an equality with no consequence attached. Both write paths failing is the point — a create-only key that leaks into the update set breaks every writer, not one. The fourth is the instructive one: with `title` owned, `render_update` OVERWRITES the record's empty title with the derived one before `certify_persisted` ever sees the mapping, so the rejection silently becomes a backfill. That is the same repair-before-validate mode Mutation G targets, reached here by a different door — which is why a create-only key is a containment property, not a cosmetic one. **Revert.**
 
 - [ ] **Step 5: Mutation E — the allowlist**
 
@@ -1207,9 +1209,14 @@ and pass `created=str(existing_frontmatter.get("created") or today)`.
 
 Expected: all three `test_compile_refuses_a_PARSEABLE_but_inadmissible_destination` cases FAIL — no
 exception is raised, because `render_update` overwrites `id`, `kind` and `created`, so the mapping
-`certify_persisted` sees is valid. `test_malformed_existing_entity_is_REFUSED` keeps PASSING under
-this mutation, since invalid YAML still raises during parsing — which is exactly why that test
-cannot stand in for this one. **Revert.**
+`certify_persisted` sees is valid.
+
+`test_malformed_existing_entity_is_REFUSED` ALSO breaks under this mutation, but by ERRORING rather
+than failing: the direct `split_frontmatter` call lets a bare `yaml.parser.ParserError` escape,
+where the test asserts `MalformedTargetError`. Invalid YAML does still raise during parsing — the
+exception TYPE is what changes, and `read_existing_target` is what converts one into the other. So
+that test cannot stand in for this one for two independent reasons: it never exercises a parseable
+destination at all, and its raise is a parser artifact rather than an admission decision. **Revert.**
 
 - [ ] **Step 11: Mutation I — the format checker**
 
