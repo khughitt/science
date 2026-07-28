@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 10. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 11. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -85,6 +85,15 @@
 > producers (§10). Metrics validation moves from the health drain to the generic
 > producer boundary; unwired producers omit metrics and skip schema validation (§6,
 > §11). The composition is described as fixed, not deeply immutable.
+>
+> **Revision 11 closes four planning ambiguities.** Prose lint warnings and INFO
+> advisories receive separate rules so per-rule visibility preserves today's rendering
+> (§6, §9, §11). The registry is explicitly project-scoped and active-kind-derived while
+> family policy remains toolkit-owned; test 4 and failure condition 6 use that same
+> distinction, and inactive-rule case behavior is defined (§3, §6). Test 31 compares
+> declarations to active-kind expansion rather than to sparse emissions. The fixed
+> hypothesis lineage rule and the deliberate override of correspondence drift's
+> derived-ID comment are recorded (§6).
 
 ## Motivation
 
@@ -143,7 +152,7 @@ currently derives issues from coverage metrics and from archive lag (§Grounding
 
 ## Grounding findings that shape the design
 
-Verified against the source tree at `bbff18fd`; revisions 8–10 change this design only.
+Verified against the source tree at `bbff18fd`; revisions 8–11 change this design only.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
   (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is the unchanged status-and-row
@@ -426,6 +435,15 @@ not equal `slug(record.rule_id)`, or whose filename digest does not equal
 its own immutable fields, is a **load error** — never a silent repair or rename. A renamed
 or hand-edited case file must fail loudly rather than acquire a new identity.
 
+**Stored identity does not depend on current registry activity.** If a project drops an
+ontology catalog or profile and a previously active kind-derived rule disappears from
+the project-scoped registry, its existing case still loads: filename/content binding is
+self-contained and the storage loader does not consult current rule declarations.
+Re-ingestion of that rule is refused as undeclared, and no new occurrence is appended.
+The historical case may still be reviewed or dismissed; reactivating the same canonical
+kind deterministically restores the same rule ID and permits later observations to dedup
+onto it.
+
 ### 4. `AuditFindingRecord` — the canonical stored case
 
 `AuditFindingRecord` carries immutable identity fields plus append-only history. **It does not
@@ -572,10 +590,24 @@ is created.
 
 ### 6. Rules — declared beside the producer, registry derived
 
-Rules are declared next to the code that emits them, and **one frozen registry is derived
-from those declarations**. There is no hand-maintained central list, and therefore no
-repeated ID string to drift — while ingestion still gets exactly one immutable lookup
-authority.
+Rules and rule-family policy are declared next to the code that emits them. For each
+project source context, **one frozen project-scoped registry** is derived from those
+toolkit declarations plus the trusted active `EntityKind` descriptors supplied by graph
+loading. There is no hand-maintained central rule list and no project-authored policy;
+report construction and ingestion each receive exactly one immutable lookup authority
+for that same source context.
+
+Project configuration therefore has one narrow, existing role: by activating a trusted
+profile or ontology catalog, it contributes canonical kind descriptors to the active-kind
+set over which toolkit-owned rule families expand. It does **not** author finding rules
+or override a family's severity function, section, presentation metadata, subject
+contract, identity qualifiers, or any other policy field.
+
+This is Plan 2 work, not a property of Plan 1's current stub:
+`findings.producers.build_registry()` today is a pure function of a producer list and
+`findings.cli._registry()` builds it with no project input. Plan 2 threads the canonical
+source context into registry construction so kind-family expansion and entity-subject
+arbitration cannot observe different active profiles or ontology catalogs.
 
 ```python
 FindingRule(
@@ -688,10 +720,17 @@ producers were attempted and which could not run.
 | Current family | Plan 2 rule identity | Existing policy preserved |
 |---|---|---|
 | `f"{kind}.status-vocabulary"` | **Keep the full kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind`. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; `gates.py` continues naming certified full IDs; the live `paper.status-vocabulary` acceptance continues matching. |
-| `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
+| `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. This deliberately overrides the source comment at `correspondence_drift.py:71-74` that kept the ID derived for a future kind: evidence scope is current policy, while a hypothetical no-rename convenience is not. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
 | `f"{kind}.unbacked-inverse"` | **Keep the full kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind`. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
 | `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
-| `f"prose_lints.{check}"` | Collapse lint-hit IDs only to `prose-lints.hit`, with `check` as a required typed identity qualifier. Fixed rules such as `prose_lints.config` and `prose_lints.numeric-verification.coverage` stay distinct. | No gate tier or surveyed acceptance names a lint-hit ID; hit severities remain warnings. §9 records the count-neutral rename. |
+| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The other INFO sites remain distinct canonical rules: visible `prose-lints.config` and hidden `prose-lints.numeric-verification-coverage`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
+
+`hypothesis.dangling-lineage` is the third kind-graded emitter named by
+`kind_severity.py`, but it is **not** a parameterized family: the check is semantically
+hypothesis-only and already emits the hard-coded `RULE_DANGLING_LINEAGE`. It stays one
+literal declared rule, continues calling `severity_for_kind("hypothesis")`, and remains
+the literal third hypothesis entry in `gates.py`. Plan 2 must not derive dangling-lineage
+rules for other active kinds.
 
 The per-kind rules are derived when the project-scoped registry is built from the same
 trusted active entity-kind registry used by graph loading. The **family declaration** —
@@ -711,7 +750,11 @@ The derived registry **fails early** on:
 4. A rule declaring producer remediation without a registered trusted handler.
 5. A registered producer returning anything except `FindingProducerResult`, including a
    bare `InstrumentResult`, tuple, row list, or report mapping.
-6. Project configuration attempting to add or override a toolkit rule.
+6. Project configuration attempting to author or override toolkit-owned family policy.
+   Activating a trusted canonical kind descriptor and thereby selecting its derived rule
+   instances is permitted; supplying a rule declaration or changing its severity
+   function, section, presentation metadata, subject contract, identity qualifiers, or
+   other family field is refused.
 7. Two rules claiming the same `display_order` within a `section`, or two sections
    claiming the same `section_order`.
 
@@ -850,7 +893,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | lint-hit IDs alone collapse to `prose-lints.hit` + `check`; no count change |
+| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory` + `check`; INFO never entered `count_issues`, so neither rename changes counts |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `archive_lag` | `1 if total else 0` | `tasks.archive-lag`, `ProjectSubject`, emitted **iff** total > 0 | `done_in_active`, `retired_in_active`, `missing_completed` retained as metrics | net count unchanged (1 ↔ 1); the measurement is no longer the issue |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -896,13 +939,15 @@ up as two findings colliding in one report, in the producer's own tests.
 
 **Validation-family count effect.** The §6 family rulings are count-neutral.
 Kind-scoped status and inverse IDs, the five annotation IDs, and
-`plan.correspondence-drift` retain their exact emitted identities. Only prose lint hits
-are renamed; each old hit still emits exactly one finding, and no gate tier or acceptance
-in the surveyed 50-entry corpus names a lint-hit ID. The one surveyed acceptance that
-does name a parameterized family, `paper.status-vocabulary` in post-acute-infection,
-keeps that exact ID and therefore remains excluded. A future family collapse that changes
-an accepted or gated full ID requires a new ledger row; it cannot be absorbed as registry
-population.
+`plan.correspondence-drift` retain their exact emitted identities. Prose lint WARN hits
+and configured-non-warn INFO summaries are renamed separately: each old emission still
+produces exactly one finding, WARN hits retain visible presentation, INFO advisories
+retain hidden presentation, and INFO never entered `count_issues`. No gate tier or
+acceptance in the surveyed 50-entry corpus names either affected ID. The one surveyed
+acceptance that does name a parameterized family, `paper.status-vocabulary` in
+post-acute-infection, keeps that exact ID and therefore remains excluded. A future family
+collapse that changes an accepted or gated full ID requires a new ledger row; it cannot
+be absorbed as registry population.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
@@ -1111,7 +1156,9 @@ class AuditReport(TypedDict):
   Sorting on the section *identifier* would alphabetize, discarding the order
   `HEALTH_CHECKS`'s hand-ordered tuple encodes today; `section_order` (§6) carries it.
 - **Visibility comes from `default_visibility`**, retiring
-  `validate/cli.py:25`'s hardcoded rule set.
+  `validate/cli.py:25`'s hardcoded rule set. The split prose-lint rules preserve its
+  current distinction: WARN `prose-lints.hit` and INFO `prose-lints.config` are visible;
+  INFO `prose-lints.advisory` and `prose-lints.numeric-verification-coverage` are hidden.
 - **The unwired invariant survives the rewrite**: a non-empty `unwired` forbids any
   "clean" rendering, asserted directly on rendered output (§Testing 5).
 
@@ -1128,7 +1175,11 @@ class AuditReport(TypedDict):
    section each fail.
 3. **Constraint validation** — a finding whose severity, subject type, identifier
    namespace, or qualifiers violate its rule fails.
-4. **Project config cannot add or override a toolkit rule.**
+4. **Project config can select kind instances, never family policy.** Activating a
+   trusted profile or ontology catalog expands the exact rule instances implied by its
+   canonical kind descriptors. A project-authored rule or attempted override of severity
+   function, section, presentation metadata, subject contract, identity qualifiers, or
+   another toolkit-owned family field fails.
 5. **Renderer clean-refusal** — a non-empty unwired channel forbids "Project is clean",
    asserted on rendered output, not on a boolean. The invariant lives in the layer being
    rewritten, and this is the guard-in-one-reader failure shape.
@@ -1228,11 +1279,14 @@ class AuditReport(TypedDict):
 30. **All twelve dataset rules are declared and reachable** — the emitted-code set equals
     the declared-rule set, asserted as equality rather than as a subset, which is the
     assertion shape that let `dataset_access_invalid` drift.
-31. **Parameterized validation families are complete and policy-preserving** — active
-    kind-derived rule IDs equal the emitted status/inverse ID sets; annotation rule IDs
-    equal `ISSUE_KINDS`; `plan.correspondence-drift`, its evidence scope, the three
-    hypothesis gate entries, and each `severity_for_kind` result remain exact; only
-    lint-hit IDs collapse.
+31. **Parameterized validation families are complete and policy-preserving** — declared
+    status/inverse rule IDs equal the deterministic expansion over the project's active
+    canonical kinds; every emitted family ID is declared, and every emission site's kind
+    is a member of that same active-kind registry. Sparse fixture emissions need only be
+    a subset of declarations. Annotation rule IDs equal `ISSUE_KINDS`;
+    `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
+    and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
+    advisories map to their distinct canonical rules with their current visibility.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
