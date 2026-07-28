@@ -215,7 +215,7 @@ def finish_command(
     from science_model.autonomous_runs import RunDisposition
 
     from science_tool.autonomy.lifecycle import file_quarantine_feedback, finish_run
-    from science_tool.feedback_cli import _get_feedback_dir
+    from science_tool.feedback_cli import resolve_feedback_dir
 
     # `RunBudget` requires at least one of the two, so omitting both would raise a
     # ValidationError deep inside record construction and surface as `unwired` -- an
@@ -240,7 +240,7 @@ def finish_command(
     if outcome.disposition is RunDisposition.QUARANTINED:
         try:
             feedback_path = file_quarantine_feedback(
-                outcome, feedback_dir=_get_feedback_dir(), project=project_root.resolve().name
+                outcome, feedback_dir=resolve_feedback_dir(), project=project_root.resolve().name
             )
         except OSError as exc:
             feedback_error = f"could not file the quarantine feedback item: {exc}"
