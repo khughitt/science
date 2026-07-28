@@ -94,7 +94,13 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
 
     try:
         entries = load_all_entries(feedback_dir)
-    except (OSError, UnicodeError, yaml.YAMLError, ValidationError) as exc:
+    except (
+        FeedbackStoreError,
+        OSError,
+        UnicodeError,
+        ValidationError,
+        yaml.YAMLError,
+    ) as exc:
         raise click.ClickException(f"could not load feedback entries from {feedback_dir}: {exc}") from exc
     try:
         plan = build_curate_plan(report.candidates, entries, coverage_context(report), report.scope.to_dict())

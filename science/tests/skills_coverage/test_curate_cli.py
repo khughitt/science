@@ -291,3 +291,47 @@ def test_invalid_feedback_reports_click_error(tmp_path: Path, monkeypatch) -> No
 
     assert result.exit_code != 0
     assert "could not load feedback entries" in result.output
+
+
+def test_mismatched_feedback_filename_reports_click_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fb, _ = _setup(tmp_path, monkeypatch)
+    fb.mkdir()
+    (fb / "fb-2026-07-28-900.yaml").write_text(
+        "id: fb-2026-07-28-901\n"
+        "target: skill-coverage:x\n"
+        "summary: s\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+
+    assert result.exit_code != 0
+    assert "could not load feedback entries" in result.output
+    assert "does not match entry id" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_feedback_symlink_escape_reports_click_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fb, _ = _setup(tmp_path, monkeypatch)
+    fb.mkdir()
+    outside = tmp_path / "outside.yaml"
+    outside.write_text(
+        "id: fb-2026-07-28-900\n"
+        "target: skill-coverage:x\n"
+        "summary: s\n",
+        encoding="utf-8",
+    )
+    (fb / "fb-2026-07-28-900.yaml").symlink_to(outside)
+
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+
+    assert result.exit_code != 0
+    assert "could not load feedback entries" in result.output
+    assert "outside feedback store" in result.output
+    assert "Traceback" not in result.output
