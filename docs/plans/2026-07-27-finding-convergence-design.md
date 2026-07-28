@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 20. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 21. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -173,6 +173,16 @@
 > `_text_matches` rejects both a non-string/non-list `message_contains` and a list
 > containing any non-string member. The frozen key now rejects both shapes instead of
 > filtering invalid list members into a key for an entry that cannot suppress (§10).
+>
+> **Revision 21 moves the observation-count ceiling to trusted ingestion.**
+> `AuditReport` is both the public in-process result of `science health` and the wire
+> input to trusted ingestion. A model-level 5,000-observation ceiling made a large
+> trusted diagnostic fail to report anything, although health has no hostile-input
+> boundary and today's report is uncapped. The combined `findings + accepted` ceiling is
+> now `MAX_INGESTED_REPORT_FINDINGS` in ingestion, enforced for both bounded file loads
+> and direct in-memory ingestion before any store operation. The existing 8 MiB bounded
+> file read still caps untrusted parsing; `AuditReport` itself retains all structural and
+> total-consistency validation but has no volume policy (§8, §11).
 
 ## Motivation
 
@@ -1073,8 +1083,12 @@ Ingestion additionally enforces:
 - **Schema and version validation.** The report declares `schema_version` and
   `fingerprint_version`; unknown or unimplemented values are refused outright, never
   coerced.
-- **Size limits.** A maximum report byte size and a maximum finding count, both
-  configured in the toolkit, not by the project.
+- **Size limits at ingestion.** A maximum report byte size and a maximum combined
+  `findings + accepted` count, both configured in the toolkit, not by the project.
+  `load_report` applies both to actor-authored files, and direct `ingest_report` applies
+  both to its detached snapshot before the case store is opened. These are ingestion
+  policies, not `AuditReport` model constraints: trusted in-process health reporting is
+  not capped.
 - **Path safety.** Every path in a subject or evidence entry must be relative,
   normalized, free of `..`, and resolve inside the project root. Absolute paths are
   refused.
@@ -1419,6 +1433,10 @@ class AuditReport(TypedDict):
   therefore has no finding visibility.
 - **The unwired invariant survives the rewrite**: a non-empty `unwired` forbids any
   "clean" rendering, asserted directly on rendered output (§Testing 5).
+- **Health never truncates or refuses by finding count.** `AuditReport` validates its
+  structure and exact totals but carries no observation ceiling. The 5,000-observation
+  bound belongs only to trusted ingestion (§8), where both accepted and unsuppressed
+  observations create stored occurrences.
 
 ## Testing
 
@@ -1508,9 +1526,10 @@ class AuditReport(TypedDict):
     `reviewer_kind == "agent"` fails.
 21. **Ingestion hardening** — absolute path, NUL, `..` traversal, symlinked path
     (including parent-swap and dangling-link cases), unknown `schema_version`,
-    unimplemented `fingerprint_version`, oversize report, excess finding count, and any
-    invalid Markdown leaf in the aggregate case store are each refused, and a
-    *validation* failure writes nothing.
+    unimplemented `fingerprint_version`, oversize report, excess combined ingestion
+    observation count, and any invalid Markdown leaf in the aggregate case store are
+    each refused, and a *validation* failure writes nothing. The same `AuditReport`
+    constructed by trusted `science health` may exceed that ingestion-only count.
 22. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
 23. **Graph isolation** — no finding triple appears in any named graph; cases are absent
