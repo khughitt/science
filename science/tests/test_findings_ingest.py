@@ -85,12 +85,14 @@ REGISTRY = build_registry(
         FindingProducer(
             producer_id="dataset_anomalies",
             namespace="health_checks",
+            source_module="graph/health_checks/test.py",
             rules=(RULE,),
             sections=(SECTION,),
             metrics_schema=None,
             remediators=frozenset(),
         )
-    ]
+    ],
+    active_kinds=frozenset(),
 )
 
 
@@ -127,12 +129,14 @@ def test_array_identity_qualifier_round_trips_from_build_through_ingestion(
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE, array_rule),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     finding = array_rule.build(
         subject=EntitySubject(ref="dataset:a"),
@@ -331,6 +335,7 @@ def _registry_with_second_producer():
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -339,12 +344,14 @@ def _registry_with_second_producer():
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
 
 
@@ -517,7 +524,7 @@ def test_graph_context_accepts_an_adapter_backed_entity(tmp_path):
         "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
         encoding="utf-8",
     )
-    context = _load_ingestion_context(tmp_path)
+    context, _entity_registry = _load_ingestion_context(tmp_path)
     assert "paper:Smith2024" in context.canonical_entity_ids
     report = _report(
         findings=[
@@ -564,7 +571,7 @@ def test_graph_invalid_entities_do_not_enter_the_trusted_context(tmp_path):
         "---\nid: mystery:invalid\nkind: mystery\ntitle: Invalid\n---\n",
         encoding="utf-8",
     )
-    context = _load_ingestion_context(tmp_path)
+    context, _entity_registry = _load_ingestion_context(tmp_path)
     assert "mystery:invalid" not in context.canonical_entity_ids
     report = _report(
         findings=[
@@ -687,6 +694,7 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -695,12 +703,14 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[
@@ -763,6 +773,7 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE,),
                 sections=(SECTION,),
                 metrics_schema=None,
@@ -771,12 +782,14 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
             FindingProducer(
                 producer_id="curation_lens",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(),
                 sections=(),
                 metrics_schema=None,
                 remediators=frozenset(),
             ),
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     a = tmp_path / "a"
     b = tmp_path / "b"
@@ -866,12 +879,14 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(unicode_rule,),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     first_subject = (
         PathSubject(path=subject["path"])
@@ -967,12 +982,14 @@ def test_direct_ingestion_validates_the_canonical_identity_value_before_writing(
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(rule,),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[
@@ -1634,12 +1651,14 @@ def test_a_subject_path_through_a_symlink_is_refused(tmp_path):
             FindingProducer(
                 producer_id="dataset_anomalies",
                 namespace="health_checks",
+                source_module="graph/health_checks/test.py",
                 rules=(RULE, path_rule),
                 sections=(SECTION,),
                 metrics_schema=None,
                 remediators=frozenset(),
             )
-        ]
+        ],
+        active_kinds=frozenset(),
     )
     report = _report(
         findings=[

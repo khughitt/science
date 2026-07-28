@@ -65,9 +65,9 @@ def test_phase_boundary_ratchet_no_producers_are_registered_yet():
     completeness" to "does not check completeness" while turning the tree green, which
     is the exact substitution this ratchet exists to make impossible.
     """
-    from science_tool.findings.cli import _registry
+    from science_tool.findings.catalog import registered_producers
 
-    assert not _registry().producers_by_id, (
+    assert not registered_producers(), (
         "producers are now registered, so design test 29 (producer-namespace "
         "completeness) can and must be written: compare the modules discovered under "
         "each NAMESPACE_DIRS entry against the registered producers, and REPLACE this "

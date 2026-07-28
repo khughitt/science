@@ -128,6 +128,7 @@ def _isolation_report() -> tuple[AuditReport, FindingRegistry]:
     producer = FindingProducer(
         producer_id="isolation_probe",
         namespace="health_checks",
+        source_module="graph/health_checks/test.py",
         rules=(rule,),
         sections=(section,),
         metrics_schema=None,
@@ -165,7 +166,7 @@ def _isolation_report() -> tuple[AuditReport, FindingRegistry]:
             "timings": (),
         },
     )
-    return report, build_registry([producer])
+    return report, build_registry([producer], active_kinds=frozenset())
 
 
 def _named_quads(dataset: Dataset) -> set[tuple[str, str, str, str]]:

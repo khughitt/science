@@ -48,13 +48,14 @@ def _rule(rule_id="dataset.stale-review", order=100) -> FindingRule:
 
 def _producer(pid="dataset_anomalies", rules=None, metrics_schema=M) -> FindingProducer:
     return FindingProducer(
-        producer_id=pid, namespace="health_checks", rules=tuple(rules or [_rule()]),
+        producer_id=pid, namespace="health_checks", source_module="graph/health_checks/test.py",
+        rules=tuple(rules or [_rule()]),
         sections=(SECTION,), metrics_schema=metrics_schema, remediators=frozenset(),
     )
 
 
 def test_registry_resolves_a_declared_rule():
-    registry = build_registry([_producer()])
+    registry = build_registry([_producer()], active_kinds=frozenset())
     assert registry.rule("dataset.stale-review").title == "t"
 
 
@@ -70,16 +71,16 @@ def test_producer_accepts_a_closed_metrics_schema():
 
 def test_duplicate_rule_id_across_producers_fails():
     with pytest.raises(RegistryError, match="duplicate rule id"):
-        build_registry([_producer(pid="a"), _producer(pid="b")])
+        build_registry([_producer(pid="a"), _producer(pid="b")], active_kinds=frozenset())
 
 
 def test_duplicate_producer_id_fails():
     with pytest.raises(RegistryError, match="duplicate producer id"):
-        build_registry([_producer(), _producer(rules=[_rule("dataset.other")])])
+        build_registry([_producer(), _producer(rules=[_rule("dataset.other")])], active_kinds=frozenset())
 
 
 def test_unknown_rule_lookup_fails_rather_than_returning_none():
-    registry = build_registry([_producer()])
+    registry = build_registry([_producer()], active_kinds=frozenset())
     with pytest.raises(RegistryError, match="undeclared rule"):
         registry.rule("dataset.never-declared")
 
@@ -88,24 +89,25 @@ def test_colliding_display_order_within_a_section_fails():
     with pytest.raises(RegistryError, match="display_order"):
         build_registry([
             _producer(rules=[_rule("dataset.a", 10), _rule("dataset.b", 10)])
-        ])
+        ], active_kinds=frozenset())
 
 
 def test_colliding_section_order_fails():
     other = FindingSection(id="tasks", title="Tasks", section_order=300)
     producer = FindingProducer(
-        producer_id="p", namespace="health_checks", rules=(_rule(),),
+        producer_id="p", namespace="health_checks", source_module="graph/health_checks/test.py",
+        rules=(_rule(),),
         sections=(SECTION, other), metrics_schema=M, remediators=frozenset(),
     )
     with pytest.raises(RegistryError, match="section_order"):
-        build_registry([producer])
+        build_registry([producer], active_kinds=frozenset())
 
 
 def test_rule_naming_an_undeclared_section_fails():
     with pytest.raises(RegistryError, match="undeclared section"):
         build_registry([
             _producer(rules=[_rule("dataset.a")]).model_copy(update={"sections": ()})
-        ])
+        ], active_kinds=frozenset())
 
 
 def test_producer_remediation_without_a_registered_handler_fails():
@@ -115,14 +117,14 @@ def test_producer_remediation_without_a_registered_handler_fails():
         remediator="fix_dataset", title="t", section="datasets", display_order=200,
     )
     with pytest.raises(RegistryError, match="remediator"):
-        build_registry([_producer(rules=[rule])])
+        build_registry([_producer(rules=[rule])], active_kinds=frozenset())
 
 
 def test_sort_key_orders_by_section_then_display_order_not_by_name():
     alpha = FindingSection(id="zzz-last-alphabetically", title="Z", section_order=100)
     beta = FindingSection(id="aaa-first-alphabetically", title="A", section_order=200)
     producer = FindingProducer(
-        producer_id="p", namespace="health_checks",
+        producer_id="p", namespace="health_checks", source_module="graph/health_checks/test.py",
         rules=(
             FindingRule(id="z.rule", severities={"warn"}, subject_types={"project"},
                         qualifier_schema=Q, title="t", section=alpha.id, display_order=1),
@@ -131,19 +133,19 @@ def test_sort_key_orders_by_section_then_display_order_not_by_name():
         ),
         sections=(alpha, beta), metrics_schema=M, remediators=frozenset(),
     )
-    registry = build_registry([producer])
+    registry = build_registry([producer], active_kinds=frozenset())
     assert registry.sort_key("z.rule") < registry.sort_key("a.rule")
 
 
 def test_metrics_are_validated_against_the_declared_schema():
-    registry = build_registry([_producer()])
+    registry = build_registry([_producer()], active_kinds=frozenset())
     registry.validate_metrics("dataset_anomalies", {"scanned": 3})
     with pytest.raises(RegistryError, match="metrics"):
         registry.validate_metrics("dataset_anomalies", {"scaned": 3})
 
 
 def test_metrics_validation_does_not_mutate_the_authoritative_mapping():
-    registry = build_registry([_producer(metrics_schema=MutatingMetrics)])
+    registry = build_registry([_producer(metrics_schema=MutatingMetrics)], active_kinds=frozenset())
     metrics = {"scanned": 3}
 
     registry.validate_metrics("dataset_anomalies", metrics)
@@ -159,13 +161,13 @@ def test_a_metric_of_the_wrong_type_is_refused_not_quietly_coerced():
     only thing that types it. Lax validation would accept `"3"` for `scanned: int`,
     report `3`, discard that model, and leave `"3"` to be rendered and compared.
     """
-    registry = build_registry([_producer()])
+    registry = build_registry([_producer()], active_kinds=frozenset())
     with pytest.raises(RegistryError, match="metrics invalid"):
         registry.validate_metrics("dataset_anomalies", {"scanned": "3"})
 
 
 def test_the_registry_mappings_are_not_mutable():
-    registry = build_registry([_producer()])
+    registry = build_registry([_producer()], active_kinds=frozenset())
     with pytest.raises(TypeError):
         registry.rules_by_id["injected"] = _rule("dataset.injected")
     with pytest.raises(TypeError):
@@ -201,16 +203,30 @@ def test_the_public_registry_constructor_copies_and_wraps_every_mapping():
         registry.producers_by_id["injected"] = producer
 
 
-def test_project_config_cannot_add_or_override_a_rule(tmp_path):
-    # The registry reads nothing from the filesystem, environment, or project config.
-    # This test is the assertion that it has no such input at all.
-    import inspect
-
-    import science_tool.findings.producers as module
-
-    source = inspect.getsource(module)
-    for forbidden in ("yaml", "project_config", "os.environ", "science.yaml"):
-        assert forbidden not in source, (
-            f"{forbidden!r} appears in producers.py; the registry must not be "
-            "project-overridable (design §6)"
+def test_project_selects_kind_instances_but_cannot_author_family_policy():
+    def family(kinds: frozenset[str]) -> tuple[FindingRule, ...]:
+        return tuple(
+            FindingRule(
+                id=f"{kind.replace('_', '-')}.status-vocabulary",
+                severities={"warn"},
+                subject_types={"path"},
+                qualifier_schema=Q,
+                title=f"{kind} status",
+                section=SECTION.id,
+                display_order=100 + index,
+            )
+            for index, kind in enumerate(sorted(kinds))
         )
+
+    producer = _producer().model_copy(
+        update={"rules": (), "kind_rule_factory": family}
+    )
+    registry = build_registry(
+        [producer],
+        active_kinds=frozenset({"canonical_parameter", "paper", "project-kind"}),
+    )
+    assert set(registry.rules_by_id) == {
+        "canonical-parameter.status-vocabulary",
+        "paper.status-vocabulary",
+        "project-kind.status-vocabulary",
+    }

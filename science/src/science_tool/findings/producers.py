@@ -2,7 +2,9 @@
 
 Rules are declared beside the producer that emits them; this module derives one
 immutable lookup authority from those declarations. There is no hand-maintained
-central table, so no repeated rule-id string can drift.
+central table, so no repeated rule-id string can drift. Project configuration
+selects the active kind set, while all producer and family policy remains toolkit
+code.
 
 Not project-overridable by construction: nothing here reads project
 configuration, the environment, or any file. A project needing different audit
@@ -15,12 +17,28 @@ without making health the ontology owner.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from types import MappingProxyType
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
-from science_model.audit import FindingRule, FindingSection
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+from science_model.audit import (
+    AuditFinding,
+    FindingRule,
+    FindingSection,
+    ProducerMetrics,
+    finding_fingerprint,
+)
+
+from science_tool.instruments import InstrumentResult
 
 #: Every namespace contributing producers to the derived registry. Each one must
 #: have a filesystem-derived completeness guard (design §6); see
@@ -36,15 +54,34 @@ class RegistryError(ValueError):
     """The derived registry is inconsistent, or a lookup names something undeclared."""
 
 
+KindRuleFactory = Callable[[frozenset[str]], tuple[FindingRule, ...]]
+
+
 class FindingProducer(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
     producer_id: str
     namespace: str
+    source_module: str
     rules: tuple[FindingRule, ...]
     sections: tuple[FindingSection, ...] = ()
     metrics_schema: type[BaseModel] | None = None
     remediators: frozenset[str] = frozenset()
+    kind_rule_factory: KindRuleFactory | None = None
+
+    @field_validator("source_module")
+    @classmethod
+    def _validate_source_module(cls, value: str) -> str:
+        if "\0" in value or "\\" in value:
+            raise ValueError("source_module must be a repo-relative POSIX path")
+        path = PurePosixPath(value)
+        if (
+            path.is_absolute()
+            or any(part in {".", ".."} for part in value.split("/"))
+            or path.suffix != ".py"
+        ):
+            raise ValueError("source_module must be a repo-relative POSIX .py path")
+        return value
 
     @model_validator(mode="after")
     def _validate_metrics_schema(self) -> FindingProducer:
@@ -56,6 +93,27 @@ class FindingProducer(BaseModel):
                 f"{self.producer_id!r} metrics schema "
                 f"{self.metrics_schema.__name__} must set model_config extra='forbid'"
             )
+        return self
+
+    def expanded_rules(self, active_kinds: frozenset[str]) -> tuple[FindingRule, ...]:
+        derived = (
+            self.kind_rule_factory(active_kinds)
+            if self.kind_rule_factory is not None
+            else ()
+        )
+        return (*self.rules, *derived)
+
+
+class FindingProducerResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument: InstrumentResult[AuditFinding]
+    metrics: ProducerMetrics = Field(default_factory=ProducerMetrics)
+
+    @model_validator(mode="after")
+    def _unwired_has_no_metrics(self) -> "FindingProducerResult":
+        if self.instrument.status == "unwired" and self.metrics.model_dump(mode="json"):
+            raise ValueError("an unwired producer cannot report metrics")
         return self
 
 
@@ -120,7 +178,9 @@ class FindingRegistry:
             raise RegistryError(f"{producer_id!r} metrics invalid: {exc}") from exc
 
 
-def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
+def build_registry(
+    producers: list[FindingProducer], *, active_kinds: frozenset[str]
+) -> FindingRegistry:
     """Derive the frozen registry, failing early on every §6 condition."""
     rules_by_id: dict[str, FindingRule] = {}
     sections_by_id: dict[str, FindingSection] = {}
@@ -151,7 +211,7 @@ def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
             section_order_claims[section.section_order] = section.id
             sections_by_id[section.id] = section
 
-        for rule in producer.rules:
+        for rule in producer.expanded_rules(active_kinds):
             if rule.id in rules_by_id:
                 raise RegistryError(f"duplicate rule id {rule.id!r}")
             rules_by_id[rule.id] = rule
@@ -180,3 +240,51 @@ def build_registry(producers: list[FindingProducer]) -> FindingRegistry:
         sections_by_id=MappingProxyType(dict(sections_by_id)),
         producers_by_id=MappingProxyType(dict(producers_by_id)),
     )
+
+
+def validate_producer_result(
+    registry: FindingRegistry,
+    producer_id: str,
+    value: object,
+) -> FindingProducerResult:
+    if type(value) is not FindingProducerResult:
+        raise TypeError(
+            f"registered producer {producer_id!r} must return FindingProducerResult, "
+            f"got {type(value).__name__}"
+        )
+    result = value
+    producer = registry.producers_by_id.get(producer_id)
+    if producer is None:
+        raise RegistryError(f"unregistered producer {producer_id!r}")
+    if result.instrument.status == "unwired":
+        return result
+
+    registry.validate_metrics(
+        producer_id,
+        result.metrics.model_dump(mode="json"),
+    )
+    seen: set[str] = set()
+    for finding in result.instrument.rows:
+        rule = registry.rule(finding.rule_id)
+        rebuilt = rule.build(
+            subject=finding.subject,
+            severity=finding.severity,
+            qualifiers=finding.qualifiers,
+            message=finding.message,
+            evidence=list(finding.evidence),
+        )
+        if rebuilt != finding:
+            raise RegistryError(
+                f"{producer_id!r} emitted a noncanonical {finding.rule_id!r} finding"
+            )
+        finding_id = finding_fingerprint(
+            rule_id=finding.rule_id,
+            subject=finding.subject,
+            identity_qualifiers=rule.identity_subset(finding.qualifiers),
+        )
+        if finding_id in seen:
+            raise RegistryError(
+                f"{producer_id!r} emitted duplicate finding identity {finding_id}"
+            )
+        seen.add(finding_id)
+    return result

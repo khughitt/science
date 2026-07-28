@@ -13,6 +13,7 @@ import click
 import yaml
 from science_model.audit import CASE_STATUSES
 
+from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.output import OUTPUT_FORMATS, emit
 
 
@@ -21,11 +22,11 @@ def findings_group() -> None:
     """Ingest and inspect audit findings."""
 
 
-def _registry():
+def _registry(entity_registry: EntityRegistry):
     """The derived registry. Plan 2 populates it from real producers."""
-    from science_tool.findings.producers import build_registry
+    from science_tool.findings.catalog import build_registry_for_entity_registry
 
-    return build_registry([])
+    return build_registry_for_entity_registry(entity_registry)
 
 
 def _load_ingestion_context(project_root: Path):
@@ -34,11 +35,12 @@ def _load_ingestion_context(project_root: Path):
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root)
-    return IngestionContext(
+    context = IngestionContext(
         canonical_entity_ids=frozenset(
             entity.canonical_id for entity in sources.entities
         )
     )
+    return context, sources.registry
 
 
 @findings_group.command("ingest")
@@ -89,11 +91,11 @@ def ingest_command(
             generated_at=attest_generated_at,
             producer_ids=frozenset(attest_producer_ids),
         )
-        context = _load_ingestion_context(project_root)
+        context, entity_registry = _load_ingestion_context(project_root)
         outcome = ingest_report(
             project_root,
             report,
-            _registry(),
+            _registry(entity_registry),
             provenance=provenance,
             context=context,
         )
