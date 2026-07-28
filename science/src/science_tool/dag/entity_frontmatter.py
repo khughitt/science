@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 from science_model.entities import EvidenceLineEntity
+from science_model.entity_schema import EntityValidationError, EntityValidator
 from science_model.frontmatter import split_frontmatter
 from science_model.propositions import PropositionEntity
 
@@ -85,6 +86,30 @@ def render_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
     return "---\n" + dumped + "---\n" + body
 
 
+class PersistedShapeError(ValueError):
+    """A write was refused because its result would not satisfy the durable base shape."""
+
+
+def certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path | None = None) -> None:
+    """Refuse to render or plan a write whose result would fail the durable base shape.
+
+    On create this catches a writer regression; on update it catches a record that predates
+    containment -- deliberately a REJECTION, not a backfill (design §5.4): a workbench update must
+    not silently migrate a record the author did not ask to touch.
+    """
+    frontmatter = yaml.safe_load(text.split("---\n", 2)[1]) or {}
+    try:
+        EntityValidator().validate_persisted_base_shape(frontmatter)
+    except EntityValidationError as exc:
+        where = f"{path}: " if path is not None else ""
+        raise PersistedShapeError(
+            f"{where}{entity.id} would not satisfy the durable base shape and was NOT written\n"
+            f"  {exc}\n"
+            f"  If this record predates writer containment, repair it directly; the workbench "
+            f"will not backfill it."
+        ) from exc
+
+
 def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: str) -> str:
     """Render a NEW entity file from the owned allowlist plus the create-only keys."""
     generated = generated_frontmatter(entity, created=created, updated=updated)
@@ -92,7 +117,9 @@ def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: 
     final = {key: value for key, value in generated.items() if key in allowed}
     final["created"] = created
     final["updated"] = updated
-    return render_from_frontmatter(final, body)
+    text = render_from_frontmatter(final, body)
+    certify_persisted(entity, text)
+    return text
 
 
 class MalformedTargetError(ValueError):
@@ -149,4 +176,6 @@ def render_update(
             final[key] = generated[key]
     final["created"] = created
     final["updated"] = updated
-    return render_from_frontmatter(final, body)
+    text = render_from_frontmatter(final, body)
+    certify_persisted(entity, text)
+    return text

@@ -239,3 +239,57 @@ def test_compile_refuses_a_PARSEABLE_but_inadmissible_destination(tmp_path, corr
         wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 28))
 
     assert written.read_bytes() == before, "a refused destination was modified anyway"
+
+
+def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
+    # THE §5.4 ruling. Three implementations were plausible -- reject, skip validation, backfill --
+    # and only rejection is fail-early without silently migrating a record nobody asked to touch.
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    entity = _proposition_for_row(_row())
+    edit = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    edit.path.parent.mkdir(parents=True, exist_ok=True)
+    edit.path.write_text(
+        edit.final_text.replace(f"title: {entity.title}", "title: ''"), encoding="utf-8"
+    )
+
+    with pytest.raises(PersistedShapeError) as exc:
+        _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
+
+    message = str(exc.value)
+    assert entity.id in message            # names the record
+    assert "title" in message              # names the field
+    assert edit.path.read_text(encoding="utf-8").count("title: ''") == 1  # and wrote nothing
+
+
+def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
+    # Both create paths, not just the risky-looking one. Neutralize the title derivation and the
+    # create path must refuse to plan a write rather than emit an empty-title file.
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    entity = _proposition_for_row(_row())
+    monkeypatch.setattr(entity, "title", "", raising=False)
+    with pytest.raises(PersistedShapeError, match="title"):
+        _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+
+
+def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch) -> None:
+    # The second create path, exercised through its real entry point. Task 3 routes it through the
+    # shared renderer; without certification INSIDE render_create, a compile-path regression could
+    # still persist an invalid base shape while `_entity_edit` stayed green.
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    monkeypatch.setattr(wb, "_proposition_title", lambda row: "")
+    workbench = wb.WorkbenchFile.model_validate(
+        {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
+                                 "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}
+    )
+
+    with pytest.raises(PersistedShapeError, match="title"):
+        wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
+
+    assert not list((tmp_path / "entities").rglob("*.md")), "a refused compile still wrote a file"
