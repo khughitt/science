@@ -122,24 +122,35 @@ nothing — the `report-only` tier exactly as `science wander`'s CLI behaves. Th
 report is deterministic and ordered (by score desc, then term) so it is
 snapshot-testable.
 
-**Output shape.** One payload object serves both the report run and the
-`--apply` run: `scope`, `rows[]`, and
+**Output shape.** One payload object serves both runs, distinguished by a
+**top-level `mode: "report" | "apply"`**: `mode`, `scope`, `rows[]`, and
 `context: {covered_not_loaded, unmapped, skipped_projects}`. Each row is
 
 ```
 {term, disposition: new|recur|skip|skip-addressed-conflict,
  score, likely_archetype, n_plans, n_projects,
- existing: [{id, status}, …],          # matches under (target, concern=tooling); [] for NEW
- result?: {action: created|recurred, id, recurrence_after}}   # present only on --apply, for NEW/RECUR rows
+ existing: [{id, status}, …],   # ALL same-identity matches (target, concern=tooling); [] for NEW
+ applied?: bool,                # present only when mode == "apply"
+ result?: {action: created|recurred, id, recurrence_after?}}   # present iff applied == true
 ```
 
-`existing[]` lists every same-identity match (one element for RECUR — the fail-early
-guard bounds open matches to ≤1; possibly several for SKIP). `result` is the
-**post-apply action contract** the CLI-behavior convention requires ("output
-should name what changed"): on `--apply`, a NEW row reports the `created` id, a
-RECUR row reports the `recurred` id and the resulting `recurrence_after`, and a
-SKIP row gets **no `result`** because it performs no write. On a report run
-(`result` absent everywhere) the payload is the pre-apply plan.
+`existing[]` lists **every** same-identity match in any status — an open+resolved
+pair is a legitimate RECUR that carries both (the open one plus a historical
+`wontfix`/`addressed`). The fail-early guard bounds *open* matches to ≤1, so the
+entry that recurs is unambiguous, and `result.id` names it.
+
+`mode` and `applied` resolve the scoped-apply ambiguity: under `--apply --term …`
+only selected NEW/RECUR rows are written, so a missing `result` must be
+distinguishable from a report run. In `mode: "report"` no row has `applied` or
+`result`. In `mode: "apply"` **every** NEW/RECUR/SKIP row carries `applied`
+(`true` only for a written selected row; `false` for an unselected row or any
+SKIP), and `result` is present exactly when `applied == true`. This is the
+post-apply action contract the CLI-behavior convention requires ("output should
+name what changed"): `created` returns `{action, id}`; `recurred` returns
+`{action, id, recurrence_after}` (= the entry's `len(occurrences)` after the
+bump). `recurrence_after` is **recur-only** — a NEW entry seeds no occurrence
+(mirroring `feedback add`, where recurrence counts re-observations), so there is
+no meaningful post-count to report for a creation.
 
 A `conflict` (>1 open match) is not a row — it aborts the run with a nonzero exit
 before any plan or result is emitted.
@@ -252,10 +263,19 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
 13. **Mixed resolved statuses** — a term with both a `wontfix` and an
     `addressed` match yields one SKIP row whose `existing[]` lists both, tagged
     `skip-addressed-conflict`. Guards R2.
-14. **Apply-result contract** — after `--apply`, a NEW row carries
-    `result.action == "created"` with the generated id; a RECUR row carries
+14. **Apply-result contract** — after `--apply`, `mode == "apply"`; a NEW row
+    carries `applied: true`, `result.action == "created"` with the generated id
+    and **no** `recurrence_after`; a RECUR row carries `applied: true`,
     `result.action == "recurred"` and `recurrence_after == len(occurrences)`; a
-    SKIP row has no `result`. Guards R4.
+    SKIP row carries `applied: false` and no `result`. A report run has `mode ==
+    "report"` and neither `applied` nor `result` on any row. Guards R4 and R3-opt.
+15. **Scoped `--apply --term`** — with one of two NEW terms selected, the
+    selected row is `applied: true` (written) and the unselected row is
+    `applied: false` (not written, no feedback file created for it); an unknown
+    `--term` aborts. Guards R1-scoped (mode/applied disambiguation).
+16. **Open+resolved RECUR payload** — a term with one open and one `wontfix`
+    match yields RECUR whose `existing[]` lists **both**, and `result.id` is the
+    open entry (the one that received the occurrence). Guards R2-precedence.
 
 ## Code layout
 
