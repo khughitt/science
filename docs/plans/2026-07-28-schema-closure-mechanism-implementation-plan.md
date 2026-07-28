@@ -489,23 +489,27 @@ git commit -m "feat(profiles): refuse toolkit-reserved kind fields in external m
 - Test: `science/model/tests/test_schema_closed_gate.py` (extend)
 
 **Interfaces:**
-- Consumes: `SHIPPED_KINDS`, `PROJECT_MIXIN_NAMES`, `_MIXIN_VERSION_BY_GENERATION`, `_BASE_VERSION_FOR_MIXIN` from Task 1.
+- Consumes: `SHIPPED_KINDS`, `PROJECT_MIXIN_NAMES`, `_MIXIN_VERSION_BY_GENERATION` from Task 1; the packaged `mixin-*.json` files on disk.
 - Produces: gates the Task 7 mutation matrix targets by name.
 
 **These are the gates that can genuinely disagree.** Each compares the declaration against a hand-authored artifact: a generation row (authored in `profile.py`), a file on disk, a descriptor field.
 
 - [ ] **Step 1: Write gate 1 — generation-row equality, per generation, commons excluded**
 
-Extend the file's `entity_schema.profile` import — Task 1 imported only `PROJECT_MIXIN_NAMES`, and these three are used for the first time here:
+Extend the file's imports — Task 1 imported only `PROJECT_MIXIN_NAMES`, and everything below is used for the first time in this task. All of it goes in the **top-of-file import block**; an import placed above the function that uses it is ruff **E402**:
 
 ```python
+import json
+from importlib.resources import files
+
 from science_model.entity_schema.profile import (
     COMMONS_MIXIN_NAMES,
     PROJECT_MIXIN_NAMES,
-    _BASE_VERSION_FOR_MIXIN,
     _MIXIN_VERSION_BY_GENERATION,
 )
 ```
+
+`_BASE_VERSION_FOR_MIXIN` is deliberately **not** imported — see Step 2 for why the assertion that would have used it was removed as tautological. Importing it unused is F401.
 
 Then append:
 
@@ -536,10 +540,9 @@ def test_GATE_1_commons_kinds_are_represented_in_every_generation_row() -> None:
 
 - [ ] **Step 2: Write gate 2 — armed components resolve, forward only**
 
+Both `json` and `files` were staged by Step 1's import block. Append:
+
 ```python
-from importlib.resources import files
-
-
 def _packaged_schema_names() -> set[str]:
     return {p.name for p in files("science_model.schemas").iterdir() if p.name.endswith(".json")}
 
@@ -558,13 +561,29 @@ def test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file() -> None:
             )
 
 
-def test_GATE_2_every_closed_kind_pins_base_2_0() -> None:
-    # `_BASE_VERSION_FOR_MIXIN` is a third hand-maintained surface. Base 1.0 enum-locks `kind` to
-    # the four commons kinds and an allOf can only narrow, so a closed project kind pinned to
-    # base 1.0 is structurally unvalidatable rather than merely wrong.
-    for name in PROJECT_MIXIN_NAMES:
-        assert _BASE_VERSION_FOR_MIXIN[name] == "2.0", f"{name} is closed but does not pin base 2.0"
+def test_GATE_2_every_armed_project_mixin_pins_its_own_kind() -> None:
+    # The packaged mixin's `const` is the hand-authored artifact here. base-2.0 constrains `kind`
+    # to a SHAPE only ("^[a-z][a-z0-9-]*$", with a $comment saying the mixin's const pins the
+    # exact kind), so the const is the sole thing tying a composed schema to the kind it claims
+    # to be. Copying mixin-hypothesis-1.0.json to mixin-<newkind>-1.0.json and forgetting to
+    # change the const yields a schema that silently validates every record as a hypothesis --
+    # the exact slice-author error, and one nothing else catches.
+    #
+    # Only files that EXIST are checked; a missing packaged file is the previous gate's finding,
+    # and duplicating it here would report one defect as two.
+    available = _packaged_schema_names()
+    for generation, row in _MIXIN_VERSION_BY_GENERATION.items():
+        for kind in set(row) - COMMONS_MIXIN_NAMES:
+            name = f"mixin-{kind}-{row[kind]}.json"
+            if name not in available:
+                continue
+            schema = json.loads(files("science_model.schemas").joinpath(name).read_text())
+            assert schema.get("properties", {}).get("kind") == {"const": kind}, (
+                f"generation {generation}: {name} does not pin kind to {kind!r}"
+            )
 ```
+
+**Why this replaced the base-version assertion.** A draft of this step asserted `_BASE_VERSION_FOR_MIXIN[name] == "2.0"` for every closed kind, describing that dict as "a third hand-maintained surface." It is not. `profile.py:101` builds it as `{**{n: "1.0" for n in COMMONS_MIXIN_NAMES}, **{n: "2.0" for n in PROJECT_MIXIN_NAMES}}` — so once Task 1 derives `PROJECT_MIXIN_NAMES` from `schema_closed`, the assertion reads a value the comprehension just wrote from the same set it is ranging over. It is the identity function, and it is the exact defect this file's docstring says every gate here must avoid. The reasoning behind it was sound — base 1.0 does enum-lock `kind` to `["dataset", "paper", "topic", "theme"]` (verified in `science-entity-base-1.0.json`), so a closed project kind under base 1.0 really would be structurally unvalidatable — but the derivation makes that unreachable, and an unreachable hazard needs no gate. The mixin `const` is the surface that can actually disagree.
 
 - [ ] **Step 3: Write gate 4 — descriptor prerequisites (one-way implication)**
 
@@ -584,7 +603,7 @@ def test_GATE_4_a_closed_kind_declares_entity_class_and_home() -> None:
 ```bash
 (cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)
 ```
-Expected: PASS. If gate 2's base-2.0 assertion fails, stop — `_BASE_VERSION_FOR_MIXIN` disagreeing with the declaration is a real finding, not a test to adjust.
+Expected: PASS — verified before this plan was written, by running the mixin-const gate's logic against the packaged files: both armed project mixins (`mixin-hypothesis-1.0.json`, `mixin-hypothesis-2.0.json`) pin `{"const": "hypothesis"}`. If it fails, stop: a packaged mixin disagreeing with the kind it is armed for is a real finding, not a test to adjust.
 
 - [ ] **Step 5: Lint, types, commit**
 
@@ -952,7 +971,13 @@ def test_structured_source_PRESERVES_an_unknown_reference_key() -> None:
     record = StructuredEntitySource.model_validate(
         {"canonical_id": "workflow:w", "title": "W", "kind": "workflow", "method": "phantom"}
     )
-    assert record.model_extra == {"method": "phantom"}  # `kind` is dropped by normalization, not here
+    # BOTH survive. `kind` is not a declared field of StructuredEntitySource (the declared set is
+    # canonical_id/title/profile/source_path/description/domain/created/updated and the five list
+    # fields -- verified), so under extra="allow" it is an extra like any other. It is dropped
+    # LATER, by `normalize_structured_row`'s STRUCTURED_DROP_KEYS, and this assertion is upstream
+    # of that. Asserting `{"method": "phantom"}` here would fail, and "fixing" it by dropping
+    # `kind` at the contract would reintroduce the very loss Task 4 exists to remove.
+    assert record.model_extra == {"kind": "workflow", "method": "phantom"}
 ```
 
 - [ ] **Step 9: Measure the new warnings before accepting them**
@@ -1155,7 +1180,43 @@ Create `science/src/science_tool/graph/entity_schema_validation.py` and **move**
 | `gen3_shape_issue` | `science_tool.datasets.capability_shape` | no |
 | `MarkdownAdapter.INJECTED_KEYS` | `science_tool.graph.storage_adapters.markdown` | no |
 
-In `sources.py`, delete both definitions and add `from science_tool.graph.entity_schema_validation import validate_against_schema, validate_dataset_gen3`, updating its two call sites (`:411`, `:417`). Run `(cd science && uv run --frozen pytest -q -k "sources or schema" 2>&1 | tail -3)` before continuing — a move that changed behaviour must surface here, not three steps later.
+**The new module's header, in full.** A "move the bodies" instruction with no import block is not executable — the two functions between them need six names:
+
+```python
+"""The composed-schema checks, extracted from `sources.py` so the registry can call them.
+
+They live here rather than in `sources.py` because `entity_registry.py` must call them and
+`sources.py:64` already imports `EntityRegistry` -- importing back would close a cycle. This
+module imports nothing from `sources.py` and nothing from `entity_registry.py`, which is what
+keeps that true.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
+
+from science_tool.datasets.capability_shape import gen3_shape_issue
+from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+
+if TYPE_CHECKING:
+    from science_tool.entity_profiles import ProjectSchema
+```
+
+`ProjectSchema` is annotation-only in both signatures, so it stays under `TYPE_CHECKING`; the other five are used at runtime. Copy the import *lines* from `sources.py` — `:47`, `:53`, `:86` — rather than retyping the module paths.
+
+**What `sources.py` is left holding.** Checked per name against the post-move file, because F401 at Step 10 will find these anyway and the answer differs per name:
+
+| name | after the move | action |
+|---|---|---|
+| `EntityValidationError` | used **only** by the moved function (`:1433`) | drop it from the `:47` import, keep `PROJECT_MIXIN_NAMES` |
+| `gen3_shape_issue` | used **only** by the moved function (`:1457`) | delete the `:53` import line entirely |
+| `PROJECT_MIXIN_NAMES` | still used at `:846` | keep |
+| `MarkdownAdapter` | still used at `:528` | keep |
+| `ProjectSchema` | still used at `:199` and in loader signatures | keep |
+
+Then delete both definitions and add `from science_tool.graph.entity_schema_validation import validate_against_schema, validate_dataset_gen3`, updating its two call sites (`:411`, `:417`). Run `(cd science && uv run --frozen pytest -q -k "sources or schema" 2>&1 | tail -3)` and `(cd science && uv run ruff check)` before continuing — a move that changed behaviour or orphaned an import must surface here, not three steps later.
 
 - [ ] **Step 4: Rename `resolve` to `resolve_class` — this is what makes Task 6 enforceable**
 
@@ -1295,7 +1356,7 @@ if TYPE_CHECKING:                                          # annotations only, b
 
 `validate_against_schema` already carries the `kind not in PROJECT_MIXIN_NAMES` gate (moved from `sources.py:1428`), so an open kind passes through untouched.
 
-**Step 3 leaves imports behind in `sources.py`.** Moving the two validators out orphans whatever only they used — check `EntityValidationError`, `composed_schema_for_kind`, and any `jsonschema` name against the post-move file and delete what is now unused. Ruff's F401 at Step 10 catches this, but find it here rather than three steps later.
+(Step 3 already ruled on the imports the move orphans in `sources.py` — `EntityValidationError` and `gen3_shape_issue`. Nothing further is owed here.)
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -1382,14 +1443,82 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
         )
 ```
 
-**(b) `canonical_parameter` — `sources.py:1150-1161`.** Identical shape, `kind="canonical_parameter"`, `path=record.source_path`. Note this site currently resolves at `:1150` **before** enriching at `:1152`; `build` collapses both, so delete the `schema: type[Entity] = registry.resolve(...)` line rather than leaving it as an unused local.
+**(b) `canonical_parameter` — `sources.py:1150-1161`.** This site currently resolves at `:1150` **before** enriching at `:1152`; `build` collapses both, so the `schema: type[Entity] = registry.resolve(...)` line is deleted rather than left as an unused local.
 
-**(c) structured source — `sources.py:1240-1249`.** Same shape, `kind=kind_name`, `path=record.source_path or default_path` — the same expression the `SourceRef` on the next line already uses.
+```python
+        def _enrich(candidate_raw: dict[str, Any]) -> frozenset[str]:
+            return _enrich_raw(
+                candidate_raw,
+                kind="canonical_parameter",
+                project_slug=project_slug,
+                local_profile=local_profile,
+                active_kinds=active_kinds,
+                ontology_catalogs=ontology_catalogs,
+            )
 
-**(d) commons — `commons_sources.py:395-423`.** Two edits here, not one:
+        entity = registry.build(
+            "canonical_parameter",
+            raw,
+            project_schema=project_schema,
+            path=record.source_path,
+            enrich=_enrich,
+        )
+```
 
-- `:395` `schema = registry.resolve(kind)` is deleted, and `:405`'s `"summary" in schema.model_fields` becomes `registry.declares_field(kind, "summary")`. This is the only site that needed the class for something other than construction, and it is why `declares_field` exists (Step 5).
-- `:415-423` becomes a `build` call whose closure wraps the existing `_enrich_raw` with `local_profile="shared"` and the other four arguments unchanged, with `path=str(record.body_path)`.
+**(c) structured source — `sources.py:1240-1249`.** `kind` is a loop variable here, so the closure closes over `kind_name`. `path` is the same expression the `SourceRef` on the following line already uses.
+
+```python
+            def _enrich(candidate_raw: dict[str, Any], _kind: str = kind_name) -> frozenset[str]:
+                return _enrich_raw(
+                    candidate_raw,
+                    kind=_kind,
+                    project_slug=project_slug,
+                    local_profile=local_profile,
+                    active_kinds=active_kinds,
+                    ontology_catalogs=ontology_catalogs,
+                )
+
+            entity = registry.build(
+                kind_name,
+                raw,
+                project_schema=project_schema,
+                path=record.source_path or default_path,
+                enrich=_enrich,
+            )
+```
+
+The `_kind: str = kind_name` default is deliberate, not stylistic: this closure is defined **inside a loop**, and a bare `kind_name` reference would be looked up when the closure runs, not when it is created. `build` calls `enrich` immediately, so late binding happens to be harmless today — but it is harmless by accident, and binding at definition costs one parameter.
+
+**(d) commons — `commons_sources.py:395-423`.** Two edits here, not one. First, `:395` `schema = registry.resolve(kind)` is deleted, and `:405`'s condition becomes a field question:
+
+```python
+    if "description" in fm and "summary" not in fm and registry.declares_field(kind, "summary"):
+        raw["summary"] = fm["description"]
+```
+
+This is the only site that needed the class for something other than construction, and it is why `declares_field` exists (Step 5). Then `:415-423`:
+
+```python
+    def _enrich(candidate_raw: dict[str, object]) -> frozenset[str]:
+        return _enrich_raw(
+            candidate_raw,
+            kind=kind,
+            project_slug=project_slug,
+            local_profile="shared",
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
+
+    return registry.build(
+        kind,
+        raw,
+        project_schema=project_schema,
+        path=str(record.body_path),
+        enrich=_enrich,
+    )
+```
+
+**Two direct test callers break here, and they are not in this task's file list yet — add them.** `tests/test_graph_commons_sources.py` calls both threaded functions itself: `_closure` (`:82`) calls `collect_commons_contributions`, and `_translate` (`:262`) calls `_materialize_commons_candidate`. A new required keyword-only parameter makes both a `TypeError` at collection time. Give each helper `project_schema=None` — these fixtures load unpinned commons records, where `None` is the honest value rather than a validation opt-out, and every existing assertion in that file is about translation, not schema refusal. Add `science/tests/test_graph_commons_sources.py` to Step 10's `git add`. The `-k commons` selection in Step 9 runs this file, so getting it wrong surfaces there — but fix it here, where the signature changes.
 
 Note the ordering constraint this site carries: the `description` → `summary` mapping, the `journal` → `venue` mapping, the `scope`/`profile`/`file_path` assignments, and the `_OVERLAY_ONLY_FIELDS` pops all happen at `:396-414`, **before** `build` is called — they shape the authored mapping into the one that gets validated. They are not enrichment and must not move into the closure; an overlay-only key left in place would be refused by a closed kind for a reason the author cannot act on.
 
@@ -1454,7 +1583,7 @@ Expected: PASS. The Markdown rejection-classification tests are the ones at risk
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
-git add science/src/science_tool/graph/entity_registry.py science/src/science_tool/graph/entity_schema_validation.py science/src/science_tool/graph/sources.py science/src/science_tool/graph/commons_sources.py science/tests/test_entity_construction_boundary.py
+git add science/src/science_tool/graph/entity_registry.py science/src/science_tool/graph/entity_schema_validation.py science/src/science_tool/graph/sources.py science/src/science_tool/graph/commons_sources.py science/tests/test_entity_construction_boundary.py science/tests/test_graph_commons_sources.py
 git commit -m "feat(graph): merge entity resolution and construction into one validating operation"
 ```
 
@@ -1491,11 +1620,9 @@ Scope stays derived from the package tree — `graph/` is the entity-loading pac
 
 - [ ] **Step 1: Write the guard, its probe, and its rename tripwire together**
 
-Append to `science/tests/test_entity_construction_boundary.py`:
+Add `import ast` **to the file's import block at the top** — Task 4 Step 1 created that block, and an import placed here, after four tasks' worth of functions, is ruff **E402**. Then append:
 
 ```python
-import ast
-
 _REGISTRY_MODULE = "entity_registry.py"
 
 
@@ -1543,11 +1670,15 @@ def _dotted(func: ast.expr) -> list[str] | None:
 
 
 def _local_entity_names(tree: ast.Module, entity_names: frozenset[str]) -> frozenset[str]:
-    """Entity class names PLUS this module's own aliases for them.
+    """Entity class names PLUS every local name this module binds to one.
 
-    `from science_model.entities import MethodEntity as ME` binds `ME`, and `ME(**raw)` is the
-    same bypass under a different spelling. Deriving the alias from the module's own import
-    statements is the only way to see it -- there is nothing in the name `ME` to recognize.
+    Two binding forms, and both are ordinary code rather than evasion:
+      `from science_model.entities import MethodEntity as ME`  -> ME
+      `EntityType = MethodEntity`                              -> EntityType
+
+    There is nothing in the names `ME` or `EntityType` to recognize, so the binding has to be
+    derived from the module's own statements. The assignment pass runs to a fixed point because
+    rebinding chains (`A = MethodEntity; B = A`) are one edit away from being written.
     """
     local = set(entity_names)
     for node in ast.walk(tree):
@@ -1555,6 +1686,19 @@ def _local_entity_names(tree: ast.Module, entity_names: frozenset[str]) -> froze
             for alias in node.names:
                 if alias.name in entity_names and alias.asname:
                     local.add(alias.asname)
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            target, value = node.targets[0], node.value
+            if not isinstance(target, ast.Name) or target.id in local:
+                continue
+            segments = _dotted(value) if isinstance(value, ast.Name | ast.Attribute) else None
+            if segments and any(s in local for s in segments):
+                local.add(target.id)
+                changed = True
     return frozenset(local)
 
 
@@ -1629,17 +1773,21 @@ def test_the_guarded_METHOD_still_exists() -> None:
 
 def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> None:
     # An AST guard that silently matches nothing passes forever. Pin the detector against all
-    # NINE bypass spellings -- including the ones that defeated three earlier drafts -- so a
+    # ELEVEN bypass spellings -- including the ones that defeated four earlier drafts -- so a
     # refactor that breaks the matching fails HERE rather than turning the gate into a no-op.
     #
-    # The probe carries real imports because `_local_entity_names` reads them: the aliased case
-    # (`ME`) is invisible without the `as` clause that bound it.
+    # The probe carries real imports and real assignments because `_local_entity_names` reads
+    # both: `ME` is invisible without the `as` clause that bound it, and `EntityType` without the
+    # assignment that did.
     probe = tmp_path / "probe.py"
     probe.write_text(
         "from science_model import entities\n"
         "from science_model.entities import Entity, MethodEntity\n"
         "from science_model.entities import MethodEntity as ME\n"
         "from science_tool.graph.sources import SkippedEntity\n"
+        "\n"
+        "EntityType = MethodEntity\n"                    # local rebinding
+        "Indirect = EntityType\n"                        # and a chain, to pin the fixed point
         "\n"
         "def f(registry, context, reg, resolver, path, kind, raw):\n"
         "    registry.resolve_class(kind)\n"
@@ -1651,16 +1799,20 @@ def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> 
         "    entities.MethodEntity.model_validate(raw)\n"# module-qualified classmethod -- match
         "    ME(**raw)\n"                                # ALIASED import -- must match
         "    ME.model_validate(raw)\n"                   # aliased classmethod -- must match
+        "    EntityType(**raw)\n"                        # LOCAL REBINDING -- must match
+        "    Indirect.model_validate(raw)\n"             # rebinding chain -- must match
         "    resolver.resolve(kind)\n"                   # a DIFFERENT resolver -- must not match
         "    path.resolve()\n"                           # pathlib -- must not match
         "    SkippedEntity(path='x')\n"                  # a dataclass, not an entity -- no match
         "    isinstance(raw, Entity)\n",                 # a type USE, not construction -- no match
         encoding="utf-8",
     )
-    assert _class_obtaining_lines(probe) == [7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert _class_obtaining_lines(probe) == [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 ```
 
-**This probe was executed against the real detector before this plan was written** — nine hits, and all four negatives correctly ignored. The negatives are the ones that broke earlier drafts: `SkippedEntity(path='x')` (which an `endswith("Entity")` match flags, and which `sources.py` constructs five times) and `isinstance(raw, Entity)` (which the import-surface draft flagged in twelve modules). The four *positives* added in this revision — module-qualified and aliased — are ordinary import styles, not deliberate evasion, and three successive shape-matching drafts missed them one at a time. That is the argument for matching segments instead of shapes.
+**This probe was executed against the real detector before this plan was written** — eleven hits at lines 10–20, and all four negatives correctly ignored, with zero offenders on the real `graph/` tree. The negatives are the ones that broke earlier drafts: `SkippedEntity(path='x')` (which an `endswith("Entity")` match flags, and which `sources.py` constructs five times) and `isinstance(raw, Entity)` (which the import-surface draft flagged in twelve modules). The six *positives* added across the last two revisions — module-qualified, aliased, rebound, and a rebinding chain — are all ordinary Python, not evasion, and four successive drafts missed them one or two at a time. Each miss was found by someone writing the bypass down, never by the guard.
+
+**What remains uncovered, named rather than implied.** The detector is a static, single-module analysis. It does not see `getattr(registry, "resolve_" + "class")`, a class arriving as a function *parameter* (`def f(model: type[Entity]): model(**raw)`), or one pulled out of a dict at runtime (`CORE_KIND_MODELS[kind](**raw)` — which is why `entity_registry.py` is the excluded module rather than a special case). Each needs a data-flow analysis this test is not, and each is deliberate code rather than an ordinary idiom someone reaches for by accident. The durable barrier is that `build` is the only operation returning a *validated* entity; the guard's job is to keep the accidental bypasses out, and the list above is what it does not claim.
 
 - [ ] **Step 2: Run it and read the real result**
 
@@ -1700,12 +1852,14 @@ This is a **verification** task. Each mutation breaks the implementation deliber
 
 **Method for every mutation:** confirm `git status --short` is clean → apply the mutation exactly → run the named selection → record the actual failures → revert (`git checkout -- <file>`) → confirm clean again. **Never commit a mutation.**
 
-**The expected failures are part of the assertion, and they are stated as a NAMED SET, not a count.** Each row below lists the tests that must fail. The check is set equality against what you observe.
+**Every mutation below carries its exact command.** A mutation without one is not reproducible: the observed failure set is a function of the selection, and two people running "the gates" get different answers. Mutation 3, for instance, fails gate 1 *and* the armed-component gate (`mixin-concept-1.0.json` is not packaged) — which reads as an unpredicted cascade only if the selection was never pinned.
 
-Two directions, and they are not symmetric:
+**The semantics are REQUIRED-SUBSET, not set equality**, and the asymmetry is the point:
 
-- **A named test that does not fail is a hard stop.** That is the gate failing to catch its mutation, which is the whole thing this task certifies. Report it; do not proceed.
-- **An unnamed test that also fails is a finding to record, not a stop** — unless it reveals the mutation broke something unrelated. Gates overlap by design: mutation 5a strips the shadow key so the closed-kind rejection never fires, and mutation 5b removes the call the validation spy watches. Both cascades were traced to their cause when this matrix was written; a third one you can trace to the mutation is fine, one you cannot is a stop.
+- **Each mutation names the gate it targets. That gate MUST fail — if it does not, stop.** A gate that does not catch its own mutation is the one thing this task exists to detect, and it is the only hard stop here.
+- **The plan also predicts the other tests that fail under the same command.** These are a *prediction to check*, not a pass condition. Record the full observed set; where it differs from the prediction, report the difference with the cause you traced. A cascade you can trace to the mutation is expected — gates overlap by design, and the 5a/5b/5c rows below say exactly how. A failure you cannot trace to the mutation is a finding worth stopping for.
+
+That split is deliberate. The targeted-gate direction is a property of the implementation and is worth failing the task over. The full-set direction is a property of *this plan's foresight*, and four review rounds have shown the plan wrong about it twice — so it is written as something to measure, not something to satisfy.
 
 Do not edit this plan to match what you observed. A prediction and an implementation disagreeing means one of them is wrong, and which one is the finding.
 
@@ -1713,43 +1867,53 @@ Do not edit this plan to match what you observed. A prediction and an implementa
 
 Delete `"hypothesis": "1.0"` from generation 2 in `_MIXIN_VERSION_BY_GENERATION`.
 Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
-Expected: `test_GATE_1_every_generation_row_matches_the_closed_declaration` FAILS, naming `hypothesis` as declared-closed-but-missing-from-the-row. **Revert.**
+**Targets** `test_GATE_1_every_generation_row_matches_the_closed_declaration` — must FAIL, naming `hypothesis` as declared-closed-but-missing-from-the-row.
+Predicted alongside it: nothing. The armed-component gate ranges over row entries, so removing one gives it less to check, not more; `PROJECT_MIXIN_NAMES` derives from `schema_closed` and is untouched. **Revert.**
 
 - [ ] **Step 2: Mutation 2 — a closed declaration with no generation rows**
 
 Set `schema_closed=True` on `concept` in `core.py`.
-Expected: gate 1 FAILS for **both** generations. Gate 4 passes (concept declares `entity_class` and `home`), and `test_this_mechanism_closes_NO_new_kind` also FAILS — two named gates, which is correct, not redundant. **Revert.**
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
+**Targets** `test_GATE_1_every_generation_row_matches_the_closed_declaration` — must FAIL, for **both** generations, naming `concept` as declared-closed-but-missing-from-the-row.
+Predicted alongside it: `test_this_mechanism_closes_NO_new_kind` also fails, because `PROJECT_MIXIN_NAMES` now derives `{"hypothesis", "concept"}`. Two gates for one mutation is correct, not redundant — one says the surfaces disagree, the other says this branch closed a kind it was not supposed to. Gate 4 passes (`concept` declares both `entity_class` and `home`), and the mixin-const gate passes (it ranges over row entries, and no row mentions `concept`). **Revert.**
 
 - [ ] **Step 3: Mutation 3 — a project mixin in a row with no closed declaration**
 
 Add `"concept": "1.0"` to generation 2's row without touching any declaration.
-Expected: gate 1 FAILS naming `concept` as in-the-row-but-not-declared. **Revert.**
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
+**Targets** `test_GATE_1_every_generation_row_matches_the_closed_declaration` — must FAIL, naming `concept` as in-the-row-but-not-declared.
+Predicted alongside it: `test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file` also fails, because `mixin-concept-1.0.json` is not packaged. That is the same defect seen from the other end — arming a component the toolkit cannot resolve — and it is why the mixin-const gate skips names that are not on disk rather than reporting a third time. **Revert.**
 
 - [ ] **Step 4: Mutation 4 — remove a packaged mixin file armed by a row**
 
 `git mv science/model/src/science_model/schemas/mixin-hypothesis-1.0.json /tmp/`
-Expected: `test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file` FAILS naming `hypothesis/1.0`. **Revert** (`git mv` back, or `git checkout --`).
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
+**Targets** `test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file` — must FAIL, naming `hypothesis/1.0`.
+Predicted alongside it: nothing. `test_GATE_2_every_armed_project_mixin_pins_its_own_kind` skips the missing file by design, so one missing artifact reports as one failure. **Revert** (`git mv` back, or `git checkout --`).
 
 - [ ] **Step 5: Mutation 5a — restore `extra="ignore"` on `StructuredEntitySource`**
 
-Expected: **three** named failures.
+Run: `(cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py tests/test_undeclared_key_diagnostic.py -q)`
+**Targets** `test_an_unknown_key_SURVIVES_the_source_contract` — must FAIL, `model_extra` is `{}`.
+Predicted alongside it, **four** more, all traceable to the same strip:
+1. `test_an_authored_shadow_key_SURVIVES_the_whole_load_path` — the key is gone by the time the entity exists.
+2. `test_structured_source_PRESERVES_an_unknown_reference_key` (in `test_undeclared_key_diagnostic.py`, inverted by Task 4 Step 8) — `model_extra` is empty, so the assertion that both extras survive fails. This is why that file is in the selection.
+3. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` — with the key stripped at the contract, the mapping reaching the composed schema is clean, nothing refuses it, and the `pytest.raises` fails. Precisely the point of 5a: the check is intact and still catches nothing, because it sits downstream of the loss.
+4. `test_the_same_closed_row_WITHOUT_the_shadow_key_loads` — **the negative control fails too, and tracing why matters.** `status` is not a declared field of `StructuredEntitySource`; it rides through as an extra and is exactly what the hypothesis mixin *requires*. Restore `extra="ignore"` and `status` is destroyed with everything else, so the valid row now gets refused for a missing required field. If you see this one and cannot explain it, that is the trace.
 
-1. `test_an_unknown_key_SURVIVES_the_source_contract` — `model_extra` is `{}`.
-2. `test_an_authored_shadow_key_SURVIVES_the_whole_load_path` — the key is gone by the time the entity exists.
-3. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` — **the cascade, and it is correct.** With the key stripped at the contract, the mapping that reaches the composed schema is clean, so nothing refuses it and the `pytest.raises` fails. This is precisely the point of 5a: the check is intact and still catches nothing, because it is downstream of the loss.
-
-Together these prove the **loss** is prevented, at the contract, on the real path, and where it would otherwise silently disarm the refusal.
+Together these prove the **loss** is prevented, at the contract, on the real path, on the diagnostic surface, and where it would otherwise silently disarm the refusal.
 
 `test_a_shadow_key_reaches_the_normalized_mapping` is **expected to keep passing** and that is not a defect: it hands a dict straight to `normalize_structured_row`, so the source contract is not in its path. It pins normalization, not losslessness. This is exactly why Task 4 Step 7's end-to-end test exists — without it, this mutation would be caught only by a single unit assertion on a model config, and the pipeline could regress with the gate still green. **Revert.**
 
 - [ ] **Step 6: Mutation 5b — drop the schema check from `registry.build`**
 
 Remove the `validate_against_schema(...)` line from `build`, leaving only the projection.
-Expected: **three** named failures.
+Run: `(cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py tests/test_undeclared_key_diagnostic.py -q)`
+**Targets** `test_build_validates_a_closed_kind_before_projecting` (unit) — must FAIL: no refusal at the choke point.
+Predicted alongside it:
 
-1. `test_build_validates_a_closed_kind_before_projecting` (unit) — no refusal at the choke point.
-2. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` (end-to-end) — no refusal on the real path.
-3. `test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES` — **the cascade, and it is correct.** The spy patches the name `build` calls; deleting the call leaves `seen` empty and its `next()` raises `StopIteration`. A spy on a function nobody calls has nothing to say, which is the honest result.
+1. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` (end-to-end) — no refusal on the real path.
+2. `test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES` — **the cascade, and it is correct.** The spy patches the name `build` calls; deleting the call leaves `seen` empty and its `next()` raises `StopIteration`. A spy on a function nobody calls has nothing to say, which is the honest result.
 
 Together these prove the **check runs**, at the choke point and on the real load path.
 
@@ -1760,11 +1924,12 @@ The end-to-end one is the load-bearing failure: it is the single test that fails
 - [ ] **Step 7: Mutation 5c — obtain an entity class outside `registry.build`**
 
 Restore one resolve-then-construct pair: in `_load_structured_source_records` (`sources.py`), replace the `registry.build(...)` call with `registry.resolve_class(kind_name).model_validate(raw)`.
-Expected: **three** named failures.
+Run: `(cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py tests/test_undeclared_key_diagnostic.py -q)`
+**Targets** `test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from` — must FAIL, naming `sources.py` and the line.
+Predicted alongside it:
 
-1. `test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from` — names `sources.py` and the line. **This is the one the mutation targets;** the other two are cascades, and they are correct.
-2. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` — the bypassed path no longer validates, so nothing refuses.
-3. `test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES` — same cause: the spied call is gone from this path, `seen` is empty.
+1. `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` — the bypassed path no longer validates, so nothing refuses.
+2. `test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES` — same cause: the spied call is gone from this path, `seen` is empty.
 
 That 5c reproduces 5b's two cascades is the point rather than noise: routing around `build` and gutting `build` are the same defect reached from opposite directions. **Revert.**
 
@@ -1775,22 +1940,30 @@ An *import* of an entity class is deliberately **not** the mutation here: twelve
 - [ ] **Step 8: Mutation 5d — add an undeclared key to the drop set**
 
 Change `STRUCTURED_DROP_KEYS` to `frozenset({"kind", "title"})`.
-Expected: `test_kind_is_the_only_declared_DROP` FAILS. **Revert.**
+Run: `(cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py tests/test_undeclared_key_diagnostic.py -q)`
+**Targets** `test_kind_is_the_only_declared_DROP` — must FAIL.
+Predicted alongside it: `test_a_shadow_key_reaches_the_normalized_mapping` and any normalization test whose fixture carries `title`, because a dropped `title` fails the base schema's `required`. Trace each to the drop set before accepting it. **Revert.**
 
 - [ ] **Step 9: Mutation 6 — closed descriptor with `home=None`**
 
 Set `home=None` on `hypothesis` in `core.py`.
-Expected: `test_GATE_4_a_closed_kind_declares_entity_class_and_home` FAILS on `home`. **Revert.**
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
+**Targets** `test_GATE_4_a_closed_kind_declares_entity_class_and_home` — must FAIL on `home`.
+Predicted alongside it: nothing in this file. **Revert.**
 
 - [ ] **Step 10: Mutation 7 — closed descriptor with `entity_class=None`**
 
 Set `entity_class=None` on `hypothesis`.
-Expected: gate 4 FAILS on `entity_class`. **Revert.**
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
+**Targets** `test_GATE_4_a_closed_kind_declares_entity_class_and_home` — must FAIL on `entity_class`.
+Predicted alongside it: nothing in this file. **Revert.**
 
 - [ ] **Step 11: Mutation 8 — external manifest authors `schema_closed`**
 
 Already covered by `test_an_external_manifest_may_NOT_author_schema_closed`, which asserts the raise directly rather than requiring a source mutation. Confirm it fails when the `_refuse_toolkit_reserved_fields` validator body is replaced with `return data`.
-Expected: both external-manifest rejection tests FAIL. **Revert.**
+Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)` and `(cd science && uv run --frozen pytest tests/test_local_kind_registration_reserved_fields.py -q)`
+**Targets** both external-manifest rejection tests (`..._may_NOT_author_schema_closed` and `..._FALSE_either`) plus the tool-side loader test — all three must FAIL.
+Predicted alongside them: nothing; the two control tests in that file must keep passing, which is what shows the rejection was the only thing removed. **Revert.**
 
 - [ ] **Step 12: Record the results and commit**
 
