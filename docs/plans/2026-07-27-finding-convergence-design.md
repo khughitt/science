@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 14. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 15. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -118,6 +118,18 @@
 > suppression-neutral for the verified projects. Unknown external corpora remain covered
 > by Plan 3's fail-loud migration contract rather than by an undeclared compatibility
 > alias.
+>
+> **Revision 15 corrects revision 14's incomplete rule-ID survey and closes the
+> validation-notice seam.** Revision 14 inspected explicit `rule=` arguments but missed
+> fixed strings captured inside helpers such as `_result(..., "manifest", ...)`. An AST
+> pass following each helper's rule parameter finds 30 nonconforming fixed IDs: 29 carry
+> WARN/ERROR observations and receive exact dotted-kebab mappings in §6; `papers` is
+> INFO-only and declares no rule. Command-only INFO observations are now explicitly
+> `ValidationNotice`, preserved for `science validate --verbose` but absent from
+> `FindingProducerResult`, health, cases, and counts. A frozen
+> `ValidationObservationBatch` makes findings, metrics, and notices products of one pass;
+> its producer projection still returns exactly `FindingProducerResult`, so the uniform
+> channel is not widened.
 
 ## Motivation
 
@@ -780,12 +792,41 @@ site supplies a rule explicitly; retaining an unused default would preserve exac
 undeclared-string construction path this registry removes.
 
 **Static validation IDs must also satisfy the frozen grammar.** Most current IDs already
-do. Two finding IDs do not, and Plan 2 applies these exact one-time renames:
+do. Plan 2 applies these exact one-time mappings to the complete nonconforming fixed-ID
+set:
 
 | Current ID | Declared Plan 2 ID | Gate / surveyed acceptance effect |
 |---|---|---|
+| `autonomous-runs` | `autonomous-runs.check` | none |
+| `bias_audits` | `bias-audits.check` | none |
+| `cross-references` | `cross-references.check` | none |
+| `directory_structure` | `directory-structure.check` | none |
+| `discussions` | `discussions.check` | none |
+| `document_structure` | `document-structure.check` | none |
+| `entity-conformance` | `entity-conformance.check` | none |
 | `evidence.empirical.requires_dataset_usage` | `evidence.empirical.requires-dataset-usage` | none |
+| `gap_analysis` | `gap-analysis.check` | none |
+| `graph` | `graph.check` | none |
+| `hypotheses` | `hypotheses.check` | none |
+| `hypothesis_comparisons` | `hypothesis-comparisons.check` | none |
+| `id-prefixes` | `id-prefixes.check` | none |
+| `forbidden-second-declaration` | `identity.forbidden-second-declaration` | none |
+| `lens_views` | `lens-views.check` | none |
+| `manifest` | `manifest.check` | none |
+| `non-materializing-field` | `materialization.non-materializing-field` | none |
+| `notes` | `notes.check` | none |
+| `origins` | `origins.check` | none |
+| `orphan-datapackage-owner` | `dataset.orphan-datapackage-owner` | none |
+| `papers` | —; INFO-only command notice | none |
+| `prereg` | `prereg.check` | none |
+| `project_readme` | `project-readme.check` | none |
 | `proposition.claim_layer.canonical` | `proposition.claim-layer.canonical` | none |
+| `references` | `references.check` | none |
+| `registration` | `registration.check` | none |
+| `research_scope` | `research-scope.check` | none |
+| `tasks` | `tasks.check` | none |
+| `tooling` | `tooling.check` | none |
+| `unresolved_markers` | `unresolved-markers.check` | none |
 
 The nearby `prose_lints.*` spellings are governed by the semantic split above, and
 `prose_lints.numeric-verification.coverage` becomes metrics rather than a rule. These are
@@ -793,6 +834,31 @@ the complete nonconforming rule spellings in the current validation finding stre
 Plan 2 adds an emitted-ID grammar guard; it must not normalize arbitrary strings or retain
 aliases. A future invalid ID is a producer declaration failure, not a reason to widen the
 wire grammar.
+
+**Command notices are explicit producer-internal observations.** Sixty-five current
+validation sites emit INFO. Only `prose-lints.config` and `prose-lints.advisory` are the
+policy-bearing INFO findings ruled above; numeric-verification coverage is metrics. Every
+other INFO site is a `ValidationNotice`: progress, pass confirmation, skipped optional
+work, or a descriptive tally shown only by the command's verbose renderer. Notices have
+typed path / line / message fields but no `rule_id`, never enter
+`FindingProducerResult.instrument.rows`, and never enter health or case ingestion.
+
+The one-pass mechanism is explicit rather than a mutable side channel:
+
+1. a canonical check is executed once, converts its typed issue observations through
+   declarations, and freezes a `ValidationObservationBatch` containing
+   `AuditFinding`s, optional metrics, and notices;
+2. its registered producer projection consumes that batch and returns exactly
+   `FindingProducerResult`;
+3. the runner immediately validates that result at the generic boundary; and
+4. `RunResult.notices` carries the same batch's notices only to
+   `science validate --verbose`.
+
+Focused check functions may still yield typed observations and be wrapped into the batch
+once. A check is never executed twice. JSON validation output remains WARN/ERROR-only as
+today; normal text preserves per-rule INFO visibility (`prose-lints.config` visible,
+`prose-lints.advisory` hidden); verbose text retains notice messages, although the old
+bracketed pseudo-rule label is removed because a notice is deliberately not a rule.
 
 The per-kind rules are derived when the project-scoped registry is built from the same
 trusted active entity-kind registry used by graph loading. The **family declaration** —
@@ -955,7 +1021,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; the two static underscore IDs use §6's exact kebab renames; every old emission still produces one row, and INFO never entered `count_issues`, so the changes are count-neutral |
+| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 29 static rule mappings and the INFO-only `papers` removal; every old WARN/ERROR emission still produces one finding, and INFO never entered health `count_issues`, so the changes are count-neutral |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -1014,11 +1080,12 @@ be absorbed as registry population.
 The numeric-verification coverage row is not part of that rename: its four counts move
 unchanged into producer metrics and produce no `AuditFinding`.
 
-The two static validation-ID renames are also count-neutral. Neither old ID is named by a
-gate tier or by any of the 50 surveyed acceptance entries. Plan 2 therefore changes no
-verified suppression or exit-code behavior. It deliberately does not add aliases:
-repositories outside the surveyed corpus are handled by Plan 3's stale/ambiguous
-reporting before configuration is rewritten.
+The static validation-ID mappings are also count-neutral. None of the old IDs is named by
+a gate tier or by any of the 50 surveyed acceptance entries. Plan 2 therefore changes no
+verified suppression or exit-code behavior. The INFO-only `papers` observation never
+entered health counts and remains a command notice. Plan 2 deliberately does not add
+aliases: repositories outside the surveyed corpus are handled by Plan 3's
+stale/ambiguous reporting before configuration is rewritten.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
@@ -1348,7 +1415,10 @@ class AuditReport(TypedDict):
     finding occurrence may still record a measured count as non-identity observation
     data when the finding itself states a policy-relevant condition. In particular,
     `prose_lints.numeric-verification.coverage` retains its four tallies in producer
-    metrics and declares no finding rule.
+    metrics and declares no finding rule. Command-only pass/progress/skip INFO
+    observations are `ValidationNotice`, not metrics and not findings; they remain
+    available only to the verbose validation renderer from the same frozen observation
+    batch.
 29. **Producer-namespace completeness** — every namespace contributing to the derived
     registry has a filesystem-derived guard, and each namespace's execution path crosses
     the generic result-validation boundary rather than validating in its own reader.
@@ -1363,9 +1433,11 @@ class AuditReport(TypedDict):
     `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
     and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
     advisories map to their distinct canonical rules with their current visibility.
-    Every emitted validation rule satisfies the frozen dotted-kebab grammar; the only
-    current static renames are the two exact §6 mappings, and the old underscore IDs are
-    absent from declarations and emissions.
+    Every emitted validation rule satisfies the frozen dotted-kebab grammar; the current
+    static mappings equal the complete §6 table, and every old nonconforming ID is absent
+    from declarations and emissions. All non-policy INFO sites emit
+    `ValidationNotice`, not an `AuditFinding`; the check executes once and its notice and
+    producer result derive from the same frozen observation batch.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
