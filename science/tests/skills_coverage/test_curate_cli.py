@@ -137,3 +137,40 @@ def test_bad_status_reports_click_error(tmp_path: Path, monkeypatch) -> None:
     result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
     assert result.exit_code != 0
     assert "unknown status" in result.output
+
+
+def test_feedback_path_must_be_directory_before_scan(tmp_path: Path, monkeypatch) -> None:
+    feedback_path = tmp_path / "feedback"
+    feedback_path.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(feedback_path))
+
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+
+    assert result.exit_code != 0
+    assert "feedback directory is not a directory" in result.output
+
+
+def test_malformed_feedback_reports_click_error(tmp_path: Path, monkeypatch) -> None:
+    fb, _ = _setup(tmp_path, monkeypatch)
+    fb.mkdir()
+    (fb / "fb-2026-07-28-900.yaml").write_text("not: [valid", encoding="utf-8")
+
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+
+    assert result.exit_code != 0
+    assert "could not load feedback entries" in result.output
+
+
+def test_invalid_feedback_reports_click_error(tmp_path: Path, monkeypatch) -> None:
+    fb, _ = _setup(tmp_path, monkeypatch)
+    fb.mkdir()
+    (fb / "fb-2026-07-28-900.yaml").write_text(
+        "id: fb-2026-07-28-900\ntarget: skill-coverage:x\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+
+    assert result.exit_code != 0
+    assert "could not load feedback entries" in result.output

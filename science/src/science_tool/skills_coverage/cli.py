@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 
 import click
+import yaml
+from pydantic import ValidationError
 
 from science_model.skill_coverage.coverage import (
     SkillCoverageError,
@@ -73,13 +75,18 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
     # the combination outright. Apply results already print to stdout (redirect for audit).
     if apply_ and output is not None:
         raise click.ClickException("--output cannot be combined with --apply (results go to stdout)")
+    feedback_dir = resolve_feedback_dir()
+    if feedback_dir.exists() and not feedback_dir.is_dir():
+        raise click.ClickException(f"feedback directory is not a directory: {feedback_dir}")
     try:
         report = scan_portfolio(only=project)
     except (SkillCoverageScanError, SkillCoverageError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    feedback_dir = resolve_feedback_dir()
-    entries = load_all_entries(feedback_dir)
+    try:
+        entries = load_all_entries(feedback_dir)
+    except (OSError, UnicodeError, yaml.YAMLError, ValidationError) as exc:
+        raise click.ClickException(f"could not load feedback entries from {feedback_dir}: {exc}") from exc
     try:
         plan = build_curate_plan(report.candidates, entries, coverage_context(report), report.scope.to_dict())
     except (CurateConflictError, CurateStatusError) as exc:
