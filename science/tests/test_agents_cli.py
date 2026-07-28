@@ -362,9 +362,9 @@ def test_install_cli_defaults_to_project_scope_and_reports_counts(
     second = runner.invoke(agents_group, args)
 
     assert first.exit_code == 0, first.output
-    assert "Installed 52 links; 0 already current" in first.output
+    assert "Installed 53 links; 0 already current" in first.output
     assert second.exit_code == 0, second.output
-    assert "Installed 0 links; 52 already current" in second.output
+    assert "Installed 0 links; 53 already current" in second.output
     assert (project / ".agents" / "skills" / "science-command-preamble").is_symlink()
     assert not (project / ".codex").exists()
 
