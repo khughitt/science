@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 18. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 19. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -158,6 +158,16 @@
 > Plan 2 replaces each formatter with a toolkit-owned `key -> FindingRule` map and an
 > equality guard against its upstream finite key authority (§6). Unknown keys fail;
 > emission never constructs a rule string.
+>
+> **Revision 19 closes validation-row identity.** Existing umbrella validation rules can
+> emit several rows for one path, so `(rule, subject)` alone would collide and reduce
+> counts. Every ordinary validation rule now uses the required ordered identity qualifier
+> `key: list[str]`; producers build it only from stable semantic components such as
+> predicate code, field name, canonical ref, or relation endpoints. Message, severity,
+> line, and list position remain forbidden (§3, §6, §9). Rules with already-frozen
+> special identity (`prose-lints.*`, correspondence evidence signature, and other
+> explicitly enumerated schemas) keep their specific keys rather than acquiring a
+> redundant generic one.
 
 ## Motivation
 
@@ -818,6 +828,31 @@ upstream authority (or the exact frozen finite set where no exported authority e
 The emission site performs a lookup and raises on a missing key. These are declarations
 derived from toolkit code, not a license for a generic rule-string factory.
 
+**Ordinary validation rows have one uniform semantic identity key.**
+
+```python
+class ValidationQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: list[str]
+    task: str | None = None
+```
+
+Every ordinary validation `FindingRule` declares
+`identity_qualifiers=("key",)`, and every emission supplies the key explicitly. The
+ordered components state *which semantic instance of the predicate* this row reports:
+
+- one possible row per subject uses `[]`;
+- a missing manifest field uses `["missing-field", field_name]`;
+- an unresolved task reference uses `["unresolved-task", task_id]`;
+- an authored relation defect uses `[subject_ref, predicate, object_ref]`; and
+- a repeated field/ref family uses the stable field/ref value, never its loop index.
+
+The key is not a message slug and no generic helper hashes prose. Rule-specific schemas
+may replace this standard only when §6/§9 already freezes their identity fields (for
+example `check` for prose lints or `evidence_signature` for correspondence drift).
+Producer duplicate-identity validation is the enforcement backstop: if two old rows
+would still collapse, that producer fails its own run before report assembly.
+
 The adjacent `prose_lints.numeric-verification.coverage` INFO site is **not** a
 finding-rule declaration. Its verified / unverifiable / mismatch / error values are a
 four-way tally with no policy threshold or violation predicate, so R1 classifies it as
@@ -1088,7 +1123,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; every old WARN/ERROR emission still produces one finding, and INFO never entered health `count_issues`, so the changes are count-neutral |
+| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families; ordinary rules use the required semantic `key` | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; the semantic key prevents same-rule/same-subject rows from collapsing, so every old WARN/ERROR emission still produces one finding; INFO never entered health `count_issues` |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -1523,7 +1558,10 @@ class AuditReport(TypedDict):
     producer result derive from the same frozen observation batch. Benchmark,
     identity-context, relation, and workflow finite-dispatch key sets equal their
     declaration maps, and their emission sites perform lookups rather than formatting
-    rule strings.
+    rule strings. Ordinary validation declarations require `key`; fixture rows are
+    one-to-one with distinct `(rule_id, subject, key)` tuples. Metamorphic tests vary
+    message text, severity, line, and input-list position without changing `key`, while
+    changing a declared semantic component changes it.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
