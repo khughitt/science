@@ -49,6 +49,11 @@ Measured on `main` at `bbff18fd` before writing this plan. An implementer who fi
 | `model_dump(exclude_unset=True)` under `extra="allow"` | returns authored keys **plus extras**, and no defaulted fields — verified against Pydantic; it is how Task 4 gets the authored row |
 | `_load_typed_records` return/cache type | `list[_SourceRecordT]` — parsed models only. The authored mapping is **not** in scope at the construction site |
 | tests asserting the opposite of Task 4 | `tests/test_undeclared_key_diagnostic.py:58` — inverted deliberately, with a ruling, in Task 4 Step 8 |
+| `EntityRegistry.resolve` name collisions | `ReferenceResolver.resolve`, `Path.resolve` — which is why Task 5 renames it to `resolve_class` (**0** occurrences anywhere in the tree) |
+| `_enrich_raw` injects | 18 keys via `setdefault`, incl. `evidence_refs=[]` (`sources.py:1005`) — so any assertion that a loaded entity has `evidence_refs == []` is INERT |
+| ENTITY_SCHEMA rejection branch reads | `validation.schema` and `validation.error` only (`sources.py:604-613`) — never `authored_aliases` |
+| local-profile selection key | `knowledge_profiles.local` (`project_config.py:26`); a top-level `local_profile` is silently ignored and defaults to `"local"` |
+| undeclared-key audit entry point | `audit_project_sources` (`graph/migrate.py:287`); `REFERENCE_FIELD_NAMES` at `:112`. There is no `graph/reference_fields` module |
 
 **Design citations that have drifted** — use these corrected locations:
 
@@ -764,8 +769,13 @@ The tests written in Step 1 each exercise **one** component with a hand-built di
 ```python
 def _write_structured_project(root: Path, rows: list[dict]) -> None:
     """A project whose local profile declares one structured-source kind."""
+    # `knowledge_profiles.local`, NOT a top-level `local_profile`. `selected_local_profile_name`
+    # (project_config.py:26) reads only the former and silently defaults to "local" -- so the
+    # wrong key sends the loader to knowledge/sources/local, it never reads this manifest, and
+    # the test dies on StopIteration with nothing to indicate the fixture was the problem.
     (root / "science.yaml").write_text(
-        yaml.safe_dump({"name": "demo", "local_profile": "project_specific"}), encoding="utf-8"
+        yaml.safe_dump({"name": "demo", "knowledge_profiles": {"local": "project_specific"}}),
+        encoding="utf-8",
     )
     sources = root / "knowledge" / "sources" / "project_specific"
     sources.mkdir(parents=True)
@@ -805,18 +815,97 @@ def test_an_authored_shadow_key_SURVIVES_the_whole_load_path(tmp_path: Path) -> 
     assert (entity.model_extra or {}).get("shadow_key") == "v"
 
 
-def test_a_row_omitting_an_optional_field_does_not_gain_an_empty_one(tmp_path: Path) -> None:
-    # The defaults-promotion failure, asserted on the real path. If normalization ranged over the
-    # parsed record rather than `model_dump(exclude_unset=True)`, an unauthored `evidence_refs`
-    # would arrive as an authored `[]` -- schema-valid, and wrong.
+def test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # The defaults-promotion failure. Asserting `entity.evidence_refs == []` on the loaded entity
+    # would be INERT: `_enrich_raw` (sources.py:1005) does `raw.setdefault("evidence_refs", [])`
+    # on every record, so that assertion holds whether the value was authored, promoted from the
+    # source-model default, or injected by enrichment. It cannot fail, and a probe that cannot
+    # fail proves nothing.
+    #
+    # The claim is about the mapping VALIDATION is shown, which is upstream of enrichment. Spy on
+    # it. Under `unevaluatedProperties: false` on a closed kind, an unauthored `evidence_refs: []`
+    # arriving as authored is exactly the failure mode this pins.
+    seen: list[dict] = []
+    import science_tool.graph.entity_schema_validation as esv
+
+    real = esv.validate_against_schema
+    monkeypatch.setattr(
+        esv, "validate_against_schema",
+        lambda raw, **kw: (seen.append(dict(raw)), real(raw, **kw))[1],
+    )
     _write_structured_project(tmp_path, [{"canonical_id": "widget:0002-y", "title": "W2"}])
+    load_project_sources(tmp_path)
+
+    row = next(m for m in seen if m.get("id") == "widget:0002-y")
+    assert "evidence_refs" not in row, "an unauthored field reached validation as an authored one"
+    assert row["title"] == "W2"  # the authored ones DO arrive -- not a vacuously empty mapping
+
+
+def _write_closed_kind_project(root: Path, rows: list[dict]) -> None:
+    """A PINNED project whose local profile attaches a structured source to the core `hypothesis`.
+
+    `core_structured_sources` (profiles/schema.py:56) is what attaches a data file to a core kind
+    without registering or shadowing it -- the only way to get a CLOSED kind onto the structured
+    path, which is what makes refusal demonstrable here at all.
+    """
+    _write_structured_project(root, [])
+    # entity_schema_version: 2 is REQUIRED. Without the pin, `load_project_schema` returns None,
+    # `validate_against_schema` returns on its first line, and the test passes for the wrong
+    # reason -- no refusal, because no validation was ever armed.
+    (root / "science.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "demo",
+                "knowledge_profiles": {"local": "project_specific"},
+                "entity_schema_version": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources_dir = root / "knowledge" / "sources" / "project_specific"
+    manifest = yaml.safe_load((sources_dir / "manifest.yaml").read_text())
+    manifest["core_structured_sources"] = [
+        {"kind": "hypothesis", "structured_source": "hypothesis.yaml"}
+    ]
+    (sources_dir / "manifest.yaml").write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    (sources_dir / "hypothesis.yaml").write_text(
+        yaml.safe_dump({"hypothesis": rows}), encoding="utf-8"
+    )
+
+
+def test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path(
+    tmp_path: Path,
+) -> None:
+    # THE keystone of gate 3, and the only test that fails under BOTH mutation 5a and 5b.
+    #
+    # Every other end-to-end test here uses `widget`, an OPEN local kind -- so it can only show
+    # that an extra survives, never that anything refuses it. Refusal needs a closed kind, and
+    # `hypothesis` is the one this branch has.
+    _write_closed_kind_project(tmp_path, [{**_valid_hypothesis_row(), "shadow_key": "v"}])
+    with pytest.raises(ValueError, match="does not satisfy its schema"):
+        load_project_sources(tmp_path)
+
+
+def test_the_same_closed_row_WITHOUT_the_shadow_key_loads(tmp_path: Path) -> None:
+    # The other half, and not optional. Without it the test above passes on ANY fixture defect --
+    # a wrong path, a missing required field, a kind that never registered -- while appearing to
+    # prove something about shadow keys. This is what makes the pair a controlled comparison:
+    # one key differs between the two fixtures, and only one of them raises.
+    _write_closed_kind_project(tmp_path, [_valid_hypothesis_row()])
     sources = load_project_sources(tmp_path)
-    entity = next(e for e in sources.entities if e.canonical_id == "widget:0002-y")
-    assert entity.evidence_refs == []  # the MODEL default, not an authored value
+    assert any(e.canonical_id == _valid_hypothesis_row()["canonical_id"] for e in sources.entities)
 ```
 
+Write `_valid_hypothesis_row()` as a module-level helper returning a structured row (`canonical_id`, `title`, and whatever the hypothesis mixin requires) that loads clean. Derive its content from the packaged `mixin-hypothesis-1.0.json` required list rather than guessing, and if it cannot be made to satisfy both `StructuredEntitySource` and the hypothesis mixin, **stop and report** — that would mean no closed kind is reachable on the structured path, which is a finding about the design, not something to work around.
+
+Reuse `_valid_hypothesis_mapping()` from Task 5 if the shapes match; if they do not, say so in your report rather than maintaining two hand-authored notions of a valid hypothesis.
+
 Run: `cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py -q`
-Expected: PASS. If `load_project_sources` needs more scaffolding than the helper above provides, read `tests/test_undeclared_key_diagnostic.py`'s `_write_project` for the established shape in this suite rather than inventing a second.
+Expected: PASS. Note that the two closed-kind tests depend on `registry.build` and so cannot pass until Task 5 lands — write them here, mark them `@pytest.mark.xfail(strict=True, reason="registry.build arrives in Task 5")`, and **remove the marker in Task 5 Step 9**. A `strict=True` xfail fails the suite the moment it starts passing, so the marker cannot be forgotten.
+
+If `load_project_sources` needs more scaffolding than the helper above provides, read `tests/test_undeclared_key_diagnostic.py`'s `_write_project` for the established shape in this suite rather than inventing a second.
 
 - [ ] **Step 8: Rule on the diagnostic surface this widens — do not leave it implicit**
 
@@ -841,27 +930,26 @@ def test_structured_source_PRESERVES_an_unknown_reference_key() -> None:
 
 - [ ] **Step 9: Measure the new warnings before accepting them**
 
-The ruling above widens a **warning** surface across every project with structured sources. Warnings are not failures, but an unmeasured jump in them is how a diagnostic gets ignored. Count them:
+The ruling above widens a **warning** surface across every project with structured sources. Warnings are not failures, but an unmeasured jump in them is how a diagnostic gets ignored.
+
+**Measure the audit rows, not the YAML keys.** Counting reference-shaped keys across source files answers the wrong question twice over: it counts *declared* fields that were never extras, and it counts files no structured adapter loads. The only thing that matters is how many `undeclared_key` rows the audit actually emits — so run the audit, before and after.
 
 ```bash
+# Run on the merge-base first, then on this branch, for each project
 cd science && uv run --frozen python -c "
-import pathlib, yaml
-from science_tool.graph.reference_fields import REFERENCE_FIELD_NAMES
-tot = {}
-for root in pathlib.Path.home().joinpath('d').glob('*/knowledge/sources/*/*.yaml'):
-    try: data = yaml.safe_load(root.read_text()) or {}
-    except Exception: continue
-    for rows in data.values():
-        if not isinstance(rows, list): continue
-        for row in rows:
-            if not isinstance(row, dict): continue
-            for k in row:
-                if k in REFERENCE_FIELD_NAMES: tot[k] = tot.get(k, 0) + 1
-print(sorted(tot.items(), key=lambda kv: -kv[1]))
-"
+import sys, pathlib
+from science_tool.graph.sources import load_project_sources
+from science_tool.graph.migrate import audit_project_sources
+root = pathlib.Path(sys.argv[1])
+verdict = audit_project_sources(load_project_sources(root))
+rows = [r for r in verdict.rows if r['check'] == 'undeclared_key']   # read ValidationVerdict for the real attribute
+print(root.name, len(rows), sorted({r['field'] for r in rows}))
+" ~/d/<project>
 ```
 
-Import `REFERENCE_FIELD_NAMES` from wherever `graph/migrate.py` gets it — grep for it rather than assuming the module path above. Record the counts in your report. **If the total exceeds ~50, stop and report before committing**: that is no longer a diagnostic widening but a corpus finding, and it needs a ruling this plan does not contain.
+Two corrections to note, because getting either wrong measures nothing: `REFERENCE_FIELD_NAMES` lives at `graph/migrate.py:112`, **not** in a `graph/reference_fields` module, which does not exist; and the audit entry point is `audit_project_sources` (`graph/migrate.py:287`), which returns a `ValidationVerdict[AuditRow]` — read that type for how to reach its rows rather than assuming `.rows`. Call the real path; a hand-rolled reimplementation of the `undeclared_key` predicate would measure your reimplementation, not the diagnostic.
+
+Run it against every Dropbox-resident project that has `knowledge/sources/*/`, on the merge-base and again on this branch, and record the delta per project in your report. **If any project gains more than ~20 rows, stop and report before committing** — that is no longer a diagnostic widening but a corpus finding, and it needs a ruling this plan does not contain.
 
 - [ ] **Step 10: Run the structured-source and diagnostic suites**
 
@@ -898,7 +986,7 @@ git commit -m "feat(sources): make the structured source contract lossless and d
   - `EntityRegistry.EntityProjectionError(kind, schema, error)` — a `ValueError` subclass carrying the resolved class
   - `graph/entity_schema_validation.py` exposing `validate_against_schema` / `validate_dataset_gen3`
 
-  Task 6's guard depends on **no `registry.resolve` call surviving in `graph/`**.
+  Task 6's guard depends on **no `resolve_class` call surviving in `graph/`** outside the registry.
 
 **Why `resolve` is the hole.** `EntityRegistry.resolve(kind)` returns `type[Entity]`. Handing out the class means any adapter — present or future — can construct an entity without validating. Merging resolution and construction into one operation is what makes the boundary enforceable: obtaining the class stops being how an entity gets built, and the five sites that do it today become zero, which is a property a guard can assert.
 
@@ -910,21 +998,27 @@ Append to `science/tests/test_entity_construction_boundary.py`:
 def test_build_validates_a_closed_kind_before_projecting(tmp_path) -> None:
     # The load-bearing order. `hypothesis` is the one closed kind on this branch, so it is what
     # can demonstrate refusal at all.
-    from science_model.entity_schema import EntityValidationError
-
-    registry, project_schema = _armed_registry(tmp_path)  # helper defined below, same file
-    with pytest.raises(EntityValidationError):
+    #
+    # `ValueError`, not EntityValidationError: `validate_against_schema` CATCHES the model-layer
+    # EntityValidationError and re-raises a ValueError carrying the path and the pinned
+    # generation (sources.py:1431, moved in Step 3). Asserting the inner type would fail.
+    registry, project_schema = _armed_registry(tmp_path)
+    with pytest.raises(ValueError, match="does not satisfy its schema"):
         registry.build(
             "hypothesis",
             {**_valid_hypothesis_mapping(), "shadow_key": "v"},
             project_schema=project_schema,
+            path="entities/hypotheses/0001-x.md",
         )
 
 
 def test_build_admits_a_valid_closed_kind(tmp_path) -> None:
     registry, project_schema = _armed_registry(tmp_path)
     entity = registry.build(
-        "hypothesis", _valid_hypothesis_mapping(), project_schema=project_schema
+        "hypothesis",
+        _valid_hypothesis_mapping(),
+        project_schema=project_schema,
+        path="entities/hypotheses/0001-x.md",
     )
     assert entity.kind == "hypothesis"
 
@@ -934,10 +1028,15 @@ def test_build_does_not_validate_an_OPEN_kind(tmp_path) -> None:
     # open kind is preserved, not refused; that is the `extra="allow"` projection doing its job.
     registry, project_schema = _armed_registry(tmp_path)
     entity = registry.build(
-        "concept", {**_valid_concept_mapping(), "shadow_key": "v"}, project_schema=project_schema
+        "concept",
+        {**_valid_concept_mapping(), "shadow_key": "v"},
+        project_schema=project_schema,
+        path="entities/concepts/0001-x.md",
     )
     assert entity.kind == "concept"
 ```
+
+`path` is **required and positional-free on every call** — it is what puts the file name in the refusal message, and a default would let a caller silently produce `": hypothesis frontmatter does not satisfy its schema"`. Three calls, three paths.
 
 Write `_armed_registry`, `_valid_hypothesis_mapping` and `_valid_concept_mapping` as module-level helpers in the same file. Build the registry through the existing `build_entity_registry(resolved)` path (`sources.py:322`) against a temporary project pinned to `entity_schema_version: 2`; read `tests/test_kind_reconciliation_registry.py` for the established way to construct one in this suite rather than inventing a second.
 
@@ -963,9 +1062,22 @@ Create `science/src/science_tool/graph/entity_schema_validation.py` and **move**
 
 In `sources.py`, delete both definitions and add `from science_tool.graph.entity_schema_validation import validate_against_schema, validate_dataset_gen3`, updating its two call sites (`:411`, `:417`). Run `cd science && uv run --frozen pytest -q -k "sources or schema" 2>&1 | tail -3` before continuing — a move that changed behaviour must surface here, not three steps later.
 
-- [ ] **Step 4: Implement `build`**
+- [ ] **Step 4: Rename `resolve` to `resolve_class` — this is what makes Task 6 enforceable**
 
-**Match the moved signature exactly.** It is `(raw: dict[str, Any], *, kind: str, path: str, project_schema: ProjectSchema | None)` — `raw` is positional, `kind` and `path` are keyword-only, and `path` is `str`, not `Path`. In `entity_registry.py`, add alongside `resolve`:
+`EntityRegistry.resolve` shares its name with `ReferenceResolver.resolve` and `Path.resolve`, and a guard over the bare name `resolve` must then discriminate by *receiver variable name* — which enforces a naming convention, not a boundary. `reg.resolve(kind)` would slip straight through.
+
+`resolve_class` is **unique in the tree** (verified: zero occurrences across `src/`, `tests/`, and `model/src/`). Renaming turns the guard's match from a heuristic into an exact one: any receiver spelling is caught, and `resolver.resolve(...)` / `path.resolve()` cannot false-positive.
+
+Rename the method at `entity_registry.py:189` and update its callers: the five producing sites (which Steps 5–6 replace with `build` anyway), plus four test files — `tests/test_entity_registry.py`, `test_book_kind.py`, `test_entity_registry_method_step.py`, `test_talk_kind.py`. `tests/test_verdict_registry.py` also matches a `registry.resolve` grep but is the **claim** registry, a different object — leave it alone; if renaming breaks it, stop, because the premise that they are separate is then false.
+
+```bash
+cd science && uv run --frozen pytest tests/test_entity_registry.py tests/test_book_kind.py tests/test_entity_registry_method_step.py tests/test_talk_kind.py tests/test_verdict_registry.py -q
+```
+Expected: PASS.
+
+- [ ] **Step 5: Implement `build`**
+
+**Match the moved signature exactly.** It is `(raw: dict[str, Any], *, kind: str, path: str, project_schema: ProjectSchema | None)` — `raw` is positional, `kind` and `path` are keyword-only, and `path` is `str`, not `Path`. In `entity_registry.py`, add alongside `resolve_class`:
 
 ```python
     def build(
@@ -1000,55 +1112,90 @@ Import `ProjectSchema` under `if TYPE_CHECKING:` — `entity_profiles` is a heav
 
 `resolve` is called **before** validation so an unknown kind raises `EntityKindNotRegisteredError` rather than being schema-validated first; that ordering is what the Markdown path's `UNKNOWN_KIND` classification depends on.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py -q
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Give `build` the two things the Markdown path would otherwise lose**
+- [ ] **Step 7: Give `build` the two things the Markdown path would otherwise lose**
 
 The Markdown path is not a resolve-then-validate pair that collapses into one call. `validate_canonical_markdown_record` (`sources.py:382-456`) does four things a flat `build` would destroy, and **both** must be handled before Step 6 touches any call site:
 
-**(a) Enrichment sits BETWEEN validation and projection.** The real order is validate authored mapping → `_enrich_raw` (which mutates the mapping and returns `authored_aliases`) → `model_validate`. Validating after enrichment would show the composed schema keys the toolkit injected, and under `unevaluatedProperties: false` those become refusals of records that did nothing wrong. So `build` takes the enrichment as a parameter and owns the order — which is the point, since the order stops being each adapter's private property:
+**(a) Enrichment sits BETWEEN validation and projection.** The real order is validate authored mapping → `_enrich_raw` (which mutates the mapping and returns `authored_aliases`) → `model_validate`. Validating after enrichment would show the composed schema the eighteen keys `_enrich_raw` injects (`sources.py:1000-1015`: `evidence_refs`, `related`, `same_as`, `xrefs`, `scope`, `provisional`, …), and under `unevaluatedProperties: false` those become refusals of records that did nothing wrong. So `build` takes the enrichment as a parameter and owns the order — the point being that the order stops being each adapter's private property.
 
-```python
-        enrich: "Callable[[dict[str, Any]], frozenset[str]] | None" = None,
-```
+**(b) Three failures must stay three failures.** The path classifies `UNKNOWN_KIND`, `PROJECT_SCHEMA`, and `ENTITY_SCHEMA` separately, and the `ENTITY_SCHEMA` branch (`sources.py:604-613`) needs the resolved **class** to format its message via `_format_schema_validation_failure`. `resolve_class` raising and `validate_against_schema` raising `ValueError` separate the first two; a typed exception carries the class for the third.
 
-applied after the two validators and before `schema.model_validate(raw)`, with `build` performing the `entity._authored_aliases = authored_aliases` assignment both call sites do today.
+**The alias question is ruled here, not left to the implementer.** `authored_aliases` are **not** carried on the projection-failure branch. Verified at `sources.py:604-613`: the `ENTITY_SCHEMA` branch reads `validation.schema` and `validation.error` and nothing else — there is no entity to attach aliases to, and every consumer of that branch formats an error or skips. `build` therefore assigns `_authored_aliases` only on the success path.
 
-**(b) Three failures must stay three failures.** The path classifies `UNKNOWN_KIND`, `PROJECT_SCHEMA`, and `ENTITY_SCHEMA` separately, and the `ENTITY_SCHEMA` branch (`sources.py:604-613`) needs the resolved **class** to format its message via `_format_schema_validation_failure`. `resolve` raising and `validate_against_schema` raising `ValueError` already separate the first two. For the third, add to `entity_registry.py`:
+This is the complete final implementation. `entity_registry.py`:
 
 ```python
 class EntityProjectionError(ValueError):
     """A mapping that resolved and passed its composed schema, then failed the model projection.
 
     Carries the resolved class because the Markdown reader formats its rejection from it. Without
-    this, the only way for a caller to obtain the class would be `resolve` -- reopening the exact
-    hole `build` exists to close, in the one branch nobody reads.
+    this, the only way for a caller to obtain the class would be `resolve_class` -- reopening the
+    exact hole `build` exists to close, in the one branch nobody reads.
     """
 
-    def __init__(self, kind: str, schema: type[Entity], error: "ValidationError") -> None:
+    def __init__(self, kind: str, schema: type[Entity], error: ValidationError) -> None:
         super().__init__(f"{kind}: entity projection failed")
         self.kind = kind
         self.schema = schema
         self.error = error
-```
 
-and wrap the projection in `build`:
 
-```python
+    def build(
+        self,
+        kind: str,
+        raw: dict[str, Any],
+        *,
+        project_schema: "ProjectSchema | None",
+        path: str,
+        enrich: "Callable[[dict[str, Any]], frozenset[str]] | None" = None,
+    ) -> Entity:
+        """Validate a raw mapping against its composed profile, THEN project it onto the model.
+
+        Resolution and construction are ONE operation on purpose. Handing out `type[Entity]` is
+        the hole: an adapter that can get the class can construct an entity without validating.
+
+        The ORDER is this method's contract and the reason `enrich` is a parameter rather than
+        the caller's business: enrichment injects eighteen keys the author never wrote, and a
+        composed schema shown those keys under `unevaluatedProperties: false` would refuse
+        records that did nothing wrong. Validate authored -> enrich -> project. Every adapter
+        gets that order by construction instead of re-deriving it.
+
+        Raises EntityKindNotRegisteredError (unknown kind), ValueError (composed-schema refusal),
+        or EntityProjectionError (projection refusal) -- three distinct failures, kept distinct so
+        the Markdown adapter can keep classifying them into its three rejection codes.
+        """
+        schema = self.resolve_class(kind)
+        validate_against_schema(raw, kind=kind, path=path, project_schema=project_schema)
+        validate_dataset_gen3(raw, kind=kind, path=path, project_schema=project_schema)
+        authored_aliases = enrich(raw) if enrich is not None else frozenset()
         try:
             entity = schema.model_validate(raw)
         except ValidationError as exc:
             raise EntityProjectionError(kind, schema, exc) from exc
+        entity._authored_aliases = authored_aliases
+        return entity
 ```
 
-`validate_canonical_markdown_record` then keeps its exact current shape and rejection codes, with the three `try` blocks becoming one:
+And the complete Markdown call site, replacing `sources.py:403-451` — the closure is what adapts `_enrich_raw`'s six-argument signature to the one-argument callback, so `build` needs to know nothing about markdown context:
 
 ```python
+    def _enrich(candidate_raw: dict[str, Any]) -> frozenset[str]:
+        return _enrich_raw(
+            candidate_raw,
+            kind=kind,
+            project_slug=context.project_slug,
+            local_profile=context.local_profile,
+            active_kinds=context.active_kinds,
+            ontology_catalogs=context.ontology_catalogs,
+        )
+
     try:
         entity = context.registry.build(
             kind, candidate, project_schema=context.project_schema, path=path, enrich=_enrich,
@@ -1056,32 +1203,42 @@ and wrap the projection in `build`:
     except EntityKindNotRegisteredError:
         return CanonicalMarkdownValidation(kind=kind, rejection=CanonicalMarkdownRejection.UNKNOWN_KIND)
     except EntityProjectionError as exc:
+        # No authored_aliases: verified that this branch (sources.py:604-613) reads only `schema`
+        # and `error`. There is no entity to carry them on.
         return CanonicalMarkdownValidation(
-            kind=kind, schema=exc.schema, authored_aliases=..., 
-            rejection=CanonicalMarkdownRejection.ENTITY_SCHEMA, error=exc.error,
+            kind=kind,
+            schema=exc.schema,
+            rejection=CanonicalMarkdownRejection.ENTITY_SCHEMA,
+            error=exc.error,
         )
     except ValueError as exc:
         return CanonicalMarkdownValidation(
             kind=kind, rejection=CanonicalMarkdownRejection.PROJECT_SCHEMA, error=exc,
         )
+    return CanonicalMarkdownValidation(
+        kind=kind,
+        schema=type(entity),
+        entity=entity,
+        authored_aliases=entity._authored_aliases,
+    )
 ```
 
-**Order matters in that `except` chain:** `EntityProjectionError` subclasses `ValueError`, so it must be caught first. Note the `PROJECT_SCHEMA` branch no longer carries `schema=schema` — check whether the consumer at `sources.py:598-603` reads it (it reads only `.error`); if it does read `.schema`, report rather than dropping the field.
+**Order matters in that `except` chain:** `EntityProjectionError` subclasses `ValueError`, so it must be caught first. The `PROJECT_SCHEMA` branch drops `schema=` — verified against its consumer at `sources.py:598-603`, which reads only `.error` and re-raises it.
 
-`authored_aliases` on the projection-failure branch: `build` has them but the exception does not carry them, and today's code does. Either add them to `EntityProjectionError` or confirm from `sources.py:604-660` that the `ENTITY_SCHEMA` branch never reads `validation.authored_aliases` — **check, do not assume.**
-
-- [ ] **Step 6: Route the other four producing sites through `build`**
+- [ ] **Step 8: Route the other four producing sites through `build`**
 
 - `sources.py:1119-1120` — `model`
 - `sources.py:1150-1160` — `canonical_parameter`
 - `sources.py:1216` / `:1248` — structured source (its `_enrich_raw` call passes through the new `enrich` parameter, same as Markdown)
 - `commons_sources.py:395` / `:423` — commons
 
-Each becomes one `registry.build(kind, raw, project_schema=..., path=...)` call, and **no `registry.resolve` call may remain in `src/science_tool/graph/`** — Task 6's guard asserts exactly that, and the five sites listed across Steps 5 and 6 are the complete set (verified: `grep -rn 'registry\.resolve' src/` finds these five in `graph/`, plus two in `verdict/` that are a different registry object entirely — `registry.resolve(claim_id) is None` cannot be `EntityRegistry.resolve`, which raises).
+Each becomes one `registry.build(kind, raw, project_schema=..., path=...)` call, and **no `resolve_class` call may remain in `src/science_tool/graph/`** — Task 6's guard asserts exactly that, and the five sites listed across Steps 5 and 6 are the complete set (verified: `grep -rn 'registry\.resolve' src/` finds these five in `graph/`, plus two in `verdict/` that are a different registry object entirely — `registry.resolve(claim_id) is None` cannot be `EntityRegistry.resolve`, which raises).
 
 Where a site currently has no `project_schema` in scope, thread it — do not pass `None` to make the call compile, because `None` disables validation entirely.
 
-- [ ] **Step 7: Run the graph and sources suites**
+- [ ] **Step 9: Remove the Task 4 xfail markers and run the graph and sources suites**
+
+Task 4 left two tests marked `@pytest.mark.xfail(strict=True)` because they need `registry.build`, which now exists: `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` and `test_the_same_closed_row_WITHOUT_the_shadow_key_loads`. Delete both markers. Because the xfails are `strict=True`, forgetting this fails the suite rather than leaving two silently-skipped tests — but delete them deliberately, do not wait to be told.
 
 ```bash
 cd science && uv run --frozen pytest tests/test_kind_reconciliation_registry.py tests/test_entity_construction_boundary.py -q
@@ -1089,7 +1246,7 @@ cd science && uv run --frozen pytest -q -k "sources or commons or graph_build or
 ```
 Expected: PASS. The Markdown rejection-classification tests are the ones at risk here — if any of the three rejection codes stops being produced, this is where it shows.
 
-- [ ] **Step 8: Lint, types, commit**
+- [ ] **Step 10: Lint, types, commit**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
@@ -1110,7 +1267,13 @@ git commit -m "feat(graph): merge entity resolution and construction into one va
 
 **This guard scans for `resolve` CALLS, not for entity-class imports.** An earlier draft of this plan proposed the import version. It was run against the tree before this revision and **fails today with twelve offenders in `graph/` alone** — `materialize.py`, `identity_arbitration.py`, `reference_resolution.py`, `storage_adapters/base.py` and eight others — nearly all of which import `Entity` for `isinstance` checks and type annotations, not to construct anything. `materialize.py:1798` is the clearest case: `isinstance(object_entity, Entity)` inside `_is_membership`. A guard whose green state requires rewriting twelve unrelated modules is not a guard; and the only ways to make it pass are an exemption list (the enumerated-scope hole, refused) or a scope narrowed until it asserts nothing.
 
-The import surface was also the wrong surface. Importing `Entity` for an annotation constructs nothing. **Obtaining a class in order to build from it** is the hole, and that has exactly one spelling in this codebase: `registry.resolve(kind)` followed by `.model_validate(...)`. Measured before this revision:
+The import surface was also the wrong surface. Importing `Entity` for an annotation constructs nothing. **Obtaining a class in order to build from it** is the hole, and it has two spellings: `registry.resolve_class(kind)` and direct use of an imported `<Name>Entity`. The guard matches both.
+
+**Why the rename in Task 5 Step 4 is what makes this work.** A first attempt matched the bare name `resolve` and, to avoid the 24 `resolver.resolve(...)` calls in `materialize.py`, discriminated by whether the receiver variable was named `registry`. That enforces a naming convention: `reg.resolve(kind)` passes. `resolve_class` occurs nowhere else in the tree, so the match becomes exact and receiver-independent, and `test_the_guarded_METHOD_still_exists` stops a rename from silently disarming it.
+
+**What this guard does and does not claim.** It makes the two known bypasses fail and derives its scope from the package tree, so a sixth adapter is inside it automatically. It is not a proof of impossibility — `getattr(registry, "resolve_" + "class")` would evade any AST rule. The durable barrier is that `build` is the only operation that returns a *validated* entity; the guard raises the cost of routing around it from "write different code" to "write deliberately obfuscated code."
+
+Measured before this revision:
 
 | `registry.resolve` call sites in `src/science_tool/graph/` | 5 — `sources.py:404`, `:1119`, `:1150`, `:1216`; `commons_sources.py:395` |
 | After Task 5 routes all five through `build` | **0** |
@@ -1132,34 +1295,29 @@ def _entity_loading_package() -> Path:
     return Path(__file__).resolve().parents[1] / "src" / "science_tool" / "graph"
 
 
-def _receiver_name(func: ast.Attribute) -> str:
-    value = func.value
-    if isinstance(value, ast.Name):
-        return value.id          # registry.resolve(kind)
-    if isinstance(value, ast.Attribute):
-        return value.attr        # context.registry.resolve(kind), self._registry.resolve(kind)
-    return ""
+def _class_obtaining_lines(module: Path) -> list[int]:
+    """Lines that obtain an entity class in order to build from it.
 
-
-def _registry_resolve_lines(module: Path) -> list[int]:
-    """Lines calling `<...>registry.resolve(<arg>)`.
-
-    Both filters are load-bearing and were measured, not guessed. Matching every `.resolve(` in
-    this package reports 29 lines, of which 24 are `resolver.resolve(...)` in `materialize.py` --
-    reference resolution, nothing to do with entity classes. Requiring an argument excludes
-    `path.resolve()`; requiring a registry receiver excludes the resolver. Together they report
-    exactly the five producing sites and nothing else.
+    TWO spellings, because there are two. `resolve_class` is the registry's; `<Name>Entity.<any>`
+    is direct use of an imported class. Neither filter is a receiver-name heuristic: an earlier
+    draft matched the bare name `resolve` and had to discriminate by whether the receiver was
+    called `registry`, which enforces a naming convention -- `reg.resolve(kind)` slipped through.
+    Step 4 of Task 5 renamed the method to `resolve_class` precisely so this match can be exact.
+    `resolve_class` occurs nowhere else in the tree, so ANY receiver spelling is caught.
     """
     tree = ast.parse(module.read_text(encoding="utf-8"))
-    return sorted(  # sorted: ast.walk is breadth-first, so raw order is not source order
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "resolve"
-        and node.args
-        and _receiver_name(node.func).lower().endswith("registry")
-    )
+    hits: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        # registry.resolve_class(kind) / self._registry.resolve_class(kind) / reg.resolve_class(k)
+        if node.func.attr == "resolve_class":
+            hits.add(node.lineno)
+        # MethodEntity.model_validate(raw) -- the other way to build without asking the registry
+        value = node.func.value
+        if isinstance(value, ast.Name) and value.id.endswith("Entity"):
+            hits.add(node.lineno)
+    return sorted(hits)  # ast.walk is breadth-first, so raw order is not source order
 
 
 def test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from() -> None:
@@ -1168,36 +1326,50 @@ def test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from() -> None
     # those the violation and force either a rewrite of unrelated code or an exemption list, and
     # an exemption list is the enumerated-scope hole this project has been bitten by before.
     #
-    # Obtaining a class in order to build from it has one spelling: `registry.resolve(kind)` then
-    # `.model_validate(...)`. There were five such sites; `build` makes it zero. Scope is DERIVED
-    # from the package tree, so a sixth adapter added tomorrow is inside it automatically.
+    # Obtaining a class in order to build from it has two spellings: `registry.resolve_class(kind)`
+    # and direct use of an imported `<Name>Entity`. There were five such sites; `build` makes it
+    # zero. Scope is DERIVED from the package tree, so a sixth adapter is inside it automatically.
     offenders: dict[str, list[int]] = {}
     for module in sorted(_entity_loading_package().rglob("*.py")):
         if module.name == _REGISTRY_MODULE:
-            continue  # `build` calls `resolve` -- that is the one legitimate call, by construction
-        lines = _registry_resolve_lines(module)
+            continue  # `build` calls it -- the one legitimate call, by construction
+        lines = _class_obtaining_lines(module)
         if lines:
             offenders[module.name] = lines
     assert not offenders, (
-        f"modules resolving an entity class outside the registry: {offenders}. "
+        f"modules obtaining an entity class outside the registry: {offenders}. "
         "Construct through `registry.build(kind, raw, ...)`, which validates first."
     )
 
 
-def test_the_guard_can_actually_SEE_a_violation(tmp_path: Path) -> None:
-    # An AST guard that silently matches nothing passes forever, and this one carries two filters
-    # tuned to make it quiet. Pin the detector against known inputs so a refactor that breaks the
-    # matching fails HERE, rather than turning the gate above into a green no-op.
+def test_the_guarded_METHOD_still_exists() -> None:
+    # Without this, the gate above is disarmed by a rename rather than by a fix: if
+    # `resolve_class` is ever renamed back to `resolve`, every call site stops matching and the
+    # guard goes permanently, silently green. The name is load-bearing, so assert it.
+    from science_tool.graph.entity_registry import EntityRegistry
+
+    assert hasattr(EntityRegistry, "resolve_class")
+    assert not hasattr(EntityRegistry, "resolve"), (
+        "`resolve` is back; the guard matches `resolve_class` and no longer sees the call sites"
+    )
+
+
+def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> None:
+    # An AST guard that silently matches nothing passes forever. Pin the detector against all
+    # four bypass spellings -- including the two that defeated the earlier receiver-name draft --
+    # so a refactor that breaks the matching fails HERE rather than turning the gate into a no-op.
     probe = tmp_path / "probe.py"
     probe.write_text(
-        "def f(registry, context, resolver, path, kind):\n"
-        "    registry.resolve(kind)\n"
-        "    context.registry.resolve(kind)\n"
-        "    resolver.resolve(kind)\n"   # a DIFFERENT resolver -- must not match
-        "    path.resolve()\n",          # pathlib -- must not match
+        "def f(registry, context, reg, resolver, path, kind, raw):\n"
+        "    registry.resolve_class(kind)\n"
+        "    context.registry.resolve_class(kind)\n"
+        "    reg.resolve_class(kind)\n"          # arbitrary receiver name -- must still match
+        "    MethodEntity.model_validate(raw)\n" # direct construction -- must still match
+        "    resolver.resolve(kind)\n"           # a DIFFERENT resolver -- must not match
+        "    path.resolve()\n",                  # pathlib -- must not match
         encoding="utf-8",
     )
-    assert _registry_resolve_lines(probe) == [2, 3]
+    assert _class_obtaining_lines(probe) == [2, 3, 4, 5]
 ```
 
 - [ ] **Step 2: Run it and read the real result**
@@ -1269,14 +1441,16 @@ Expected: `test_an_unknown_key_SURVIVES_the_source_contract` FAILS (`model_extra
 
 - [ ] **Step 6: Mutation 5b — drop the schema check from `registry.build`**
 
-Remove the `_validate_against_schema(...)` line, leaving only the projection.
-Expected: `test_build_validates_a_closed_kind_before_projecting` FAILS (no exception raised). This proves the **check runs**.
+Remove the `validate_against_schema(...)` line from `build`, leaving only the projection.
+Expected: **two** tests FAIL — `test_build_validates_a_closed_kind_before_projecting` (unit) and `test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path` (end-to-end). This proves the **check runs**, at the choke point and on the real load path.
+
+The end-to-end one is the load-bearing failure: it is the single test that fails under **both** 5a and 5b, which is what certifies that lossless parse and composed validation are wired to each other rather than merely both present.
 
 5a and 5b are both required and are not redundant: 5a proves the loss is prevented, 5b proves the check runs. An earlier design draft had only the second, which would have passed against a pipeline faithfully validating a mapping the toolkit had already stripped — a check that cannot fail. **Revert.**
 
 - [ ] **Step 7: Mutation 5c — obtain an entity class outside `registry.build`**
 
-Restore one resolve-then-construct pair: in `_load_structured_source_records` (`sources.py`), replace the `registry.build(...)` call with `registry.resolve(kind_name).model_validate(raw)`.
+Restore one resolve-then-construct pair: in `_load_structured_source_records` (`sources.py`), replace the `registry.build(...)` call with `registry.resolve_class(kind_name).model_validate(raw)`.
 Expected: `test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from` FAILS, naming `sources.py` and the line. **Revert.**
 
 An *import* of an entity class is deliberately **not** the mutation here: twelve modules in `graph/` already import `Entity` legitimately, so an import cannot distinguish a violation from an annotation. The resolve call is the thing that precedes construction, and it is what the guard watches.
