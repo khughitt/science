@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -282,3 +283,37 @@ def apply_plan(
             }
         row.applied = True
     return plan
+
+
+def serialize_curate_plan(plan: CuratePlan, fmt: str) -> str:
+    if fmt == "json":
+        return json.dumps(plan.to_dict(), indent=2, sort_keys=True) + "\n"
+    return _render_text(plan)
+
+
+def _render_text(plan: CuratePlan) -> str:
+    header = f"skill-coverage curate ({plan.mode}) — scope {plan.scope.get('mode', '?')}"
+    project = plan.scope.get("project")
+    if project:
+        header += f" · project {project}"
+    lines = [header]
+    if not plan.rows:
+        lines.append("  no uncovered gaps")
+    for row in plan.rows:
+        tag = row.disposition
+        if row.applied is not None:
+            tag += " [applied]" if row.applied else " [not applied]"
+        line = (
+            f"  {tag}: {row.term}  [{row.likely_archetype}]  score={row.score}  "
+            f"{row.n_plans} plans / {row.n_projects} projects"
+        )
+        if row.existing:
+            line += "  existing=" + ",".join(f"{m.id}:{m.status}" for m in row.existing)
+        if row.result is not None:
+            line += f"  -> {row.result}"
+        lines.append(line)
+    ctx = plan.context
+    lines.append(f"context: covered-not-loaded: {ctx.covered_not_loaded}  unmapped: {ctx.unmapped}")
+    if ctx.skipped_projects:
+        lines.append("  skipped: " + ", ".join(ctx.skipped_projects))
+    return "\n".join(lines) + "\n"
