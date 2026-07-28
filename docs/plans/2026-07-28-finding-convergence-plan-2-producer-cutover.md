@@ -2077,3 +2077,49 @@ the health path. Plan 3 must, in one landing:
 5. retain the old reader only inside the explicit migration command.
 
 No Task in Plan 2 may pre-build a permanent dual matcher.
+
+## Implementation record
+
+Cutover landed in `43a417ae9ff41d1996fbb2984196e83966e8a40d`
+(`refactor(findings): converge deterministic producers`); the scoped
+formatting follow-up is
+`be48496638a85428edc36837bdddd94c80b2d056`.
+
+Final verification on the formatted tree:
+
+```bash
+cd science/model && uv run --frozen pytest
+# 1678 passed in 5.01s
+
+cd science && uv run --frozen pytest
+# 11743 passed, 7 skipped, 8 deselected, 43956 warnings in 639.78s (0:10:39)
+
+cd science && uv run --frozen ruff check
+# All checks passed!
+
+cd science && uv run --frozen pyright
+# 0 errors, 0 warnings, 0 informations
+```
+
+The exact Task 4 scoped regression command recorded in the Task 5 report
+passed 1,176 tests. The public health JSON report is schema version 2 with
+fingerprint version 1. Its totals use `totals.findings_total`, which equals
+the number of `findings` rows; the temporary CLI fixtures also confirmed the
+separate `accepted`, `metrics`, `caveats`, and `unwired` channels.
+
+The approved count increases are `legacy_task_type` and
+`invalid_entity_aspects`: both now produce findings that count. Retired
+archive lag remains absent, guarded by
+`science/tests/test_finding_convergence.py::test_retired_archive_lag_is_not_reintroduced`.
+
+Scoped formatting covered every existing Python file changed from
+`4a68e477..HEAD`: all 206 files passed package-local format checks, and the
+96 formatter-edited files preserved normalized ASTs. The repository-wide
+`cd science && uv run --frozen ruff format --check` is not a passing gate:
+it still reports 731 baseline files to reformat (946 already formatted), all
+outside this branch's changed-file scope.
+
+Updated user guidance:
+`docs/user-guide/health-and-validation.md` documents `findings`,
+`totals.findings_total`, `accepted`, `metrics`, `caveats`, and
+`unwired`.
