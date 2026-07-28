@@ -89,7 +89,6 @@ def _scope_project(args: list[str], project: Path) -> list[str]:
         ("tasks list", ["tasks", "list", "--status", "proposed"]),
         ("tasks list", ["tasks", "list", "--status", "proposed", "--format", "json"]),
         ("health", ["health"]),
-        ("health", ["health", "--format", "json"]),
         ("health", ["health", "--severity", "all"]),
         ("project index", ["project", "index"]),
         ("project index", ["project", "index", "--format", "json"]),
@@ -108,6 +107,7 @@ def test_command_stays_within_its_ceiling(project: Path, command_path: str, args
         ("entities inventory", ["entities", "inventory"]),
         ("data audit", ["data", "audit"]),
         ("data audit", ["data", "audit", "--format", "json"]),
+        ("health", ["health", "--format", "json"]),
     ],
 )
 def test_bulk_dump_refuses_rather_than_flooding(project: Path, command_path: str, args: list[str]) -> None:
