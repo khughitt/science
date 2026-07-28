@@ -43,6 +43,10 @@ def _frontmatter(path: Path) -> dict[str, object]:
 def _proposition(entity_id: str = "proposition:a-affects-b") -> PropositionEntity:
     return PropositionEntity(
         id=entity_id,
+        # Matches the deterministic title `_proposition_for_row` derives from the triple
+        # (`<subject> <predicate> <object>`); the workbench-applied proposition on disk now
+        # carries this title instead of an empty one.
+        title="a affects b",
         subject="a",
         predicate=Predicate.AFFECTS,
         object="b",

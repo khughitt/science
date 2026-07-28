@@ -132,10 +132,13 @@ class WorkbenchRow(BaseModel):
     # Identity — optional; id-less rows get minted at compile (Task 5b).
     id: str | None = None
 
-    # Core triple.
-    subject: str
+    # Core triple. `min_length=1`: these feed the derived proposition title, which must satisfy
+    # base 2.0's `minLength: 1`. `predicate` is separately protected by the `Predicate(...)`
+    # conversion; subject and object were protected by nothing, so an empty term reached the
+    # persisted title. Failing here names the row, not the rendered file.
+    subject: str = Field(min_length=1)
     predicate: str
-    object: str
+    object: str = Field(min_length=1)
 
     # Patch membership.
     patch: str
@@ -246,6 +249,33 @@ def _resolve_row_discusses(row: WorkbenchRow, focal_hypothesis: str | None) -> l
     return None
 
 
+def _collapse(text: str) -> str:
+    """Collapse all runs of whitespace to single spaces. Titles are durable authored source."""
+    return " ".join(text.split())
+
+
+def _proposition_title(row: WorkbenchRow) -> str:
+    """THE derived proposition title (design §5.2). Deterministic, not good prose.
+
+    Mechanical on purpose: it must be stable and reconstructible from the row. An author may
+    replace it afterwards, and the update path will preserve the replacement because `title` is
+    not in the per-kind workbench key set.
+    """
+    return _collapse(f"{row.subject} {row.predicate} {row.object}")
+
+
+def _evidence_line_title(stub: EvidenceStub, *, target_id: str) -> str:
+    """THE derived evidence-line title (design §5.2).
+
+    `target_id` is computed by the caller and always present, so the head alone is non-empty.
+    `stance` defaults to SUPPORTS at lift, matching the entity field's own default.
+    """
+    stance = stub.stance or "supports"
+    head = f"{stance} {target_id}"
+    tail = stub.source or (stub.evidence_type.value if stub.evidence_type else None)
+    return _collapse(f"{head} — {tail}" if tail else head)
+
+
 def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
     """Build a ``PropositionEntity`` from a row, minting a deterministic id if id-less.
 
@@ -255,6 +285,7 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
     entity_id = row.id or f"proposition:{_slug_for_triple(row.subject, row.predicate, row.object)}"
     return PropositionEntity(
         id=entity_id,
+        title=_proposition_title(row),
         subject=row.subject,
         object=row.object,
         predicate=Predicate(row.predicate),
@@ -285,9 +316,10 @@ def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -
         id=line_id,
         kind="evidence-line",
         type=EntityType.EVIDENCE_LINE,
-        # Base-required fields that have no value at lift time — safe empties
-        # (mirrors the minimal-construction pattern in the entity model tests).
-        title="",
+        title=_evidence_line_title(stub, target_id=target_id),
+        # These are REQUIRED by the model and must keep being supplied. They are not persisted --
+        # Task 3's owned-key allowlist is what keeps them out of the file. Deleting them here
+        # raises `Field required` for all six.
         project="",
         ontology_terms=[],
         related=[],
