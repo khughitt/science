@@ -15,7 +15,7 @@
 - Only **`uncovered`** candidates are filed. Feedback field values are fixed: `target = "skill-coverage:<term>"`, `project = "science"`, `category = "gap"`, `concern = "tooling"`.
 - Correlation match key is **`(normalize_target(entry.target), entry.concern == "tooling")`** — never a raw `fnmatch` namespace glob, never target-only.
 - **Fail early** on more than one *open* match for a term (raise, nonzero exit, no writes).
-- `recurrence_after` is **recur-only**; a NEW entry seeds no occurrence (mirrors `feedback add`).
+- `recurrence_after` is **always present** in a result = the entry's `recurrence` after the write. `FeedbackEntry` seeds one occurrence for every entry (validator floor 1), so a NEW entry is `recurrence_after: 1` and a RECUR is prior + 1.
 - Default is report-only (writes nothing). `--term` is `--apply`-only. An unknown `--term` is a hard error.
 - No skill files are authored; the only side effect is under `~/.config/science/feedback` (or `$SCIENCE_FEEDBACK_DIR`).
 - After the command file lands, regenerate agent assets (`science agents generate`) and the committed-mirror equality test must pass.
@@ -156,6 +156,7 @@ never writes.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -270,10 +271,10 @@ def coverage_context(report: "CoverageReport") -> CurateContext:
 
 
 def build_curate_plan(
-    candidates: "list[Candidate]",
-    entries: "list[FeedbackEntry]",
+    candidates: "Sequence[Candidate]",
+    entries: "Sequence[FeedbackEntry]",
     context: CurateContext,
-    scope: dict[str, object],
+    scope: "Mapping[str, object]",
 ) -> CuratePlan:
     by_norm: dict[str, list[FeedbackEntry]] = defaultdict(list)
     for entry in entries:
@@ -312,7 +313,7 @@ def build_curate_plan(
                 candidate=cand,
             )
         )
-    return CuratePlan(mode="report", scope=scope, rows=rows, context=context)
+    return CuratePlan(mode="report", scope=dict(scope), rows=rows, context=context)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -383,7 +384,7 @@ def test_apply_new_creates_entry_with_fixed_fields(tmp_path: Path) -> None:
     row = plan.rows[0]
     assert row.applied is True
     assert row.result["action"] == "created"
-    assert "recurrence_after" not in row.result  # recur-only
+    assert row.result["recurrence_after"] == 1  # validator seeds one occurrence
     [entry] = load_all_entries(tmp_path)
     assert entry.target == "skill-coverage:data-product:x"
     assert (entry.project, entry.category, entry.concern) == ("science", "gap", "tooling")
@@ -391,24 +392,31 @@ def test_apply_new_creates_entry_with_fixed_fields(tmp_path: Path) -> None:
 
 
 def test_apply_recur_records_occurrence_with_metadata(tmp_path: Path) -> None:
-    save_entry(tmp_path, _open_entry("data-product:x"))
+    save_entry(tmp_path, _open_entry("data-product:x"))  # persisted -> recurrence 1 (seeded)
     plan = build_curate_plan([_cand("data-product:x")], list_entries(tmp_path, status=None), _CTX, _SCOPE)
     apply_plan(plan, tmp_path, today="2026-07-28")
     row = plan.rows[0]
-    assert row.result == {"action": "recurred", "id": "fb-2026-07-28-500", "recurrence_after": 1}
+    assert row.result == {"action": "recurred", "id": "fb-2026-07-28-500", "recurrence_after": 2}
     [entry] = load_all_entries(tmp_path)
-    assert entry.recurrence == 1
+    assert entry.recurrence == 2  # seeded 1 + one recurrence
     occ = entry.occurrences[-1]
     assert (occ.project, occ.category) == ("science", "gap")
 
 
-def test_apply_idempotent_records_second_occurrence(tmp_path: Path) -> None:
-    save_entry(tmp_path, _open_entry("data-product:x"))
-    for _ in range(2):
-        plan = build_curate_plan([_cand("data-product:x")], list_entries(tmp_path, status=None), _CTX, _SCOPE)
-        apply_plan(plan, tmp_path, today="2026-07-28")
-    [entry] = load_all_entries(tmp_path)
-    assert entry.recurrence == 2  # occurrence, never a duplicate entry
+def test_apply_twice_from_empty_is_new_then_recur(tmp_path: Path) -> None:
+    # First apply on an empty store -> NEW (recurrence 1); second -> RECUR (recurrence 2).
+    plan1 = build_curate_plan([_cand("data-product:x")], list_entries(tmp_path, status=None), _CTX, _SCOPE)
+    apply_plan(plan1, tmp_path, today="2026-07-28")
+    assert plan1.rows[0].result["action"] == "created"
+    plan2 = build_curate_plan([_cand("data-product:x")], list_entries(tmp_path, status=None), _CTX, _SCOPE)
+    apply_plan(plan2, tmp_path, today="2026-07-28")
+    assert plan2.rows[0].result == {
+        "action": "recurred",
+        "id": plan1.rows[0].result["id"],
+        "recurrence_after": 2,
+    }
+    [entry] = load_all_entries(tmp_path)  # one entry, never a duplicate
+    assert entry.recurrence == 2
 
 
 def test_scoped_apply_writes_only_selected(tmp_path: Path) -> None:
@@ -436,7 +444,7 @@ def test_skip_row_writes_nothing(tmp_path: Path) -> None:
     row = plan.rows[0]
     assert row.disposition == "skip" and row.applied is False and row.result is None
     entries = load_all_entries(tmp_path)
-    assert len(entries) == 1 and entries[0].id == "fb-2026-07-28-600" and entries[0].recurrence == 0
+    assert len(entries) == 1 and entries[0].id == "fb-2026-07-28-600" and entries[0].recurrence == 1
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -524,7 +532,7 @@ def apply_plan(
                 concern=CONCERN,
             )
             save_entry(feedback_dir, entry)
-            row.result = {"action": "created", "id": entry.id}
+            row.result = {"action": "created", "id": entry.id, "recurrence_after": entry.recurrence}
         row.applied = True
     return plan
 ```
@@ -656,7 +664,7 @@ git commit -m "feat(skills-curate): serialize the plan as text and canonical JSO
 ### Task 4: CLI command `science skills curate` + feedback-dir helper
 
 **Files:**
-- Modify: `science/src/science_tool/feedback_cli.py` (promote `_get_feedback_dir` → public `resolve_feedback_dir`)
+- Modify: `science/src/science_tool/feedback_cli.py` (add public `resolve_feedback_dir`; keep `_get_feedback_dir` delegating)
 - Modify: `science/src/science_tool/skills_coverage/cli.py` (add `curate_command`)
 - Modify: `science/src/science_tool/skills_lint/cli.py` (register on `skills_group`)
 - Test: `science/tests/skills_coverage/test_curate_cli.py`
@@ -665,9 +673,13 @@ git commit -m "feat(skills-curate): serialize the plan as text and canonical JSO
 - Consumes: `scan_portfolio`, `write_report_atomically`; Task 1–3 `build_curate_plan`, `apply_plan`, `serialize_curate_plan`, `coverage_context`, `CurateConflictError`, `CurateSelectionError`; `science_tool.feedback.load_all_entries`, `resolve_feedback_dir`.
 - Produces: `science skills curate [--apply] [--term T]… [--project P] [--format text|json] [--output PATH]`.
 
-- [ ] **Step 1: Promote the feedback-dir helper**
+- [ ] **Step 1: Add a public feedback-dir helper (additive — do NOT rename)**
 
-In `science/src/science_tool/feedback_cli.py`, rename the private resolver to a public one and update its callers:
+`_get_feedback_dir` is imported by `science_tool.autonomy.cli` (`autonomy/cli.py:218`),
+so renaming it would break `autonomy finish` at runtime. Instead, add a public
+function and make the private one delegate, changing no external caller. In
+`science/src/science_tool/feedback_cli.py` replace the body of `_get_feedback_dir`
+with:
 
 ```python
 def resolve_feedback_dir() -> Path:
@@ -676,9 +688,14 @@ def resolve_feedback_dir() -> Path:
     from science_tool.registry.config import get_science_config_dir
 
     return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
+
+
+def _get_feedback_dir() -> Path:
+    # Retained for existing callers (e.g. science_tool.autonomy.cli); delegates to the public name.
+    return resolve_feedback_dir()
 ```
 
-Replace every `_get_feedback_dir()` call in that module with `resolve_feedback_dir()`. (Grep first: `grep -n _get_feedback_dir science/src/science_tool/feedback_cli.py`.)
+Verify no caller is orphaned: `grep -rn _get_feedback_dir science/src/science_tool/` should still resolve (the function still exists).
 
 - [ ] **Step 2: Write the failing CLI test**
 
@@ -713,18 +730,46 @@ def _registry(tmp_path: Path, entries: list[dict]) -> None:
     (tmp_path / "config.yaml").write_text(yaml.safe_dump({"projects": entries}), encoding="utf-8")
 
 
-def _setup(tmp_path: Path, monkeypatch) -> Path:
+def _an_uncovered_term() -> str:
+    """A real catalog term that no leaf skill covers (guarantees a candidate)."""
+    from science_model.data_products import load_catalog
+    from science_model.skill_coverage import LeafSkill, build_skill_overlay
+    from science_tool.graph.skill_inventory import load_skill_inventory
+
+    catalog = load_catalog()
+    overlay = build_skill_overlay(load_skill_inventory(), catalog)
+    covered = {term for skill in overlay if isinstance(skill, LeafSkill) for term in skill.covers}
+    return next(term for term in catalog.by_id if term not in covered)
+
+
+def _seed_gap(root: Path, term: str) -> None:
+    from _fixtures.entity_helpers import write_markdown_entity
+
+    write_markdown_entity(root, "entities/datasets/tagged.md", {
+        "id": "dataset:tagged", "kind": "dataset", "title": "Tagged",
+        "provided_capabilities": [{"data_product": term}],
+    }, "A tagged dataset.")
+    write_markdown_entity(root, "entities/plans/0001-p.md", {
+        "id": "plan:0001-p", "kind": "plan", "title": "Plan p",
+        "related": ["dataset:tagged"],
+    }, "A plan that uses the tagged dataset.")
+
+
+def _setup(tmp_path: Path, monkeypatch, *, seed_gap: bool = True) -> tuple[Path, str]:
     enrolled = tmp_path / "enrolled"
     _enrolled_project(enrolled)
+    term = _an_uncovered_term()
+    if seed_gap:
+        _seed_gap(enrolled, term)
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path))
     fb = tmp_path / "feedback"
     monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(fb))
     _registry(tmp_path, [{"path": str(enrolled), "name": "enrolled", "id": "enrolled", "registered": "2026-07-25"}])
-    return fb
+    return fb, term
 
 
 def test_report_run_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
-    fb = _setup(tmp_path, monkeypatch)
+    fb, _ = _setup(tmp_path, monkeypatch)
     result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
     assert result.exit_code == 0, result.output
     obj = json.loads(result.output)
@@ -733,13 +778,15 @@ def test_report_run_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_apply_files_feedback(tmp_path: Path, monkeypatch) -> None:
-    fb = _setup(tmp_path, monkeypatch)
+    fb, term = _setup(tmp_path, monkeypatch)
     result = CliRunner().invoke(skills_group, ["curate", "--apply", "--format", "json"])
     assert result.exit_code == 0, result.output
     obj = json.loads(result.output)
-    if obj["rows"]:  # a real enrolled project surfaces uncovered gaps
-        assert obj["mode"] == "apply"
-        assert all(e.project == "science" for e in load_all_entries(fb))
+    assert obj["mode"] == "apply"
+    row = next(r for r in obj["rows"] if r["term"] == term)
+    assert row["applied"] is True and row["result"]["action"] == "created"
+    entries = load_all_entries(fb)
+    assert any(e.target == f"skill-coverage:{term}" and e.project == "science" for e in entries)
 
 
 def test_term_requires_apply(tmp_path: Path, monkeypatch) -> None:
@@ -878,10 +925,10 @@ Use `$ARGUMENTS` for optional flags. Recognized:
 
 ## Steps
 
-1. Run the report-only plan:
+1. Run the report-only plan (forward `--project` when the user passed it):
 
    ```bash
-   cd science && uv run --frozen science skills curate --format json
+   uv run science skills curate --format json [--project <project>]
    ```
 
 2. Present the `rows` to the user, ranked by `score`. For each, name the
@@ -897,11 +944,13 @@ Use `$ARGUMENTS` for optional flags. Recognized:
    those:
 
    ```bash
-   cd science && uv run --frozen science skills curate --apply --term <term> [--term <term> …]
+   uv run science skills curate --apply --term <term> [--term <term> …] [--project <project>]
    ```
 
-   Bare `--apply` (no `--term`) files every `new`/`recur` row. Report the
-   resulting feedback ids from each row's `result`.
+   Forward the same `--project` value used in step 1, so the accepted terms and
+   the filed feedback come from one scope. Bare `--apply` (no `--term`) files
+   every `new`/`recur` row. Report the resulting feedback ids from each row's
+   `result`.
 ```
 
 - [ ] **Step 2: Regenerate the committed agent-assets mirror**
@@ -974,9 +1023,10 @@ After all tasks, from `science/`:
 ```bash
 uv run --frozen pytest tests/skills_coverage tests/test_agent_assets.py -q
 uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py
-uv run --frozen pyright src/science_tool/skills_coverage
+uv run --frozen pyright            # repo-wide: the single pyrightconfig governs all trees; catches cross-module breaks (e.g. autonomy)
 ```
 
 Then run the affected content-guard / command-doc modules the new command touches
-(`tests/test_command_docs.py`, `tests/test_codex_skills.py` if present) before the
-top-level agent runs the full suite once.
+(`tests/test_command_docs.py`, `tests/test_codex_skills.py` if present), plus the
+autonomy CLI tests (`tests/ -k autonomy`) since Task 4 touched `feedback_cli.py`,
+before the top-level agent runs the full suite once.

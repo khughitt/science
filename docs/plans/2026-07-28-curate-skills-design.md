@@ -131,7 +131,7 @@ snapshot-testable.
  score, likely_archetype, n_plans, n_projects,
  existing: [{id, status}, …],   # ALL same-identity matches (target, concern=tooling); [] for NEW
  applied?: bool,                # present only when mode == "apply"
- result?: {action: created|recurred, id, recurrence_after?}}   # present iff applied == true
+ result?: {action: created|recurred, id, recurrence_after}}   # present iff applied == true
 ```
 
 `existing[]` lists **every** same-identity match in any status — an open+resolved
@@ -146,11 +146,13 @@ distinguishable from a report run. In `mode: "report"` no row has `applied` or
 (`true` only for a written selected row; `false` for an unselected row or any
 SKIP), and `result` is present exactly when `applied == true`. This is the
 post-apply action contract the CLI-behavior convention requires ("output should
-name what changed"): `created` returns `{action, id}`; `recurred` returns
-`{action, id, recurrence_after}` (= the entry's `len(occurrences)` after the
-bump). `recurrence_after` is **recur-only** — a NEW entry seeds no occurrence
-(mirroring `feedback add`, where recurrence counts re-observations), so there is
-no meaningful post-count to report for a creation.
+name what changed"): both `created` and `recurred` return `{action, id,
+recurrence_after}`, where `recurrence_after` is the entry's `recurrence`
+(= `len(occurrences)`) after the write. **`FeedbackEntry` seeds one occurrence
+for every entry** (the `_backfill_occurrences` validator, floor 1), so a freshly
+`created` entry is `recurrence_after: 1` and a `recurred` entry is its prior
+count + 1. `recurrence_after` is therefore always present and always meaningful —
+it is not recur-only (an earlier draft wrongly assumed NEW seeds no occurrence).
 
 A `conflict` (>1 open match) is not a row — it aborts the run with a nonzero exit
 before any plan or result is emitted.
@@ -265,10 +267,11 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
     `skip-addressed-conflict`. Guards R2.
 14. **Apply-result contract** — after `--apply`, `mode == "apply"`; a NEW row
     carries `applied: true`, `result.action == "created"` with the generated id
-    and **no** `recurrence_after`; a RECUR row carries `applied: true`,
-    `result.action == "recurred"` and `recurrence_after == len(occurrences)`; a
-    SKIP row carries `applied: false` and no `result`. A report run has `mode ==
-    "report"` and neither `applied` nor `result` on any row. Guards R4 and R3-opt.
+    and `recurrence_after == 1` (the seeded occurrence); a RECUR row carries
+    `applied: true`, `result.action == "recurred"` and `recurrence_after ==
+    len(occurrences)` (prior + 1); a SKIP row carries `applied: false` and no
+    `result`. A report run has `mode == "report"` and neither `applied` nor
+    `result` on any row. Guards R4 and the recurrence-seeding contract.
 15. **Scoped `--apply --term`** — with one of two NEW terms selected, the
     selected row is `applied: true` (written) and the unselected row is
     `applied: false` (not written, no feedback file created for it); an unknown
