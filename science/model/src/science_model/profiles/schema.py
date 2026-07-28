@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from science_model.identity import CurationScope, EntityClass
 
@@ -67,6 +67,20 @@ class EntityKind(BaseModel):
     # is the YAML root key holding the row list (defaults to the kind `name`).
     structured_source: str | None = None
     structured_source_root_key: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_toolkit_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Do not turn an internal default into externally authored manifest input.
+
+        Explicit declarations remain visible. A dumped packaged profile is therefore not an
+        external manifest: once trusted objects become raw mappings, accepting their reserved
+        fields would let an external author claim the same trust with no distinguishable
+        provenance.
+        """
+        dumped = cast(dict[str, Any], handler(self))
+        if "schema_closed" not in self.model_fields_set:
+            dumped.pop("schema_closed", None)
+        return dumped
 
 
 class CoreStructuredSource(BaseModel):

@@ -12,7 +12,7 @@ def test_profile_manifest_requires_imports_for_extension_profiles() -> None:
     assert manifest.imports == ["core"]
 
 
-def test_profile_manifest_round_trip() -> None:
+def test_external_profile_manifest_round_trip_does_not_manufacture_reserved_fields() -> None:
     manifest = ProfileManifest(
         name="core",
         imports=[],
@@ -36,5 +36,18 @@ def test_profile_manifest_round_trip() -> None:
         strictness="core",
     )
     dumped = manifest.model_dump()
+    assert "schema_closed" not in dumped["entity_kinds"][0]
     round_tripped = ProfileManifest.model_validate(dumped)
     assert round_tripped == manifest
+
+
+def test_entity_kind_dump_does_not_strip_an_explicit_toolkit_declaration() -> None:
+    kind = EntityKind(
+        name="hypothesis",
+        canonical_prefix="hypothesis",
+        layer="layer/core",
+        description="Testable project hypothesis",
+        schema_closed=False,
+    )
+
+    assert kind.model_dump()["schema_closed"] is False
