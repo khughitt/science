@@ -285,7 +285,7 @@ def test_vehicles_outside_a_git_repository_are_reported_unverifiable(tmp_path: P
 
 
 def test_durability_failures_gate_the_build_but_undeclared_does_not() -> None:
-    """The four durability defects fail closed; the grandfathered WARN does not.
+    """The five durability defects fail closed; the grandfathered WARN does not.
 
     Gating these is safe only because the corpus produces zero findings on them
     today — see the note in gates.py.
