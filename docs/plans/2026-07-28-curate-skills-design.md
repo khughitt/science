@@ -174,10 +174,13 @@ review surface, so it must carry the decision-critical fields: the header names
 the scope mode **and** the selected `--project` when scoped, and each row shows
 its `likely_archetype` alongside term, disposition, score, and counts.
 
-When `--output` is set, its parent directory is verified **before** any
-`--apply` write. Otherwise an unwritable destination would raise only after the
-feedback store was already mutated, and a retry would record a second occurrence;
-the preflight makes the apply-then-serialize pair fail atomically.
+`--output` is **report-only**: combining it with `--apply` is a hard error. A
+failing report-write after a committed feedback write would leave the store
+half-applied (and a retry would double-record an occurrence), and reserving the
+destination cannot make a later write infallible (a read-only or full target
+still fails after the mutation). Rejecting the combination outright keeps apply
+atomic by construction; apply results are emitted to stdout, which a shell
+redirect can capture for an audit trail.
 
 ### Feedback record mapping
 
@@ -299,10 +302,18 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
 18. **Text render carries decision fields** — the default `text` output names
     each row's `likely_archetype` and, when `--project` scopes the scan, the
     project in the header (not just the scope mode).
-19. **`--output` preflight is atomic** — with a real gap present, `--apply
-    --output <bad-parent>/plan.json` aborts **before** any feedback write (the
-    store stays empty and no file is created); a successful `--output` writes the
-    full payload to the file and nothing to stdout.
+19. **`--output` is report-only** — `--apply --output …` is rejected **before**
+    any feedback write (the store stays empty, no file is created), so apply is
+    atomic by construction; a report-mode `--output` writes the full payload to
+    the file and nothing to stdout.
+20. **`coverage_context` counts exact values** — a constructed `CoverageReport`
+    with two `covered-not-loaded`, one `unmapped`, one `uncovered`, and one
+    skipped project yields `CurateContext(covered_not_loaded=2, unmapped=1,
+    skipped_projects=("…",))` — `uncovered` is never counted. Asserted at exact
+    values so a zero-returning stub would fail.
+21. **Bad persisted status → Click error** — an entry whose status is outside the
+    known vocabulary surfaces through the CLI as a clean `ClickException` (nonzero
+    exit, message names the unknown status), not an uncaught traceback.
 
 ## Code layout
 

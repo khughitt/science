@@ -16,7 +16,7 @@
 - Correlation match key is **`(normalize_target(entry.target), entry.concern == "tooling")`** — never a raw `fnmatch` namespace glob, never target-only.
 - **Fail early** on more than one *open* match for a term (raise, nonzero exit, no writes).
 - A match's `status` must be `open` or a known resolved status (`addressed`, `deferred`, `wontfix`). `FeedbackEntry.status` is an unvalidated `str`; any other value is a hard error, never silently treated as resolved/SKIP.
-- When `--output` is set, its parent directory is verified **before** any feedback write, so a failed report-write can never follow a committed `--apply` (which would double-record on retry).
+- `--output` is **report-only**: combining it with `--apply` is a hard error. This keeps apply atomic — a failing report-write can never follow a committed feedback write (which a retry would double-record). Apply results go to stdout; redirect there for an audit trail.
 - `recurrence_after` is **always present** in a result = the entry's `recurrence` after the write. `FeedbackEntry` seeds one occurrence for every entry (validator floor 1), so a NEW entry is `recurrence_after: 1` and a RECUR is prior + 1.
 - Default is report-only (writes nothing). `--term` is `--apply`-only. An unknown `--term` is a hard error.
 - No skill files are authored; the only side effect is under `~/.config/science/feedback` (or `$SCIENCE_FEEDBACK_DIR`).
@@ -122,24 +122,30 @@ def test_unknown_status_fails_early() -> None:
 
 def test_skip_addressed_conflict_lists_all_resolved() -> None:
     entries = [
-        _entry("skill-coverage:data-product:x", status="wontfix"),
-        _entry("skill-coverage:data-product:x", status="addressed"),
+        _entry("skill-coverage:data-product:x", status="wontfix", n=0),
+        _entry("skill-coverage:data-product:x", status="addressed", n=1),
     ]
     plan = build_curate_plan([_cand("data-product:x")], entries, _CTX, _SCOPE)
     row = plan.rows[0]
     assert row.disposition == "skip-addressed-conflict"
-    assert sorted(m.status for m in row.existing) == ["addressed", "wontfix"]
+    assert sorted((m.id, m.status) for m in row.existing) == [
+        ("fb-2026-07-28-100", "wontfix"),
+        ("fb-2026-07-28-101", "addressed"),
+    ]
 
 
 def test_open_plus_resolved_is_recur_listing_both() -> None:
     entries = [
-        _entry("skill-coverage:data-product:x", status="open"),
-        _entry("skill-coverage:data-product:x", status="wontfix"),
+        _entry("skill-coverage:data-product:x", status="open", n=0),
+        _entry("skill-coverage:data-product:x", status="wontfix", n=1),
     ]
     plan = build_curate_plan([_cand("data-product:x")], entries, _CTX, _SCOPE)
     row = plan.rows[0]
     assert row.disposition == "recur"
-    assert sorted(m.status for m in row.existing) == ["open", "wontfix"]
+    assert sorted((m.id, m.status) for m in row.existing) == [
+        ("fb-2026-07-28-100", "open"),
+        ("fb-2026-07-28-101", "wontfix"),
+    ]
 
 
 def test_counts_and_ordering() -> None:
@@ -150,6 +156,40 @@ def test_counts_and_ordering() -> None:
     plan = build_curate_plan(cands, [], _CTX, _SCOPE)
     assert [r.term for r in plan.rows] == ["data-product:b", "data-product:a"]  # score desc
     assert (plan.rows[0].n_plans, plan.rows[0].n_projects) == (2, 2)
+
+
+def test_coverage_context_counts_states_and_skips() -> None:
+    # Real CoverageReport: coverage_context must count only covered-not-loaded and
+    # unmapped (never uncovered), and carry the skipped-project paths — asserted at
+    # exact nonzero values so a stub returning zeros would fail.
+    from science_model.skill_coverage.coverage import (
+        CoverageReport,
+        CoveredNotLoadedOccurrence,
+        ReportScope,
+        SkippedProject,
+        UncoveredOccurrence,
+        UnmappedOccurrence,
+    )
+    from science_tool.skills_coverage.curate import coverage_context
+
+    report = CoverageReport(
+        scope=ReportScope(mode="portfolio"),
+        coverage_occurrences=(
+            CoveredNotLoadedOccurrence(project="p1", term="data-product:a",
+                                       available_skill_ids=("skill:x",), evidence_refs=()),
+            CoveredNotLoadedOccurrence(project="p2", term="data-product:b",
+                                       available_skill_ids=("skill:y",), evidence_refs=()),
+            UnmappedOccurrence(project="p1", dataset_ref="dataset:d", evidence_refs=()),
+            UncoveredOccurrence(project="p1", term="data-product:c", evidence_refs=()),  # not counted
+        ),
+        skill_reference_diagnostics=(),
+        dataset_reference_diagnostics=(),
+        candidates=(),
+        skipped_projects=(SkippedProject(path="/gone", reason="unreadable"),),
+    )
+    ctx = coverage_context(report)
+    assert (ctx.covered_not_loaded, ctx.unmapped) == (2, 1)
+    assert ctx.skipped_projects == ("/gone",)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -351,7 +391,7 @@ def build_curate_plan(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_plan.py -q`
-Expected: PASS (9 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -586,7 +626,7 @@ def apply_plan(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_apply.py tests/skills_coverage/test_curate_plan.py -q`
-Expected: PASS (16 tests: 7 apply + 9 plan).
+Expected: PASS (17 tests: 7 apply + 10 plan).
 
 - [ ] **Step 5: Commit**
 
@@ -847,7 +887,7 @@ def test_report_run_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     obj = json.loads(result.output)
     assert obj["mode"] == "report"
-    assert set(obj["context"]) == {"covered_not_loaded", "unmapped", "skipped_projects"}  # context extracted
+    assert set(obj["context"]) == {"covered_not_loaded", "unmapped", "skipped_projects"}  # context shape wired through
     assert not fb.exists() or load_all_entries(fb) == []  # no writes
 
 
@@ -890,15 +930,29 @@ def test_output_writes_full_payload_not_stdout(tmp_path: Path, monkeypatch) -> N
     assert obj["mode"] == "report" and any(r["term"] == term for r in obj["rows"])
 
 
-def test_apply_output_failure_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
-    # A real gap exists, so apply WOULD write — but a bad --output parent must be
-    # caught first, leaving the feedback store untouched (no half-commit on retry).
+def test_apply_with_output_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    # --output is report-only; combined with --apply it must error BEFORE any write,
+    # so no feedback is committed and no file is created (apply stays atomic).
     fb, _ = _setup(tmp_path, monkeypatch)
-    out = tmp_path / "missing-dir" / "plan.json"  # parent does not exist
+    out = tmp_path / "plan.json"
     result = CliRunner().invoke(skills_group, ["curate", "--apply", "--output", str(out)])
     assert result.exit_code != 0
+    assert "cannot be combined with --apply" in result.output
     assert not out.exists()
     assert not fb.exists() or load_all_entries(fb) == []  # apply never ran
+
+
+def test_bad_status_reports_click_error(tmp_path: Path, monkeypatch) -> None:
+    # A persisted entry with an out-of-vocabulary status must surface as a clean
+    # Click error, not an uncaught CurateStatusError traceback.
+    from science_tool.feedback import FeedbackEntry, save_entry
+
+    fb, term = _setup(tmp_path, monkeypatch)
+    save_entry(fb, FeedbackEntry(id="fb-2026-07-28-900", target=f"skill-coverage:{term}",
+                                 summary="s", concern="tooling", category="gap", status="bogus"))
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json"])
+    assert result.exit_code != 0
+    assert "unknown status" in result.output
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
@@ -918,6 +972,7 @@ from science_tool.feedback_cli import resolve_feedback_dir
 from science_tool.skills_coverage.curate import (
     CurateConflictError,
     CurateSelectionError,
+    CurateStatusError,
     apply_plan,
     build_curate_plan,
     coverage_context,
@@ -936,10 +991,11 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
     """Triage uncovered skill-coverage gaps into `science feedback` (report-first)."""
     if terms and not apply_:
         raise click.ClickException("--term requires --apply")
-    # Preflight the output destination BEFORE any feedback write, so an unwritable
-    # --output can never follow a committed --apply (which a retry would double-record).
-    if output is not None and not output.parent.is_dir():
-        raise click.ClickException(f"--output parent directory does not exist: {output.parent}")
+    # --output is report-only. Combined with --apply, a failing report-write would
+    # follow a committed feedback write (a retry would then double-record), so reject
+    # the combination outright. Apply results already print to stdout (redirect for audit).
+    if apply_ and output is not None:
+        raise click.ClickException("--output cannot be combined with --apply (results go to stdout)")
     try:
         report = scan_portfolio(only=project)
     except (SkillCoverageScanError, SkillCoverageError) as exc:
@@ -949,7 +1005,7 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
     entries = load_all_entries(feedback_dir)
     try:
         plan = build_curate_plan(report.candidates, entries, coverage_context(report), report.scope.to_dict())
-    except CurateConflictError as exc:
+    except (CurateConflictError, CurateStatusError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     if apply_:
@@ -978,7 +1034,7 @@ skills_group.add_command(curate_command)
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_cli.py -q`
-Expected: PASS (6 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 6: Lint, type-check, commit**
 
