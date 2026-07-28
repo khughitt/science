@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from science_model.audit import FindingRule, FindingSection, PathSubject, ProducerMetrics
 
 from science_tool.annotation.cross_paper_evidence import (
@@ -43,10 +43,60 @@ class CrossPaperQualifiers(BaseModel):
 class CrossPaperMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: str
-    empty_state: str
-    summary: dict[str, object]
-    propositions: list[dict[str, object]]
+    status: Literal["ok", "fail"]
+    empty_state: Literal[
+        "no_propositions",
+        "no_cross_paper_evidence",
+        "active",
+    ]
+    summary: "CrossPaperSummaryMetrics"
+    propositions: list["CrossPaperPropositionMetrics"]
+
+
+class CrossPaperSummaryMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    propositions: int = Field(ge=0)
+    propositions_with_units: int = Field(ge=0)
+    units: int = Field(ge=0)
+    faults: int = Field(ge=0)
+    faults_by_reason: dict[
+        Literal[
+            "sidecar-parse-error",
+            "non-proposition-target",
+            "stale-proposition",
+            "invalid-stance",
+            "adapter-unresolvable",
+            "ownership-mismatch",
+        ],
+        int,
+    ]
+    contested: int = Field(ge=0)
+
+
+class CrossPaperBeliefMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    belief_magnitude: Literal[
+        "speculative",
+        "fragile",
+        "supported",
+        "well_supported",
+    ]
+    contested: bool
+    contested_groups: list[str]
+    support_units: int = Field(ge=0)
+    dispute_units: int = Field(ge=0)
+
+
+class CrossPaperPropositionMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposition: str
+    unit_count: int = Field(ge=0)
+    supporting_papers: int = Field(ge=0)
+    disputing_papers: int = Field(ge=0)
+    belief: CrossPaperBeliefMetrics
 
 
 SECTION = FindingSection(

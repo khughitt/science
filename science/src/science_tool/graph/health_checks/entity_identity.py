@@ -13,7 +13,6 @@ from science_model.audit import (
     PathSubject,
     Severity,
 )
-from science_model.audit.subjects import SubjectError
 from science_model.contracts.inventory_common import InventoryWarning
 
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
@@ -75,12 +74,12 @@ def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFindi
     ]
 
 
-def _subject(row: EntityIdentityFinding):
-    if row["canonical_id"]:
-        try:
-            return EntitySubject(ref=row["canonical_id"])
-        except (SubjectError, ValueError):
-            pass
+def _subject(
+    row: EntityIdentityFinding,
+    canonical_entity_ids: frozenset[str],
+):
+    if row["canonical_id"] in canonical_entity_ids:
+        return EntitySubject(ref=row["canonical_id"])
     return PathSubject(path=row["path"] or PROJECT_CONFIG_FILENAME)
 
 
@@ -93,10 +92,11 @@ def _severity(value: str) -> Severity:
 
 def run_check(context: HealthContext):
     rows = _collect_entity_identity(context)
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in context_sources(context).entities)
     observed = InstrumentResult.from_rows(rows)
     findings = [
         RULE.build(
-            subject=_subject(row),
+            subject=_subject(row, canonical_entity_ids),
             severity=_severity(row["severity"]),
             qualifiers={"code": row["code"]},
             message=row["message"],

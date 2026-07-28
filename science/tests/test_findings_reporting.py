@@ -1,3 +1,4 @@
+import pytest
 from pydantic import BaseModel, ConfigDict
 
 from science_model.audit import (
@@ -5,12 +6,14 @@ from science_model.audit import (
     AuditFinding,
     FindingRule,
     FindingSection,
+    PathSubject,
     finding_fingerprint,
 )
 from science_model.audit.subjects import EntitySubject
 from science_tool.findings.producers import (
     FindingProducer,
     FindingProducerResult,
+    RegistryError,
     build_registry,
 )
 from science_tool.instruments import InstrumentResult
@@ -30,6 +33,28 @@ class _IdentityQualifiers(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     variant: str
+
+
+def _accepted_registry():
+    section = FindingSection(id="accepted", title="Accepted", section_order=1)
+    rule = FindingRule(
+        id="accepted.problem",
+        severities={"warn"},
+        subject_types={"entity"},
+        qualifier_schema=_IdentityQualifiers,
+        identity_qualifiers=("variant",),
+        title="Accepted problem",
+        section=section.id,
+        display_order=1,
+    )
+    producer = FindingProducer(
+        producer_id="wired",
+        namespace="health_checks",
+        source_module="graph/health_checks/wired.py",
+        rules=(rule,),
+        sections=(section,),
+    )
+    return build_registry([producer], active_kinds=frozenset())
 
 
 def _finding(
@@ -199,3 +224,65 @@ def test_build_audit_report_orders_rows_and_separates_output_channels():
     assert unwired_producers == {"unwired"}
     assert producers_run.isdisjoint(unwired_producers)
     assert report.caveats[0].producer_id == "wired"
+
+
+@pytest.mark.parametrize(
+    ("finding", "message"),
+    (
+        (
+            AuditFinding(
+                rule_id="accepted.problem",
+                subject=EntitySubject(ref="dataset:accepted"),
+                severity="info",
+                qualifiers={"variant": "one"},
+                message="wrong severity",
+            ),
+            "severity",
+        ),
+        (
+            AuditFinding(
+                rule_id="accepted.problem",
+                subject=PathSubject(path="doc/accepted.md"),
+                severity="warn",
+                qualifiers={"variant": "one"},
+                message="wrong subject",
+            ),
+            "subject",
+        ),
+        (
+            AuditFinding(
+                rule_id="accepted.problem",
+                subject=EntitySubject(ref="dataset:accepted"),
+                severity="warn",
+                qualifiers={"variant": "one", "extra": "forbidden"},
+                message="wrong qualifiers",
+            ),
+            "qualifier",
+        ),
+    ),
+)
+def test_build_audit_report_validates_every_accepted_finding(
+    finding: AuditFinding,
+    message: str,
+) -> None:
+    from science_tool.findings.reporting import build_audit_report
+
+    accepted = AcceptedFinding(
+        producer_id="wired",
+        finding=finding,
+        acceptance_key="a" * 32,
+        reason="known exception",
+    )
+    with pytest.raises(RegistryError, match=message):
+        build_audit_report(
+            producer_results={
+                "wired": FindingProducerResult(
+                    instrument=InstrumentResult.empty(),
+                )
+            },
+            registry=_accepted_registry(),
+            ingestion_ref="run:accepted",
+            generated_at="2026-07-28T12:00:00+00:00",
+            total_duration_seconds=0,
+            accepted=(accepted,),
+        )

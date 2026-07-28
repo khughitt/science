@@ -203,7 +203,14 @@ def _one_issue_result(
             lambda *_args, **_kwargs: {
                 "status": "fail",
                 "empty_state": "active",
-                "summary": {},
+                "summary": {
+                    "propositions": 0,
+                    "propositions_with_units": 0,
+                    "units": 0,
+                    "faults": 1,
+                    "faults_by_reason": {"sidecar-parse-error": 1},
+                    "contested": 0,
+                },
                 "findings": [
                     {
                         "code": "cross_paper_evidence.sidecar-parse-error",
@@ -641,7 +648,7 @@ def test_legacy_task_and_invalid_aspects_now_count(tmp_path: Path) -> None:
     entity = tmp_path / "entities" / "questions" / "q.md"
     entity.parent.mkdir(parents=True)
     entity.write_text(
-        "---\nid: question:q\nkind: question\naspects: [unknown]\n---\n",
+        "---\nid: question:q\nkind: question\ntitle: Question\naspects: [unknown]\n---\n",
         encoding="utf-8",
     )
     report = build_health_report(

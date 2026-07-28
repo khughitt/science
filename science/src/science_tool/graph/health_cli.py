@@ -11,7 +11,6 @@ from uuid import uuid4
 import click
 from rich.console import Console
 from science_model.audit import (
-    AuditReport,
     EntitySubject,
     FindingSubject,
     IdentifierSubject,
@@ -20,6 +19,7 @@ from science_model.audit import (
 
 from science_tool.findings.producers import FindingRegistry
 from science_tool.findings.reporting import report_sort_key
+from science_tool.graph.health_projection import ProjectedHealthReport
 from science_tool.output import emit, serialize_json
 
 
@@ -42,13 +42,14 @@ def _subject_text(subject: FindingSubject) -> str:
 
 
 def render_health_report(
-    report: AuditReport,
+    display: ProjectedHealthReport,
     registry: FindingRegistry,
     sink: HealthSink,
 ) -> None:
     """Render findings generically; metrics never become synthetic findings."""
     from rich.table import Table
 
+    report = display.report
     if report.meta.timings:
         sink.echo("Health timings:")
         for row in report.meta.timings:
@@ -73,7 +74,7 @@ def render_health_report(
         sink.console.print(table)
 
     grouped: dict[str, list] = defaultdict(list)
-    for item in report.findings:
+    for item in display.findings:
         grouped[registry.rule(item.finding.rule_id).section].append(item)
     for section_id in sorted(
         grouped,
@@ -106,7 +107,7 @@ def render_health_report(
             f"Metrics [{producer_id}]: {serialize_json(metrics.model_dump(mode='json'), indent=None, sort_keys=True)}"
         )
 
-    sink.echo(f"Findings displayed: {len(report.findings)} of {report.totals.findings_total} total.")
+    sink.echo(f"Findings displayed: {len(display.findings)} of {report.totals.findings_total} total.")
     if report.totals.findings_total == 0 and not report.unwired:
         sink.echo("Project is clean.")
     elif report.unwired:
@@ -161,9 +162,11 @@ def health_command(
     from science_tool.budget.invocation import build_complete_via, hint_for
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
-    from science_tool.findings.catalog import build_project_registry
-    from science_tool.graph.health import build_health_report, list_health_checks
-    from science_tool.graph.health_projection import project_health_report
+    from science_tool.graph.health import execute_health_report, list_health_checks
+    from science_tool.graph.health_projection import (
+        ProjectedHealthReport,
+        project_health_report,
+    )
 
     sink = BoundedSink(
         lookup("health"),
@@ -203,7 +206,7 @@ def health_command(
     ingestion_ref = f"health:{uuid4().hex}"
     generated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
     try:
-        report = build_health_report(
+        execution = execute_health_report(
             project_root,
             ingestion_ref=ingestion_ref,
             generated_at=generated_at,
@@ -215,13 +218,20 @@ def health_command(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    registry = build_project_registry(project_root)
+    report = execution.report
+    registry = execution.registry
     displayed = (
-        report if output_path is not None else project_health_report(report, registry=registry, threshold=severity)
+        ProjectedHealthReport(report=report, findings=report.findings)
+        if output_path is not None
+        else project_health_report(
+            report,
+            registry=registry,
+            threshold=severity,
+        )
     )
     emit(
         output_format=output_format,
-        payload=displayed.model_dump(mode="json"),
+        payload=report.model_dump(mode="json"),
         render_text=lambda: render_health_report(displayed, registry, sink),
         indent=2 if output_path is not None else None,
         separators=None if output_path is not None else (",", ":"),

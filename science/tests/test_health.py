@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from science_model.audit import EntitySubject, finding_fingerprint
 
 from science_tool.cli import main
 from science_tool.graph.health import build_health_report
@@ -91,6 +92,107 @@ def test_dataset_declared_rule_ids_equal_complete_code_ledger() -> None:
     assert {rule.id for rule in DATASET_RULES.values()} == {
         f"dataset.{code.removeprefix('dataset_').replace('_', '-')}" for code in DATASET_RULE_CODES
     }
+
+
+def test_dataset_rule_contracts_and_fingerprints_match_the_frozen_table() -> None:
+    expected = {
+        "dataset_access_invalid": ({"error"}, (), ()),
+        "dataset_consumed_but_unverified": ({"error"}, (), ()),
+        "dataset_stale_review": ({"warn"}, (), ()),
+        "dataset_missing_source_url": ({"warn"}, (), ()),
+        "dataset_cached_field_drift": ({"warn"}, ("field",), ("field",)),
+        "dataset_invariant_violation": (
+            {"warn"},
+            ("invariant", "counterpart"),
+            ("invariant", "counterpart"),
+        ),
+        "dataset_derived_missing_workflow_run": ({"error"}, (), ()),
+        "dataset_derived_asymmetric_edge": (
+            {"error"},
+            ("counterpart",),
+            ("counterpart",),
+        ),
+        "dataset_derived_input_chain_broken": (
+            {"error"},
+            ("counterpart",),
+            ("counterpart",),
+        ),
+        "dataset_origin_block_mismatch": ({"error"}, ("field",), ("field",)),
+        "dataset_verified_but_unstageable": ({"warn"}, (), ()),
+        "dataset_research_package_asymmetric": (
+            {"error"},
+            ("counterpart",),
+            ("counterpart",),
+        ),
+    }
+    assert set(DATASET_RULES) == set(expected)
+    for code, (severities, fields, identity) in expected.items():
+        rule = DATASET_RULES[code]
+        assert rule.severities == frozenset(severities)
+        assert rule.subject_types == frozenset({"entity"})
+        assert tuple(rule.qualifier_schema.model_fields) == fields
+        assert rule.identity_qualifiers == identity
+
+        qualifiers = {field: f"{field}:one" for field in fields}
+        first = rule.build(
+            subject=EntitySubject(ref="dataset:one"),
+            severity=next(iter(severities)),
+            qualifiers=qualifiers,
+            message="first wording",
+        )
+        first_id = finding_fingerprint(
+            rule_id=first.rule_id,
+            subject=first.subject,
+            identity_qualifiers=rule.identity_subset(first.qualifiers),
+        )
+        if fields:
+            changed = dict(qualifiers)
+            changed[fields[0]] = f"{fields[0]}:two"
+            second = rule.build(
+                subject=first.subject,
+                severity=first.severity,
+                qualifiers=changed,
+                message=first.message,
+            )
+            second_id = finding_fingerprint(
+                rule_id=second.rule_id,
+                subject=second.subject,
+                identity_qualifiers=rule.identity_subset(second.qualifiers),
+            )
+            assert second_id != first_id
+        else:
+            reworded = first.model_copy(update={"message": "different wording"})
+            reworded_id = finding_fingerprint(
+                rule_id=reworded.rule_id,
+                subject=reworded.subject,
+                identity_qualifiers=rule.identity_subset(reworded.qualifiers),
+            )
+            assert reworded_id == first_id
+
+
+def test_health_cli_does_not_rebuild_the_registry_after_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import science_tool.findings.catalog as catalog
+
+    (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+    def changed_configuration(_root: Path):
+        raise AssertionError("project configuration changed after health execution")
+
+    monkeypatch.setattr(catalog, "build_project_registry", changed_configuration)
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "unresolved_refs",
+        ],
+    )
+    assert result.exit_code == 0, result.output
 
 
 def test_health_cli_json_is_exact_report_v2(tmp_path: Path) -> None:

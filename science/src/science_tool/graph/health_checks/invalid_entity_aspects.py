@@ -7,10 +7,14 @@ from typing import TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence, PathSubject
-from science_model.audit.subjects import SubjectError
 
 from science_tool.findings.producers import FindingProducer
-from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
+from science_tool.graph.health_checks.base import (
+    HealthCheck,
+    HealthContext,
+    composed_result,
+    context_sources,
+)
 from science_tool.instruments import InstrumentResult
 
 
@@ -47,11 +51,13 @@ PRODUCER = FindingProducer(
 )
 
 
-def _subject(row: InvalidEntityAspectsFinding):
-    try:
+def _subject(
+    row: InvalidEntityAspectsFinding,
+    canonical_entity_ids: frozenset[str],
+):
+    if row["entity_id"] in canonical_entity_ids:
         return EntitySubject(ref=row["entity_id"])
-    except (SubjectError, ValueError):
-        return PathSubject(path=row["source_file"])
+    return PathSubject(path=row["source_file"])
 
 
 def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[InvalidEntityAspectsFinding]:
@@ -120,10 +126,11 @@ def collect_invalid_entity_aspects(project_root: Path) -> InstrumentResult[Inval
 
 
 def run_check(context: HealthContext):
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in context_sources(context).entities)
     observed = collect_invalid_entity_aspects(context.project_root)
     findings = [
         RULE.build(
-            subject=_subject(row),
+            subject=_subject(row, canonical_entity_ids),
             severity="error",
             qualifiers={},
             message=row["message"],
@@ -137,7 +144,7 @@ def run_check(context: HealthContext):
 CHECK = HealthCheck(
     name="invalid_entity_aspects",
     description="Validate explicit entity aspects against the project aspect catalog.",
-    requires_sources=False,
+    requires_sources=True,
     run=run_check,
     producer=PRODUCER,
 )

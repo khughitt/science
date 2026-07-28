@@ -35,6 +35,7 @@ from science_model.audit import (
     FindingRule,
     FindingSection,
     ProducerMetrics,
+    RuleDeclarationError,
     finding_fingerprint,
 )
 
@@ -248,7 +249,27 @@ def validate_producer_result(
     )
     seen: set[str] = set()
     for finding in result.instrument.rows:
-        rule = registry.rule(finding.rule_id)
+        finding_id = validate_finding(
+            registry,
+            producer_id,
+            finding,
+        )
+        if finding_id in seen:
+            raise RegistryError(f"{producer_id!r} emitted duplicate finding identity {finding_id}")
+        seen.add(finding_id)
+    return result
+
+
+def validate_finding(
+    registry: FindingRegistry,
+    producer_id: str,
+    finding: AuditFinding,
+) -> str:
+    """Validate one producer-enveloped finding and return its canonical identity."""
+    if producer_id not in registry.producers_by_id:
+        raise RegistryError(f"unregistered producer {producer_id!r}")
+    rule = registry.rule(finding.rule_id)
+    try:
         rebuilt = rule.build(
             subject=finding.subject,
             severity=finding.severity,
@@ -256,14 +277,15 @@ def validate_producer_result(
             message=finding.message,
             evidence=list(finding.evidence),
         )
-        if rebuilt != finding:
-            raise RegistryError(f"{producer_id!r} emitted a noncanonical {finding.rule_id!r} finding")
-        finding_id = finding_fingerprint(
+    except RuleDeclarationError as exc:
+        raise RegistryError(f"{producer_id!r} emitted invalid {finding.rule_id!r} finding: {exc}") from exc
+    if rebuilt != finding:
+        raise RegistryError(f"{producer_id!r} emitted a noncanonical {finding.rule_id!r} finding")
+    try:
+        return finding_fingerprint(
             rule_id=finding.rule_id,
             subject=finding.subject,
             identity_qualifiers=rule.identity_subset(finding.qualifiers),
         )
-        if finding_id in seen:
-            raise RegistryError(f"{producer_id!r} emitted duplicate finding identity {finding_id}")
-        seen.add(finding_id)
-    return result
+    except RuleDeclarationError as exc:
+        raise RegistryError(f"{producer_id!r} emitted invalid {finding.rule_id!r} identity: {exc}") from exc

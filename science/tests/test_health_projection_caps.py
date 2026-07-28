@@ -26,7 +26,4 @@ def test_projection_caps_findings_but_never_actor_channels(tmp_path: Path) -> No
         threshold="all",
     )
     assert len(projected.findings) == SECTION_ROW_CAP
-    assert projected.totals == report.totals
-    assert projected.unwired == report.unwired
-    assert projected.caveats == report.caveats
-    assert projected.meta.timings == report.meta.timings
+    assert projected.report is expanded_report

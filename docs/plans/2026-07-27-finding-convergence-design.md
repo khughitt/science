@@ -1238,7 +1238,10 @@ stale/ambiguous reporting before configuration is rewritten.
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
 class. Layered-claim coverage is a net-neutral reclassification.
-**No entry reduces counts.** Everything else preserves observable counts exactly.
+The approved prose duplicate grouping reduces one finding per repeated semantically
+identical `(path, check, normalized match)` hit while retaining every location as
+evidence. **No other entry reduces counts.** Everything else preserves observable counts
+exactly.
 
 ### 10. Acceptance migration
 

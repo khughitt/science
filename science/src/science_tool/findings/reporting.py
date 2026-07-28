@@ -23,6 +23,7 @@ from science_tool.findings.producers import (
     FindingProducerResult,
     FindingRegistry,
     RegistryError,
+    validate_finding,
     validate_producer_result,
 )
 
@@ -86,6 +87,12 @@ def build_audit_report(
         if producer.metrics_schema is not None:
             metrics[producer_id] = result.metrics
         findings.extend(ReportedFinding(producer_id=producer_id, finding=finding) for finding in result.instrument.rows)
+    for item in accepted:
+        validate_finding(
+            registry,
+            item.producer_id,
+            item.finding,
+        )
     findings.sort(key=lambda item: report_sort_key(registry, item.finding))
     accepted = tuple(sorted(accepted, key=lambda item: report_sort_key(registry, item.finding)))
     severity = Counter(item.finding.severity for item in findings)

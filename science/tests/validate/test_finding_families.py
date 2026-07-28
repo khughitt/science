@@ -309,6 +309,7 @@ def test_registered_projection_never_reinvokes_raw_check(tmp_path: Path) -> None
             entry,
             ctx,
             build_project_registry(tmp_path),
+            tuple(entry.fn(ctx)),
         )
         assert calls == 1
         assert len(result.instrument.rows) == 1
@@ -648,6 +649,7 @@ def test_multi_issue_emitters_have_one_semantic_identity_per_row(
         entry,
         ctx,
         registry,
+        tuple(entry.fn(ctx)),
     )
 
     identities = [
@@ -692,6 +694,7 @@ def test_accepted_validation_coalesces_equivalent_severity_spellings_at_register
         entry,
         ctx,
         build_project_registry(tmp_path),
+        tuple(entry.fn(ctx)),
     )
 
     assert len(result.instrument.rows) == 1

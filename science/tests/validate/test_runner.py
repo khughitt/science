@@ -1,9 +1,14 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from science_model.audit import ProjectSubject
 
 from science_tool.findings.catalog import build_project_registry
+from science_tool.findings.producers import RegistryError
+from science_tool.graph.health_checks import validate as validate_health
+from science_tool.graph.health_checks.base import HealthContext
+from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.checks.manifest import RULES as MANIFEST_RULES
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
@@ -55,12 +60,13 @@ def test_runner_exception_uses_declared_runtime_rule(
 ) -> None:
     import science_tool.validate.runner as runner
 
-    class Broken:
-        section = "broken"
-        fn = staticmethod(lambda _ctx: (_ for _ in ()).throw(RuntimeError("boom")))
-        producer = type("Producer", (), {"producer_id": "validate.manifest"})()
+    manifest = next(entry for entry in CANONICAL_CHECKS if entry.producer.producer_id == "validate.manifest")
+    broken = replace(
+        manifest,
+        fn=lambda _ctx: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
 
-    monkeypatch.setattr(runner, "_checks_for_profile", lambda _profile: (Broken(),))
+    monkeypatch.setattr(runner, "_checks_for_profile", lambda _profile: (broken,))
     monkeypatch.setattr(runner, "_skipped_checks_for_profile", lambda _profile: ())
     result = runner.run(
         _project(tmp_path),
@@ -72,6 +78,80 @@ def test_runner_exception_uses_declared_runtime_rule(
     assert len(crashes) == 1
     assert crashes[0].subject == ProjectSubject()
     assert crashes[0].qualifiers["check"] == "<lambda>"
+    failed = result.producer_results["validate.manifest"]
+    assert failed.instrument.status == "unwired"
+    assert failed.instrument.code == "check-error"
+
+
+def test_runner_fails_early_on_wrong_observation_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import science_tool.validate.runner as runner
+
+    manifest = next(entry for entry in CANONICAL_CHECKS if entry.producer.producer_id == "validate.manifest")
+    malformed = replace(manifest, fn=lambda _ctx: (object(),))
+    monkeypatch.setattr(runner, "_checks_for_profile", lambda _profile: (malformed,))
+    monkeypatch.setattr(runner, "_skipped_checks_for_profile", lambda _profile: ())
+
+    with pytest.raises(TypeError, match="unsupported validation observation"):
+        runner.run(
+            _project(tmp_path),
+            strict=False,
+            verbose=False,
+            enable_python_sidecar=False,
+        )
+
+
+def test_runner_fails_early_on_duplicate_finding_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import science_tool.validate.runner as runner
+
+    manifest = next(entry for entry in CANONICAL_CHECKS if entry.producer.producer_id == "validate.manifest")
+    duplicate = Result(
+        severity=Severity.ERROR,
+        path=tmp_path / "science.yaml",
+        line=None,
+        message="duplicate",
+        rule=MANIFEST_RULES["manifest.check"],
+        task=None,
+        qualifiers={"key": ["duplicate"]},
+    )
+    malformed = replace(manifest, fn=lambda _ctx: (duplicate, duplicate))
+    monkeypatch.setattr(runner, "_checks_for_profile", lambda _profile: (malformed,))
+    monkeypatch.setattr(runner, "_skipped_checks_for_profile", lambda _profile: ())
+
+    with pytest.raises(RegistryError, match="duplicate finding identity"):
+        runner.run(
+            _project(tmp_path),
+            strict=False,
+            verbose=False,
+            enable_python_sidecar=False,
+        )
+
+
+def test_health_validation_reports_required_metric_check_failure_as_unwired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import science_tool.validate.runner as runner
+
+    prose = next(entry for entry in CANONICAL_CHECKS if entry.producer.producer_id == "validate.prose-lints")
+    broken = replace(
+        prose,
+        fn=lambda _ctx: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    monkeypatch.setattr(runner, "_checks_for_profile", lambda _profile: (broken,))
+    monkeypatch.setattr(runner, "_skipped_checks_for_profile", lambda _profile: ())
+
+    result = validate_health.run_check(
+        HealthContext(project_root=_project(tmp_path)),
+    )
+
+    assert result.instrument.status == "unwired"
+    assert result.instrument.code == "check-error"
 
 
 def test_runner_uses_global_project_registry(tmp_path: Path) -> None:

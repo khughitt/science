@@ -119,12 +119,17 @@ class _Sink:
 
 def _render(report: AuditReport) -> str:
     from science_tool.graph import health_cli
+    from science_tool.graph.health_projection import ProjectedHealthReport
 
     renderer: Any = getattr(health_cli, "render_health_report", None)
     assert renderer is not None, "health must expose its AuditReport v2 renderer"
     sink = _Sink()
     registry = build_registry([], active_kinds=frozenset())
-    renderer(report, registry=registry, sink=sink)
+    renderer(
+        ProjectedHealthReport(report=report, findings=report.findings),
+        registry=registry,
+        sink=sink,
+    )
     return "\n".join(sink.values)
 
 

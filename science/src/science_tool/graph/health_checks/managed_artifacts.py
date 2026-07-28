@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import (
@@ -28,7 +28,26 @@ class ManagedArtifactQualifiers(BaseModel):
 class ManagedArtifactMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    inventory: list[dict[str, object]]
+    inventory: list["ManagedArtifactMetric"]
+
+
+class ManagedArtifactMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    install_target: str
+    version: str
+    status: Literal[
+        "current",
+        "stale",
+        "locally_modified",
+        "untracked",
+        "missing",
+        "pinned",
+        "pinned_but_locally_modified",
+    ]
+    detail: str
+    counts_as_issue: bool
 
 
 SECTION = FindingSection(

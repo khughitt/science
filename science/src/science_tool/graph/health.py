@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
@@ -13,6 +14,7 @@ from science_tool.findings.catalog import (
 )
 from science_tool.findings.producers import (
     FindingProducerResult,
+    FindingRegistry,
     validate_producer_result,
 )
 from science_tool.findings.reporting import build_audit_report
@@ -24,6 +26,14 @@ from science_tool.graph.health_checks.schema_invalid import (
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.acceptance import partition_health_acceptances
+
+
+@dataclass(frozen=True)
+class HealthExecution:
+    """One health observation pass and the exact registry that validated it."""
+
+    report: AuditReport
+    registry: FindingRegistry
 
 
 def _health_check_names() -> frozenset[str]:
@@ -86,7 +96,7 @@ def _partition_validation_acceptances(
     return producer_results, tuple(accepted)
 
 
-def build_health_report(
+def execute_health_report(
     project_root: Path,
     *,
     ingestion_ref: str,
@@ -95,8 +105,8 @@ def build_health_report(
     checks: set[str] | frozenset[str] | None = None,
     skip_checks: set[str] | frozenset[str] | None = None,
     fast: bool = False,
-) -> AuditReport:
-    """Run selected producers and assemble their already-validated observations."""
+) -> HealthExecution:
+    """Run selected producers and retain their exact validation authority."""
     project_root = project_root.resolve()
     selected_checks = _select_health_checks(
         checks=checks,
@@ -144,12 +154,37 @@ def build_health_report(
         producer_results,
     )
     elapsed = perf_counter() - started
-    return build_audit_report(
-        producer_results=producer_results,
+    return HealthExecution(
+        report=build_audit_report(
+            producer_results=producer_results,
+            registry=registry,
+            ingestion_ref=ingestion_ref,
+            generated_at=generated_at,
+            total_duration_seconds=elapsed,
+            accepted=accepted,
+            timings=tuple(context.timings),
+        ),
         registry=registry,
+    )
+
+
+def build_health_report(
+    project_root: Path,
+    *,
+    ingestion_ref: str,
+    generated_at: str,
+    collect_timings: bool = False,
+    checks: set[str] | frozenset[str] | None = None,
+    skip_checks: set[str] | frozenset[str] | None = None,
+    fast: bool = False,
+) -> AuditReport:
+    """Run selected producers and return the public AuditReport only."""
+    return execute_health_report(
+        project_root,
         ingestion_ref=ingestion_ref,
         generated_at=generated_at,
-        total_duration_seconds=elapsed,
-        accepted=accepted,
-        timings=tuple(context.timings),
-    )
+        collect_timings=collect_timings,
+        checks=checks,
+        skip_checks=skip_checks,
+        fast=fast,
+    ).report

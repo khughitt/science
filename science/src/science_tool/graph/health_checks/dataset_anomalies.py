@@ -7,8 +7,13 @@ from typing import cast
 
 import yaml as _yaml
 from pydantic import BaseModel, ConfigDict
-from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence
-from science_model.audit.subjects import SubjectError
+from science_model.audit import (
+    EntitySubject,
+    FindingRule,
+    FindingSection,
+    LocationEvidence,
+    Severity,
+)
 
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.findings.producers import FindingProducer
@@ -31,10 +36,25 @@ DATASET_RULE_CODES: tuple[str, ...] = (
 )
 
 
-class DatasetAnomalyQualifiers(BaseModel):
+class NoDatasetQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class DatasetFieldQualifiers(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     field: str
+
+
+class DatasetCounterpartQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    counterpart: str
+
+
+class DatasetInvariantQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     invariant: str
     counterpart: str
 
@@ -44,18 +64,113 @@ SECTION = FindingSection(
     title="Dataset anomalies",
     section_order=212,
 )
-RULES = {
-    code: FindingRule(
-        id=f"dataset.{code.removeprefix('dataset_').replace('_', '-')}",
-        severities=frozenset({"error", "warn"}),
+
+
+def _rule(
+    *,
+    rule_id: str,
+    severity: Severity,
+    qualifier_schema: type[BaseModel],
+    identity_qualifiers: tuple[str, ...],
+    display_order: int,
+) -> FindingRule:
+    return FindingRule(
+        id=rule_id,
+        severities=frozenset({severity}),
         subject_types=frozenset({"entity"}),
-        qualifier_schema=DatasetAnomalyQualifiers,
-        identity_qualifiers=("field", "invariant", "counterpart"),
-        title=code.removeprefix("dataset_").replace("_", " ").title(),
+        qualifier_schema=qualifier_schema,
+        identity_qualifiers=identity_qualifiers,
+        title=rule_id.removeprefix("dataset.").replace("-", " ").title(),
         section=SECTION.id,
-        display_order=index,
+        display_order=display_order,
     )
-    for index, code in enumerate(DATASET_RULE_CODES, start=1)
+
+
+RULES = {
+    "dataset_access_invalid": _rule(
+        rule_id="dataset.access-invalid",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=1,
+    ),
+    "dataset_consumed_but_unverified": _rule(
+        rule_id="dataset.consumed-but-unverified",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=2,
+    ),
+    "dataset_stale_review": _rule(
+        rule_id="dataset.stale-review",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=3,
+    ),
+    "dataset_missing_source_url": _rule(
+        rule_id="dataset.missing-source-url",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=4,
+    ),
+    "dataset_cached_field_drift": _rule(
+        rule_id="dataset.cached-field-drift",
+        severity="warn",
+        qualifier_schema=DatasetFieldQualifiers,
+        identity_qualifiers=("field",),
+        display_order=5,
+    ),
+    "dataset_invariant_violation": _rule(
+        rule_id="dataset.invariant-violation",
+        severity="warn",
+        qualifier_schema=DatasetInvariantQualifiers,
+        identity_qualifiers=("invariant", "counterpart"),
+        display_order=6,
+    ),
+    "dataset_derived_missing_workflow_run": _rule(
+        rule_id="dataset.derived-missing-workflow-run",
+        severity="error",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=7,
+    ),
+    "dataset_derived_asymmetric_edge": _rule(
+        rule_id="dataset.derived-asymmetric-edge",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=8,
+    ),
+    "dataset_derived_input_chain_broken": _rule(
+        rule_id="dataset.derived-input-chain-broken",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=9,
+    ),
+    "dataset_origin_block_mismatch": _rule(
+        rule_id="dataset.origin-block-mismatch",
+        severity="error",
+        qualifier_schema=DatasetFieldQualifiers,
+        identity_qualifiers=("field",),
+        display_order=10,
+    ),
+    "dataset_verified_but_unstageable": _rule(
+        rule_id="dataset.verified-but-unstageable",
+        severity="warn",
+        qualifier_schema=NoDatasetQualifiers,
+        identity_qualifiers=(),
+        display_order=11,
+    ),
+    "dataset_research_package_asymmetric": _rule(
+        rule_id="dataset.research-package-asymmetric",
+        severity="error",
+        qualifier_schema=DatasetCounterpartQualifiers,
+        identity_qualifiers=("counterpart",),
+        display_order=12,
+    ),
 }
 PRODUCER = FindingProducer(
     producer_id="dataset_anomalies",
@@ -64,28 +179,6 @@ PRODUCER = FindingProducer(
     rules=tuple(RULES.values()),
     sections=(SECTION,),
 )
-
-_FIELDS = {
-    "dataset_access_invalid": "access",
-    "dataset_consumed_but_unverified": "consumed_by",
-    "dataset_stale_review": "access.last_reviewed",
-    "dataset_missing_source_url": "access.source_url",
-    "dataset_cached_field_drift": "datapackage",
-    "dataset_derived_missing_workflow_run": "derivation.workflow_run",
-    "dataset_derived_asymmetric_edge": "derivation.workflow_run",
-    "dataset_derived_input_chain_broken": "derivation.inputs",
-    "dataset_origin_block_mismatch": "origin",
-    "dataset_verified_but_unstageable": "datapackage",
-    "dataset_research_package_asymmetric": "consumed_by",
-    "dataset_invariant_violation": "dataset",
-}
-_INVARIANTS = {
-    "dataset_origin_block_mismatch": "origin-block",
-    "dataset_invariant_violation": "dataset-lineage",
-    "dataset_derived_asymmetric_edge": "workflow-run-symmetry",
-    "dataset_derived_input_chain_broken": "input-chain",
-    "dataset_research_package_asymmetric": "research-package-symmetry",
-}
 
 
 def _passes_gate(
@@ -226,6 +319,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                     "code": "dataset_origin_block_mismatch",
                     "severity": "error",
                     "entity_id": entity_id,
+                    "field": "derivation",
                     "file_path": str(md),
                     "message": "origin: external entity carries a derivation: block (invariant #7)",
                 }
@@ -246,6 +340,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_origin_block_mismatch",
                         "severity": "error",
                         "entity_id": entity_id,
+                        "field": ",".join(forbidden),
                         "file_path": str(md),
                         "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
                     }
@@ -529,8 +624,8 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                     {
                         "code": "dataset_research_package_asymmetric",
                         "severity": "error",
-                        "entity_id": ds_id,
-                        "counterpart": rp_id,
+                        "entity_id": rp_id,
+                        "counterpart": ds_id,
                         "file_path": "",
                         "message": f"research-package.displays lists {ds_id} but no such dataset entity",
                     }
@@ -551,13 +646,12 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
 
 
 def _dataset_subject(row: dict):
-    entity_id = str(row["entity_id"])
-    if not entity_id.startswith("dataset:"):
-        entity_id = f"dataset:{entity_id.removeprefix('research-package:')}"
-    try:
-        return EntitySubject(ref=entity_id)
-    except SubjectError as exc:
-        raise ValueError(f"dataset anomaly has no valid dataset identity: {row!r}") from exc
+    return EntitySubject(ref=str(row["entity_id"]))
+
+
+def _dataset_qualifiers(row: dict[str, object]) -> dict[str, object]:
+    rule = RULES[str(row["code"])]
+    return {field: row[field] for field in rule.qualifier_schema.model_fields}
 
 
 def run_check(context: HealthContext):
@@ -566,11 +660,7 @@ def run_check(context: HealthContext):
         RULES[str(row["code"])].build(
             subject=_dataset_subject(row),
             severity="warn" if row["severity"] == "warning" else "error",
-            qualifiers={
-                "field": str(row.get("field", _FIELDS[str(row["code"])])),
-                "invariant": str(row.get("invariant", _INVARIANTS.get(str(row["code"]), ""))),
-                "counterpart": str(row.get("counterpart", "")),
-            },
+            qualifiers=_dataset_qualifiers(row),
             message=str(row["message"]),
             evidence=([LocationEvidence(path=str(row["file_path"]))] if row["file_path"] else []),
         )

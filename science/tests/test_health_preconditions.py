@@ -3,6 +3,7 @@ from pathlib import Path
 from science_tool.findings.catalog import build_project_registry
 from science_tool.graph.health import build_health_report
 from science_tool.graph.health_cli import render_health_report
+from science_tool.graph.health_projection import ProjectedHealthReport
 
 
 class _Console:
@@ -33,7 +34,11 @@ def test_unwired_is_separate_and_renderer_refuses_clean(tmp_path: Path) -> None:
     assert report.totals.findings_total == 0
     assert report.totals.unwired_total == 1
     sink = _Sink()
-    render_health_report(report, build_project_registry(tmp_path), sink)
+    render_health_report(
+        ProjectedHealthReport(report=report, findings=report.findings),
+        build_project_registry(tmp_path),
+        sink,
+    )
     assert "Project is not clean: one or more diagnostics could not run." in sink.lines
     assert "Project is clean." not in sink.lines
 
@@ -51,5 +56,9 @@ def test_wired_zero_renderer_is_clean(tmp_path: Path) -> None:
         checks={"tooling_scaffold"},
     )
     sink = _Sink()
-    render_health_report(report, build_project_registry(tmp_path), sink)
+    render_health_report(
+        ProjectedHealthReport(report=report, findings=report.findings),
+        build_project_registry(tmp_path),
+        sink,
+    )
     assert "Project is clean." in sink.lines

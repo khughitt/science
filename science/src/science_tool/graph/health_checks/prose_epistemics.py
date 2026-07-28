@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import FindingRule, FindingSection, PathSubject, ProducerMetrics
@@ -22,9 +22,79 @@ class ProseEpistemicsMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     applicable: bool
-    summary: dict[str, object]
-    coverage: dict[str, object]
-    sources: list[object]
+    summary: "ProseSummaryMetrics | EmptyProseMetrics"
+    coverage: "ProseCoverageMetrics | EmptyProseMetrics"
+    sources: list["ProseSourceMetrics"]
+
+
+class EmptyProseMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProseSourceSummaryMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_candidate_units: int
+    promoted_units: int
+    grounded_units: int
+    below_floor_units: int
+    unbacked_units: int
+    unpromoted_units: int
+    skipped_units: int
+    stale_units: int
+    contested_units: int
+
+
+class ProseSummaryMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    declared_sources: int
+    sources_with_decomposition: int
+    sources_with_grounding: int
+    current_candidate_units: int
+    promoted_units: int
+    grounded_units: int
+    below_floor_units: int
+    unbacked_units: int
+    unpromoted_units: int
+    skipped_units: int
+    stale_units: int
+    contested_units: int
+
+
+class ProseCoverageMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    numerator: int
+    denominator: int
+    ratio: float | None
+
+
+class ProseCoverageMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    promotion: ProseCoverageMetric
+    grounding: ProseCoverageMetric
+    strict_grounding: ProseCoverageMetric
+
+
+class ProseSourceMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_ref: str
+    title: str
+    path: str
+    decomposition_artifact_id: str | None
+    grounding_report_path: str
+    summary: ProseSourceSummaryMetrics
+    state: Literal[
+        "missing_decomposition",
+        "invalid_decomposition",
+        "missing_grounding",
+        "invalid_grounding",
+        "stale_grounding",
+        "complete",
+    ]
 
 
 SECTION = FindingSection(

@@ -9,7 +9,6 @@ from typing import TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence, PathSubject
-from science_model.audit.subjects import SubjectError
 from science_model.entities import Entity
 
 from science_tool.findings.producers import FindingProducer
@@ -59,17 +58,19 @@ PRODUCER = FindingProducer(
 )
 
 
-def _subject(row: IdentityPolicyFinding):
+def _subject(
+    row: IdentityPolicyFinding,
+    canonical_entity_ids: frozenset[str],
+):
     if row["check"] == "relation_endpoint_disambiguation":
         role = row["message"].split(" ", 1)[0]
         return PathSubject(
             path=row["source_file"],
             pointer=f"relation/{row['entity_id']}/{role}",
         )
-    try:
+    if row["entity_id"] in canonical_entity_ids:
         return EntitySubject(ref=row["entity_id"])
-    except (SubjectError, ValueError):
-        return PathSubject(path=row["source_file"])
+    return PathSubject(path=row["source_file"])
 
 
 _LOCAL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -237,13 +238,15 @@ def _collect_entity_identity_findings(
 
 
 def run_check(context: HealthContext):
+    sources = context_sources(context)
     observed = collect_identity_policy_findings(
         context.project_root,
-        sources=context_sources(context),
+        sources=sources,
     )
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in sources.entities)
     findings = [
         RULE.build(
-            subject=_subject(row),
+            subject=_subject(row, canonical_entity_ids),
             severity="warn",
             qualifiers={"check": row["check"]},
             message=row["message"],

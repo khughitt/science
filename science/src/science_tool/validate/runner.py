@@ -150,29 +150,40 @@ def run(
             )
         for entry in checks:
             try:
-                producer_result, check_notices = _execute_check(
-                    entry,
-                    ctx,
-                    registry,
+                raw_observations = tuple(entry.fn(ctx))
+            except Exception as exc:  # noqa: BLE001 - operational check failure
+                detail = (
+                    f"check {entry.fn.__name__!r} (section "
+                    f"{entry.section!r}) could not run: "
+                    f"{type(exc).__name__}: {exc}"
                 )
-                producer_results[entry.producer.producer_id] = producer_result
-                notices.extend(check_notices)
-            except Exception as exc:  # noqa: BLE001 - one check must not abort the whole run
-                # A single check (e.g. one that loads project sources and hits a
-                # malformed entity) must not abort the entire validate run. Surface
-                # the failure as an ERROR finding and continue with the other checks.
                 runtime_findings.append(
                     RULE_CHECK_ERROR.build(
                         subject=ProjectSubject(),
                         severity="error",
                         qualifiers={"check": entry.fn.__name__},
-                        message=(
-                            f"check {entry.fn.__name__!r} (section "
-                            f"{entry.section!r}) could not run: "
-                            f"{type(exc).__name__}: {exc}"
-                        ),
+                        message=detail,
                     )
                 )
+                producer_results[entry.producer.producer_id] = validate_producer_result(
+                    registry,
+                    entry.producer.producer_id,
+                    FindingProducerResult(
+                        instrument=InstrumentResult.unwired(
+                            code="check-error",
+                            reason=detail,
+                        )
+                    ),
+                )
+                continue
+            producer_result, check_notices = _execute_check(
+                entry,
+                ctx,
+                registry,
+                raw_observations,
+            )
+            producer_results[entry.producer.producer_id] = producer_result
+            notices.extend(check_notices)
         if sidecar_enabled:
             runtime_findings.extend(
                 result.to_finding(ctx.project_root) for result in _dispatch_hooks("extra_checks", ctx)
@@ -240,9 +251,10 @@ def _execute_check(
     entry: CheckEntry,
     ctx: ValidateContext,
     registry: FindingRegistry,
+    raw_observations: tuple[object, ...],
 ) -> tuple[FindingProducerResult, tuple[ValidationNotice, ...]]:
     observations: list[AuditFinding | ValidationMetricObservation | ValidationNotice] = []
-    for item in entry.fn(ctx):
+    for item in raw_observations:
         if isinstance(item, Result):
             observations.append(item.to_finding(ctx.project_root))
         elif isinstance(item, ValidationMetricObservation | ValidationNotice):

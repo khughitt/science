@@ -28,8 +28,16 @@ def run_check(context: HealthContext) -> FindingProducerResult:
         verbose=False,
         enable_python_sidecar=False,
     )
+    numeric_result = run_result.producer_results["validate.prose-lints"]
+    if numeric_result.instrument.status == "unwired":
+        return FindingProducerResult(
+            instrument=InstrumentResult.unwired(
+                code=numeric_result.instrument.code or "check-error",
+                reason=numeric_result.instrument.reason,
+            )
+        )
     findings = [finding for finding in run_result.results if finding.severity != "info"]
-    numeric = run_result.producer_results["validate.prose-lints"].metrics
+    numeric = numeric_result.metrics
     return FindingProducerResult(
         instrument=InstrumentResult.from_rows(findings),
         metrics=ProducerMetrics.model_validate(numeric.model_dump(mode="json")),

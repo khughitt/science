@@ -2,13 +2,14 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+from science_model.audit import AuditReport
 
 from science_tool.budget.measure import visible_len
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
 
 
-def test_health_json_budget_uses_complete_report_totals(tmp_path: Path) -> None:
+def test_health_json_stdout_is_a_complete_valid_audit_report(tmp_path: Path) -> None:
     tasks = tmp_path / "tasks" / "active"
     tasks.mkdir(parents=True)
     for index in range(45):
@@ -31,9 +32,9 @@ def test_health_json_budget_uses_complete_report_totals(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert len(payload["findings"]) == 40
-    assert payload["totals"]["findings_total"] == 45
+    report = AuditReport.model_validate_json(result.output)
+    assert len(report.findings) == 45
+    assert report.totals.findings_total == 45
 
 
 def test_health_output_file_receives_complete_report(tmp_path: Path) -> None:
