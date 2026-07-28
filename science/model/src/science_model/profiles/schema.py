@@ -43,6 +43,16 @@ class EntityKind(BaseModel):
     # False because project-authored manifest kinds validate through this model and must not be
     # forced to declare; a test asserts every SHIPPED kind sets it explicitly.
     supersedable: bool = False
+    # Schema-first closure: does this kind validate through a COMPOSED entity profile with
+    # `unevaluatedProperties: false`? DECLARED per kind. `PROJECT_MIXIN_NAMES` derives from this,
+    # so flipping it to True arms strictness, Markdown load validation, write-boundary validation
+    # and `strict_schema_kinds` in ONE edit -- there is deliberately no separate strictness switch.
+    # Defaults False because project-authored manifest kinds validate through this same model and
+    # must not be forced to declare; a test asserts every SHIPPED kind sets it explicitly, so a
+    # shipped kind that merely FORGOT is distinguishable from one ruled open. A project manifest
+    # that authors it is REJECTED (see ProfileManifest) -- a project cannot install a packaged
+    # type mixin, so honouring the field there would be a claim the toolkit cannot make true.
+    schema_closed: bool = False
     # Structured-source declaration: a project-local kind whose entities are
     # generated/maintained as rows in a single-type YAML data file under
     # knowledge/sources/<profile>/ (NOT the multi-type entities.yaml/terms.yaml

@@ -76,6 +76,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=True,
         ),
         EntityKind(
             name="question",
@@ -92,6 +93,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "partially-answered", "answered", "deferred", "retired", "archived"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="research-question",
@@ -104,6 +106,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/research-question.md",
             strategy="singleton",
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="task",
@@ -113,6 +116,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="proposition",
@@ -129,6 +133,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="draft",
             statuses=["draft", "active", "supported", "contested", "weakened", "retired", "superseded", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="observation",
@@ -144,6 +149,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired", "archived"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="finding",
@@ -159,6 +165,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="interpretation",
@@ -175,6 +182,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="story",
@@ -190,6 +198,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="draft",
             statuses=["draft", "developing", "mature", "superseded"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="synthesis",
@@ -205,6 +214,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="report",
@@ -225,6 +235,7 @@ CORE_PROFILE = ProfileManifest(
             # they are -- not because files existed.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="validation-report",
@@ -239,6 +250,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="discussion",
@@ -255,6 +267,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="inquiry",
@@ -269,6 +282,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "complete", "superseded", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="mechanism",
@@ -284,6 +298,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="theme",
@@ -300,6 +315,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["draft", "active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="assumption",
@@ -310,6 +326,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="patch-definition",
@@ -324,6 +341,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="paper",
@@ -338,6 +356,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="prose-source",
@@ -352,6 +371,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="book",
@@ -366,6 +386,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="talk",
@@ -379,6 +400,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="article",
@@ -388,6 +410,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="concept",
@@ -402,6 +425,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "deprecated"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="construct",
@@ -415,6 +439,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="outcome",
@@ -428,6 +453,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="topic",
@@ -441,6 +467,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="variable",
@@ -450,6 +477,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="experiment",
@@ -459,6 +487,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="method",
@@ -474,6 +503,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="pre-registration",
@@ -501,6 +531,7 @@ CORE_PROFILE = ProfileManifest(
             # to undo. Those files stay WARN -- that warning IS the migration signal.
             statuses=["active", "committed", "amended", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="plan",
@@ -523,6 +554,7 @@ CORE_PROFILE = ProfileManifest(
             # exercise is trying to end. Those 25 stay WARN and migrate to `draft`.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="search",
@@ -536,6 +568,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "complete", "retired", "archived"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="decision",
@@ -549,6 +582,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "abandoned", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="claim-registry",
@@ -561,6 +595,7 @@ CORE_PROFILE = ProfileManifest(
             home="entities/claim-registry.yaml",
             strategy="singleton",
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="spec",
@@ -580,6 +615,7 @@ CORE_PROFILE = ProfileManifest(
             # `sci:supersedes` pair below, or the D4 supersedable gate goes red.
             statuses=["draft", "active", "complete", "superseded", "retired", "archived"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="transformation",
@@ -590,6 +626,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="curation-sweep",
@@ -600,6 +637,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="dataset",
@@ -615,6 +653,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["proposed", "candidate", "active", "retired", "deprecated"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="workflow",
@@ -629,6 +668,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["planned", "active", "deprecated", "retired"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="workflow-run",
@@ -642,6 +682,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="running",
             statuses=["running", "complete", "failed"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="workflow-step",
@@ -655,6 +696,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired"],
             supersedable=True,
+            schema_closed=False,
         ),
         EntityKind(
             name="data-package",
@@ -664,6 +706,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="research-package",
@@ -674,6 +717,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.CORRESPONDENCE,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="structural-chain",
@@ -684,6 +728,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="chain-audit",
@@ -694,6 +739,7 @@ CORE_PROFILE = ProfileManifest(
             curation_scope=CurationScope.EPISTEMIC,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="code-file",
@@ -703,6 +749,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.AUTHORED_CORE,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="evidence-line",
@@ -718,6 +765,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="draft",
             statuses=["draft", "active", "retired", "archived"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="falsification",
@@ -733,6 +781,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="draft",
             statuses=["draft", "active", "retired", "archived"],
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="unknown",
@@ -742,6 +791,7 @@ CORE_PROFILE = ProfileManifest(
             entity_class=EntityClass.REFERENCE,
             category=KindCategory.RESERVED,
             supersedable=False,
+            schema_closed=False,
         ),
     ],
     relation_kinds=[

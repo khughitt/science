@@ -15,6 +15,7 @@ LOCAL_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="canonical_parameter",
@@ -24,6 +25,7 @@ LOCAL_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
             supersedable=False,
+            schema_closed=False,
         ),
         EntityKind(
             name="parameter_binding",
@@ -33,6 +35,7 @@ LOCAL_PROFILE = ProfileManifest(
             entity_class=EntityClass.OPERATIONAL,
             category=KindCategory.SOURCE_ONLY,
             supersedable=False,
+            schema_closed=False,
         ),
     ],
     relation_kinds=[],

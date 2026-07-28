@@ -12,16 +12,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from science_model.profiles.core import CORE_PROFILE
+from science_model.profiles.local import LOCAL_PROFILE
+
 BASE_NAME = "science-entity-base"
 
 # Commons type mixins (base 1.0). Shared across repos; versioned; 369 live records.
 COMMONS_MIXIN_NAMES = frozenset({"dataset", "paper", "topic", "theme"})
 
-# Project-authored kinds converging onto the same schema system (base 2.0). This set IS the
-# migration slice list: one entry per migrated kind. It also gates schema STRICTNESS
-# (`unevaluatedProperties: false` in the validator) -- commons stays open, project kinds close
-# as they migrate.
-PROJECT_MIXIN_NAMES = frozenset({"hypothesis"})
+# Project-authored kinds converging onto the same schema system (base 2.0). DERIVED from the
+# per-kind `schema_closed` declaration, over the BUILT-IN profiles only -- a project cannot arm
+# strictness for itself. This set still gates BOTH schema strictness (`unevaluatedProperties:
+# false`) and load enforcement, deliberately: `sources.py` explains that splitting them is how a
+# green check over an unchecked record becomes possible.
+PROJECT_MIXIN_NAMES: frozenset[str] = frozenset(
+    kind.name
+    for kind in (*CORE_PROFILE.entity_kinds, *LOCAL_PROFILE.entity_kinds)
+    if kind.schema_closed
+)
 
 TYPE_MIXIN_NAMES = COMMONS_MIXIN_NAMES | PROJECT_MIXIN_NAMES
 
