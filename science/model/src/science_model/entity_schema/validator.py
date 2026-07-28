@@ -9,8 +9,10 @@ from jsonschema.exceptions import ValidationError as _JsonValidationError
 
 from science_model.entity_schema.loader import SchemaLoader
 from science_model.entity_schema.profile import (
+    BASE_NAME,
     PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
+    ProfileComponent,
     ProfileParseError,
     ProfileString,
     parse_profile,
@@ -63,6 +65,31 @@ class EntityValidator:
             joined = "; ".join(_format_error(err) for err in errors)
             raise EntityValidationError(
                 f"entity failed schema validation: {joined}",
+                errors=errors,
+            )
+
+    def validate_persisted_base_shape(self, mapping: dict[str, Any]) -> None:
+        """Necessary validation of durable source shape, NOT sufficient entity-schema validation.
+
+        Checks the final frontmatter mapping — after titles and dates have been added — against
+        base 2.0 alone. It deliberately does NOT apply `unevaluatedProperties: false`: the kinds
+        this guards have no mixin yet, so closing here would reject every field they legitimately
+        carry. Refusing unknown keys is the closure programme's job.
+
+        Use it at a persistence boundary, where "this will become authored source" is true. Do not
+        use it as a substitute for `validate_as`, which is the sufficient check and which refuses
+        a base-only profile precisely so this distinction cannot blur.
+        """
+        schema = self._loader.load(ProfileComponent(name=BASE_NAME, version="2.0"))
+        validator = Draft202012Validator(
+            schema,
+            format_checker=Draft202012Validator.FORMAT_CHECKER,
+        )
+        errors = sorted(validator.iter_errors(mapping), key=lambda e: list(e.absolute_path))
+        if errors:
+            joined = "; ".join(_format_error(err) for err in errors)
+            raise EntityValidationError(
+                f"persisted entity does not satisfy the durable base shape: {joined}",
                 errors=errors,
             )
 
