@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 11. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 12. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -94,6 +94,13 @@
 > declarations to active-kind expansion rather than to sparse emissions. The fixed
 > hypothesis lineage rule and the deliberate override of correspondence drift's
 > derived-ID comment are recorded (§6).
+>
+> **Revision 12 restores the R1 boundary for prose-lint coverage.**
+> `prose_lints.numeric-verification.coverage` is a four-way measurement and remains a
+> producer metric, not a declared rule (§6, §9, §11). The distinct INFO advisory remains
+> a finding because it reports that configured policy demoted detected lint issues; it
+> uses `ProjectSubject`, keys identity on `check`, and records the changing `count` only
+> on the occurrence. Plan 2 also removes `_result`'s unused default rule string (§6).
 
 ## Motivation
 
@@ -152,7 +159,7 @@ currently derives issues from coverage metrics and from archive lag (§Grounding
 
 ## Grounding findings that shape the design
 
-Verified against the source tree at `bbff18fd`; revisions 8–11 change this design only.
+Verified against the source tree at `bbff18fd`; revisions 8–12 change this design only.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
   (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is the unchanged status-and-row
@@ -723,7 +730,19 @@ producers were attempted and which could not run.
 | `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. This deliberately overrides the source comment at `correspondence_drift.py:71-74` that kept the ID derived for a future kind: evidence scope is current policy, while a hypothetical no-rename convenience is not. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
 | `f"{kind}.unbacked-inverse"` | **Keep the full kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind`. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
 | `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
-| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The other INFO sites remain distinct canonical rules: visible `prose-lints.config` and hidden `prose-lints.numeric-verification-coverage`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
+| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
+
+The adjacent `prose_lints.numeric-verification.coverage` INFO site is **not** a
+finding-rule declaration. Its verified / unverifiable / mismatch / error values are a
+four-way tally with no policy threshold or violation predicate, so R1 classifies it as
+producer metrics (§9). Its current hidden presentation does not justify turning a
+measurement into a case.
+
+`prose-lints.advisory` is different: it reports that the project configured a lint check
+to detect issues without warning on them — a policy-relevant advisory that preserves
+today's rendering. It uses `ProjectSubject`; `check` is its sole identity qualifier; and
+the observed `count` is a required **non-identity** qualifier stored on the occurrence.
+A changed count therefore updates one durable case rather than forking its identity.
 
 `hypothesis.dangling-lineage` is the third kind-graded emitter named by
 `kind_severity.py`, but it is **not** a parameterized family: the check is semantically
@@ -731,6 +750,10 @@ hypothesis-only and already emits the hard-coded `RULE_DANGLING_LINEAGE`. It sta
 literal declared rule, continues calling `severity_for_kind("hypothesis")`, and remains
 the literal third hypothesis entry in `gates.py`. Plan 2 must not derive dangling-lineage
 rules for other active kinds.
+
+Plan 2 also deletes `_result`'s default `rule="prose_lints"` argument. Every current call
+site supplies a rule explicitly; retaining an unused default would preserve exactly the
+undeclared-string construction path this registry removes.
 
 The per-kind rules are derived when the project-scoped registry is built from the same
 trusted active entity-kind registry used by graph loading. The **family declaration** —
@@ -893,7 +916,8 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory` + `check`; INFO never entered `count_issues`, so neither rename changes counts |
+| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; INFO never entered `count_issues`, so neither rename changes counts |
+| `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `archive_lag` | `1 if total else 0` | `tasks.archive-lag`, `ProjectSubject`, emitted **iff** total > 0 | `done_in_active`, `retired_in_active`, `missing_completed` retained as metrics | net count unchanged (1 ↔ 1); the measurement is no longer the issue |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -948,6 +972,9 @@ acceptance that does name a parameterized family, `paper.status-vocabulary` in
 post-acute-infection, keeps that exact ID and therefore remains excluded. A future family
 collapse that changes an accepted or gated full ID requires a new ledger row; it cannot
 be absorbed as registry population.
+
+The numeric-verification coverage row is not part of that rename: its four counts move
+unchanged into producer metrics and produce no `AuditFinding`.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
@@ -1158,7 +1185,8 @@ class AuditReport(TypedDict):
 - **Visibility comes from `default_visibility`**, retiring
   `validate/cli.py:25`'s hardcoded rule set. The split prose-lint rules preserve its
   current distinction: WARN `prose-lints.hit` and INFO `prose-lints.config` are visible;
-  INFO `prose-lints.advisory` and `prose-lints.numeric-verification-coverage` are hidden.
+  INFO `prose-lints.advisory` is hidden. Numeric-verification coverage is metrics and
+  therefore has no finding visibility.
 - **The unwired invariant survives the rewrite**: a non-empty `unwired` forbids any
   "clean" rendering, asserted directly on rendered output (§Testing 5).
 
@@ -1271,8 +1299,12 @@ class AuditReport(TypedDict):
 27. **Presentation order is preserved** — rendering order matches the current
     `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
     a section identifier.
-28. **Metrics are not findings** — coverage, counts, and nested summaries survive as
-    metrics and are absent from the finding stream.
+28. **Metrics are not findings** — measurement-only coverage, standalone tallies, and
+    nested summaries survive as metrics and are absent from the finding stream. A
+    finding occurrence may still record a measured count as non-identity observation
+    data when the finding itself states a policy-relevant condition. In particular,
+    `prose_lints.numeric-verification.coverage` retains its four tallies in producer
+    metrics and declares no finding rule.
 29. **Producer-namespace completeness** — every namespace contributing to the derived
     registry has a filesystem-derived guard, and each namespace's execution path crosses
     the generic result-validation boundary rather than validating in its own reader.
