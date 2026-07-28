@@ -85,14 +85,9 @@ def build_audit_report(
         producer = registry.producers_by_id[producer_id]
         if producer.metrics_schema is not None:
             metrics[producer_id] = result.metrics
-        findings.extend(
-            ReportedFinding(producer_id=producer_id, finding=finding)
-            for finding in result.instrument.rows
-        )
+        findings.extend(ReportedFinding(producer_id=producer_id, finding=finding) for finding in result.instrument.rows)
     findings.sort(key=lambda item: report_sort_key(registry, item.finding))
-    accepted = tuple(
-        sorted(accepted, key=lambda item: report_sort_key(registry, item.finding))
-    )
+    accepted = tuple(sorted(accepted, key=lambda item: report_sort_key(registry, item.finding)))
     severity = Counter(item.finding.severity for item in findings)
     return AuditReport(
         schema_version=2,

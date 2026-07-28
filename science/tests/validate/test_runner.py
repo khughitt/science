@@ -46,11 +46,7 @@ def test_runner_keeps_numeric_coverage_in_metrics(tmp_path: Path) -> None:
         "mismatch": 0,
         "error": 0,
     }
-    assert not [
-        item
-        for item in result.results
-        if "numeric-verification.coverage" in item.rule_id
-    ]
+    assert not [item for item in result.results if "numeric-verification.coverage" in item.rule_id]
 
 
 def test_runner_exception_uses_declared_runtime_rule(

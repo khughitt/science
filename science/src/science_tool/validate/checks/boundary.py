@@ -294,9 +294,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[CheckObservation]:
                 message=f"boundary.unmanaged_allow names {entry.source!r}, which is not a tracked in-worktree .gitignore file. The entry can never match, so it is a silent no-op rather than an excuse.",
                 rule=RULES["boundary.invalid-declaration"],
                 task=None,
-                qualifiers={
-                    "key": ["unmanaged-allow", entry.source, entry.pattern]
-                },
+                qualifiers={"key": ["unmanaged-allow", entry.source, entry.pattern]},
             )
 
     # ---- declared: index invariant --------------------------------------
@@ -435,7 +433,5 @@ def check_boundary(ctx: ValidateContext) -> Iterator[CheckObservation]:
                 message=f"{candidate} matches a tracked: glob of manifest root {declared_root.path!r} but git will not surface it -- `git add .` stages nothing and no diagnostic reports a problem. The usual cause is a bare directory exclude stopping git descending. Run `science boundary sync`.",
                 rule=RULES["boundary.unreachable-tracked"],
                 task=None,
-                qualifiers={
-                    "key": ["declared-root", declared_root.path, "candidate", candidate]
-                },
+                qualifiers={"key": ["declared-root", declared_root.path, "candidate", candidate]},
             )

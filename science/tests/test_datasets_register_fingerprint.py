@@ -49,8 +49,14 @@ def _kwargs(**over):
 
 def test_capture_marks_every_component_captured():
     fp = capture_fingerprint(**_kwargs())
-    for name in ("code_sha", "code_dirty", "environment_digest",
-                 "parameters_digest", "input_manifest_digest", "output_manifest_digest"):
+    for name in (
+        "code_sha",
+        "code_dirty",
+        "environment_digest",
+        "parameters_digest",
+        "input_manifest_digest",
+        "output_manifest_digest",
+    ):
         assert getattr(fp, name).provenance is ComponentProvenance.CAPTURED
     assert fp.code_dirty.value == "false"
     assert fp.container_digest is None
@@ -94,8 +100,7 @@ def test_capture_takes_no_frontmatter_so_nothing_can_be_hand_authored():
 
 def test_capture_copies_declared_fields_onto_the_fingerprint():
     """The fingerprint stands alone as a science-run-fingerprint/v1 record."""
-    fp = capture_fingerprint(**_kwargs(declaration=_declaration(
-        input_artifact_locality=ArtifactLocality.EXTERNAL)))
+    fp = capture_fingerprint(**_kwargs(declaration=_declaration(input_artifact_locality=ArtifactLocality.EXTERNAL)))
     assert fp.executor is ExecutorKind.LOCAL
     assert fp.input_artifact_locality is ArtifactLocality.EXTERNAL
     assert fp.output_artifact_locality is ArtifactLocality.SCIENCE_MANAGED
@@ -106,12 +111,13 @@ def test_a_commons_run_can_be_captured_because_capture_origin_is_declared():
     """Before t093 `capture_origin` was unreachable, so a commons run could not
     be registered at all: the model demands it and nothing could supply it."""
     origin = CaptureOrigin(
-        origin_project="upstream", origin_run_ref="workflow-run:up",
-        captured_at=datetime(2026, 7, 10, tzinfo=UTC), captured_by="science",
+        origin_project="upstream",
+        origin_run_ref="workflow-run:up",
+        captured_at=datetime(2026, 7, 10, tzinfo=UTC),
+        captured_by="science",
         capture_policy="science-run-fingerprint/v1",
     )
-    fp = capture_fingerprint(**_kwargs(declaration=_declaration(
-        executor=ExecutorKind.COMMONS, capture_origin=origin)))
+    fp = capture_fingerprint(**_kwargs(declaration=_declaration(executor=ExecutorKind.COMMONS, capture_origin=origin)))
     assert fp.executor is ExecutorKind.COMMONS
     assert fp.capture_origin is not None
     assert fp.capture_origin.origin_run_ref == "workflow-run:up"
@@ -133,20 +139,28 @@ def git_project(tmp_path: Path) -> Path:
     )
     for sub, name, body in [
         ("workflows", "w1", "id: workflow:w1\nkind: workflow\ntitle: W1\n"),
-        ("methods", "leiden",
-         "id: method:leiden\nkind: method\ntitle: Leiden\n"
-         "stochasticity: seedable\nseed_params: [random_state]\n"),
-        ("workflow-steps", "cluster",
-         "id: workflow-step:cluster\nkind: workflow-step\ntitle: Cluster\n"
-         "workflow: workflow:w1\nmethod: method:leiden\n"
-         'seed_bindings:\n  random_state: "config.seed"\n'),
-        ("workflow-runs", "r1",
-         "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
-         "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
-         "execution:\n"
-         "  executor: local\n"
-         "  input_artifact_locality: science-managed\n"
-         "  output_artifact_locality: science-managed\n"),
+        (
+            "methods",
+            "leiden",
+            "id: method:leiden\nkind: method\ntitle: Leiden\nstochasticity: seedable\nseed_params: [random_state]\n",
+        ),
+        (
+            "workflow-steps",
+            "cluster",
+            "id: workflow-step:cluster\nkind: workflow-step\ntitle: Cluster\n"
+            "workflow: workflow:w1\nmethod: method:leiden\n"
+            'seed_bindings:\n  random_state: "config.seed"\n',
+        ),
+        (
+            "workflow-runs",
+            "r1",
+            "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+            "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
+            "execution:\n"
+            "  executor: local\n"
+            "  input_artifact_locality: science-managed\n"
+            "  output_artifact_locality: science-managed\n",
+        ),
     ]:
         d = tmp_path / "entities" / sub
         d.mkdir(parents=True, exist_ok=True)
@@ -159,7 +173,8 @@ def git_project(tmp_path: Path) -> Path:
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
-        cwd=tmp_path, check=True,
+        cwd=tmp_path,
+        check=True,
     )
     return tmp_path
 
@@ -267,9 +282,7 @@ def test_persist_writes_captured_components_into_frontmatter(git_project):
     assert fp.code_sha.provenance == "captured" and len(fp.code_sha.value) == 40
     assert fp.code_dirty.value == "false"
 
-    written = yaml.safe_load(
-        (git_project / "entities" / "workflow-runs" / "r1.md").read_text().split("---")[1]
-    )
+    written = yaml.safe_load((git_project / "entities" / "workflow-runs" / "r1.md").read_text().split("---")[1])
     assert written["fingerprint"]["code_sha"]["provenance"] == "captured"
     # git_project's one step applies a seedable method, so the derived policy is seeded.
     assert written["fingerprint"]["seed_policy"]["kind"] == "seeded"
@@ -320,16 +333,21 @@ def test_absent_git_repo_fails_loud(tmp_path: Path):
     for sub, name, body in [
         ("workflows", "w1", "id: workflow:w1\nkind: workflow\ntitle: W1\n"),
         ("methods", "const", "id: method:const\nkind: method\ntitle: Const\nstochasticity: deterministic\n"),
-        ("workflow-steps", "s1",
-         "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\n"
-         "workflow: workflow:w1\nmethod: method:const\n"),
-        ("workflow-runs", "r1",
-         "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
-         "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
-         "execution:\n"
-         "  executor: local\n"
-         "  input_artifact_locality: science-managed\n"
-         "  output_artifact_locality: science-managed\n"),
+        (
+            "workflow-steps",
+            "s1",
+            "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\nworkflow: workflow:w1\nmethod: method:const\n",
+        ),
+        (
+            "workflow-runs",
+            "r1",
+            "id: workflow-run:r1\nkind: workflow-run\ntitle: R1\n"
+            "workflow: workflow:w1\nconfig_snapshot: config.yaml\n"
+            "execution:\n"
+            "  executor: local\n"
+            "  input_artifact_locality: science-managed\n"
+            "  output_artifact_locality: science-managed\n",
+        ),
     ]:
         d = tmp_path / "entities" / sub
         d.mkdir(parents=True, exist_ok=True)
@@ -374,9 +392,11 @@ def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
     for sub, name, body in [
         ("workflows", "wf", "id: workflow:wf\nkind: workflow\ntitle: WF\n"),
         ("methods", "const", "id: method:const\nkind: method\ntitle: Const\nstochasticity: deterministic\n"),
-        ("workflow-steps", "s1",
-         "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\n"
-         "workflow: workflow:wf\nmethod: method:const\n"),
+        (
+            "workflow-steps",
+            "s1",
+            "id: workflow-step:s1\nkind: workflow-step\ntitle: S1\nworkflow: workflow:wf\nmethod: method:const\n",
+        ),
     ]:
         d = root / "entities" / sub
         d.mkdir(parents=True, exist_ok=True)
@@ -397,13 +417,12 @@ def _project_with_output_resource(root: Path, *, resource: dict) -> Path:
     )
     results = root / "results" / "wf" / "r1"
     results.mkdir(parents=True)
-    (results / "datapackage.yaml").write_text(
-        yaml.safe_dump({"resources": [resource]}), encoding="utf-8"
-    )
+    (results / "datapackage.yaml").write_text(yaml.safe_dump({"resources": [resource]}), encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
-        cwd=root, check=True,
+        cwd=root,
+        check=True,
     )
     return root
 
@@ -601,8 +620,9 @@ def test_editing_the_declaration_after_registering_is_caught_as_drift(git_projec
     text = run.read_text(encoding="utf-8")
     head, sep, tail = text.partition("fingerprint:")
     run.write_text(
-        head.replace("  input_artifact_locality: science-managed\n",
-                     "  input_artifact_locality: external\n") + sep + tail,
+        head.replace("  input_artifact_locality: science-managed\n", "  input_artifact_locality: external\n")
+        + sep
+        + tail,
         encoding="utf-8",
     )
     ctx = ValidateContext.from_project_root(git_project, strict=False, verbose=False)

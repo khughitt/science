@@ -127,7 +127,5 @@ def resolve_gate_tier(fail_on: str | None, manifest: Mapping[str, Any]) -> str:
         raw = manifest.get("code_gate")
         tier = str(raw) if raw is not None else "report"
     if tier not in GATE_TIERS:
-        raise ValueError(
-            f"unknown code gate tier {tier!r}; expected one of {', '.join(GATE_TIERS)}"
-        )
+        raise ValueError(f"unknown code gate tier {tier!r}; expected one of {', '.join(GATE_TIERS)}")
     return tier

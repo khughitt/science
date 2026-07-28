@@ -113,14 +113,10 @@ def data_audit_command(
         lookup("data audit"),
         output_path=output_path,
         command_path="data audit",
-        complete_via=build_complete_via(
-            click.get_current_context(), output_hint=hint_for("audit", output_format)
-        ),
+        complete_via=build_complete_via(click.get_current_context(), output_hint=hint_for("audit", output_format)),
     )
     control_notice = (
-        bounded_control_notice(f"wrote the data audit report to {output_path}")
-        if output_path is not None
-        else None
+        bounded_control_notice(f"wrote the data audit report to {output_path}") if output_path is not None else None
     )
 
     fresh_violations: list[Violation] = []
@@ -150,6 +146,7 @@ def data_audit_command(
             )
 
     if fix:
+
         def apply_render_and_flush() -> None:
             outcomes = apply_fixes(project_path, fresh_violations)
             if emit_json:
@@ -160,13 +157,8 @@ def data_audit_command(
                 for o in outcomes:
                     mark = "moved" if o.performed else "FLAG"
                     tgt = o.violation.proposed_target or "-"
-                    sink.echo(
-                        f"  [{mark}] {o.violation.path} → {tgt}"
-                        + (f"  ({o.reason})" if o.reason else "")
-                    )
-                sink.echo(
-                    f"\n{performed} moved (staged, not committed), {flagged} flagged."
-                )
+                    sink.echo(f"  [{mark}] {o.violation.path} → {tgt}" + (f"  ({o.reason})" if o.reason else ""))
+                sink.echo(f"\n{performed} moved (staged, not committed), {flagged} flagged.")
             sink.flush()
 
         if fresh_violations:

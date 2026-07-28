@@ -40,9 +40,7 @@ def _pre_migration_key_fields(entry: dict[str, Any]) -> dict[str, object]:
         fields["message_contains"] = [needles]
     elif isinstance(needles, list):
         if not all(isinstance(value, str) for value in needles):
-            raise ValueError(
-                "malformed message_contains cannot acquire an acceptance key"
-            )
+            raise ValueError("malformed message_contains cannot acquire an acceptance key")
         fields["message_contains"] = list(needles)
     elif needles is not None:
         raise ValueError("malformed message_contains cannot acquire an acceptance key")
@@ -50,9 +48,7 @@ def _pre_migration_key_fields(entry: dict[str, Any]) -> dict[str, object]:
 
 
 def pre_migration_acceptance_key(entry: dict[str, Any]) -> str:
-    payload = b"science.acceptance.v1\n" + canonical_json(
-        _pre_migration_key_fields(entry)
-    )
+    payload = b"science.acceptance.v1\n" + canonical_json(_pre_migration_key_fields(entry))
     return hashlib.sha256(payload).hexdigest()[:32]
 
 

@@ -113,9 +113,7 @@ def run_check(context: HealthContext):
         sources=context_sources(context),
     )
     rows = report["rows"]
-    propositions = [
-        entity for entity in context_sources(context).entities if entity.kind == "proposition"
-    ]
+    propositions = [entity for entity in context_sources(context).entities if entity.kind == "proposition"]
     causal = [
         row
         for row in rows
@@ -166,9 +164,7 @@ def run_check(context: HealthContext):
                     subject=ProjectSubject(),
                     severity="warn",
                     qualifiers={"axis": axis},
-                    message=(
-                        f"{axis} coverage is {metric['numerator']}/{metric['denominator']}."
-                    ),
+                    message=(f"{axis} coverage is {metric['numerator']}/{metric['denominator']}."),
                 )
             )
     return composed_result(

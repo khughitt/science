@@ -48,9 +48,7 @@ def prereg_schedule_registered() -> Generator[None]:
     yield
     checks.clear_checks_for_tests()
     for module_name in CANONICAL_CHECK_MODULES:
-        importlib.reload(
-            importlib.import_module(f"science_tool.validate.checks.{module_name}")
-        )
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
 
 def _ctx(root: Path) -> ValidateContext:
@@ -205,10 +203,7 @@ def test_no_schedule_declared_emits_nothing(project: Path) -> None:
 def test_ordinary_prose_does_not_trip_the_antecedent(project: Path) -> None:
     _write_prereg(
         project,
-        body=(
-            "We assess each process within its habitat unless the registered "
-            "exclusion criterion applies."
-        ),
+        body=("We assess each process within its habitat unless the registered exclusion criterion applies."),
     )
 
     assert _results(project) == []

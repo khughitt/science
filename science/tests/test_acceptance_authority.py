@@ -23,9 +23,7 @@ def test_pre_migration_key_encodes_matcher_semantics_not_raw_yaml():
         "severity": 7,
         "reason": "another explanation",
     }
-    assert pre_migration_acceptance_key(absent) == pre_migration_acceptance_key(
-        malformed_wildcard
-    )
+    assert pre_migration_acceptance_key(absent) == pre_migration_acceptance_key(malformed_wildcard)
 
 
 def test_pre_migration_key_includes_every_match_discriminator():
@@ -65,8 +63,8 @@ def test_pre_migration_key_refuses_message_matchers_that_can_never_match(
         )
 
 
-_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64                       # the bare hash token (NOT scoped on its own)
-_LABELED = f"evidence-signature: {_SIG}"       # the complete labeled token that IS scoped
+_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64  # the bare hash token (NOT scoped on its own)
+_LABELED = f"evidence-signature: {_SIG}"  # the complete labeled token that IS scoped
 
 
 def _finding(
@@ -95,31 +93,47 @@ def test_evidence_scoped_rule_is_declared():
 def test_path_only_entry_does_not_suppress_the_scoped_rule():
     entry = {"rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md", "reason": "checked"}
     assert not entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="entities/plans/0001-x.md",
+        task=None,
+        message=f"... {_LABELED}",
     )
 
 
 def test_valid_signature_entry_suppresses():
     entry = {
-        "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
-        "reason": "input file, not a deliverable", "message_contains": _LABELED,
+        "rule": "plan.correspondence-drift",
+        "path": "entities/plans/0001-x.md",
+        "reason": "input file, not a deliverable",
+        "message_contains": _LABELED,
     }
     assert entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="entities/plans/0001-x.md",
+        task=None,
+        message=f"... {_LABELED}",
     )
 
 
 def test_bare_signature_without_label_does_not_suppress():
     # A hash without the `evidence-signature:` label is not a scoped signature.
     entry = {
-        "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
-        "reason": "tried to accept with a bare hash", "message_contains": _SIG,
+        "rule": "plan.correspondence-drift",
+        "path": "entities/plans/0001-x.md",
+        "reason": "tried to accept with a bare hash",
+        "message_contains": _SIG,
     }
     assert not entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="entities/plans/0001-x.md",
+        task=None,
+        message=f"... {_LABELED}",
     )
 
 
@@ -127,46 +141,62 @@ def test_scoped_entry_without_path_does_not_suppress():
     # Signature present, but no `path`: one signature would blind the rule tree-wide.
     entry = {"rule": "plan.correspondence-drift", "reason": "no path", "message_contains": _LABELED}
     assert not entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="entities/plans/0001-x.md",
+        task=None,
+        message=f"... {_LABELED}",
     )
 
 
 def test_scoped_entry_with_absolute_path_does_not_suppress():
     entry = {
-        "rule": "plan.correspondence-drift", "path": "/abs/entities/plans/0001-x.md",
-        "reason": "absolute path", "message_contains": _LABELED,
+        "rule": "plan.correspondence-drift",
+        "path": "/abs/entities/plans/0001-x.md",
+        "reason": "absolute path",
+        "message_contains": _LABELED,
     }
     assert not entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="/abs/entities/plans/0001-x.md", task=None, message=f"... {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="/abs/entities/plans/0001-x.md",
+        task=None,
+        message=f"... {_LABELED}",
     )
 
 
 def test_stale_signature_entry_does_not_suppress():
     entry = {
-        "rule": "plan.correspondence-drift", "path": "entities/plans/0001-x.md",
-        "reason": "was accepted", "message_contains": f"evidence-signature: {SIGNATURE_VERSION}:" + "b" * 64,
+        "rule": "plan.correspondence-drift",
+        "path": "entities/plans/0001-x.md",
+        "reason": "was accepted",
+        "message_contains": f"evidence-signature: {SIGNATURE_VERSION}:" + "b" * 64,
     }
     assert not entry_suppresses(
-        entry, rule="plan.correspondence-drift", severity="warn",
-        path="entities/plans/0001-x.md", task=None, message=f"live {_LABELED}",
+        entry,
+        rule="plan.correspondence-drift",
+        severity="warn",
+        path="entities/plans/0001-x.md",
+        task=None,
+        message=f"live {_LABELED}",
     )
 
 
 def test_entry_is_evidence_scoped_requires_the_exact_token_spelling():
-    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})    # label, no hash
-    assert not entry_is_evidence_scoped({"message_contains": f"{SIGNATURE_VERSION}:short"})               # malformed hash
-    assert not entry_is_evidence_scoped({"message_contains": _SIG})                     # hash, no label
-    assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:{_SIG}"})    # no space
+    assert not entry_is_evidence_scoped({"message_contains": "evidence-signature:"})  # label, no hash
+    assert not entry_is_evidence_scoped({"message_contains": f"{SIGNATURE_VERSION}:short"})  # malformed hash
+    assert not entry_is_evidence_scoped({"message_contains": _SIG})  # hash, no label
+    assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:{_SIG}"})  # no space
     assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:  {_SIG}"})  # two spaces
     assert not entry_is_evidence_scoped({"message_contains": f"evidence-signature:\n{_SIG}"})  # newline
-    assert entry_is_evidence_scoped({"message_contains": f"x {_LABELED} y"})            # exact token
+    assert entry_is_evidence_scoped({"message_contains": f"x {_LABELED} y"})  # exact token
 
 
 def test_other_rules_are_unaffected_by_evidence_scoping(tmp_path: Path):
     (tmp_path / "science.yaml").write_text(
-        'name: f\nprofile: research\nhealth:\n  accepted_validation:\n'
+        "name: f\nprofile: research\nhealth:\n  accepted_validation:\n"
         '    - rule: "code.metadata-gap"\n      path: "x.py"\n      reason: "ok"\n',
         encoding="utf-8",
     )
@@ -189,6 +219,7 @@ def test_legacy_validate_acceptance_removes_only_the_warning(tmp_path: Path):
 # filter_accepted_warnings is the `validate` surface (cli.py:152 _with_accepted_warnings_filtered
 # delegates to it). These exercise the whole filter for the drift rule, not just the predicates.
 
+
 def _drift_manifest(root: Path, entry_lines: str) -> None:
     (root / "science.yaml").write_text(
         "name: f\nprofile: research\nhealth:\n  accepted_validation:\n" + entry_lines,
@@ -203,8 +234,7 @@ def _drift_warn() -> AuditFinding:
 def test_filter_keeps_drift_for_a_path_only_entry(tmp_path: Path):
     _drift_manifest(
         tmp_path,
-        '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
-        '      reason: "path only"\n',
+        '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n      reason: "path only"\n',
     )
     assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == [_drift_warn()]
 
@@ -222,7 +252,11 @@ def test_filter_keeps_drift_for_a_stale_signature_entry(tmp_path: Path):
     _drift_manifest(
         tmp_path,
         '    - rule: "plan.correspondence-drift"\n      path: "entities/plans/0001-x.md"\n'
-        '      reason: "stale"\n      message_contains: "evidence-signature: ' + SIGNATURE_VERSION + ':' + "b" * 64 + '"\n',
+        '      reason: "stale"\n      message_contains: "evidence-signature: '
+        + SIGNATURE_VERSION
+        + ":"
+        + "b" * 64
+        + '"\n',
     )
     assert filter_accepted_warnings(tmp_path, [_drift_warn()]) == [_drift_warn()]
 
@@ -276,9 +310,7 @@ def test_partition_health_acceptances_uses_current_matcher_wildcards(
     )
     finding = _reported_validation_finding(severity=finding_severity)
     remaining, accepted_findings = partition_health_acceptances(tmp_path, [finding])
-    assert (remaining, accepted_findings) == (
-        ([], accepted_findings) if accepted else ([finding], [])
-    )
+    assert (remaining, accepted_findings) == (([], accepted_findings) if accepted else ([finding], []))
     if accepted:
         assert accepted_findings[0].producer_id == "validate"
         assert accepted_findings[0].reason == "known"

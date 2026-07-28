@@ -35,22 +35,14 @@ def _load_ingestion_context(project_root: Path):
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(project_root)
-    context = IngestionContext(
-        canonical_entity_ids=frozenset(
-            entity.canonical_id for entity in sources.entities
-        )
-    )
+    context = IngestionContext(canonical_entity_ids=frozenset(entity.canonical_id for entity in sources.entities))
     return context, sources.registry
 
 
 @findings_group.command("ingest")
 @click.argument("report_path", type=click.Path(path_type=Path, exists=True))
-@click.option(
-    "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True
-)
-@click.option(
-    "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True
-)
+@click.option("--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--attest-ingestion-ref",
     required=True,
@@ -120,18 +112,14 @@ def ingest_command(
 
 
 @findings_group.command("list")
-@click.option(
-    "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True
-)
+@click.option("--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True)
 @click.option(
     "--status",
     type=click.Choice(CASE_STATUSES),
     default=None,
     help="Filter to one lifecycle status.",
 )
-@click.option(
-    "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True
-)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 def list_command(project_root: Path, status: str | None, output_format: str) -> None:
     """List stored cases. Read-only."""
     from science_tool.findings.storage import CaseStorageError, load_cases

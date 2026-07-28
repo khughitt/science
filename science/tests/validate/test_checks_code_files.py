@@ -67,9 +67,7 @@ def test_blockless_file_is_a_ghost(tmp_path: Path) -> None:
 def test_malformed_block_is_reported_with_error(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     # Unterminated block -> present but invalid.
-    (tmp_path / "code" / "x.py").write_text(
-        "# science:code\n# status: library\nprint(1)\n", encoding="utf-8"
-    )
+    (tmp_path / "code" / "x.py").write_text("# science:code\n# status: library\nprint(1)\n", encoding="utf-8")
     ctx = _ctx(tmp_path)
     by_rule = _by_rule(list(check_code_files(ctx)))
     assert "code.ghost" not in by_rule
@@ -215,8 +213,7 @@ def test_committed_valid_block_has_no_uncommitted_finding(tmp_path: Path) -> Non
 def test_orphaned_executable_is_flagged(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     (tmp_path / "code" / "run.py").write_text(
-        '# science:code\n# status: workflow-owned\n# science:end\n'
-        'if __name__ == "__main__":\n    pass\n',
+        '# science:code\n# status: workflow-owned\n# science:end\nif __name__ == "__main__":\n    pass\n',
         encoding="utf-8",
     )
     ctx = _ctx(tmp_path)
@@ -229,8 +226,7 @@ def test_orphaned_executable_is_flagged(tmp_path: Path) -> None:
 def test_workflow_referenced_executable_is_not_orphan(tmp_path: Path) -> None:
     (tmp_path / "code" / "workflows").mkdir(parents=True)
     (tmp_path / "code" / "run.py").write_text(
-        '# science:code\n# status: workflow-owned\n# science:end\n'
-        'if __name__ == "__main__":\n    pass\n',
+        '# science:code\n# status: workflow-owned\n# science:end\nif __name__ == "__main__":\n    pass\n',
         encoding="utf-8",
     )
     (tmp_path / "code" / "workflows" / "main.smk").write_text(
@@ -244,8 +240,7 @@ def test_workflow_referenced_executable_is_not_orphan(tmp_path: Path) -> None:
 def test_exploratory_executable_is_exempt_from_orphan(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     (tmp_path / "code" / "run.py").write_text(
-        '# science:code\n# status: exploratory\n# science:end\n'
-        'if __name__ == "__main__":\n    pass\n',
+        '# science:code\n# status: exploratory\n# science:end\nif __name__ == "__main__":\n    pass\n',
         encoding="utf-8",
     )
     ctx = _ctx(tmp_path)
@@ -256,7 +251,7 @@ def test_exploratory_executable_is_exempt_from_orphan(tmp_path: Path) -> None:
 def test_declared_non_decision_bearing_executable_is_not_orphan(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     (tmp_path / "code" / "run.py").write_text(
-        '# science:code\n# status: workflow-owned\n# decision_bearing: false\n# science:end\n'
+        "# science:code\n# status: workflow-owned\n# decision_bearing: false\n# science:end\n"
         'if __name__ == "__main__":\n    pass\n',
         encoding="utf-8",
     )
@@ -268,7 +263,7 @@ def test_declared_non_decision_bearing_executable_is_not_orphan(tmp_path: Path) 
 def test_library_valid_block_is_not_orphan(tmp_path: Path) -> None:
     (tmp_path / "code").mkdir()
     (tmp_path / "code" / "lib.py").write_text(
-        '# science:code\n# status: library\n# science:end\ndef f():\n    return 1\n',
+        "# science:code\n# status: library\n# science:end\ndef f():\n    return 1\n",
         encoding="utf-8",
     )
     ctx = _ctx(tmp_path)

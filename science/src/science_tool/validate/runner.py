@@ -146,8 +146,7 @@ def run(
             python_sidecar_imported = True
         if sidecar_enabled:
             runtime_findings.extend(
-                result.to_finding(ctx.project_root)
-                for result in _dispatch_hooks("pre_validation", ctx)
+                result.to_finding(ctx.project_root) for result in _dispatch_hooks("pre_validation", ctx)
             )
         for entry in checks:
             try:
@@ -176,23 +175,18 @@ def run(
                 )
         if sidecar_enabled:
             runtime_findings.extend(
-                result.to_finding(ctx.project_root)
-                for result in _dispatch_hooks("extra_checks", ctx)
+                result.to_finding(ctx.project_root) for result in _dispatch_hooks("extra_checks", ctx)
             )
         runtime_result = FindingProducerResult(
             instrument=InstrumentResult.from_rows(runtime_findings),
         )
-        producer_results[VALIDATION_RUNTIME_PRODUCER.producer_id] = (
-            validate_producer_result(
-                registry,
-                VALIDATION_RUNTIME_PRODUCER.producer_id,
-                runtime_result,
-            )
+        producer_results[VALIDATION_RUNTIME_PRODUCER.producer_id] = validate_producer_result(
+            registry,
+            VALIDATION_RUNTIME_PRODUCER.producer_id,
+            runtime_result,
         )
         results = [
-            finding
-            for producer_result in producer_results.values()
-            for finding in producer_result.instrument.rows
+            finding for producer_result in producer_results.values() for finding in producer_result.instrument.rows
         ]
         run_result = _tally(
             results,
@@ -226,8 +220,7 @@ def _dispatch_hooks(name: str, ctx: ValidateContext) -> list[Result]:
         for value in fn(ctx):
             if not isinstance(value, Result):
                 raise TypeError(
-                    f"validation hook {fn.__name__!r} must return Result objects, "
-                    f"got {type(value).__name__}"
+                    f"validation hook {fn.__name__!r} must return Result objects, got {type(value).__name__}"
                 )
             if value.severity is Severity.INFO and not is_policy_info_rule(value.rule):
                 raise TypeError(
@@ -248,18 +241,14 @@ def _execute_check(
     ctx: ValidateContext,
     registry: FindingRegistry,
 ) -> tuple[FindingProducerResult, tuple[ValidationNotice, ...]]:
-    observations: list[
-        AuditFinding | ValidationMetricObservation | ValidationNotice
-    ] = []
+    observations: list[AuditFinding | ValidationMetricObservation | ValidationNotice] = []
     for item in entry.fn(ctx):
         if isinstance(item, Result):
             observations.append(item.to_finding(ctx.project_root))
         elif isinstance(item, ValidationMetricObservation | ValidationNotice):
             observations.append(item)
         else:
-            raise TypeError(
-                f"unsupported validation observation {type(item).__name__}"
-            )
+            raise TypeError(f"unsupported validation observation {type(item).__name__}")
     batch = ValidationObservationBatch.from_observations(observations)
     result = entry.produce(batch)
     return (

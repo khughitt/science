@@ -72,9 +72,7 @@ def test_sentinel_license_clears_missing_without_unrecognized() -> None:
 
 
 def test_unrecognized_license_warns() -> None:
-    assert (Severity.WARN, "dataset.license-unrecognized") in _rules(
-        [_ds(origin="external", license="cc-by-4.0")]
-    )
+    assert (Severity.WARN, "dataset.license-unrecognized") in _rules([_ds(origin="external", license="cc-by-4.0")])
 
 
 def test_unrecognized_tier_warns() -> None:
@@ -107,16 +105,12 @@ def test_non_dataset_rows_ignored() -> None:
 
 def test_non_string_license_is_unrecognized_not_crash() -> None:
     # license: 123 must not raise AttributeError on .strip(); treat as unrecognized.
-    assert (Severity.WARN, "dataset.license-unrecognized") in _rules(
-        [_ds(origin="external", license=123)]
-    )
+    assert (Severity.WARN, "dataset.license-unrecognized") in _rules([_ds(origin="external", license=123)])
 
 
 def test_non_string_tier_is_unrecognized_not_crash() -> None:
     # tier: [] must not raise TypeError on set membership; treat as unrecognized.
-    assert (Severity.WARN, "dataset.tier-unrecognized") in _rules(
-        [_ds(origin="external", license="MIT", tier=[])]
-    )
+    assert (Severity.WARN, "dataset.tier-unrecognized") in _rules([_ds(origin="external", license="MIT", tier=[])])
 
 
 def test_non_string_cadence_is_unrecognized_not_crash() -> None:
@@ -221,14 +215,14 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
     ds_dir = tmp_path / "entities" / "datasets"
     ds_dir.mkdir(parents=True)
     (ds_dir / "x.md").write_text(
-        '---\n'
+        "---\n"
         'id: "dataset:x"\n'
         'kind: "dataset"\n'
         'title: "X"\n'
         'status: "active"\n'
         'origin: "external"\n'
-        'ontology_terms: []\n'
-        '---\n\n# X\n',
+        "ontology_terms: []\n"
+        "---\n\n# X\n",
         encoding="utf-8",
     )
 

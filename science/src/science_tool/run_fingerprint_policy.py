@@ -99,9 +99,7 @@ OBLIGATIONS: Mapping[ExecutorKind, Mapping[str, Obligation]] = MappingProxyType(
 )
 
 
-def obligation_for(
-    executor: ExecutorKind, component: str, fingerprint: RunFingerprint
-) -> Obligation:
+def obligation_for(executor: ExecutorKind, component: str, fingerprint: RunFingerprint) -> Obligation:
     """Resolve a component's obligation, collapsing BY_LOCALITY to a concrete one."""
     declared = OBLIGATIONS[executor][component]
     if declared is not Obligation.BY_LOCALITY:
@@ -113,9 +111,7 @@ def obligation_for(
 def _reconcile_obligation_table() -> None:
     """Fail at import if the table and the model have drifted apart."""
     model_components = {
-        name
-        for name, field in RunFingerprint.model_fields.items()
-        if "FingerprintComponent" in str(field.annotation)
+        name for name, field in RunFingerprint.model_fields.items() if "FingerprintComponent" in str(field.annotation)
     }
     if set(COMPONENT_FIELDS) != model_components:
         raise RuntimeError(
@@ -124,16 +120,12 @@ def _reconcile_obligation_table() -> None:
         )
     for executor in ExecutorKind:
         if executor not in OBLIGATIONS:
-            raise RuntimeError(
-                f"run-fingerprint drift: ExecutorKind {executor.value!r} has no OBLIGATIONS entry"
-            )
+            raise RuntimeError(f"run-fingerprint drift: ExecutorKind {executor.value!r} has no OBLIGATIONS entry")
         declared = set(OBLIGATIONS[executor])
         if declared != model_components:
             missing = sorted(model_components - declared)
             extra = sorted(declared - model_components)
-            raise RuntimeError(
-                f"run-fingerprint drift for executor={executor.value}: missing={missing} extra={extra}"
-            )
+            raise RuntimeError(f"run-fingerprint drift for executor={executor.value}: missing={missing} extra={extra}")
     if set(LOCALITY_OBLIGATION) != set(ArtifactLocality):
         missing = sorted(loc.value for loc in set(ArtifactLocality) - set(LOCALITY_OBLIGATION))
         extra = sorted(loc.value for loc in set(LOCALITY_OBLIGATION) - set(ArtifactLocality))

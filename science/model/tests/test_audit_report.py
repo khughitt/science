@@ -230,10 +230,7 @@ def test_the_wire_form_refuses_the_nul_the_stored_hashes_refuse():
 
 def test_trusted_reports_can_contain_more_than_the_ingestion_ceiling():
     half = 2500
-    findings = [
-        ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}"))
-        for i in range(half + 1)
-    ]
+    findings = [ReportedFinding(producer_id="p", finding=_finding(ref=f"dataset:{i}")) for i in range(half + 1)]
     accepted = [
         AcceptedFinding(
             producer_id="p",
@@ -368,9 +365,7 @@ def test_successful_and_unwired_producer_sets_are_disjoint_and_unique():
 def test_every_output_producer_is_named_in_producers_run(channel):
     overrides = {}
     if channel == "findings":
-        overrides["findings"] = [
-            ReportedFinding(producer_id="other", finding=_finding())
-        ]
+        overrides["findings"] = [ReportedFinding(producer_id="other", finding=_finding())]
     elif channel == "accepted":
         overrides["accepted"] = [
             AcceptedFinding(

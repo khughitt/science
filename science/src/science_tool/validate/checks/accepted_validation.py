@@ -53,9 +53,7 @@ def check_accepted_validation(ctx: ValidateContext) -> Iterator[CheckObservation
                     "message_contains",
                 )
             }
-            severity = canonical_acceptance_severity(
-                semantic_fields["severity"]
-            )
+            severity = canonical_acceptance_severity(semantic_fields["severity"])
             if severity is None:
                 del semantic_fields["severity"]
             else:

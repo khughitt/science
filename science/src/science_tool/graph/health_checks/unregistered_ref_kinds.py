@@ -174,8 +174,7 @@ def run_check(context: HealthContext):
                 "refs": row["refs"],
             },
             message=(
-                f"Reference kind {row['kind']} is not registered in {row['field']} "
-                f"({row['mention_count']} mention(s))."
+                f"Reference kind {row['kind']} is not registered in {row['field']} ({row['mention_count']} mention(s))."
             ),
             evidence=[
                 *[LocationEvidence(path=path) for path in row["sources"]],

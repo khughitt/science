@@ -270,9 +270,7 @@ def test_ingest_cli_wraps_commons_context_failures_as_zero_write_refusals(
 
 
 def test_list_on_a_project_with_no_cases_is_empty_and_exits_zero(tmp_path):
-    result = CliRunner().invoke(
-        findings_group, ["list", "--project-root", str(tmp_path), "--format", "json"]
-    )
+    result = CliRunner().invoke(findings_group, ["list", "--project-root", str(tmp_path), "--format", "json"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == []
 
@@ -283,9 +281,7 @@ def test_list_refuses_every_markdown_leaf_that_is_not_a_bound_case(tmp_path, nam
     cases.mkdir(parents=True)
     (cases / name).write_text("not a case", encoding="utf-8")
 
-    result = CliRunner().invoke(
-        findings_group, ["list", "--project-root", str(tmp_path)]
-    )
+    result = CliRunner().invoke(findings_group, ["list", "--project-root", str(tmp_path)])
 
     assert result.exit_code == 2
     assert name in result.output

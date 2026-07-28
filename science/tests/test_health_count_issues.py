@@ -81,10 +81,7 @@ def test_count_ledger_is_exhaustive_and_every_producer_uses_one_report_channel(
         generated_at="2026-07-28T12:00:00+00:00",
     )
 
-    accounted = (
-        set(report.meta.producers_run)
-        | {item.producer_id for item in report.unwired}
-    )
+    accounted = set(report.meta.producers_run) | {item.producer_id for item in report.unwired}
     assert accounted == _LEDGER_PRODUCERS | {"schema_invalid"}
     assert report.totals.findings_total == len(report.findings)
     assert sum(report.totals.findings_by_severity.values()) == len(report.findings)
@@ -131,9 +128,7 @@ def _one_issue_result(
         monkeypatch.setattr(
             lingering_tags,
             "collect_lingering_tags",
-            lambda *_args, **_kwargs: one(
-                [{"file": "doc/note.md", "values": ["legacy"]}]
-            ),
+            lambda *_args, **_kwargs: one([{"file": "doc/note.md", "values": ["legacy"]}]),
         )
     elif producer_id == "agent_context":
         monkeypatch.setattr(
@@ -324,15 +319,11 @@ def _one_issue_result(
         doc = context.project_root / "doc" / "note.md"
         doc.parent.mkdir(parents=True)
         doc.write_text(
-            "Smith 2020 reported this result.\n"
-            "Jones 2021 repeated it.\n",
+            "Smith 2020 reported this result.\nJones 2021 repeated it.\n",
             encoding="utf-8",
         )
         result = validate_health.CHECK.run(context)
-        assert sum(
-            finding.rule_id == "prose-lints.hit"
-            for finding in result.instrument.rows
-        ) == 2
+        assert sum(finding.rule_id == "prose-lints.hit" for finding in result.instrument.rows) == 2
         return result, len(result.instrument.rows)
     else:
         raise AssertionError(f"missing count-ledger fixture for {producer_id}")
@@ -381,9 +372,7 @@ def test_each_count_ledger_row_executes_its_real_producer_and_preserves_count(
             context,
             monkeypatch,
         )
-        producer = next(
-            check.producer for check in HEALTH_CHECKS if check.name == producer_id
-        )
+        producer = next(check.producer for check in HEALTH_CHECKS if check.name == producer_id)
 
     validated = validate_producer_result(
         registry,
@@ -400,9 +389,7 @@ def test_each_count_ledger_row_executes_its_real_producer_and_preserves_count(
         total_duration_seconds=0,
     )
     assert report.totals.findings_total == len(report.findings)
-    assert sum(report.totals.findings_by_severity.values()) == len(
-        report.findings
-    )
+    assert sum(report.totals.findings_by_severity.values()) == len(report.findings)
 
 
 @pytest.mark.parametrize(
@@ -508,9 +495,7 @@ def test_each_layered_claim_ledger_subrow_contributes_one_finding(
 
     result = layered_claim_migration.CHECK.run(context)
 
-    assert [finding.rule_id for finding in result.instrument.rows] == [
-        expected_rule
-    ], ledger_row
+    assert [finding.rule_id for finding in result.instrument.rows] == [expected_rule], ledger_row
     assert len(result.instrument.rows) == 1
 
 
@@ -532,10 +517,7 @@ def test_numeric_verification_ledger_row_remains_metrics_only(
         "mismatch": 0,
         "error": 0,
     }
-    assert all(
-        finding.rule_id != "prose-lints.numeric-verification.coverage"
-        for finding in result.instrument.rows
-    )
+    assert all(finding.rule_id != "prose-lints.numeric-verification.coverage" for finding in result.instrument.rows)
 
 
 def test_validation_ledger_reduces_only_semantically_identical_prose_hits(
@@ -545,9 +527,7 @@ def test_validation_ledger_reduces_only_semantically_identical_prose_hits(
     doc = tmp_path / "doc" / "note.md"
     doc.parent.mkdir(parents=True)
     doc.write_text(
-        "Smith 2020 reported this result.\n"
-        "Smith 2020 repeated this result.\n"
-        "Jones 2021 reported a distinct result.\n",
+        "Smith 2020 reported this result.\nSmith 2020 repeated this result.\nJones 2021 reported a distinct result.\n",
         encoding="utf-8",
     )
 
@@ -557,22 +537,11 @@ def test_validation_ledger_reduces_only_semantically_identical_prose_hits(
         generated_at="2026-07-28T12:00:00+00:00",
         checks={"validate"},
     )
-    prose_hits = [
-        item.finding
-        for item in report.findings
-        if item.finding.rule_id == "prose-lints.hit"
-    ]
+    prose_hits = [item.finding for item in report.findings if item.finding.rule_id == "prose-lints.hit"]
 
-    assert {
-        finding.qualifiers["match"]
-        for finding in prose_hits
-    } == {"smith 2020", "jones 2021"}
+    assert {finding.qualifiers["match"] for finding in prose_hits} == {"smith 2020", "jones 2021"}
     assert len(prose_hits) == 2
-    smith = next(
-        finding
-        for finding in prose_hits
-        if finding.qualifiers["match"] == "smith 2020"
-    )
+    smith = next(finding for finding in prose_hits if finding.qualifiers["match"] == "smith 2020")
     assert smith.evidence == (
         # Lines remain evidence and never enter the finding identity.
         LocationEvidence(path="doc/note.md", line=1),

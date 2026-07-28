@@ -34,9 +34,7 @@ def _restore_canonical_checks() -> None:
     yield
     clear_checks_for_tests()
     for module_name in CANONICAL_CHECK_MODULES:
-        importlib.reload(
-            importlib.import_module(f"science_tool.validate.checks.{module_name}")
-        )
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
 
 
 def test_check_registers_the_exact_producer_projection() -> None:
@@ -67,7 +65,8 @@ def test_check_registers_the_exact_producer_projection() -> None:
     assert entry.producer.source_module == "test_registry.py"
     assert entry.producer.rules == (_RULE,)
     batch = ValidationObservationBatch.from_observations(
-        item.to_finding(Path.cwd()) for item in entry.fn(None)  # type: ignore[arg-type]
+        item.to_finding(Path.cwd())
+        for item in entry.fn(None)  # type: ignore[arg-type]
     )
     assert entry.produce(batch) == batch.producer_result()
     clear_checks_for_tests()

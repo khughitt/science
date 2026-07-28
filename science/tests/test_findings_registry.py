@@ -40,17 +40,26 @@ SECTION = FindingSection(id="datasets", title="Datasets", section_order=300)
 
 def _rule(rule_id="dataset.stale-review", order=100) -> FindingRule:
     return FindingRule(
-        id=rule_id, severities={"warn"}, subject_types={"entity"},
-        qualifier_schema=Q, identity_qualifiers=("field",),
-        title="t", section="datasets", display_order=order,
+        id=rule_id,
+        severities={"warn"},
+        subject_types={"entity"},
+        qualifier_schema=Q,
+        identity_qualifiers=("field",),
+        title="t",
+        section="datasets",
+        display_order=order,
     )
 
 
 def _producer(pid="dataset_anomalies", rules=None, metrics_schema=M) -> FindingProducer:
     return FindingProducer(
-        producer_id=pid, namespace="health_checks", source_module="graph/health_checks/test.py",
+        producer_id=pid,
+        namespace="health_checks",
+        source_module="graph/health_checks/test.py",
         rules=tuple(rules or [_rule()]),
-        sections=(SECTION,), metrics_schema=metrics_schema, remediators=frozenset(),
+        sections=(SECTION,),
+        metrics_schema=metrics_schema,
+        remediators=frozenset(),
     )
 
 
@@ -87,17 +96,19 @@ def test_unknown_rule_lookup_fails_rather_than_returning_none():
 
 def test_colliding_display_order_within_a_section_fails():
     with pytest.raises(RegistryError, match="display_order"):
-        build_registry([
-            _producer(rules=[_rule("dataset.a", 10), _rule("dataset.b", 10)])
-        ], active_kinds=frozenset())
+        build_registry([_producer(rules=[_rule("dataset.a", 10), _rule("dataset.b", 10)])], active_kinds=frozenset())
 
 
 def test_colliding_section_order_fails():
     other = FindingSection(id="tasks", title="Tasks", section_order=300)
     producer = FindingProducer(
-        producer_id="p", namespace="health_checks", source_module="graph/health_checks/test.py",
+        producer_id="p",
+        namespace="health_checks",
+        source_module="graph/health_checks/test.py",
         rules=(_rule(),),
-        sections=(SECTION, other), metrics_schema=M, remediators=frozenset(),
+        sections=(SECTION, other),
+        metrics_schema=M,
+        remediators=frozenset(),
     )
     with pytest.raises(RegistryError, match="section_order"):
         build_registry([producer], active_kinds=frozenset())
@@ -105,16 +116,23 @@ def test_colliding_section_order_fails():
 
 def test_rule_naming_an_undeclared_section_fails():
     with pytest.raises(RegistryError, match="undeclared section"):
-        build_registry([
-            _producer(rules=[_rule("dataset.a")]).model_copy(update={"sections": ()})
-        ], active_kinds=frozenset())
+        build_registry(
+            [_producer(rules=[_rule("dataset.a")]).model_copy(update={"sections": ()})], active_kinds=frozenset()
+        )
 
 
 def test_producer_remediation_without_a_registered_handler_fails():
     rule = FindingRule(
-        id="dataset.fixable", severities={"warn"}, subject_types={"entity"},
-        qualifier_schema=Q, identity_qualifiers=("field",), remediation="producer",
-        remediator="fix_dataset", title="t", section="datasets", display_order=200,
+        id="dataset.fixable",
+        severities={"warn"},
+        subject_types={"entity"},
+        qualifier_schema=Q,
+        identity_qualifiers=("field",),
+        remediation="producer",
+        remediator="fix_dataset",
+        title="t",
+        section="datasets",
+        display_order=200,
     )
     with pytest.raises(RegistryError, match="remediator"):
         build_registry([_producer(rules=[rule])], active_kinds=frozenset())
@@ -124,14 +142,32 @@ def test_sort_key_orders_by_section_then_display_order_not_by_name():
     alpha = FindingSection(id="zzz-last-alphabetically", title="Z", section_order=100)
     beta = FindingSection(id="aaa-first-alphabetically", title="A", section_order=200)
     producer = FindingProducer(
-        producer_id="p", namespace="health_checks", source_module="graph/health_checks/test.py",
+        producer_id="p",
+        namespace="health_checks",
+        source_module="graph/health_checks/test.py",
         rules=(
-            FindingRule(id="z.rule", severities={"warn"}, subject_types={"project"},
-                        qualifier_schema=Q, title="t", section=alpha.id, display_order=1),
-            FindingRule(id="a.rule", severities={"warn"}, subject_types={"project"},
-                        qualifier_schema=Q, title="t", section=beta.id, display_order=1),
+            FindingRule(
+                id="z.rule",
+                severities={"warn"},
+                subject_types={"project"},
+                qualifier_schema=Q,
+                title="t",
+                section=alpha.id,
+                display_order=1,
+            ),
+            FindingRule(
+                id="a.rule",
+                severities={"warn"},
+                subject_types={"project"},
+                qualifier_schema=Q,
+                title="t",
+                section=beta.id,
+                display_order=1,
+            ),
         ),
-        sections=(alpha, beta), metrics_schema=M, remediators=frozenset(),
+        sections=(alpha, beta),
+        metrics_schema=M,
+        remediators=frozenset(),
     )
     registry = build_registry([producer], active_kinds=frozenset())
     assert registry.sort_key("z.rule") < registry.sort_key("a.rule")
@@ -218,9 +254,7 @@ def test_project_selects_kind_instances_but_cannot_author_family_policy():
             for index, kind in enumerate(sorted(kinds))
         )
 
-    producer = _producer().model_copy(
-        update={"rules": (), "kind_rule_factory": family}
-    )
+    producer = _producer().model_copy(update={"rules": (), "kind_rule_factory": family})
     registry = build_registry(
         [producer],
         active_kinds=frozenset({"canonical_parameter", "paper", "project-kind"}),

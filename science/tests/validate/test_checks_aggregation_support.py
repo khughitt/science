@@ -179,9 +179,7 @@ def test_unsafe_traversal_datapackage_path_reports_stamp_missing_without_reading
     from science_tool.validate.checks.aggregation_support import evaluate_aggregation_support
 
     results = list(evaluate_aggregation_support(entities, read_datapackage))
-    assert (Severity.ERROR, "aggregation-support.stamp-missing") in [
-        (r.severity, r.rule_id) for r in results
-    ]
+    assert (Severity.ERROR, "aggregation-support.stamp-missing") in [(r.severity, r.rule_id) for r in results]
     assert traversal_dp in results[0].message
 
 

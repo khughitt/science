@@ -54,9 +54,7 @@ records:
         checks={"entity_identity"},
     )
 
-    identity = [
-        item.finding for item in report.findings if item.producer_id == "entity_identity"
-    ]
+    identity = [item.finding for item in report.findings if item.producer_id == "entity_identity"]
     assert identity[0].qualifiers["code"] == "missing-canonical-id"
     assert identity[0].severity == "warn"
     assert report.totals.findings_total == 2
@@ -78,9 +76,7 @@ def test_identity_health_reports_unbaselined_missing_id_as_error_through_real_he
         checks={"entity_identity"},
     )
 
-    identity = [
-        item.finding for item in report.findings if item.producer_id == "entity_identity"
-    ]
+    identity = [item.finding for item in report.findings if item.producer_id == "entity_identity"]
     assert identity[0].qualifiers["code"] == "missing-canonical-id"
     assert identity[0].severity == "error"
     assert report.totals.findings_total == 2

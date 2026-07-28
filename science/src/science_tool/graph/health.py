@@ -72,10 +72,7 @@ def _partition_validation_acceptances(
     validate_result = producer_results.get("validate")
     if validate_result is None or validate_result.instrument.status == "unwired":
         return producer_results, ()
-    reported = [
-        ReportedFinding(producer_id="validate", finding=finding)
-        for finding in validate_result.instrument.rows
-    ]
+    reported = [ReportedFinding(producer_id="validate", finding=finding) for finding in validate_result.instrument.rows]
     remaining, accepted = partition_health_acceptances(project_root, reported)
     producer_results = dict(producer_results)
     producer_results["validate"] = FindingProducerResult(

@@ -141,7 +141,9 @@ def _scope_gate(
     return True, []
 
 
-def evaluate_dataset_capabilities(entities: Iterable[dict[str, Any]], *, generation: int = 2) -> Iterator[CheckObservation]:
+def evaluate_dataset_capabilities(
+    entities: Iterable[dict[str, Any]], *, generation: int = 2
+) -> Iterator[CheckObservation]:
     records = list(entities)
     dataset_to_targets, target_to_datasets = _frontmatter_reach(records)
     # Closure is decided PER RECORD, because it now takes the kind and the verdict -- not a status

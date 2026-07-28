@@ -17,10 +17,5 @@ def test_managed_artifacts_keep_complete_inventory_in_metrics(tmp_path: Path) ->
     inventory = validated.metrics.model_dump(mode="json")["inventory"]
     assert inventory
     assert all("counts_as_issue" in row for row in inventory)
-    assert all(
-        item.rule_id.startswith("managed-artifact.")
-        for item in validated.instrument.rows
-    )
-    assert len(validated.instrument.rows) == sum(
-        row["counts_as_issue"] is True for row in inventory
-    )
+    assert all(item.rule_id.startswith("managed-artifact.") for item in validated.instrument.rows)
+    assert len(validated.instrument.rows) == sum(row["counts_as_issue"] is True for row in inventory)

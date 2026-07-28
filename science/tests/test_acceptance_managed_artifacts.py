@@ -194,8 +194,7 @@ def test_health_surfaces_managed_artifact_status(tmp_path: Path) -> None:
     missing = [
         item
         for item in report.findings
-        if item.producer_id == "managed_artifacts"
-        and item.finding.qualifiers["status"] == "missing"
+        if item.producer_id == "managed_artifacts" and item.finding.qualifiers["status"] == "missing"
     ]
     assert len(missing) >= 1
 

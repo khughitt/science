@@ -25,7 +25,9 @@ EXECUTION = """execution:
   output_artifact_locality: science-managed
 """
 
-CLEAN = EXECUTION + """fingerprint:
+CLEAN = (
+    EXECUTION
+    + """fingerprint:
   fingerprint_policy: science-run-fingerprint/v1
   executor: local
   input_artifact_locality: science-managed
@@ -38,6 +40,7 @@ CLEAN = EXECUTION + """fingerprint:
   output_manifest_digest: {value: "sha256:out", provenance: captured}
   seed_policy: {kind: deterministic}
 """
+)
 
 
 def test_run_without_fingerprint_emits_nothing(tmp_path):
@@ -102,7 +105,7 @@ def _commons(*origin_extra: str) -> str:
     origin = _origin(*origin_extra)
     execution = EXECUTION.replace("  executor: local\n", "  executor: commons\n") + origin
     fingerprint = (
-        CLEAN[len(EXECUTION):].replace("  executor: local\n", "  executor: commons\n")
+        CLEAN[len(EXECUTION) :].replace("  executor: local\n", "  executor: commons\n")
         + "  container_digest: {provenance: unknown}\n"
         + origin
     )
@@ -157,8 +160,9 @@ def test_fingerprint_without_a_declaration_is_an_error(tmp_path):
 def test_declaration_drift_is_an_error(tmp_path):
     """Edit `execution.executor` after registering and the fingerprint goes stale."""
     _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: external\n", 1))
-    results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
-               if r.rule_id == "run.fingerprint-declaration-drift"]
+    results = [
+        r for r in check_run_fingerprint_obligations(_ctx(tmp_path)) if r.rule_id == "run.fingerprint-declaration-drift"
+    ]
     assert len(results) == 1
     assert results[0].severity == Severity.ERROR.value
     assert "executor" in results[0].message
@@ -166,10 +170,14 @@ def test_declaration_drift_is_an_error(tmp_path):
 
 
 def test_declaration_drift_on_locality_is_an_error(tmp_path):
-    _write_run(tmp_path, "r1", CLEAN.replace(
-        "  input_artifact_locality: science-managed\n", "  input_artifact_locality: external\n", 1))
-    results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
-               if r.rule_id == "run.fingerprint-declaration-drift"]
+    _write_run(
+        tmp_path,
+        "r1",
+        CLEAN.replace("  input_artifact_locality: science-managed\n", "  input_artifact_locality: external\n", 1),
+    )
+    results = [
+        r for r in check_run_fingerprint_obligations(_ctx(tmp_path)) if r.rule_id == "run.fingerprint-declaration-drift"
+    ]
     assert len(results) == 1
     assert "input_artifact_locality" in results[0].message
 

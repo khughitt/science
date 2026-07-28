@@ -63,8 +63,16 @@ def test_a_registered_check_fires_through_the_runner(tmp_path: Path) -> None:
     _seed(tmp_path)
     # `i1` claims `i2` superseded it. `i2` exists and resolves -- and grounds nothing: there is no
     # `sci:supersedes` edge anywhere in the corpus.
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "status": "superseded", "superseded_by": "interpretation:i2"})
+    _write(
+        tmp_path,
+        "i1",
+        {
+            "id": "interpretation:i1",
+            "kind": "interpretation",
+            "status": "superseded",
+            "superseded_by": "interpretation:i2",
+        },
+    )
     _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation"})
 
     findings = [r for r in _results(tmp_path) if r.rule_id == "interpretation.unbacked-inverse"]
@@ -78,9 +86,20 @@ def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
     # The control that makes the check falsifiable. SAME corpus, one edge added -- and the finding
     # has to disappear, or the rule is just "any superseded_by is a finding" wearing a better name.
     _seed(tmp_path)
-    _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
-                            "status": "superseded", "superseded_by": "interpretation:i2"})
-    _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation",
-                            "relations": [_supersedes("interpretation:i1")]})
+    _write(
+        tmp_path,
+        "i1",
+        {
+            "id": "interpretation:i1",
+            "kind": "interpretation",
+            "status": "superseded",
+            "superseded_by": "interpretation:i2",
+        },
+    )
+    _write(
+        tmp_path,
+        "i2",
+        {"id": "interpretation:i2", "kind": "interpretation", "relations": [_supersedes("interpretation:i1")]},
+    )
 
     assert [r for r in _results(tmp_path) if r.rule_id.endswith(".unbacked-inverse")] == []

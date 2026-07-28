@@ -11,8 +11,7 @@ def _project_with_bad_dataset(root: Path) -> Path:
     dataset = root / "entities" / "datasets" / "bad.md"
     dataset.parent.mkdir(parents=True)
     dataset.write_text(
-        "---\nid: dataset:bad\nkind: dataset\ntitle: bad\n"
-        "origin: derived\nsource_class: derived\n---\n",
+        "---\nid: dataset:bad\nkind: dataset\ntitle: bad\norigin: derived\nsource_class: derived\n---\n",
         encoding="utf-8",
     )
     return root

@@ -406,9 +406,7 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Che
                     message=f"{entity.canonical_id}: discusses frame ref '{frame_ref}' cannot be resolved to a known entity; cannot check cross-surface role conflict (design §4 rule 3)",
                     rule=RULES["relation.role.unresolved-frame"],
                     task=None,
-                    qualifiers={
-                        "key": [entity.canonical_id, "frame", frame_ref]
-                    },
+                    qualifiers={"key": [entity.canonical_id, "frame", frame_ref]},
                 )
                 continue
             pair = (entity.canonical_id, frame_cid)

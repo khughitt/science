@@ -82,18 +82,14 @@ def test_agent_context_rows_are_declared_findings(tmp_path: Path) -> None:
     (tmp_path / "AGENTS.md").write_text("# Guide\n", encoding="utf-8")
     report = _report(tmp_path, checks={"agent_context"})
     assert report.totals.findings_total >= 1
-    assert all(
-        item.finding.rule_id.startswith("agent-context.")
-        for item in report.findings
-    )
+    assert all(item.finding.rule_id.startswith("agent-context.") for item in report.findings)
 
 
 def test_dataset_declared_rule_ids_equal_complete_code_ledger() -> None:
     assert len(DATASET_RULE_CODES) == 12
     assert set(DATASET_RULES) == set(DATASET_RULE_CODES)
     assert {rule.id for rule in DATASET_RULES.values()} == {
-        f"dataset.{code.removeprefix('dataset_').replace('_', '-')}"
-        for code in DATASET_RULE_CODES
+        f"dataset.{code.removeprefix('dataset_').replace('_', '-')}" for code in DATASET_RULE_CODES
     }
 
 

@@ -103,14 +103,10 @@ def render_health_report(
         sink.echo(f"Accepted findings: {len(report.accepted)}")
     for producer_id, metrics in report.metrics.items():
         sink.echo(
-            f"Metrics [{producer_id}]: "
-            f"{serialize_json(metrics.model_dump(mode='json'), indent=None, sort_keys=True)}"
+            f"Metrics [{producer_id}]: {serialize_json(metrics.model_dump(mode='json'), indent=None, sort_keys=True)}"
         )
 
-    sink.echo(
-        f"Findings displayed: {len(report.findings)} of "
-        f"{report.totals.findings_total} total."
-    )
+    sink.echo(f"Findings displayed: {len(report.findings)} of {report.totals.findings_total} total.")
     if report.totals.findings_total == 0 and not report.unwired:
         sink.echo("Project is clean.")
     elif report.unwired:
@@ -221,9 +217,7 @@ def health_command(
 
     registry = build_project_registry(project_root)
     displayed = (
-        report
-        if output_path is not None
-        else project_health_report(report, registry=registry, threshold=severity)
+        report if output_path is not None else project_health_report(report, registry=registry, threshold=severity)
     )
     emit(
         output_format=output_format,

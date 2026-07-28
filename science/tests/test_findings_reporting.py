@@ -181,10 +181,7 @@ def test_build_audit_report_orders_rows_and_separates_output_channels():
         ("first.beta", "warn", "dataset:z", None),
         ("first.alpha", "error", "dataset:y", "a"),
         ("first.alpha", "info", "dataset:a", "a"),
-        *[
-            ("first.alpha", "info", "dataset:z", finding.qualifiers["variant"])
-            for finding in expected_same_subject
-        ],
+        *[("first.alpha", "info", "dataset:z", finding.qualifiers["variant"]) for finding in expected_same_subject],
         ("second.gamma", "warn", "dataset:z", None),
     ]
     assert report.accepted == (accepted,)

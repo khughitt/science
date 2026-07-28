@@ -15,11 +15,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "science_tool"
 
 
 def _source_modules(namespace: str) -> list[str]:
-    return [
-        producer.source_module
-        for producer in registered_producers()
-        if producer.namespace == namespace
-    ]
+    return [producer.source_module for producer in registered_producers() if producer.namespace == namespace]
 
 
 def test_every_registered_health_module_has_one_catalog_producer() -> None:
@@ -50,11 +46,7 @@ def test_data_audit_file_contributes_its_one_producer() -> None:
 
 def _called_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    return {
-        node.func.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
+    return {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
 
 
 def test_every_namespace_execution_crosses_validate_producer_result() -> None:
@@ -187,10 +179,6 @@ def test_health_report_has_only_the_audit_report_v2_fields() -> None:
 def test_retired_archive_lag_is_not_reintroduced() -> None:
     producers = registered_producers()
     producer_ids = {producer.producer_id for producer in producers}
-    rule_ids = {
-        rule.id
-        for producer in producers
-        for rule in producer.expanded_rules(frozenset())
-    }
+    rule_ids = {rule.id for producer in producers for rule in producer.expanded_rules(frozenset())}
     assert "archive_lag" not in producer_ids
     assert "tasks.archive-lag" not in rule_ids

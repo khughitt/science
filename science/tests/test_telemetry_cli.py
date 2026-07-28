@@ -70,9 +70,7 @@ def test_click_parse_error_records_command_error(tmp_path: Path) -> None:
     assert events[0]["exit_code"] == 2
 
 
-def test_telemetry_group_preserves_nonzero_ctx_exit(
-    tmp_path: Path, isolated_check_registry: None
-) -> None:
+def test_telemetry_group_preserves_nonzero_ctx_exit(tmp_path: Path, isolated_check_registry: None) -> None:
     # The fixture clears the registry (so `demo_check` is the ONLY check this run sees) and RESTORES
     # it afterwards. Clearing without restoring silently disarms every later `runner.run` in the
     # session -- see the fixture's docstring.
@@ -172,7 +170,9 @@ def test_telemetry_report_json_summarizes_local_events(tmp_path: Path) -> None:
         },
     )
 
-    result = CliRunner().invoke(main, ["telemetry", "report", "--format", "json"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)})
+    result = CliRunner().invoke(
+        main, ["telemetry", "report", "--format", "json"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+    )
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -269,7 +269,9 @@ def test_telemetry_export_jsonl_prints_events(tmp_path: Path) -> None:
         },
     )
 
-    result = CliRunner().invoke(main, ["telemetry", "export", "--format", "jsonl"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)})
+    result = CliRunner().invoke(
+        main, ["telemetry", "export", "--format", "jsonl"], env={"SCIENCE_TELEMETRY_DIR": str(telemetry_dir)}
+    )
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output.splitlines()[0])["event_id"] == "finish"

@@ -70,7 +70,7 @@ class Unit:
     """
 
     stance: str = "supports"
-    on: str = "hypothesis"          # "hypothesis" | "core" | "rival"
+    on: str = "hypothesis"  # "hypothesis" | "core" | "rival"
     admissible: bool = True
 
 
@@ -143,15 +143,17 @@ def build(
     # `propositions:` field -- only a mechanism does -- so this is the ONLY authoring path.
     for role in members:
         ref = _target_ref(role)
-        discusses: list[object] = (
-            [{"frame": HYPOTHESIS, "role": "rival"}] if role == "rival" else [HYPOTHESIS]
-        )
+        discusses: list[object] = [{"frame": HYPOTHESIS, "role": "rival"}] if role == "rival" else [HYPOTHESIS]
         _write(
             root,
             f"entities/propositions/{role}.md",
             _frontmatter(
-                id=ref, kind="proposition", title=role,
-                created="2026-07-13", updated="2026-07-13", discusses=discusses,
+                id=ref,
+                kind="proposition",
+                title=role,
+                created="2026-07-13",
+                updated="2026-07-13",
+                discusses=discusses,
             ),
         )
 
@@ -163,10 +165,15 @@ def build(
             root,
             "entities/falsifications/f1.md",
             _frontmatter(
-                id="falsification:f1", kind="falsification", title="f1",
-                created="2026-07-13", updated="2026-07-13",
+                id="falsification:f1",
+                kind="falsification",
+                title="f1",
+                created="2026-07-13",
+                updated="2026-07-13",
                 falsifies=_target_ref(falsified_member),
-                predicted="p", observed="o", decision="reject",
+                predicted="p",
+                observed="o",
+                decision="reject",
             ),
         )
 
@@ -309,8 +316,8 @@ def test_the_three_rules_fire_INDEPENDENTLY(project: Path) -> None:
         "verdict.disagrees-with-computed",
     }
     assert {r.rule_id: r.severity for r in results(root)} == {
-        "verdict.missing-basis": Severity.WARN,            # >=11 of 15 cannot satisfy it -- never ERROR
-        "verdict.refutation-masked": Severity.ERROR,       # the one hard invariant
+        "verdict.missing-basis": Severity.WARN,  # >=11 of 15 cannot satisfy it -- never ERROR
+        "verdict.refutation-masked": Severity.ERROR,  # the one hard invariant
         "verdict.disagrees-with-computed": Severity.WARN,  # explanatory, never a ceiling
     }
 
@@ -383,9 +390,7 @@ def test_partially_supported_with_ONLY_a_dispute_IS_a_disagreement(project: Path
 
 def test_partially_supported_with_ONLY_a_falsification_IS_a_disagreement(project: Path) -> None:
     # Same, through the other basis limb: a linked negative adjudication and nothing else.
-    root = build(
-        project, verdict="partially-supported", members=("core",), falsified_member="core"
-    )
+    root = build(project, verdict="partially-supported", members=("core",), falsified_member="core")
     assert rules(root) == {"verdict.disagrees-with-computed"}
 
 
@@ -406,7 +411,7 @@ def test_supported_over_an_UNRESOLVED_core_member_does_not_deny_the_support_that
         units=(Unit(stance="supports", on="hypothesis"),),
         members=("core",),
     )
-    assert rules(root) == {"verdict.disagrees-with-computed"}   # a basis EXISTS -- only the fit fails
+    assert rules(root) == {"verdict.disagrees-with-computed"}  # a basis EXISTS -- only the fit fails
 
     (message,) = messages(root, "verdict.disagrees-with-computed")
     assert "no admissible evidence composes to any support at all" not in message

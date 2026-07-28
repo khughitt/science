@@ -102,9 +102,7 @@ _STATIC_RULE_MIGRATIONS: tuple[tuple[str, str | None], ...] = (
 def _canonical_entries() -> tuple[CheckEntry, ...]:
     clear_checks_for_tests()
     for module_name in CANONICAL_CHECK_MODULES:
-        importlib.reload(
-            importlib.import_module(f"science_tool.validate.checks.{module_name}")
-        )
+        importlib.reload(importlib.import_module(f"science_tool.validate.checks.{module_name}"))
     return tuple(CANONICAL_CHECKS)
 
 
@@ -142,19 +140,13 @@ def test_sparse_family_emissions_are_declared_and_belong_to_active_registry() ->
 
 def test_annotation_suffixes_equal_issue_kinds() -> None:
     assert set(ANNOTATION_RULES) == set(ISSUE_KINDS)
-    assert {rule.id.removeprefix("annotations.") for rule in ANNOTATION_RULES.values()} == set(
-        ISSUE_KINDS
-    )
+    assert {rule.id.removeprefix("annotations.") for rule in ANNOTATION_RULES.values()} == set(ISSUE_KINDS)
 
 
 def test_correspondence_and_hypothesis_gate_ids_remain_exact() -> None:
     assert RULE_CORRESPONDENCE_DRIFT.id == "plan.correspondence-drift"
     assert RULE_CORRESPONDENCE_DRIFT.identity_qualifiers == ("evidence_signature",)
-    assert {
-        rule
-        for rule in cumulative_rules("hygiene")
-        if rule.startswith("hypothesis.")
-    } == {
+    assert {rule for rule in cumulative_rules("hygiene") if rule.startswith("hypothesis.")} == {
         "hypothesis.status-vocabulary",
         "hypothesis.dangling-lineage",
         "hypothesis.unbacked-inverse",
@@ -171,19 +163,14 @@ def test_prose_policy_rules_keep_distinct_visibility_and_metrics_only_coverage()
         "mismatch",
         "error",
     }
-    assert all(
-        "numeric-verification.coverage" not in rule.id
-        for rule in (RULE_HIT, RULE_CONFIG, RULE_ADVISORY)
-    )
+    assert all("numeric-verification.coverage" not in rule.id for rule in (RULE_HIT, RULE_CONFIG, RULE_ADVISORY))
 
 
 def test_static_rule_migrations_are_complete_and_old_ids_are_absent() -> None:
     assert len(_STATIC_RULE_MIGRATIONS) == 31
-    declared = {
-        rule.id
-        for entry in _canonical_entries()
-        for rule in entry.producer.rules
-    } | {rule.id for rule in VALIDATION_RUNTIME_PRODUCER.rules}
+    declared = {rule.id for entry in _canonical_entries() for rule in entry.producer.rules} | {
+        rule.id for rule in VALIDATION_RUNTIME_PRODUCER.rules
+    }
     assert {new for _, new in _STATIC_RULE_MIGRATIONS if new is not None} <= declared
     assert not ({old for old, _ in _STATIC_RULE_MIGRATIONS} & declared)
     rule_id_pattern = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -311,11 +298,7 @@ def test_registered_projection_never_reinvokes_raw_check(tmp_path: Path) -> None
         )
         yield ValidationNotice(path=None, line=None, message="progress")
 
-    entry = next(
-        item
-        for item in CANONICAL_CHECKS
-        if item.producer.producer_id == "validate.test.raw-once"
-    )
+    entry = next(item for item in CANONICAL_CHECKS if item.producer.producer_id == "validate.test.raw-once")
     try:
         ctx = ValidateContext.from_project_root(
             tmp_path,
@@ -357,14 +340,10 @@ def test_actual_evidence_emitter_has_no_same_subject_identity_collision(
     entry = next(
         item
         for item in _canonical_entries()
-        if item.producer.producer_id
-        == "validate.evidence-lines.evidence-lines-unstanced"
+        if item.producer.producer_id == "validate.evidence-lines.evidence-lines-unstanced"
     )
 
-    observations = [
-        item.to_finding(tmp_path) if isinstance(item, Result) else item
-        for item in entry.fn(ctx)
-    ]
+    observations = [item.to_finding(tmp_path) if isinstance(item, Result) else item for item in entry.fn(ctx)]
     batch = ValidationObservationBatch.from_observations(observations)
     result = validate_producer_result(
         build_project_registry(tmp_path),
@@ -373,9 +352,7 @@ def test_actual_evidence_emitter_has_no_same_subject_identity_collision(
     )
 
     assert len(result.instrument.rows) == 2
-    assert {
-        tuple(item.qualifiers["key"]) for item in result.instrument.rows
-    } == {
+    assert {tuple(item.qualifiers["key"]) for item in result.instrument.rows} == {
         ("required-field", "stance"),
         ("required-field", "target"),
     }
@@ -418,15 +395,13 @@ def _write_multi_issue_fixture(
         methods = root / "entities" / "methods"
         methods.mkdir(parents=True)
         methods.joinpath("method.md").write_text(
-            "---\nid: method:m\nkind: method\ntitle: M\n"
-            "stochasticity: seedable\nseed_params: [a, b]\n---\n",
+            "---\nid: method:m\nkind: method\ntitle: M\nstochasticity: seedable\nseed_params: [a, b]\n---\n",
             encoding="utf-8",
         )
         steps = root / "entities" / "workflow-steps"
         steps.mkdir(parents=True)
         steps.joinpath("step.md").write_text(
-            "---\nid: workflow-step:s\nkind: workflow-step\ntitle: S\n"
-            "method: method:m\n---\n",
+            "---\nid: workflow-step:s\nkind: workflow-step\ntitle: S\nmethod: method:m\n---\n",
             encoding="utf-8",
         )
     elif family == "prose-lints":
@@ -489,13 +464,7 @@ def _write_multi_issue_fixture(
         directory = root / "entities" / "pre-registrations"
         directory.mkdir(parents=True)
         directory.joinpath("one.md").write_text(
-            "---\n"
-            "kind: pre-registration\n"
-            "status: committed\n"
-            "vehicles:\n"
-            "  - {label: first}\n"
-            "  - {label: second}\n"
-            "---\n",
+            "---\nkind: pre-registration\nstatus: committed\nvehicles:\n  - {label: first}\n  - {label: second}\n---\n",
             encoding="utf-8",
         )
     elif family == "prereg-schedule":
@@ -528,10 +497,7 @@ def _write_multi_issue_fixture(
         path = root / ".labnote" / "app_export" / "views.json"
         path.parent.mkdir(parents=True)
         path.write_text(
-            '{"views": ['
-            '{"id": "one", "surface": "findings"}, '
-            '{"id": "two", "surface": "findings"}'
-            "]}\n",
+            '{"views": [{"id": "one", "surface": "findings"}, {"id": "two", "surface": "findings"}]}\n',
             encoding="utf-8",
         )
     elif family == "dataset-taxonomy":
@@ -567,9 +533,7 @@ def _write_multi_issue_fixture(
         monkeypatch.setattr(
             dataset_influence,
             "_dataset_ref_statuses",
-            lambda _ctx, refs, _frontmatters: {
-                ref: "missing" for ref in refs
-            },
+            lambda _ctx, refs, _frontmatters: {ref: "missing" for ref in refs},
         )
     elif family == "identity-provenance":
         directory = root / "entities" / "datasets"
@@ -672,11 +636,7 @@ def test_multi_issue_emitters_have_one_semantic_identity_per_row(
     from science_tool.validate import runner
     from science_tool.validate.context import ValidateContext
 
-    entry = next(
-        item
-        for item in _canonical_entries()
-        if item.producer.producer_id == producer_id
-    )
+    entry = next(item for item in _canonical_entries() if item.producer.producer_id == producer_id)
     _write_multi_issue_fixture(tmp_path, family, monkeypatch)
     ctx = ValidateContext.from_project_root(
         tmp_path,
@@ -694,9 +654,7 @@ def test_multi_issue_emitters_have_one_semantic_identity_per_row(
         finding_fingerprint(
             rule_id=finding.rule_id,
             subject=finding.subject,
-            identity_qualifiers=registry.rule(finding.rule_id).identity_subset(
-                finding.qualifiers
-            ),
+            identity_qualifiers=registry.rule(finding.rule_id).identity_subset(finding.qualifiers),
         )
         for finding in result.instrument.rows
     ]
@@ -724,11 +682,7 @@ def test_accepted_validation_coalesces_equivalent_severity_spellings_at_register
         "      reason: equivalent spelling\n",
         encoding="utf-8",
     )
-    entry = next(
-        item
-        for item in _canonical_entries()
-        if item.producer.producer_id == "validate.accepted-validation"
-    )
+    entry = next(item for item in _canonical_entries() if item.producer.producer_id == "validate.accepted-validation")
     ctx = ValidateContext.from_project_root(
         tmp_path,
         strict=False,
@@ -745,9 +699,7 @@ def test_accepted_validation_coalesces_equivalent_severity_spellings_at_register
 
 def test_finite_dispatch_maps_equal_their_authorities() -> None:
     assert set(SUPPORT_FIELD_RULES) == {
-        field
-        for field in BENCHMARK_TASK_SUPPORT_FIELDS
-        if field in {"evidence", "notes"}
+        field for field in BENCHMARK_TASK_SUPPORT_FIELDS if field in {"evidence", "notes"}
     }
     assert set(TIER_DECLARATION_RULES) == {
         "assembly",
@@ -797,11 +749,7 @@ def test_result_rule_arguments_are_never_string_literals_or_fstrings() -> None:
             name = call.func.id if isinstance(call.func, ast.Name) else None
             if name not in {"Result", "validation_observation"}:
                 continue
-            candidates = [
-                keyword.value
-                for keyword in call.keywords
-                if keyword.arg == "rule"
-            ]
+            candidates = [keyword.value for keyword in call.keywords if keyword.arg == "rule"]
             if name == "Result" and len(call.args) >= 5:
                 candidates.append(call.args[4])
             if any(isinstance(value, ast.Constant | ast.JoinedStr) for value in candidates):

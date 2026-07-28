@@ -103,9 +103,7 @@ class IngestionProvenance(BaseModel):
         try:
             datetime.fromisoformat(value)
         except ValueError as exc:
-            raise ValueError(
-                f"generated_at must be ISO-8601, got {value!r}: {exc}"
-            ) from exc
+            raise ValueError(f"generated_at must be ISO-8601, got {value!r}: {exc}") from exc
         return value
 
     @field_validator("producer_ids")
@@ -131,9 +129,7 @@ class IngestionContext(BaseModel):
     def _valid_entity_ids(cls, value: frozenset[str]) -> frozenset[str]:
         invalid = sorted(item for item in value if not item.strip() or "\0" in item)
         if invalid:
-            raise ValueError(
-                f"canonical entity ids must be nonblank and NUL-free: {invalid!r}"
-            )
+            raise ValueError(f"canonical entity ids must be nonblank and NUL-free: {invalid!r}")
         return value
 
 
@@ -194,10 +190,7 @@ def _snapshot_report(report: AuditReport) -> AuditReport:
             ensure_ascii=False,
         ).encode("utf-8")
         if len(canonical) > MAX_REPORT_BYTES:
-            raise IngestError(
-                f"canonical report snapshot is {len(canonical)} bytes, which exceeds "
-                f"{MAX_REPORT_BYTES}"
-            )
+            raise IngestError(f"canonical report snapshot is {len(canonical)} bytes, which exceeds {MAX_REPORT_BYTES}")
         return snapshot
     except IngestError:
         raise
@@ -265,10 +258,7 @@ def _plan(
     trusted_producers = {producer_id: producer_id for producer_id in provenance.producer_ids}
     unknown_producers = set(trusted_producers) - set(registry.producers_by_id)
     if unknown_producers:
-        raise IngestError(
-            f"unregistered producer ids in report provenance: "
-            f"{sorted(unknown_producers)}"
-        )
+        raise IngestError(f"unregistered producer ids in report provenance: {sorted(unknown_producers)}")
 
     for producer_id, metrics in report.metrics.items():
         try:
@@ -277,16 +267,12 @@ def _plan(
             raise IngestError(str(exc)) from exc
 
     planned: list[_Planned] = []
-    channels = [
-        (r.producer_id, r.finding, None) for r in report.findings
-    ] + [
+    channels = [(r.producer_id, r.finding, None) for r in report.findings] + [
         (a.producer_id, a.finding, a.acceptance_key) for a in report.accepted
     ]
     for producer_id, finding, acceptance_key in channels:
         if producer_id not in trusted_producers:
-            raise IngestError(
-                f"producer {producer_id!r} is not in the trusted provenance"
-            )
+            raise IngestError(f"producer {producer_id!r} is not in the trusted provenance")
         if producer_id not in registry.producers_by_id:
             raise IngestError(f"unregistered producer {producer_id!r}")
         try:
@@ -294,14 +280,10 @@ def _plan(
         except RegistryError as exc:
             raise IngestError(str(exc)) from exc
         if finding.severity not in rule.severities:
-            raise IngestError(
-                f"{finding.rule_id}: severity {finding.severity!r} is not in "
-                f"{sorted(rule.severities)}"
-            )
+            raise IngestError(f"{finding.rule_id}: severity {finding.severity!r} is not in {sorted(rule.severities)}")
         if finding.subject.type not in rule.subject_types:
             raise IngestError(
-                f"{finding.rule_id}: subject type {finding.subject.type!r} is not in "
-                f"{sorted(rule.subject_types)}"
+                f"{finding.rule_id}: subject type {finding.subject.type!r} is not in {sorted(rule.subject_types)}"
             )
         if finding.subject.type == "identifier":
             if finding.subject.namespace not in rule.identifier_namespaces:
@@ -309,10 +291,7 @@ def _plan(
                     f"{finding.rule_id}: namespace {finding.subject.namespace!r} is not "
                     f"in {sorted(rule.identifier_namespaces)}"
                 )
-        if (
-            finding.subject.type == "entity"
-            and finding.subject.ref not in context.canonical_entity_ids
-        ):
+        if finding.subject.type == "entity" and finding.subject.ref not in context.canonical_entity_ids:
             raise IngestError(
                 f"{finding.rule_id}: entity subject {finding.subject.ref!r} is not an "
                 "exact member of the trusted canonical project entity universe"
@@ -325,9 +304,7 @@ def _plan(
             # about what its identity is. `validate_qualifiers` is strict: a report
             # carrying `"1"` where the schema declares `int` is refused rather than
             # coerced-then-discarded, so what is fingerprinted is what was declared.
-            canonical_qualifiers = rule.canonicalize_identity_qualifiers(
-                finding.qualifiers
-            )
+            canonical_qualifiers = rule.canonicalize_identity_qualifiers(finding.qualifiers)
             rule.validate_qualifiers(canonical_qualifiers)
             identity = rule.identity_subset(canonical_qualifiers)
         except RuleDeclarationError as exc:
@@ -381,9 +358,7 @@ def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:
     candidates: list[str] = []
     if finding.subject.type == "path":
         candidates.append(finding.subject.path)
-    candidates.extend(
-        item.path for item in finding.evidence if item.type == "location"
-    )
+    candidates.extend(item.path for item in finding.evidence if item.type == "location")
     for candidate in candidates:
         try:
             resolve_inside(project_root, candidate)
@@ -402,13 +377,9 @@ def _assert_attested_provenance(
         }
     )
     if report.ingestion_ref != provenance.ingestion_ref:
-        raise IngestError(
-            "report ingestion_ref does not exactly match the trusted attestation"
-        )
+        raise IngestError("report ingestion_ref does not exactly match the trusted attestation")
     if report.generated_at != provenance.generated_at:
-        raise IngestError(
-            "report generated_at does not exactly match the trusted attestation"
-        )
+        raise IngestError("report generated_at does not exactly match the trusted attestation")
     if report_producer_ids != provenance.producer_ids:
         raise IngestError(
             "report producer ids do not exactly match the trusted attestation: "
@@ -446,9 +417,7 @@ def _new_record(
         subject=item.finding.subject,
         identity_qualifiers=item.identity_qualifiers,
         occurrences=(occurrence,),
-        transitions=(
-            _genesis_transition(occurrence, actor),
-        ),
+        transitions=(_genesis_transition(occurrence, actor),),
         status="proposed",
     )
 
@@ -508,26 +477,19 @@ def _classify_writes(
         existing = existing_by_name.get(name)
 
         if existing is None:
-            writes.append(
-                _with_canonical_occurrences(incoming_probes[0], incoming)
-            )
+            writes.append(_with_canonical_occurrences(incoming_probes[0], incoming))
             written += 1
             appended += len(incoming)
             continue
 
-        stored = {
-            occurrence.idempotency_key: occurrence
-            for occurrence in existing.occurrences
-        }
+        stored = {occurrence.idempotency_key: occurrence for occurrence in existing.occurrences}
         additions: list[Occurrence] = []
         for occurrence in incoming:
             prior = stored.get(occurrence.idempotency_key)
             if prior is None:
                 additions.append(occurrence)
                 continue
-            if canonical_occurrence_content(prior) != canonical_occurrence_content(
-                occurrence
-            ):
+            if canonical_occurrence_content(prior) != canonical_occurrence_content(occurrence):
                 raise IngestError(
                     f"idempotency conflict on {existing.finding_id}: key "
                     f"{occurrence.idempotency_key} already exists with different "
@@ -566,9 +528,7 @@ def ingest_report(
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
 
-    probes = [
-        _new_record(item, report, provenance, observed_at, actor) for item in planned
-    ]
+    probes = [_new_record(item, report, provenance, observed_at, actor) for item in planned]
     with _locked_store(project_root) as store:
         writes, written, appended, skipped = _classify_writes(
             store,

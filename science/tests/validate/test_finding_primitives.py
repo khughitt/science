@@ -44,9 +44,7 @@ RULE = FindingRule(
 
 def test_validation_path_is_the_subject_and_line_is_evidence_only(tmp_path):
     absolute = tmp_path / "entities" / "papers" / "1.md"
-    assert validation_subject(tmp_path, absolute) == PathSubject(
-        path="entities/papers/1.md"
-    )
+    assert validation_subject(tmp_path, absolute) == PathSubject(path="entities/papers/1.md")
     evidence = validation_evidence(tmp_path, absolute, 7)
     assert evidence[0].path == "entities/papers/1.md"
     assert evidence[0].line == 7
@@ -79,9 +77,10 @@ def test_prose_advisory_count_is_not_an_identity_field():
 def test_ordinary_validation_identity_key_is_required_explicitly():
     with pytest.raises(ValidationError):
         ValidationQualifiers.model_validate({"task": None})
-    assert ValidationQualifiers.model_validate(
-        {"key": ["missing-field", "summary"], "task": None}
-    ).key == ["missing-field", "summary"]
+    assert ValidationQualifiers.model_validate({"key": ["missing-field", "summary"], "task": None}).key == [
+        "missing-field",
+        "summary",
+    ]
 
 
 def test_build_validation_finding_uses_path_subject_and_location_evidence(tmp_path):
@@ -101,9 +100,7 @@ def test_build_validation_finding_uses_path_subject_and_location_evidence(tmp_pa
 
 def test_numeric_verification_metrics_rejects_negative_counts():
     with pytest.raises(ValidationError):
-        NumericVerificationMetrics.model_validate(
-            {"verified": -1, "unverifiable": 0, "mismatch": 0, "error": 0}
-        )
+        NumericVerificationMetrics.model_validate({"verified": -1, "unverifiable": 0, "mismatch": 0, "error": 0})
 
 
 def test_observation_batch_projects_findings_and_metrics_but_retains_notices():
@@ -115,9 +112,7 @@ def test_observation_batch_projects_findings_and_metrics_but_retains_notices():
     )
     metrics = ValidationMetricObservation(metrics=ProducerMetrics(count=1))
     notice = ValidationNotice(path=None, line=None, message="checked one thing")
-    batch = ValidationObservationBatch.from_observations(
-        (finding, metrics, notice)
-    )
+    batch = ValidationObservationBatch.from_observations((finding, metrics, notice))
     result = batch.producer_result()
     assert len(result.instrument.rows) == 1
     assert result.metrics.model_dump(mode="json") == {"count": 1}

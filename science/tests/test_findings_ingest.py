@@ -188,9 +188,7 @@ def _finding(**overrides) -> AuditFinding:
 
 def _report(findings=None, accepted=None, **overrides) -> AuditReport:
     findings = (
-        findings
-        if findings is not None
-        else [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
+        findings if findings is not None else [ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
     )
     accepted = accepted or []
     producers_run = sorted(
@@ -213,9 +211,7 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         unwired=[],
         totals={
             "findings_total": len(findings),
-            "findings_by_severity": dict(
-                Counter(item.finding.severity for item in findings)
-            ),
+            "findings_by_severity": dict(Counter(item.finding.severity for item in findings)),
             "accepted_total": len(accepted),
             "unwired_total": 0,
         },
@@ -256,10 +252,7 @@ def ingest_report(
         report,
         registry,
         provenance=provenance or _provenance(report),
-        context=context
-        or IngestionContext(
-            canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
-        ),
+        context=context or IngestionContext(canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})),
         actor=actor,
     )
 
@@ -323,9 +316,7 @@ def test_report_provenance_must_exactly_match_the_trusted_attestation(
             _report(),
             REGISTRY,
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -357,11 +348,7 @@ def _registry_with_second_producer():
 
 
 def test_a_registered_producer_cannot_impersonate_the_attested_producer(tmp_path):
-    report = _report(
-        findings=[
-            ReportedFinding(producer_id="curation_lens", finding=_finding())
-        ]
-    )
+    report = _report(findings=[ReportedFinding(producer_id="curation_lens", finding=_finding())])
     provenance = IngestionProvenance(
         ingestion_ref=report.ingestion_ref,
         generated_at=report.generated_at,
@@ -374,9 +361,7 @@ def test_a_registered_producer_cannot_impersonate_the_attested_producer(tmp_path
             report,
             _registry_with_second_producer(),
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -419,9 +404,7 @@ def test_producer_attestation_set_equality_has_no_subset_fallback(
             report,
             _registry_with_second_producer(),
             provenance=provenance,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
@@ -475,9 +458,7 @@ def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
             claimed,
             REGISTRY,
             provenance=current_attestation,
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
         )
 
     genuine = _report(
@@ -494,9 +475,7 @@ def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
         genuine,
         REGISTRY,
         provenance=_provenance(genuine),
-        context=IngestionContext(
-            canonical_entity_ids=frozenset({"dataset:a"})
-        ),
+        context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a"})),
     )
 
     assert outcome.records_written == 1
@@ -749,9 +728,7 @@ def test_no_arrival_order_dependence(tmp_path):
     b.mkdir()
     _seed_entity(a, "dataset:a")
     _seed_entity(b, "dataset:a")
-    first = _report(
-        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
-    )
+    first = _report(findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())])
     second = _report(
         ingestion_ref="ing:2",
         findings=[
@@ -801,16 +778,12 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     early = _report(
         ingestion_ref="ing:early",
         generated_at="2026-07-27T10:00:00+00:00",
-        findings=[
-            ReportedFinding(producer_id="curation_lens", finding=_finding())
-        ],
+        findings=[ReportedFinding(producer_id="curation_lens", finding=_finding())],
     )
     late = _report(
         ingestion_ref="ing:late",
         generated_at="2026-07-27T14:00:00+00:00",
-        findings=[
-            ReportedFinding(producer_id="dataset_anomalies", finding=_finding())
-        ],
+        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())],
     )
 
     ingest_report(a, early, registry)
@@ -833,12 +806,8 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     assert second.transitions[0].actor == "ingest"
     assert first.transitions[0].reason == "detected by curation_lens"
     assert second.transitions[0].reason == "detected by dataset_anomalies"
-    assert [
-        (occurrence.observed_at, occurrence.idempotency_key)
-        for occurrence in first.occurrences
-    ] == sorted(
-        (occurrence.observed_at, occurrence.idempotency_key)
-        for occurrence in first.occurrences
+    assert [(occurrence.observed_at, occurrence.idempotency_key) for occurrence in first.occurrences] == sorted(
+        (occurrence.observed_at, occurrence.idempotency_key) for occurrence in first.occurrences
     )
 
 
@@ -866,9 +835,7 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
         id="refs.unicode-identity",
         severities={"warn"},
         subject_types={subject["type"]},
-        identifier_namespaces=(
-            {"reference"} if subject["type"] == "identifier" else set()
-        ),
+        identifier_namespaces=({"reference"} if subject["type"] == "identifier" else set()),
         qualifier_schema=Q,
         identity_qualifiers=("field",),
         title="t",
@@ -956,9 +923,7 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
     assert left.transitions[0] == early_genesis
     assert right.transitions[0] == late_genesis
     assert left.identity_qualifiers["field"] == "année"
-    assert {
-        occurrence.qualifiers["field"] for occurrence in left.occurrences
-    } == {"année"}
+    assert {occurrence.qualifiers["field"] for occurrence in left.occurrences} == {"année"}
 
 
 def test_direct_ingestion_validates_the_canonical_identity_value_before_writing(
@@ -1292,9 +1257,7 @@ def _assert_forged_report_is_refused_without_mutation(tmp_path, report) -> None:
                 generated_at="2026-07-27T12:00:00+00:00",
                 producer_ids=frozenset({"dataset_anomalies"}),
             ),
-            context=IngestionContext(
-                canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
-            ),
+            context=IngestionContext(canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})),
         )
     assert not (tmp_path / "doc").exists()
 
@@ -1445,9 +1408,7 @@ def test_ingest_wraps_a_cyclic_mutation_during_report_snapshot(tmp_path):
 def test_partial_failure_is_repaired_by_rerunning_the_same_report(tmp_path):
     # Simulate a crash after the first of two records is written, by writing the
     # first record alone and then re-ingesting the whole report.
-    first_only = _report(
-        findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())]
-    )
+    first_only = _report(findings=[ReportedFinding(producer_id="dataset_anomalies", finding=_finding())])
     ingest_report(tmp_path, first_only, REGISTRY)
     both = _report(
         findings=[
@@ -1676,15 +1637,11 @@ def test_a_non_identity_qualifier_difference_still_collides(tmp_path):
         findings=[
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    qualifiers={"field": "year", "note": "first look"}
-                ),
+                finding=_finding(qualifiers={"field": "year", "note": "first look"}),
             ),
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    qualifiers={"field": "year", "note": "second look"}
-                ),
+                finding=_finding(qualifiers={"field": "year", "note": "second look"}),
             ),
         ]
     )
@@ -1754,9 +1711,7 @@ def test_an_evidence_path_through_a_symlink_is_refused(tmp_path):
         findings=[
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    evidence=[LocationEvidence(path="doc/x.md", line=1)]
-                ),
+                finding=_finding(evidence=[LocationEvidence(path="doc/x.md", line=1)]),
             )
         ]
     )

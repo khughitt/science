@@ -1,5 +1,6 @@
 # science/tests/test_data_audit_cli.py
 """CLI surface for `science data audit`."""
+
 import json
 import subprocess
 from pathlib import Path
@@ -24,7 +25,8 @@ def _write(root: Path, rel: str, content: bytes = b"x") -> None:
 
 def _run(tmp_path: Path, *args: str):
     return CliRunner().invoke(
-        science_cli, ["data", "audit", "--project", str(tmp_path), *args],
+        science_cli,
+        ["data", "audit", "--project", str(tmp_path), *args],
         catch_exceptions=False,
     )
 
@@ -259,8 +261,10 @@ def test_honors_science_project_root_env(tmp_path: Path):
     _write(tmp_path, "data/processed/exp1/RESULTS.md", b"# r\n")
     # No --project flag; resolution comes from the env var.
     res = CliRunner().invoke(
-        science_cli, ["data", "audit", "--json"],
-        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False,
+        science_cli,
+        ["data", "audit", "--json"],
+        env={"SCIENCE_PROJECT_ROOT": str(tmp_path)},
+        catch_exceptions=False,
     )
     payload = json.loads(res.output)
     assert payload["violations"][0]["target"] == "results/exp1/RESULTS.md"
@@ -273,13 +277,7 @@ def test_audit_json_reports_external_data_root_note(monkeypatch, tmp_path: Path)
         tmp_path,
         "science.yaml",
         (
-            "name: Demo\n"
-            "id: demo\n"
-            "data:\n"
-            f"  root: {external}\n"
-            "data_policy:\n"
-            "  record_patterns:\n"
-            "    - science.yaml\n"
+            f"name: Demo\nid: demo\ndata:\n  root: {external}\ndata_policy:\n  record_patterns:\n    - science.yaml\n"
         ).encode(),
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
@@ -295,13 +293,7 @@ def test_audit_json_omits_notes_for_in_repo_nondefault_data_root(monkeypatch, tm
     _write(
         tmp_path,
         "science.yaml",
-        b"name: Demo\n"
-        b"id: demo\n"
-        b"data:\n"
-        b"  root: bulk\n"
-        b"data_policy:\n"
-        b"  record_patterns:\n"
-        b"    - science.yaml\n",
+        b"name: Demo\nid: demo\ndata:\n  root: bulk\ndata_policy:\n  record_patterns:\n    - science.yaml\n",
     )
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / "cfg"))
     res = _run(tmp_path, "--json")

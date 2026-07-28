@@ -88,10 +88,7 @@ SECTION, RULES = declare_validation_rules(
     severities=frozenset({"error", "warn", "info"}),
 )
 
-ANNOTATION_RULES = {
-    kind: RULES[f"annotations.{kind}"]
-    for kind in ISSUE_KINDS
-}
+ANNOTATION_RULES = {kind: RULES[f"annotations.{kind}"] for kind in ISSUE_KINDS}
 
 
 def _result(
@@ -147,8 +144,7 @@ def check_annotations(ctx: "ValidateContext") -> Iterable[CheckObservation]:
                 path=None,
                 line=None,
                 message=(
-                    f"{report.annotations} annotation(s) across {report.sidecars} "
-                    "sidecar(s); all selectors clean"
+                    f"{report.annotations} annotation(s) across {report.sidecars} sidecar(s); all selectors clean"
                 ),
             )
         )

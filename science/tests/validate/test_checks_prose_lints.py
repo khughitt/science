@@ -29,9 +29,7 @@ def _write_doc(root: Path, text: str) -> None:
 
 
 def _metrics(observations: list[object]) -> dict[str, object]:
-    metric = next(
-        item for item in observations if isinstance(item, ValidationMetricObservation)
-    )
+    metric = next(item for item in observations if isinstance(item, ValidationMetricObservation))
     return metric.metrics.model_dump(mode="json")
 
 
@@ -65,8 +63,7 @@ def test_different_normalized_matches_remain_distinct_findings(
 ) -> None:
     _write_doc(
         tmp_path,
-        "Smith 2020 argues that the result is robust.\n"
-        "Jones 2021 reports a replication.\n",
+        "Smith 2020 argues that the result is robust.\nJones 2021 reports a replication.\n",
     )
 
     observations = list(check_prose_lints(_ctx(tmp_path)))
@@ -191,9 +188,7 @@ def test_numeric_coverage_appears_only_in_metrics(tmp_path: Path) -> None:
         "error": 0,
     }
     assert all(
-        not isinstance(item, Result)
-        or "numeric-verification.coverage" not in item.rule_id
-        for item in observations
+        not isinstance(item, Result) or "numeric-verification.coverage" not in item.rule_id for item in observations
     )
 
 
@@ -206,11 +201,7 @@ def test_policy_info_rules_have_distinct_visibility() -> None:
 def test_prose_rules_and_metric_schema_are_registered() -> None:
     from science_tool.validate.checks import CANONICAL_CHECKS
 
-    entry = next(
-        item
-        for item in CANONICAL_CHECKS
-        if item.producer.producer_id == "validate.prose-lints"
-    )
+    entry = next(item for item in CANONICAL_CHECKS if item.producer.producer_id == "validate.prose-lints")
     assert entry.producer.producer_id == "validate.prose-lints"
     assert set(entry.producer.rules) == {RULE_HIT, RULE_ADVISORY, RULE_CONFIG}
     assert entry.producer.metrics_schema is not None

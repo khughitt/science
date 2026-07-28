@@ -549,9 +549,7 @@ def evaluate_identity_provenance(datasets: Iterable[dict[str, Any]]) -> Iterator
                     key=[loc, dataset_id],
                 )
 
-        for loc, dataset_id in sorted(
-            set(_identity_proxy_source_datasets(identity_context))
-        ):
+        for loc, dataset_id in sorted(set(_identity_proxy_source_datasets(identity_context))):
             if dataset_id not in inputs:
                 yield _result(
                     Severity.ERROR,

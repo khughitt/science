@@ -52,7 +52,6 @@ def produce_schema_invalid(
             evidence=[TextEvidence(label="validation details", text=row.details)],
         )
         for row in skipped_entities
-        if row.reason
-        in {"entity_schema_validation_failed", "core_schema_validation_failed"}
+        if row.reason in {"entity_schema_validation_failed", "core_schema_validation_failed"}
     ]
     return FindingProducerResult(instrument=InstrumentResult.from_rows(findings))

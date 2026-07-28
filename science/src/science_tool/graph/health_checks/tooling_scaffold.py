@@ -126,11 +126,7 @@ def run_check(context: HealthContext):
     observed = collect_tooling_scaffold_findings(context.project_root)
     findings = [
         RULE.build(
-            subject=(
-                ProjectSubject()
-                if row["code"] == "pyproject_missing"
-                else PathSubject(path="pyproject.toml")
-            ),
+            subject=(ProjectSubject() if row["code"] == "pyproject_missing" else PathSubject(path="pyproject.toml")),
             severity="error",
             qualifiers={"code": row["code"]},
             message=row["detail"],

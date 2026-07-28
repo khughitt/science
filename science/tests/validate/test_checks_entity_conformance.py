@@ -155,8 +155,7 @@ def test_stray_files_flag_unpaired_annotation_sidecars(tmp_path: Path) -> None:
     results = list(check_entity_stray_files(ctx))
 
     assert any(
-        r.severity == Severity.ERROR.value and str(r.path) == "entities/questions/missing.anno.trig"
-        for r in results
+        r.severity == Severity.ERROR.value and str(r.path) == "entities/questions/missing.anno.trig" for r in results
     )
 
 

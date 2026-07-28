@@ -215,11 +215,7 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[CheckObservation]:
     if configured_checks is not None and set(configured_checks) != set(CHECKS):
         results.append(_configured_checks_result(configured_checks, include_all_checks=ctx.include_all_checks))
     warn_hits = sorted(
-        (
-            hit
-            for hit in lint_result.get("hits", [])
-            if hit.severity == "warn"
-        ),
+        (hit for hit in lint_result.get("hits", []) if hit.severity == "warn"),
         key=lambda item: (
             _relative_path(ctx, item.file).as_posix(),
             item.check,
@@ -318,10 +314,7 @@ def _hit_result(
     message = (
         first.message
         if len(hits) == 1
-        else (
-            f"{len(hits)} semantically identical {first.check} prose lint "
-            f"issues for match {normalized_match!r}"
-        )
+        else (f"{len(hits)} semantically identical {first.check} prose lint issues for match {normalized_match!r}")
     )
     return validation_observation(
         severity=Severity.WARN,
@@ -348,10 +341,7 @@ def _hit_evidence(
 ) -> tuple[Evidence, ...]:
     path = _relative_path(ctx, hits[0].file).as_posix()
     if len(hits) <= MAX_EVIDENCE_ENTRIES:
-        return tuple(
-            LocationEvidence(path=path, line=hit.line)
-            for hit in hits
-        )
+        return tuple(LocationEvidence(path=path, line=hit.line) for hit in hits)
 
     first_line = min(hit.line for hit in hits)
     last_line = max(hit.line for hit in hits)

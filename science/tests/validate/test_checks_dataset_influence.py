@@ -285,9 +285,7 @@ def test_check_dataset_influence_dataset_usage_requires_raw_dataset_ref(
     assert _rules(results) == [(Severity.ERROR, "dataset-influence.dataset-usage-malformed")]
 
 
-def test_check_dataset_influence_paper_datasets_field_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_dataset_influence_paper_datasets_field_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.validate.checks.dataset_influence import check_dataset_influence
 
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "missing-commons"))
@@ -715,4 +713,3 @@ def test_non_dependence_role_with_omitted_overlap_does_not_warn(role: str) -> No
 
     rule_pairs = _rules(results)
     assert (Severity.WARN, "dataset-influence.overlap-unknown-candidate") not in rule_pairs
-

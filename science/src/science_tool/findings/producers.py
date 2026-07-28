@@ -75,20 +75,13 @@ class FindingProducer(BaseModel):
         if "\0" in value or "\\" in value:
             raise ValueError("source_module must be a repo-relative POSIX path")
         path = PurePosixPath(value)
-        if (
-            path.is_absolute()
-            or any(part in {".", ".."} for part in value.split("/"))
-            or path.suffix != ".py"
-        ):
+        if path.is_absolute() or any(part in {".", ".."} for part in value.split("/")) or path.suffix != ".py":
             raise ValueError("source_module must be a repo-relative POSIX .py path")
         return value
 
     @model_validator(mode="after")
     def _validate_metrics_schema(self) -> FindingProducer:
-        if (
-            self.metrics_schema is not None
-            and self.metrics_schema.model_config.get("extra") != "forbid"
-        ):
+        if self.metrics_schema is not None and self.metrics_schema.model_config.get("extra") != "forbid":
             raise ValueError(
                 f"{self.producer_id!r} metrics schema "
                 f"{self.metrics_schema.__name__} must set model_config extra='forbid'"
@@ -96,11 +89,7 @@ class FindingProducer(BaseModel):
         return self
 
     def expanded_rules(self, active_kinds: frozenset[str]) -> tuple[FindingRule, ...]:
-        derived = (
-            self.kind_rule_factory(active_kinds)
-            if self.kind_rule_factory is not None
-            else ()
-        )
+        derived = self.kind_rule_factory(active_kinds) if self.kind_rule_factory is not None else ()
         return (*self.rules, *derived)
 
 
@@ -168,9 +157,7 @@ class FindingRegistry:
             raise RegistryError(f"unregistered producer {producer_id!r}")
         if producer.metrics_schema is None:
             if metrics:
-                raise RegistryError(
-                    f"{producer_id!r} declared no metrics schema but emitted metrics"
-                )
+                raise RegistryError(f"{producer_id!r} declared no metrics schema but emitted metrics")
             return
         try:
             producer.metrics_schema.model_validate(dict(metrics), strict=True)
@@ -178,9 +165,7 @@ class FindingRegistry:
             raise RegistryError(f"{producer_id!r} metrics invalid: {exc}") from exc
 
 
-def build_registry(
-    producers: list[FindingProducer], *, active_kinds: frozenset[str]
-) -> FindingRegistry:
+def build_registry(producers: list[FindingProducer], *, active_kinds: frozenset[str]) -> FindingRegistry:
     """Derive the frozen registry, failing early on every §6 condition."""
     rules_by_id: dict[str, FindingRule] = {}
     sections_by_id: dict[str, FindingSection] = {}
@@ -205,8 +190,7 @@ def build_registry(
             claimed = section_order_claims.get(section.section_order)
             if claimed is not None and claimed != section.id:
                 raise RegistryError(
-                    f"section_order {section.section_order} claimed by both "
-                    f"{claimed!r} and {section.id!r}"
+                    f"section_order {section.section_order} claimed by both {claimed!r} and {section.id!r}"
                 )
             section_order_claims[section.section_order] = section.id
             sections_by_id[section.id] = section
@@ -249,8 +233,7 @@ def validate_producer_result(
 ) -> FindingProducerResult:
     if type(value) is not FindingProducerResult:
         raise TypeError(
-            f"registered producer {producer_id!r} must return FindingProducerResult, "
-            f"got {type(value).__name__}"
+            f"registered producer {producer_id!r} must return FindingProducerResult, got {type(value).__name__}"
         )
     result = value
     producer = registry.producers_by_id.get(producer_id)
@@ -274,17 +257,13 @@ def validate_producer_result(
             evidence=list(finding.evidence),
         )
         if rebuilt != finding:
-            raise RegistryError(
-                f"{producer_id!r} emitted a noncanonical {finding.rule_id!r} finding"
-            )
+            raise RegistryError(f"{producer_id!r} emitted a noncanonical {finding.rule_id!r} finding")
         finding_id = finding_fingerprint(
             rule_id=finding.rule_id,
             subject=finding.subject,
             identity_qualifiers=rule.identity_subset(finding.qualifiers),
         )
         if finding_id in seen:
-            raise RegistryError(
-                f"{producer_id!r} emitted duplicate finding identity {finding_id}"
-            )
+            raise RegistryError(f"{producer_id!r} emitted duplicate finding identity {finding_id}")
         seen.add(finding_id)
     return result

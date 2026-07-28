@@ -568,17 +568,11 @@ def run_check(context: HealthContext):
             severity="warn" if row["severity"] == "warning" else "error",
             qualifiers={
                 "field": str(row.get("field", _FIELDS[str(row["code"])])),
-                "invariant": str(
-                    row.get("invariant", _INVARIANTS.get(str(row["code"]), ""))
-                ),
+                "invariant": str(row.get("invariant", _INVARIANTS.get(str(row["code"]), ""))),
                 "counterpart": str(row.get("counterpart", "")),
             },
             message=str(row["message"]),
-            evidence=(
-                [LocationEvidence(path=str(row["file_path"]))]
-                if row["file_path"]
-                else []
-            ),
+            evidence=([LocationEvidence(path=str(row["file_path"]))] if row["file_path"] else []),
         )
         for row in observed.rows
     ]

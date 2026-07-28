@@ -109,11 +109,7 @@ def check_origin_refs(ctx: ValidateContext) -> Iterator[CheckObservation]:
             ref = record.get("ref")
             if not isinstance(ref, str):
                 continue
-            category = (
-                "unresolved-citation"
-                if ref.startswith("cite:")
-                else "unresolved-paper"
-            )
+            category = "unresolved-citation" if ref.startswith("cite:") else "unresolved-paper"
             identity = (category, ref)
             if identity in reported_refs:
                 continue
@@ -126,11 +122,7 @@ def check_origin_refs(ctx: ValidateContext) -> Iterator[CheckObservation]:
                     "bibliography key not found in papers/references.bib",
                     key=[category, ref],
                 )
-            elif (
-                category == "unresolved-paper"
-                and ref.startswith("paper:")
-                and _paper_unresolved(ctx, ref, known_ids)
-            ):
+            elif category == "unresolved-paper" and ref.startswith("paper:") and _paper_unresolved(ctx, ref, known_ids):
                 yield _result(
                     Severity.WARN,
                     path,

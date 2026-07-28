@@ -42,9 +42,7 @@ def serialize_json(
     )
 
 
-def summarize_preexisting_warnings(
-    warnings: Sequence[str], *, show_preexisting: bool
-) -> tuple[list[str], str | None]:
+def summarize_preexisting_warnings(warnings: Sequence[str], *, show_preexisting: bool) -> tuple[list[str], str | None]:
     """Split WARNINGS into what a write command should print, plus an optional note.
 
     `_validate_prospective_write(s)` warnings mix two things a write command must not

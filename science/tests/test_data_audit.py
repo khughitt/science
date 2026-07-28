@@ -1,5 +1,6 @@
 # science/tests/test_data_audit.py
 """Detection pass for `science data audit`."""
+
 import json
 import subprocess
 from pathlib import Path
@@ -39,18 +40,13 @@ def test_location_classification():
 
 
 def test_propose_target_uses_first_segment(tmp_path: Path):
-    target = propose_results_target(
-        tmp_path, Path("data/processed/exp1/RESULTS.md"), DEFAULT_DATA_DIRS
-    )
+    target = propose_results_target(tmp_path, Path("data/processed/exp1/RESULTS.md"), DEFAULT_DATA_DIRS)
     assert target == "results/exp1/RESULTS.md"
 
 
 def test_propose_target_prefers_datapackage_workflow(tmp_path: Path):
-    _write(tmp_path, "data/processed/exp1/datapackage.yaml",
-           b"workflow: workflow:myflow\nname: x\n")
-    target = propose_results_target(
-        tmp_path, Path("data/processed/exp1/RESULTS.md"), DEFAULT_DATA_DIRS
-    )
+    _write(tmp_path, "data/processed/exp1/datapackage.yaml", b"workflow: workflow:myflow\nname: x\n")
+    target = propose_results_target(tmp_path, Path("data/processed/exp1/RESULTS.md"), DEFAULT_DATA_DIRS)
     assert target == "results/myflow/RESULTS.md"
 
 
@@ -68,8 +64,7 @@ def test_leaked_payload_detected_only_when_tracked(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "entities/x/big.feather", b"\x00" * 32)
     # Untracked → not yet a violation.
-    assert not [v for v in audit_project(tmp_path)
-                if v.quadrant is Quadrant.LEAKED_PAYLOAD]
+    assert not [v for v in audit_project(tmp_path) if v.quadrant is Quadrant.LEAKED_PAYLOAD]
     subprocess.run(["git", "add", "-f", "entities/x/big.feather"], cwd=tmp_path, check=True)
     leaked = [v for v in audit_project(tmp_path) if v.quadrant is Quadrant.LEAKED_PAYLOAD]
     assert len(leaked) == 1
@@ -85,7 +80,7 @@ def test_unknown_small_is_flag_quadrant(tmp_path: Path):
 
 def test_compliant_files_yield_no_violation(tmp_path: Path):
     _init_repo(tmp_path)
-    _write(tmp_path, "results/exp1/RESULTS.md", b"# ok\n")          # record, tracked-side
+    _write(tmp_path, "results/exp1/RESULTS.md", b"# ok\n")  # record, tracked-side
     _write(tmp_path, "data/processed/exp1/m.feather", b"\x00" * 16)  # payload, ignored-side
     assert audit_project(tmp_path) == []
 
@@ -105,8 +100,9 @@ def test_render_json_shape(tmp_path: Path):
 def test_render_json_datapackage_planned_action(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "data/processed/exp1/matrix.feather", b"\x00" * 8)
-    _write(tmp_path, "data/processed/exp1/datapackage.yaml",
-           b"name: x\nresources:\n- {name: m, path: matrix.feather}\n")
+    _write(
+        tmp_path, "data/processed/exp1/datapackage.yaml", b"name: x\nresources:\n- {name: m, path: matrix.feather}\n"
+    )
     payload = json.loads(render_json(audit_project(tmp_path)))
     dp_row = [r for r in payload["violations"] if r["path"].endswith("datapackage.yaml")][0]
     assert dp_row["action"] == "move+rewrite-resources"
@@ -115,17 +111,13 @@ def test_render_json_datapackage_planned_action(tmp_path: Path):
 
 def test_record_directly_under_data_dir_has_no_target(tmp_path: Path):
     # No experiment subfolder under data/processed → ambiguous → no proposed target.
-    target = propose_results_target(
-        tmp_path, Path("data/processed/RESULTS.md"), DEFAULT_DATA_DIRS
-    )
+    target = propose_results_target(tmp_path, Path("data/processed/RESULTS.md"), DEFAULT_DATA_DIRS)
     assert target is None
 
 
 def test_single_segment_with_workflow_sibling_resolves(tmp_path: Path):
     _write(tmp_path, "data/processed/datapackage.yaml", b"workflow: workflow:flowX\n")
-    target = propose_results_target(
-        tmp_path, Path("data/processed/datapackage.yaml"), DEFAULT_DATA_DIRS
-    )
+    target = propose_results_target(tmp_path, Path("data/processed/datapackage.yaml"), DEFAULT_DATA_DIRS)
     assert target == "results/flowX/datapackage.yaml"
 
 
@@ -133,6 +125,7 @@ def test_stranded_record_directly_under_data_dir_flag_action(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "data/processed/README.md", b"# top\n")
     import json as _json
+
     payload = _json.loads(render_json(audit_project(tmp_path)))
     row = [r for r in payload["violations"] if r["path"] == "data/processed/README.md"][0]
     assert row["quadrant"] == "stranded_record"
@@ -144,13 +137,10 @@ def test_tracked_payload_inside_data_flagged(tmp_path: Path):
     _init_repo(tmp_path)
     _write(tmp_path, "data/processed/exp1/big.feather", b"\x00" * 32)  # PAYLOAD by ext
     # Untracked payload under data/ → no violation (the normal, healthy case).
-    assert not [v for v in audit_project(tmp_path)
-                if v.quadrant is Quadrant.TRACKED_PAYLOAD]
+    assert not [v for v in audit_project(tmp_path) if v.quadrant is Quadrant.TRACKED_PAYLOAD]
     # Track it → TRACKED_PAYLOAD violation, report-only (no move target).
-    subprocess.run(["git", "add", "-f", "data/processed/exp1/big.feather"],
-                   cwd=tmp_path, check=True)
-    tracked = [v for v in audit_project(tmp_path)
-               if v.quadrant is Quadrant.TRACKED_PAYLOAD]
+    subprocess.run(["git", "add", "-f", "data/processed/exp1/big.feather"], cwd=tmp_path, check=True)
+    tracked = [v for v in audit_project(tmp_path) if v.quadrant is Quadrant.TRACKED_PAYLOAD]
     assert len(tracked) == 1
     assert tracked[0].path == "data/processed/exp1/big.feather"
     assert tracked[0].proposed_target is None

@@ -161,6 +161,7 @@ def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
     (d / "0001-x.md").write_text('---\nkind: question\nid: "hypothesis:0001-x"\n---\n', encoding="utf-8")
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
     from science_tool.validate.context import ValidateContext
+
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     assert any(r.severity == Severity.WARN.value for r in check_id_prefixes(ctx))
 
@@ -178,9 +179,7 @@ def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
         tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "tasks")
-        id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "id prefixes"
-        )
+        id_prefixes_index = next(index for index, entry in enumerate(ordered) if entry[0] == "id prefixes")
 
         assert id_prefixes_index == tasks_index + 1
         assert ordered[id_prefixes_index] == (

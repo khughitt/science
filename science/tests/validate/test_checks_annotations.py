@@ -67,9 +67,7 @@ def test_no_sidecars_emits_exact_info_message(tmp_path: Path) -> None:
 
     results = list(check_annotations(_ctx(tmp_path)))
 
-    assert _summary(results) == [
-        (Severity.INFO, "no annotation sidecars (*.anno.trig) in this project", None)
-    ]
+    assert _summary(results) == [(Severity.INFO, "no annotation sidecars (*.anno.trig) in this project", None)]
 
 
 def test_broken_and_parse_errors_emit_warn_messages(tmp_path: Path, monkeypatch) -> None:
@@ -174,9 +172,7 @@ def test_clean_sidecars_emit_exact_info_message(tmp_path: Path, monkeypatch) -> 
 
     results = list(annotations_check.check_annotations(_ctx(tmp_path)))
 
-    assert _summary(results) == [
-        (Severity.INFO, "7 annotation(s) across 2 sidecar(s); all selectors clean", None)
-    ]
+    assert _summary(results) == [(Severity.INFO, "7 annotation(s) across 2 sidecar(s); all selectors clean", None)]
 
 
 def test_registration_includes_annotations_after_prose_lints() -> None:
@@ -191,12 +187,8 @@ def test_registration_includes_annotations_after_prose_lints() -> None:
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        prose_lints_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "prose lints"
-        )
-        annotations_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "annotations"
-        )
+        prose_lints_index = next(index for index, entry in enumerate(ordered) if entry[0] == "prose lints")
+        annotations_index = next(index for index, entry in enumerate(ordered) if entry[0] == "annotations")
 
         assert annotations_index == prose_lints_index + 1
         assert ordered[annotations_index] == (

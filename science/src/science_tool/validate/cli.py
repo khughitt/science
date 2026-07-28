@@ -130,11 +130,7 @@ def validate_cmd(
     # consume the cap, and each format's omission count must reflect what that format shows.
     # (JSON drops all INFO; text keeps only "visible info" per _display_filter.)
     json_visible = [item for item in result.results if item.severity != "info"]
-    text_visible = [
-        item
-        for item in result.results
-        if _display_filter(item, result, verbose=verbose)
-    ]
+    text_visible = [item for item in result.results if _display_filter(item, result, verbose=verbose)]
     if output_path is not None:
         json_results, json_omitted = json_visible, 0
         text_results, text_omitted = text_visible, 0
@@ -289,9 +285,7 @@ def _is_visible_info(finding: AuditFinding, run_result: RunResult | None = None)
         return False
     if run_result is None:
         raise ValueError("RunResult registry is required to resolve INFO visibility")
-    return (
-        run_result.registry.rule(finding.rule_id).default_visibility == "visible"
-    )
+    return run_result.registry.rule(finding.rule_id).default_visibility == "visible"
 
 
 def _section_names(result: RunResult) -> list[str]:
@@ -343,9 +337,7 @@ def _format_checking_info_result(result: AuditFinding) -> Text:
 
 def _is_checking_info(result: AuditFinding) -> bool:
     return (
-        result.severity == "info"
-        and isinstance(result.subject, PathSubject)
-        and result.message.startswith("Checking ")
+        result.severity == "info" and isinstance(result.subject, PathSubject) and result.message.startswith("Checking ")
     )
 
 
@@ -353,11 +345,7 @@ def _location(result: AuditFinding) -> str | None:
     if not isinstance(result.subject, PathSubject):
         return None
     line = next(
-        (
-            evidence.line
-            for evidence in result.evidence
-            if isinstance(evidence, LocationEvidence)
-        ),
+        (evidence.line for evidence in result.evidence if isinstance(evidence, LocationEvidence)),
         None,
     )
     if line is None:
@@ -371,8 +359,7 @@ def _format_summary(result: RunResult) -> Text:
         style = ERROR_STYLE
     elif result.gated:
         status = (
-            f"FAILED: {len(result.gated)} finding(s) gated at tier "
-            f"'{result.gate_tier}', {result.warnings} warning(s)"
+            f"FAILED: {len(result.gated)} finding(s) gated at tier '{result.gate_tier}', {result.warnings} warning(s)"
         )
         style = ERROR_STYLE
     elif result.warnings:
@@ -398,11 +385,7 @@ def _severity_style(severity: str) -> str:
 def _legacy_result_projection(finding: AuditFinding) -> dict[str, object]:
     path = finding.subject.path if isinstance(finding.subject, PathSubject) else None
     line = next(
-        (
-            evidence.line
-            for evidence in finding.evidence
-            if isinstance(evidence, LocationEvidence)
-        ),
+        (evidence.line for evidence in finding.evidence if isinstance(evidence, LocationEvidence)),
         None,
     )
     task = finding.qualifiers.get("task")

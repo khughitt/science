@@ -17,8 +17,7 @@ def test_projection_caps_findings_but_never_actor_channels(tmp_path: Path) -> No
     )
     item = report.findings[0]
     expanded = tuple(
-        ReportedFinding(producer_id=item.producer_id, finding=item.finding)
-        for _ in range(SECTION_ROW_CAP + 5)
+        ReportedFinding(producer_id=item.producer_id, finding=item.finding) for _ in range(SECTION_ROW_CAP + 5)
     )
     expanded_report = report.model_copy(update={"findings": expanded})
     projected = project_health_report(

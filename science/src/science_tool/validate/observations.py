@@ -41,9 +41,7 @@ class ValidationObservationBatch:
     @classmethod
     def from_observations(
         cls,
-        observations: Iterable[
-            AuditFinding | ValidationMetricObservation | ValidationNotice
-        ],
+        observations: Iterable[AuditFinding | ValidationMetricObservation | ValidationNotice],
     ) -> "ValidationObservationBatch":
         findings: list[AuditFinding] = []
         metrics: list[ValidationMetricObservation] = []
@@ -56,10 +54,7 @@ class ValidationObservationBatch:
             elif isinstance(observation, ValidationNotice):
                 notices.append(observation)
             else:
-                raise TypeError(
-                    f"unsupported validation observation "
-                    f"{type(observation).__name__}"
-                )
+                raise TypeError(f"unsupported validation observation {type(observation).__name__}")
         if len(metrics) > 1:
             raise ValueError("multiple metrics observations")
         return cls(

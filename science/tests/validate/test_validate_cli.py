@@ -23,9 +23,7 @@ def _run_result(root: Path, *, severity: str = "warn") -> RunResult:
     return RunResult(
         results=[finding],
         producer_results={},
-        notices=(
-            ValidationNotice(path=Path("science.yaml"), line=2, message="checked manifest"),
-        ),
+        notices=(ValidationNotice(path=Path("science.yaml"), line=2, message="checked manifest"),),
         registry=build_project_registry(root),
         errors=int(severity == Severity.ERROR.value),
         warnings=int(severity == Severity.WARN.value),

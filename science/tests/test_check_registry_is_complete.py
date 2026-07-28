@@ -46,11 +46,7 @@ def test_EVERY_check_module_on_disk_is_REGISTERED() -> None:
     # THE GUARD. Immune to import order by construction: disk vs. tuple, no registry state read.
     from science_tool.validate import checks
 
-    on_disk = {
-        path.stem
-        for path in Path(checks.__file__).parent.glob("*.py")
-        if path.stem != "__init__"
-    }
+    on_disk = {path.stem for path in Path(checks.__file__).parent.glob("*.py") if path.stem != "__init__"}
     assert on_disk == set(checks.CANONICAL_CHECK_MODULES), (
         f"unregistered: {sorted(on_disk - set(checks.CANONICAL_CHECK_MODULES))}; "
         f"listed but absent: {sorted(set(checks.CANONICAL_CHECK_MODULES) - on_disk)}"
@@ -70,9 +66,7 @@ def test_a_registered_check_REACHES_a_real_project(tmp_path: Path) -> None:
     """
     from science_tool.graph.materialize import materialize_graph
 
-    (tmp_path / "science.yaml").write_text(
-        yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8"
-    )
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8")
     hypotheses = tmp_path / "entities" / "hypotheses"
     hypotheses.mkdir(parents=True)
     (hypotheses / "0001-x.md").write_text(
@@ -83,12 +77,12 @@ def test_a_registered_check_REACHES_a_real_project(tmp_path: Path) -> None:
         "created: 2026-07-13\n"
         "updated: 2026-07-13\n"
         "status: complete\n"
-        "verdict: supported\n"          # authored, and nothing behind it
+        "verdict: supported\n"  # authored, and nothing behind it
         "---\n\n# x\n",
         encoding="utf-8",
     )
 
-    assert materialize_graph(tmp_path).is_file()      # prove the check has something to read
+    assert materialize_graph(tmp_path).is_file()  # prove the check has something to read
 
     rules = {result.rule_id for result in runner.run(tmp_path, strict=False, verbose=False).results}
     assert "verdict.missing-basis" in rules

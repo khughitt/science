@@ -128,10 +128,7 @@ def collect_data_audit(
 
 
 def _violation_message(violation: Violation) -> str:
-    return (
-        f"{violation.file_class.value} file is in the "
-        f"{violation.quadrant.value.replace('_', ' ')} quadrant."
-    )
+    return f"{violation.file_class.value} file is in the {violation.quadrant.value.replace('_', ' ')} quadrant."
 
 
 def data_audit_result(snapshot: DataAuditSnapshot) -> FindingProducerResult:
@@ -173,7 +170,8 @@ def git_tracked_set(project_root: Path) -> set[str]:
     try:
         out = subprocess.run(
             ["git", "-C", str(project_root), "ls-files", "-z"],
-            capture_output=True, check=True,
+            capture_output=True,
+            check=True,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return set()
@@ -263,9 +261,7 @@ def _workflow_slug_from_siblings(project_root: Path, rel_path: Path) -> str | No
     return None
 
 
-def propose_results_target(
-    project_root: Path, rel_path: Path, data_dirs: tuple[Path, ...]
-) -> str | None:
+def propose_results_target(project_root: Path, rel_path: Path, data_dirs: tuple[Path, ...]) -> str | None:
     """results/<nearest-exp-or-workflow>/<substructure-beneath-segment>."""
     sub = _data_subpath(rel_path, data_dirs)
     if sub is None or not sub.parts:
@@ -292,10 +288,7 @@ def _iter_project_files(project_root: Path, data_dirs: tuple[Path, ...]):
     — its records must still be *reported* (the fixer FLAGs rather than moves them)."""
     seen: set[str] = set()
     for dirpath, dirnames, filenames in os.walk(project_root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d != ".git" and not _escapes_root(project_root, Path(dirpath) / d)
-        ]
+        dirnames[:] = [d for d in dirnames if d != ".git" and not _escapes_root(project_root, Path(dirpath) / d)]
         for fn in filenames:
             abs_path = Path(dirpath) / fn
             if abs_path.is_symlink():
@@ -351,12 +344,7 @@ def audit_project(
         # descendants are not ignored, and the walk explicitly promises to
         # report their records.
         in_hydrated_data_dir = any(rel == d or d in rel.parents for d in hydrated_data_dirs)
-        if (
-            visible is not None
-            and posix not in visible
-            and not in_declared_root
-            and not in_hydrated_data_dir
-        ):
+        if visible is not None and posix not in visible and not in_declared_root and not in_hydrated_data_dir:
             continue
         try:
             size = abs_path.stat().st_size
@@ -375,12 +363,17 @@ def audit_project(
 def _violation_for(project_root, rel, cls, loc, is_tracked, data_dirs) -> Violation | None:
     if cls is FileClass.RECORD and loc == "DATA":
         return Violation(
-            Quadrant.STRANDED_RECORD, rel.as_posix(), cls,
+            Quadrant.STRANDED_RECORD,
+            rel.as_posix(),
+            cls,
             propose_results_target(project_root, rel, data_dirs),
         )
     if cls is FileClass.PAYLOAD and is_tracked and loc != "DATA":
         return Violation(
-            Quadrant.LEAKED_PAYLOAD, rel.as_posix(), cls, "data/processed/" + rel.name,
+            Quadrant.LEAKED_PAYLOAD,
+            rel.as_posix(),
+            cls,
+            "data/processed/" + rel.name,
         )
     if cls is FileClass.PAYLOAD and is_tracked and loc == "DATA":
         # Tracked payload sitting in ignored data/ territory. Remediation is
@@ -442,9 +435,7 @@ def _tracked_paths_under_data_root(project_root: Path, data_root: Path) -> list[
         return []
     data_rel = data_root.relative_to(project_root)
     return sorted(
-        rel
-        for rel in git_tracked_set(project_root)
-        if Path(rel) == data_rel or data_rel in Path(rel).parents
+        rel for rel in git_tracked_set(project_root) if Path(rel) == data_rel or data_rel in Path(rel).parents
     )
 
 
@@ -488,8 +479,5 @@ def render_json(
         rows.append(row)
     payload = {"version": 1, "violations": rows}
     if notes:
-        payload["notes"] = [
-            {"severity": note.severity, "code": note.code, "message": note.message}
-            for note in notes
-        ]
+        payload["notes"] = [{"severity": note.severity, "code": note.code, "message": note.message} for note in notes]
     return json.dumps(payload, indent=2) + "\n"

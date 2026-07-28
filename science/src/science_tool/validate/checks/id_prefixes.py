@@ -190,8 +190,7 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[CheckObservation]:
                     (
                         display_path,
                         item_type,
-                        f"{display_path}: kind={item_type} but id={item_id} "
-                        f"(expected prefix '{expected}')",
+                        f"{display_path}: kind={item_type} but id={item_id} (expected prefix '{expected}')",
                     )
                 )
 

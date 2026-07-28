@@ -7,6 +7,8 @@ from science_tool.validate.gates import (
     gated_findings,
     resolve_gate_tier,
 )
+
+
 def _r(rule: str) -> AuditFinding:
     return AuditFinding(
         rule_id=rule,
@@ -30,9 +32,7 @@ def test_report_tier_gates_nothing() -> None:
 
 
 def test_ghost_files_tier_gates_ghost_and_malformed() -> None:
-    assert cumulative_rules("ghost-files") == frozenset(
-        {"code.ghost", "code.malformed-block"}
-    )
+    assert cumulative_rules("ghost-files") == frozenset({"code.ghost", "code.malformed-block"})
 
 
 def test_decision_bearing_orphans_tier_gates_orphan_and_lower() -> None:

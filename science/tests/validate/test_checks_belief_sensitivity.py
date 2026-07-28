@@ -53,8 +53,7 @@ def _write_support_plus_diagnostic_graph(root: Path) -> None:
     prop = URIRef("https://example.org/prop/p2")
     k.add((prop, RDF.type, SCI_NS.Proposition))
     _line(p, k, URIRef("https://example.org/el/sup"), prop, group="g1")
-    _line(p, k, URIRef("https://example.org/el/crit"), prop, group="g2",
-          stance="disputes", role="model_criticism")
+    _line(p, k, URIRef("https://example.org/el/crit"), prop, group="g2", stance="disputes", role="model_criticism")
     (root / "knowledge").mkdir(parents=True, exist_ok=True)
     ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
 
@@ -66,14 +65,14 @@ def _write_one_support_plus_excluded_circular_graph(root: Path) -> None:
     prop = URIRef("https://example.org/prop/p3")
     k.add((prop, RDF.type, SCI_NS.Proposition))
     _line(p, k, URIRef("https://example.org/el/sup"), prop, group="g1")
-    _line(p, k, URIRef("https://example.org/el/circular"), prop, group="g2",
-          stance="disputes", independence="circular")
+    _line(p, k, URIRef("https://example.org/el/circular"), prop, group="g2", stance="disputes", independence="circular")
     (root / "knowledge").mkdir(parents=True, exist_ok=True)
     ds.serialize(destination=str(root / "knowledge" / "graph.trig"), format="trig")
 
 
 def test_fragile_single_line_flags_when_drop_flips(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
+
     _write_two_support_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
     assert any(r.severity == Severity.WARN.value for r in results)
@@ -83,6 +82,7 @@ def test_fragile_single_line_flags_diagnostic_only_contestation(tmp_path: Path):
     # h012 shape: one support + one model_criticism dispute. Dropping the diagnostic flips
     # contested True->False; dropping the support flips magnitude. Either way it is fragile.
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
+
     _write_support_plus_diagnostic_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
     assert any(r.severity == Severity.WARN.value for r in results)
@@ -92,6 +92,7 @@ def test_fragile_single_line_skips_single_kept_unit_plus_excluded_circular(tmp_p
     # Raw units has length 2, but only one line is effectively kept. Leave-one-out operates on
     # kept units, so this should not warn.
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
+
     _write_one_support_plus_excluded_circular_graph(tmp_path)
     assert list(check_belief_fragile_single_line(_ctx(tmp_path))) == []
 
@@ -107,7 +108,7 @@ def test_nonreproducible_errors_when_stored_belief_mismatches(tmp_path: Path):
     # Snapshot the current (correct) belief, then corrupt the stored belief_state.
     rows = make_snapshots(tmp_path / "knowledge" / "graph.trig", as_of="2026-05-24")
     snap = tmp_path / "knowledge" / "belief-snapshots.jsonl"
-    corrupted = rows[0] | {"belief_state": "speculative"}      # same input_hashes, wrong output
+    corrupted = rows[0] | {"belief_state": "speculative"}  # same input_hashes, wrong output
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
 
     results = list(check_belief_nonreproducible(ctx))

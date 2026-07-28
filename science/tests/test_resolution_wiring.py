@@ -33,9 +33,7 @@ from science_tool.validate.context import ValidateContext
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Path:
-    (tmp_path / "science.yaml").write_text(
-        yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8"
-    )
+    (tmp_path / "science.yaml").write_text(yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8")
     (tmp_path / "entities" / "hypotheses").mkdir(parents=True)
     return tmp_path
 
@@ -60,9 +58,7 @@ def write_hypothesis(
         frontmatter["aliases"] = aliases
     frontmatter.update(extra or {})
     path = root / "entities" / "hypotheses" / f"{slug}.md"
-    path.write_text(
-        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8"
-    )
+    path.write_text(f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8")
     return path
 
 
@@ -101,9 +97,7 @@ def _validate_hypothesis(frontmatter: dict[str, object]) -> None:
 
 
 def test_validate_reports_a_dangling_successor(tmp_project: Path) -> None:
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"})
     findings = [r for r in run_validate(tmp_project) if r.rule_id == RULE_DANGLING_LINEAGE]
     assert len(findings) == 1
     # ERROR now that `hypothesis` is certified (D5): the emitter routes through
@@ -129,9 +123,7 @@ def test_a_LIVE_ALIAS_resolves_through_the_REAL_loader(tmp_project: Path) -> Non
     # `aliases:` frontmatter -> `build_alias_map`. Raw membership on a set of ids would call this
     # dangling and REFUSE A CORRECT CORPUS.
     write_hypothesis(tmp_project, "0002-y", aliases=["hypothesis:0002"])
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0002"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0002"})
     assert lineage_violations(tmp_project) == []
 
 
@@ -161,18 +153,14 @@ def test_an_ARCHIVED_successor_RESOLVES_and_is_still_a_violation(tmp_project: Pa
     write_hypothesis(tmp_project, "0003-gone")
     archive_entity(tmp_project, "hypothesis:0003-gone")
     (tmp_project / "entities" / "hypotheses" / "0003-gone.md").unlink()  # archived: not live
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0003-gone"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0003-gone"})
     violations = lineage_violations(tmp_project)
     assert len(violations) == 1
     assert "not a live hypothesis" in violations[0].message  # NOT "does not resolve"
 
 
 def test_an_UNRESOLVED_token_is_a_violation_through_the_REAL_loader(tmp_project: Path) -> None:
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"})
     violations = lineage_violations(tmp_project)
     assert len(violations) == 1
     assert "does not resolve" in violations[0].message
@@ -217,13 +205,9 @@ def test_the_LOADER_can_actually_SEE_the_terminal_fields(tmp_project: Path) -> N
     from science_model.entities import HypothesisEntity
 
     for field in ("verdict", "closure_basis", "superseded_by", "resynthesized_into"):
-        assert field in HypothesisEntity.model_fields, (
-            f"{field}: the check cannot see what the model drops"
-        )
+        assert field in HypothesisEntity.model_fields, f"{field}: the check cannot see what the model drops"
 
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"})
     sources = load_project_sources(tmp_project)
 
     entity = next(e for e in sources.entities if e.id == "hypothesis:0001-x")
@@ -268,9 +252,7 @@ def write_dataset(root: Path, slug: str, *, aliases: list[str] | None = None) ->
         frontmatter["aliases"] = aliases
     path = root / "entities" / "datasets" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8"
-    )
+    path.write_text(f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8")
 
 
 def write_interpretation(
@@ -287,9 +269,7 @@ def write_interpretation(
     frontmatter.update(extra or {})
     path = root / "entities" / "interpretations" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8"
-    )
+    path.write_text(f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n\n# {slug}\n", encoding="utf-8")
 
 
 def test_a_CROSS_KIND_alias_successor_is_a_VIOLATION(tmp_project: Path) -> None:
@@ -300,12 +280,10 @@ def test_a_CROSS_KIND_alias_successor_is_a_VIOLATION(tmp_project: Path) -> None:
     # Against the all-entities set it was found, and reported CLEAN: a hypothesis superseded by a
     # dataset, with the check's green on it. The successor population must be LIVE HYPOTHESES.
     write_dataset(tmp_project, "0002", aliases=["hypothesis:looks-valid"])
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:looks-valid"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:looks-valid"})
     violations = lineage_violations(tmp_project)
     assert len(violations) == 1
-    assert "dataset:0002" in violations[0].message          # it RESOLVED -- to the wrong kind
+    assert "dataset:0002" in violations[0].message  # it RESOLVED -- to the wrong kind
     assert "not a live hypothesis" in violations[0].message
 
 
@@ -314,9 +292,7 @@ def test_a_hypothesis_successor_is_STILL_clean(tmp_project: Path) -> None:
     # above -- and the population fix would be indistinguishable from breaking lineage entirely.
     write_dataset(tmp_project, "0002", aliases=["hypothesis:looks-valid"])
     write_hypothesis(tmp_project, "0009-real")
-    write_hypothesis(
-        tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0009-real"}
-    )
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0009-real"})
     assert lineage_violations(tmp_project) == []
 
 
@@ -366,9 +342,7 @@ def test_COMMONS_can_never_own_a_hypothesis__which_is_why_KIND_is_enough() -> No
     )
 
 
-def test_a_COMMONS_entity_is_NOT_an_acceptable_successor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_COMMONS_entity_is_NOT_an_acceptable_successor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The SHARED case, through the REAL commons overlay rather than the contract alone.
     # `topic:single-cell-foundation-models` is a COMMONS-OWNED id, and the overlay puts it in
     # `sources.entities` for real -- so the all-entities population would have ACCEPTED it as a
@@ -386,12 +360,12 @@ def test_a_COMMONS_entity_is_NOT_an_acceptable_successor(
 
     root = tmp_path / "project"
     (root / "entities" / "hypotheses").mkdir(parents=True)
-    (root / "science.yaml").write_text(
-        yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8"
-    )
+    (root / "science.yaml").write_text(yaml.safe_dump({"name": "demo", "id": "demo"}), encoding="utf-8")
     # a LOCAL alias pointing at the COMMONS-owned topic, in hypothesis clothing
     write_hypothesis(
-        root, "0001-x", status="superseded",
+        root,
+        "0001-x",
+        status="superseded",
         extra={"superseded_by": "hypothesis:shared-alias"},
     )
     (root / "entities" / "topics").mkdir(parents=True)
@@ -430,8 +404,7 @@ def test_unbacked_inverse_FLIPS_to_error_with_the_kind(tmp_project: Path) -> Non
     # A `superseded_by` that RESOLVES to a live hypothesis but has NO `sci:supersedes` edge behind
     # it. `hypothesis` is certified, so this is a gating ERROR. (dangling-lineage stays silent: the
     # successor IS a live hypothesis; the two rules are disjoint on this record.)
-    write_hypothesis(tmp_project, "0001-x", status="superseded",
-                     extra={"superseded_by": "hypothesis:0002-y"})
+    write_hypothesis(tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:0002-y"})
     write_hypothesis(tmp_project, "0002-y", status="active")
     findings = [r for r in run_validate(tmp_project) if r.rule_id == "hypothesis.unbacked-inverse"]
 
@@ -451,8 +424,7 @@ def test_unbacked_inverse_stays_WARN_for_an_UNCERTIFIED_kind(tmp_project: Path) 
     # the name, which is the status-vocabulary incident restaged.
     from science_tool.validate.gates import cumulative_rules
 
-    write_interpretation(tmp_project, "i-v1", status="superseded",
-                         extra={"superseded_by": "interpretation:i-v2"})
+    write_interpretation(tmp_project, "i-v1", status="superseded", extra={"superseded_by": "interpretation:i-v2"})
     write_interpretation(tmp_project, "i-v2", status="active")
     findings = [r for r in run_validate(tmp_project) if r.rule_id == "interpretation.unbacked-inverse"]
 

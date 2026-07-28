@@ -32,11 +32,7 @@ def test_no_namespace_is_declared_without_being_registered():
 def _registered_source_modules(namespace: str) -> set[str]:
     from science_tool.findings.catalog import registered_producers
 
-    return {
-        producer.source_module
-        for producer in registered_producers()
-        if producer.namespace == namespace
-    }
+    return {producer.source_module for producer in registered_producers() if producer.namespace == namespace}
 
 
 def test_health_namespace_equals_filesystem() -> None:
@@ -51,11 +47,7 @@ def test_health_namespace_equals_filesystem() -> None:
 
 def test_validation_namespace_equals_filesystem() -> None:
     directory = SRC / "validate" / "checks"
-    discovered = {
-        f"validate/checks/{path.name}"
-        for path in directory.glob("*.py")
-        if path.name != "__init__.py"
-    }
+    discovered = {f"validate/checks/{path.name}" for path in directory.glob("*.py") if path.name != "__init__.py"}
     discovered.add("validate/runtime.py")
     assert _registered_source_modules("validate_checks") == discovered
 

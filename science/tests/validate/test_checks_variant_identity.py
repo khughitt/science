@@ -153,9 +153,7 @@ def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
 
     results = list(check_variant_identity(_ctx(project)))
 
-    assert [r.message for r in results if r.rule_id is None] == [
-        "dataset:variants: variant rows minted: minted=2"
-    ]
+    assert [r.message for r in results if r.rule_id is None] == ["dataset:variants: variant rows minted: minted=2"]
     assert resolve_calls == [("dataset:variant-labels-dbsnp-human", "rsid_mappings.sqlite")]
     assert calls == [("rs1", "A", "G"), ("rs2", "C", "T")]
 

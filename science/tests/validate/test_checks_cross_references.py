@@ -81,15 +81,15 @@ def test_duplicate_broken_related_ref_emits_one_semantic_finding(
 
     results = list(check_cross_references(_ctx(tmp_path)))
 
-    assert _messages(results, Severity.WARN) == [
-        "Broken reference in a.md: related ID 'missing:ref' not found"
-    ]
+    assert _messages(results, Severity.WARN) == ["Broken reference in a.md: related ID 'missing:ref' not found"]
 
 
 def test_inline_and_block_related_parsing_ignores_templates(tmp_path: Path) -> None:
     from science_tool.validate.checks.cross_references import check_cross_references
 
-    _write(tmp_path / "entities" / "questions" / "a.md", "---\nid: question:a\nrelated: ['report:b', \"topic:c\"]\n---\n")
+    _write(
+        tmp_path / "entities" / "questions" / "a.md", "---\nid: question:a\nrelated: ['report:b', \"topic:c\"]\n---\n"
+    )
     _write(
         tmp_path / "entities" / "reports" / "b.md",
         "---\nid: report:b\nrelated:\n  - topic:c\n  - '{{ template }}'\nother: value\n---\n",
@@ -116,13 +116,7 @@ def test_task_ids_resolve_refs_but_retired_aggregate_ids_do_not(tmp_path: Path) 
         "Broken reference in a.md: related ID 'entity:one' not found",
         "Broken reference in a.md: related ID 'term:one' not found",
     ]
-    assert len(
-        {
-            tuple(result.qualifiers["key"])
-            for result in results
-            if isinstance(result, Result)
-        }
-    ) == 2
+    assert len({tuple(result.qualifiers["key"]) for result in results if isinstance(result, Result)}) == 2
 
 
 def test_unknown_namespace_errors_and_known_cross_project_ref_is_ignored(tmp_path: Path) -> None:
@@ -178,12 +172,8 @@ def test_loader_registry_includes_cross_references_after_id_prefixes_at_order_20
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "id prefixes"
-        )
-        cross_references_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "cross references"
-        )
+        id_prefixes_index = next(index for index, entry in enumerate(ordered) if entry[0] == "id prefixes")
+        cross_references_index = next(index for index, entry in enumerate(ordered) if entry[0] == "cross references")
 
         assert cross_references_index == id_prefixes_index + 1
         assert ordered[cross_references_index] == (
@@ -209,6 +199,7 @@ def test_read_encoding_errors_on_scanned_markdown_propagate(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 # Task 8: dual-root — entities/**/*.md ids join the known-id set
 # ---------------------------------------------------------------------------
+
 
 def test_entities_dir_id_resolves_cross_references(tmp_path: Path) -> None:
     """An id defined in entities/questions/0001-x.md is known; a ref to it is NOT broken."""

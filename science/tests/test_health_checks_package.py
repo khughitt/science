@@ -29,9 +29,5 @@ def test_each_health_check_has_one_matching_producer() -> None:
 
 
 def test_health_section_orders_are_monotonic() -> None:
-    orders = [
-        check.producer.sections[0].section_order
-        for check in HEALTH_CHECKS
-        if check.producer.sections
-    ]
+    orders = [check.producer.sections[0].section_order for check in HEALTH_CHECKS if check.producer.sections]
     assert orders == sorted(orders)

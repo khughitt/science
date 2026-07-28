@@ -106,10 +106,7 @@ class ProducerCaveat(_Base):
 
     @model_validator(mode="after")
     def _has_meaningful_detail(self) -> "ProducerCaveat":
-        if not any(
-            value is not None and value.strip()
-            for value in (self.code, self.reason)
-        ):
+        if not any(value is not None and value.strip() for value in (self.code, self.reason)):
             raise ValueError("producer caveat requires a nonblank code or reason")
         return self
 
@@ -233,9 +230,7 @@ class AuditReport(BaseModel):
         try:
             datetime.fromisoformat(value)
         except ValueError as exc:
-            raise ValueError(
-                f"generated_at must be ISO-8601, got {value!r}: {exc}"
-            ) from exc
+            raise ValueError(f"generated_at must be ISO-8601, got {value!r}: {exc}") from exc
         return value
 
     @model_validator(mode="after")
@@ -248,10 +243,7 @@ class AuditReport(BaseModel):
         # rule exists to prevent. Ingestion enforces it after computing fingerprints
         # (`science_tool.findings.ingest._plan`).
         if self.totals.findings_total != len(self.findings):
-            raise ValueError(
-                f"totals.findings_total {self.totals.findings_total} != "
-                f"{len(self.findings)} findings"
-            )
+            raise ValueError(f"totals.findings_total {self.totals.findings_total} != {len(self.findings)} findings")
         if self.totals.accepted_total != len(self.accepted):
             raise ValueError("totals.accepted_total disagrees with the accepted channel")
         if self.totals.unwired_total != len(self.unwired):
@@ -273,10 +265,7 @@ class AuditReport(BaseModel):
             raise ValueError("duplicate unwired producer ids are forbidden")
         overlap = producers_run & set(unwired)
         if overlap:
-            raise ValueError(
-                f"producer ids cannot appear in both producers_run and unwired: "
-                f"{sorted(overlap)}"
-            )
+            raise ValueError(f"producer ids cannot appear in both producers_run and unwired: {sorted(overlap)}")
         caveat_producers = [item.producer_id for item in self.caveats]
         if len(caveat_producers) != len(set(caveat_producers)):
             raise ValueError("duplicate caveat producer ids are forbidden")
@@ -288,8 +277,5 @@ class AuditReport(BaseModel):
         }
         missing = output_producers - producers_run
         if missing:
-            raise ValueError(
-                f"output producer ids must be named in meta.producers_run; missing "
-                f"{sorted(missing)}"
-            )
+            raise ValueError(f"output producer ids must be named in meta.producers_run; missing {sorted(missing)}")
         return self

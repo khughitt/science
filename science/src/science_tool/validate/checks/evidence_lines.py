@@ -207,9 +207,7 @@ def check_independence_ungrouped_collapse(ctx: ValidateContext) -> Iterator[Chec
                     message=f"{path.name}: independence='{independence}' requires 'independence_group' to be set (collapse-to is undefined without it)",
                     rule=RULES["independence.ungrouped-collapse"],
                     task=None,
-                    qualifiers={
-                        "key": ["independence-group", str(independence)]
-                    },
+                    qualifiers={"key": ["independence-group", str(independence)]},
                 )
 
 
@@ -291,9 +289,7 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[CheckO
                 message=f"dataset-derived candidate dependence ({reason}) links {len(eligible)} untagged/authored-independent lines on the same target",
                 rule=RULES["independence.suspect-circular"],
                 task=None,
-                qualifiers={
-                    "key": ["candidate", *sorted(str(member) for member in eligible)]
-                },
+                qualifiers={"key": ["candidate", *sorted(str(member) for member in eligible)]},
             )
 
     b2_direct_datasets_by_member: dict[str, set[str]] = defaultdict(set)
@@ -316,9 +312,7 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[CheckO
                 message=f"{member_uri}: authored shared_dataset {authored_dataset!r} is not supported by dataset-derived independence records",
                 rule=RULES["independence.shared-dataset-refuted"],
                 task=None,
-                qualifiers={
-                    "key": ["member", member_uri, "dataset", authored_dataset]
-                },
+                qualifiers={"key": ["member", member_uri, "dataset", authored_dataset]},
             )
 
 
@@ -387,9 +381,7 @@ def check_evidence_strength_implausible(ctx: ValidateContext) -> Iterator[CheckO
                 message=f"{path.name}: strength='strong' combined with evidence_role='background_constraint' is implausible — 'strong' requires a direct test, not background framing",
                 rule=RULES["evidence.strength-implausible"],
                 task=None,
-                qualifiers={
-                    "key": ["strength-role", "strong", "background_constraint"]
-                },
+                qualifiers={"key": ["strength-role", "strong", "background_constraint"]},
             )
 
 

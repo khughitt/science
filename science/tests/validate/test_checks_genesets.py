@@ -188,9 +188,7 @@ def test_geneset_resource_helper_reads_local_rows(tmp_path: Path) -> None:
     assert rows == [{"set_key": "R-HSA-1", "name": "Cell cycle", "member_ids": "HGNC:1;HGNC:2"}]
 
 
-def test_geneset_resource_helper_reads_commons_data_root_rows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_geneset_resource_helper_reads_commons_data_root_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from science_tool.commons.geneset_resources import read_member_rows
 
     rows_csv = "set_key,name,member_ids\nR-HSA-1,Cell cycle,HGNC:1;HGNC:2\n"
@@ -294,7 +292,9 @@ def test_boolean_numeric_collection_fields_are_malformed() -> None:
     results = list(
         evaluate_geneset_collections(
             [fm],
-            rows_by_dataset_id={"dataset:reactome-v89": [{"set_key": "R-HSA-1", "name": "One", "member_ids": "HGNC:1"}]},
+            rows_by_dataset_id={
+                "dataset:reactome-v89": [{"set_key": "R-HSA-1", "name": "One", "member_ids": "HGNC:1"}]
+            },
             registry_meta_by_id={_GENE_REGISTRY: _VALID_GENE_META},
         )
     )
@@ -362,9 +362,7 @@ def test_unavailable_registry_infos() -> None:
 
 
 def test_declared_unresolved_infos_and_skips_registry_validation() -> None:
-    fm = _geneset(
-        identifier_space={"tier": "gene", "namespace": "hgnc_id", "resolution_status": "declared_unresolved"}
-    )
+    fm = _geneset(identifier_space={"tier": "gene", "namespace": "hgnc_id", "resolution_status": "declared_unresolved"})
     results = list(
         evaluate_geneset_collections(
             [fm],

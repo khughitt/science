@@ -67,9 +67,9 @@ def _write_commons_dataset(root: Path, *, slug: str = "demo-dataset", version: s
         f"id: dataset:{slug}\n"
         "kind: dataset\n"
         "title: Demo Dataset\n"
-        f"version: \"{version}\"\n"
-        "created: \"2026-01-01\"\n"
-        "updated: \"2026-01-01\"\n"
+        f'version: "{version}"\n'
+        'created: "2026-01-01"\n'
+        'updated: "2026-01-01"\n'
         "status: active\n"
         "datapackage: datapackage.yaml\n"
         "origin: derived\n"
@@ -315,9 +315,7 @@ def test_pinned_overlay_requires_resolvable_source_datapackage(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/missing/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/missing/datapackage.json\n'
         ),
     )
 
@@ -338,10 +336,7 @@ def test_pinned_deposit_overlay_requires_source_datapackage(
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(_write_commons_dataset(tmp_path)))
     _write_descriptor(
         tmp_path,
-        extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-        ),
+        extra_frontmatter=('overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\n'),
     )
 
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
@@ -363,9 +358,7 @@ def test_pinned_overlay_requires_resolvable_commons_canonical(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 
@@ -392,9 +385,7 @@ def test_pinned_overlay_requires_matching_commons_version(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 
@@ -418,9 +409,7 @@ def test_pinned_overlay_with_resolvable_source_passes_contract(
     _write_descriptor(
         tmp_path,
         extra_frontmatter=(
-            "overlay_of: dataset:demo-dataset\n"
-            "pin_version: \"1.0.0\"\n"
-            "source: data/processed/demo/datapackage.json\n"
+            'overlay_of: dataset:demo-dataset\npin_version: "1.0.0"\nsource: data/processed/demo/datapackage.json\n'
         ),
     )
 
