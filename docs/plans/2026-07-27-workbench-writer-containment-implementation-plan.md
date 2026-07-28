@@ -107,9 +107,12 @@ def test_evidence_line_title_uses_source_when_present() -> None:
 
 
 def test_evidence_line_title_falls_back_to_evidence_type() -> None:
-    stub = EvidenceStub(stance="disputes", evidence_type="literature_evidence")
+    # `EvidenceStub.evidence_type` runs `canonical_evidence_type_token`, which strips the
+    # `_evidence` suffix BEFORE storage. The tail is therefore the canonical token, not the
+    # spelling passed in — pass the enum member and assert what the model actually holds.
+    stub = EvidenceStub(stance="disputes", evidence_type=EvidenceType.LITERATURE)
     line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
-    assert line.title == "disputes proposition:0001-x — literature_evidence"
+    assert line.title == "disputes proposition:0001-x — literature"
 
 
 def test_evidence_line_title_without_qualifiers_is_still_non_empty() -> None:
