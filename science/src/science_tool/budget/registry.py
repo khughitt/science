@@ -298,6 +298,14 @@ DEFERRED: dict[str, DeferredCommand] = {
         "--verify-current-tree emits one row per changed filesystem or synthetic-probe ignore decision",
         "1b",
     ),
+    "findings list": DeferredCommand(
+        "one output row per stored audit case",
+        "1b",
+    ),
+    "findings ingest": DeferredCommand(
+        "untrusted validation text can grow with the input report",
+        "1b",
+    ),
 }
 
 DEFERRED.update(

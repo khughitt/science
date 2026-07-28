@@ -18,7 +18,9 @@ cannot hold one without the other.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -83,15 +85,60 @@ def load_project_schema(
     """
     config = config or load_project_config(project_root)
     schemas_dir = project_root / SCHEMAS_DIRNAME
-    loader = SchemaLoader(project_dir=schemas_dir)
-    schema = ProjectSchema(
+    schema = _assemble_project_schema(
+        config.entity_extensions,
+        loader=SchemaLoader(project_dir=schemas_dir),
+        generation=generation,
+    )
+    _certify_declarations(
+        config.entity_extensions,
+        schema,
+        owns_schema=lambda filename: (schemas_dir / filename).is_file(),
+        schema_location=lambda filename: str(schemas_dir / filename),
+    )
+    return schema
+
+
+def project_schema_from_documents(
+    *,
+    extensions: Mapping[str, list[str]],
+    schema_documents: Mapping[str, dict[str, Any]],
+    generation: int,
+) -> ProjectSchema:
+    """Build a project schema from already-read extension documents.
+
+    The caller owns I/O. Descriptor-anchored readers can therefore supply bytes
+    read without pathname reopens while sharing the same composition and eager
+    declaration certification as the ordinary project loader.
+    """
+    extension_map = {kind: list(components) for kind, components in extensions.items()}
+    documents = dict(schema_documents)
+    schema = _assemble_project_schema(
+        extension_map,
+        loader=SchemaLoader(project_schemas=documents),
+        generation=generation,
+    )
+    _certify_declarations(
+        extension_map,
+        schema,
+        owns_schema=documents.__contains__,
+        schema_location=lambda filename: f"{SCHEMAS_DIRNAME}/{filename}",
+    )
+    return schema
+
+
+def _assemble_project_schema(
+    extensions: dict[str, list[str]],
+    *,
+    loader: SchemaLoader,
+    generation: int,
+) -> ProjectSchema:
+    return ProjectSchema(
         validator=EntityValidator(loader),
-        _extensions=config.entity_extensions,
+        _extensions=extensions,
         _loader=loader,
         _generation=generation,
     )
-    _certify_declarations(config.entity_extensions, schemas_dir, schema)
-    return schema
 
 
 def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
@@ -130,7 +177,11 @@ def load_project_schema_if_pinned(project_root: Path) -> ProjectSchema | None:
 
 
 def _certify_declarations(
-    extensions: dict[str, list[str]], schemas_dir: Path, schema: ProjectSchema
+    extensions: Mapping[str, list[str]],
+    schema: ProjectSchema,
+    *,
+    owns_schema: Callable[[str], bool],
+    schema_location: Callable[[str], str],
 ) -> None:
     for kind, components in extensions.items():
         for raw in components:
@@ -147,11 +198,11 @@ def _certify_declarations(
             # validates against a TOOLKIT schema of the same name -- a field it does not own,
             # governed by a contract it cannot see. Packaged extensions (`bio.*`) belong to commons
             # records, which carry their own `schema_profile` and never come through here.
-            path = schemas_dir / filename_for(component)
-            if not path.is_file():
+            filename = filename_for(component)
+            if not owns_schema(filename):
                 raise EntityExtensionsError(
                     f"science.yaml declares entity extension {raw!r} for kind {kind!r}, but "
-                    f"{path} does not exist. A project extension must be a schema this project "
+                    f"{schema_location(filename)} does not exist. A project extension must be a schema this project "
                     "owns; there is no fallback to a packaged extension."
                 )
 

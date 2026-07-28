@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -20,6 +21,23 @@ from science_tool.datasets.semantics import OrdinalReproClass
 
 class ProjectConfigError(ValueError):
     """Raised when science.yaml is not a project-configuration mapping."""
+
+
+def selected_local_profile_name(config: Mapping[str, object]) -> str:
+    """Select the local profile from parsed ``science.yaml`` data.
+
+    This is intentionally filesystem-free. Pathname and descriptor-safe readers
+    supply parsed mappings to the same policy so removed-key rejection and falsy
+    defaulting cannot drift.
+    """
+    if "profiles" in config and "knowledge_profiles" not in config:
+        raise ProjectConfigError(
+            "science.yaml uses removed top-level profiles; use knowledge_profiles"
+        )
+    knowledge_profiles = config.get("knowledge_profiles") or {}
+    if not isinstance(knowledge_profiles, Mapping):
+        knowledge_profiles = {}
+    return str(knowledge_profiles.get("local") or "local")
 
 
 class ProjectRole(StrEnum):

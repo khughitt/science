@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 122,
-    "deferred": 98,
+    "deferred": 100,
 }
 
 
@@ -150,7 +150,12 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     leaves: `boundary check` emits one warning per unanchored unmanaged rule, `boundary
     init` emits one proposal entry per discovered candidate root, and `boundary sync
     --verify-current-tree` emits one row per changed filesystem or synthetic-probe ignore
-    decision. The live partition is therefore 69/122/98 = 289.
+    decision, taking the partition to 69/122/98 = 289.
+
+    The audit-case command family adds two deferred leaves. `findings list` emits one
+    row per stored audit case, while `findings ingest` can emit untrusted validation
+    text that grows with the input report. The live partition is therefore
+    69/122/100 = 291.
     """
     actual = {
         "budgeted": len(BUDGETS),
@@ -159,6 +164,12 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     }
     assert actual == EXPECTED_CLASSIFICATION_COUNTS
     assert sum(actual.values()) == len(_leaf_commands(main, []))
+
+
+def test_findings_ingest_is_deferred_because_validation_text_can_grow():
+    assert "findings ingest" not in EXEMPTIONS
+    assert "validation" in DEFERRED["findings ingest"].growth_reason
+    assert "report" in DEFERRED["findings ingest"].growth_reason
 
 
 def test_belief_basis_is_deferred_because_compare_emits_one_row_per_delta() -> None:

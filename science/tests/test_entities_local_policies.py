@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from science_model.profiles.schema import EntityKind
+import yaml
+from science_model.profiles.schema import EntityKind, ProfileManifest
 
+from science_tool import entities as entity_module
 from science_tool.entities import (
     EntityCommandError,
     EntityPathPolicy,
@@ -16,6 +18,7 @@ from science_tool.entities import (
     resolve_path_policy,
     valid_statuses,
 )
+from science_tool import project_config as project_config_module
 from science_tool.graph.sources import resolve_local_profile_name
 
 
@@ -64,6 +67,20 @@ def test_resolve_local_profile_name_rejects_removed_profiles_key(tmp_path: Path)
 def test_resolve_local_profile_name_defaults_to_local(tmp_path: Path) -> None:
     _write(tmp_path, "science.yaml", "name: t\n")
     assert resolve_local_profile_name(tmp_path) == "local"
+
+
+@pytest.mark.parametrize("falsy", [None, "", False, 0, []])
+def test_pure_profile_selector_uses_the_canonical_falsy_default(falsy: object) -> None:
+    assert hasattr(project_config_module, "selected_local_profile_name")
+    selector = project_config_module.selected_local_profile_name
+    assert selector({"knowledge_profiles": {"local": falsy}}) == "local"
+
+
+def test_pure_profile_selector_rejects_removed_top_level_profiles() -> None:
+    assert hasattr(project_config_module, "selected_local_profile_name")
+    selector = project_config_module.selected_local_profile_name
+    with pytest.raises(ValueError, match="removed top-level profiles"):
+        selector({"profiles": {"local": "old"}})
 
 
 def test_resolve_local_profile_name_reuses_unchanged_project_config(
@@ -196,6 +213,92 @@ def test_strategy_override_unknown_is_skipped_with_warning(tmp_path: Path, bad_s
 def test_valid_manifest_has_no_local_kind_warnings(tmp_path: Path) -> None:
     root = _project_with_local_kinds(tmp_path)
     assert local_kind_warnings(root) == []
+
+
+def test_pure_local_policy_derivation_matches_the_path_loader_and_warnings(
+    tmp_path: Path,
+) -> None:
+    raw_manifest = {
+        "name": "policy-parity",
+        "imports": ["core"],
+        "strictness": "typed-extension",
+        "entity_kinds": [
+            {
+                "name": "hypothesis",
+                "canonical_prefix": "hypothesis",
+                "layer": "layer/local",
+                "description": "Builtin markdown shadow.",
+                "home": "entities/local-hypotheses",
+                "strategy": "numeric",
+            },
+            {
+                "name": "task",
+                "canonical_prefix": "task",
+                "layer": "layer/local",
+                "description": "Core name without a builtin markdown policy.",
+                "home": "entities/local-tasks",
+                "strategy": "numeric",
+            },
+            {
+                "name": "bad-strategy",
+                "canonical_prefix": "bad-strategy",
+                "layer": "layer/local",
+                "description": "Bad strategy.",
+                "strategy": "singleton",
+            },
+            {
+                "name": "bad-home",
+                "canonical_prefix": "bad-home",
+                "layer": "layer/local",
+                "description": "Bad home.",
+                "home": "doc/bad-home",
+            },
+            {
+                "name": "registry-collision",
+                "canonical_prefix": "registry-collision",
+                "layer": "layer/local",
+                "description": "Collides with a core singleton home name.",
+                "home": "entities/claim-registry.yaml",
+            },
+            {
+                "name": "design-note",
+                "canonical_prefix": "design-note",
+                "layer": "layer/local",
+                "description": "Valid local kind.",
+                "home": "entities/design-notes",
+                "strategy": "slug",
+            },
+        ],
+        "relation_kinds": [],
+    }
+    manifest = ProfileManifest.model_validate(raw_manifest)
+    _write(
+        tmp_path,
+        "science.yaml",
+        "name: parity\nknowledge_profiles:\n  local: parity\n",
+    )
+    _write(
+        tmp_path,
+        "knowledge/sources/parity/manifest.yaml",
+        yaml.safe_dump(raw_manifest, sort_keys=False),
+    )
+
+    pathname_policies = load_local_entity_policies(tmp_path)
+    pathname_warnings = local_kind_warnings(tmp_path)
+    assert set(pathname_policies) == {"task", "design-note"}
+    assert "hypothesis" not in {kind for kind, _ in pathname_warnings}
+    assert {kind for kind, _ in pathname_warnings} == {
+        "bad-strategy",
+        "bad-home",
+        "registry-collision",
+    }
+
+    assert hasattr(entity_module, "derive_local_entity_policies")
+    pure_policies, pure_warnings = entity_module.derive_local_entity_policies(
+        manifest
+    )
+    assert pure_policies == pathname_policies
+    assert pure_warnings == pathname_warnings
 
 
 def test_strategy_override_accepts_known_values(tmp_path: Path) -> None:

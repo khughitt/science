@@ -13,6 +13,7 @@ from science_model.profiles.schema import ProfileManifest
 from science_tool.data_root import project_config_path
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import local_profile_sources_dir
+from science_tool.project_config import selected_local_profile_name
 
 
 def register_local_kind(project_root: Path, kind: str, entity_class: str) -> str:
@@ -144,8 +145,7 @@ def _read_project_config(project_root: Path) -> dict:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(config, dict):
         return {}
-    if "profiles" in config and "knowledge_profiles" not in config:
-        raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
+    selected_local_profile_name(config)
     return config
 
 
@@ -158,10 +158,4 @@ def _active_ontology_names(config: dict) -> list[str]:
 
 def _local_profile_name(project_root: Path) -> str:
     config = _read_project_config(project_root)
-    knowledge_profiles = config.get("knowledge_profiles") or {}
-    if not isinstance(knowledge_profiles, dict):
-        knowledge_profiles = {}
-    local_profile = knowledge_profiles.get("local")
-    if local_profile:
-        return str(local_profile)
-    return "local"
+    return selected_local_profile_name(config)

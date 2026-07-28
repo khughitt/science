@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from copy import deepcopy
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
@@ -38,8 +40,25 @@ class SchemaLoader:
     A project may OWN fields; it may not REDEFINE the kind.
     """
 
-    def __init__(self, project_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        *,
+        project_schemas: Mapping[str, dict[str, Any]] | None = None,
+    ) -> None:
+        if project_dir is not None and project_schemas is not None:
+            raise ValueError(
+                "project_dir and project_schemas are mutually exclusive schema sources"
+            )
         self._project_dir = project_dir
+        self._project_schemas = (
+            {
+                filename: deepcopy(schema)
+                for filename, schema in project_schemas.items()
+            }
+            if project_schemas is not None
+            else None
+        )
         self._cache: dict[tuple[str, str], dict[str, Any]] = {}
 
     def load(self, component: ProfileComponent) -> dict[str, Any]:
@@ -52,10 +71,16 @@ class SchemaLoader:
         return schema
 
     def _load(self, component: ProfileComponent, filename: str) -> dict[str, Any]:
-        if self._project_dir is not None and is_extension(component):
-            candidate = self._project_dir / filename
-            if candidate.is_file():
-                return json.loads(candidate.read_text(encoding="utf-8"))
+        if is_extension(component):
+            if (
+                self._project_schemas is not None
+                and filename in self._project_schemas
+            ):
+                return self._project_schemas[filename]
+            if self._project_dir is not None:
+                candidate = self._project_dir / filename
+                if candidate.is_file():
+                    return json.loads(candidate.read_text(encoding="utf-8"))
         return _load_resource(filename)
 
 

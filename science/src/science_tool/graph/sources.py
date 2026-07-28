@@ -56,7 +56,10 @@ from science_tool.entity_profiles import (
     ProjectSchema,
     load_project_schema,
 )
-from science_tool.project_config import validated_entity_schema_version
+from science_tool.project_config import (
+    selected_local_profile_name,
+    validated_entity_schema_version,
+)
 from science_tool.graph.autonomous_runs import load_run_records
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
@@ -173,6 +176,39 @@ class SkippedEntity(BaseModel):
     kind: str
     reason: str  # "unknown_entity_kind" | "entity_schema_validation_failed" | "core_schema_validation_failed"
     details: str
+
+
+class CanonicalMarkdownRejection(StrEnum):
+    """Why a discovered Markdown record is not a canonical entity."""
+
+    MISSING_KIND = "missing_kind"
+    UNKNOWN_KIND = "unknown_kind"
+    PROJECT_SCHEMA = "project_schema_validation_failed"
+    ENTITY_SCHEMA = "entity_schema_validation_failed"
+
+
+@dataclass(frozen=True)
+class CanonicalMarkdownContext:
+    """Filesystem-free inputs needed to judge one Markdown entity record."""
+
+    project_slug: str
+    local_profile: str
+    active_kinds: frozenset[str]
+    ontology_catalogs: list[OntologyCatalog]
+    registry: EntityRegistry
+    project_schema: ProjectSchema | None
+
+
+@dataclass(frozen=True)
+class CanonicalMarkdownValidation:
+    """Accepted entity or an explicit canonical-rejection reason."""
+
+    kind: str | None = None
+    schema: type[Entity] | None = None
+    entity: Entity | None = None
+    authored_aliases: frozenset[str] = frozenset()
+    rejection: CanonicalMarkdownRejection | None = None
+    error: ValidationError | ValueError | None = None
 
 
 @dataclass(frozen=True)
@@ -343,6 +379,83 @@ def registry_for_project(project_root: Path) -> EntityRegistry:
     return registry
 
 
+def validate_canonical_markdown_record(
+    raw: dict[str, Any],
+    *,
+    path: str,
+    context: CanonicalMarkdownContext,
+) -> CanonicalMarkdownValidation:
+    """Validate one already-read Markdown record as a canonical entity.
+
+    This authority performs no I/O. Pathname and descriptor-anchored readers
+    supply raw frontmatter plus the same resolved project context, then consume
+    the same kind, project-schema, enrichment, and Pydantic-model decision.
+    """
+    candidate = dict(raw)
+    raw_kind = candidate.get("kind")
+    if not isinstance(raw_kind, str) or not raw_kind.strip():
+        return CanonicalMarkdownValidation(
+            rejection=CanonicalMarkdownRejection.MISSING_KIND
+        )
+
+    kind = _normalize_kind(raw_kind)
+    candidate["kind"] = kind
+    try:
+        schema = context.registry.resolve(kind)
+    except EntityKindNotRegisteredError:
+        return CanonicalMarkdownValidation(
+            kind=kind,
+            rejection=CanonicalMarkdownRejection.UNKNOWN_KIND,
+        )
+
+    try:
+        _validate_against_schema(
+            candidate,
+            kind=kind,
+            path=path,
+            project_schema=context.project_schema,
+        )
+        _validate_dataset_gen3(
+            candidate,
+            kind=kind,
+            path=path,
+            project_schema=context.project_schema,
+        )
+    except ValueError as exc:
+        return CanonicalMarkdownValidation(
+            kind=kind,
+            schema=schema,
+            rejection=CanonicalMarkdownRejection.PROJECT_SCHEMA,
+            error=exc,
+        )
+
+    authored_aliases = _enrich_raw(
+        candidate,
+        kind=kind,
+        project_slug=context.project_slug,
+        local_profile=context.local_profile,
+        active_kinds=context.active_kinds,
+        ontology_catalogs=context.ontology_catalogs,
+    )
+    try:
+        entity = schema.model_validate(candidate)
+    except ValidationError as exc:
+        return CanonicalMarkdownValidation(
+            kind=kind,
+            schema=schema,
+            authored_aliases=authored_aliases,
+            rejection=CanonicalMarkdownRejection.ENTITY_SCHEMA,
+            error=exc,
+        )
+    entity._authored_aliases = authored_aliases
+    return CanonicalMarkdownValidation(
+        kind=kind,
+        schema=schema,
+        entity=entity,
+        authored_aliases=authored_aliases,
+    )
+
+
 def load_project_sources(
     project_root: Path,
     markdown_overrides: dict[str, str] | None = None,
@@ -396,6 +509,14 @@ def load_project_sources(
     active_kinds = known_kinds(extra_profiles=active_profiles, ontology_catalogs=ontology_catalogs)
 
     registry, graduated_kind_skips = build_entity_registry(resolved)
+    canonical_context = CanonicalMarkdownContext(
+        project_slug=project_root.name,
+        local_profile=local_profile,
+        active_kinds=active_kinds,
+        ontology_catalogs=ontology_catalogs,
+        registry=registry,
+        project_schema=project_schema,
+    )
 
     project_paths = resolve_paths(project_root)
     adapters: list[StorageAdapter] = [
@@ -405,7 +526,6 @@ def load_project_sources(
         # the legacy doc/ scan roots have been removed (owners no longer live there).
         # See docs/user-guide/project-layout.md.
         MarkdownAdapter(
-            scan_roots=["entities", "research/packages"],
             virtual_files=markdown_overrides,
         ),
         BibAdapter(),
@@ -444,33 +564,23 @@ def load_project_sources(
                 doc = adapter.source_document(ref, raw)
                 if doc is not None:
                     markdown_documents.append(doc)
-                raw_kind = raw.get("kind")
-                if not isinstance(raw_kind, str) or not raw_kind:
+                validation = validate_canonical_markdown_record(
+                    raw,
+                    path=str(ref.path),
+                    context=canonical_context,
+                )
+                if (
+                    validation.rejection
+                    == CanonicalMarkdownRejection.MISSING_KIND
+                ):
                     # Adapter returned a record with no kind (e.g. frontmatter-less
                     # markdown). Skip rather than fail — mirrors the legacy behavior
                     # where parse_entity_file returned None.
                     continue
-                kind = _normalize_kind(raw_kind)
-                raw["kind"] = kind
-                # D3.1 -- THE SCHEMA GOES FIRST, and it goes first on the AUTHORED frontmatter,
-                # before `_enrich_raw` mixes the loader's derived keys into the same dict.
-                _validate_against_schema(
-                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
-                )
-                _validate_dataset_gen3(
-                    raw, kind=kind, path=str(ref.path), project_schema=project_schema
-                )
-                authored_aliases = _enrich_raw(
-                    raw,
-                    kind=kind,
-                    project_slug=project_slug,
-                    local_profile=local_profile,
-                    active_kinds=active_kinds,
-                    ontology_catalogs=ontology_catalogs,
-                )
-                try:
-                    schema = registry.resolve(kind)
-                except EntityKindNotRegisteredError:
+                kind = validation.kind
+                if kind is None:
+                    raise AssertionError("canonical validation omitted normalized kind")
+                if validation.rejection == CanonicalMarkdownRejection.UNKNOWN_KIND:
                     logger.warning(
                         "skipping %s: unknown entity kind %r (not registered in core or active profiles)",
                         ref.path,
@@ -485,10 +595,19 @@ def load_project_sources(
                         )
                     )
                     continue
-                try:
-                    entity = schema.model_validate(raw)
-                    entity._authored_aliases = authored_aliases
-                except ValidationError as exc:
+                if validation.rejection == CanonicalMarkdownRejection.PROJECT_SCHEMA:
+                    if not isinstance(validation.error, ValueError):
+                        raise AssertionError(
+                            "project-schema rejection omitted its validation error"
+                        )
+                    raise validation.error
+                if validation.rejection == CanonicalMarkdownRejection.ENTITY_SCHEMA:
+                    schema = validation.schema
+                    exc = validation.error
+                    if schema is None or not isinstance(exc, ValidationError):
+                        raise AssertionError(
+                            "entity-schema rejection omitted schema or error"
+                        )
                     details = _format_missing_fields(exc)
                     failure = _format_schema_validation_failure(kind=kind, schema=schema, exc=exc)
                     if registry.is_core_kind(kind):
@@ -546,6 +665,9 @@ def load_project_sources(
                         )
                     )
                     continue
+                entity = validation.entity
+                if entity is None:
+                    raise AssertionError("accepted canonical record omitted its entity")
                 owner_scope, deprecated = classify_owner_scope(adapter.name, project_name=project_name)
                 _contribute(
                     entity=entity,
@@ -1350,7 +1472,13 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
 
     data: dict[str, object] = {}
     if yaml_path.is_file():
-        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        loaded = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        if loaded is not None:
+            if not isinstance(loaded, dict):
+                raise ValueError(
+                    f"{yaml_path}: project configuration must be a mapping"
+                )
+            data = loaded
 
     # The pin, VALIDATED here through the one narrow authority the write path also uses -- key AND
     # value, WITHOUT the rest of `ProjectConfig` (which requires `name`, a tightening not this arc's).
@@ -1360,12 +1488,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     # reachable by one transposed letter or one stray quote.
     pinned_version = validated_entity_schema_version(data)
 
-    if "profiles" in data and "knowledge_profiles" not in data:
-        raise ValueError("science.yaml uses removed top-level profiles; use knowledge_profiles")
-
-    knowledge_profiles = data.get("knowledge_profiles") or {}
-    if not isinstance(knowledge_profiles, dict):
-        knowledge_profiles = {}
+    local_profile = selected_local_profile_name(data)
 
     raw_ontologies = data.get("ontologies") or []
     if not isinstance(raw_ontologies, list):
@@ -1393,7 +1516,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     config: dict[str, object] = {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
-            "local": str(knowledge_profiles.get("local") or "local"),
+            "local": local_profile,
         },
         "ontologies": [str(o) for o in raw_ontologies],
         "freshness": raw_freshness,
@@ -1416,11 +1539,7 @@ def resolve_local_profile_name(project_root: Path) -> str:
     ``"local"`` when it is absent.
     """
     config = _read_project_config(project_root)
-    knowledge_profiles = config.get("knowledge_profiles")
-    if not isinstance(knowledge_profiles, dict):
-        return "local"
-    local_profile = knowledge_profiles.get("local")
-    return str(local_profile) if local_profile is not None else "local"
+    return selected_local_profile_name(config)
 
 
 def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:

@@ -430,6 +430,15 @@ def _is_generated_python_cache(rel_path: str) -> bool:
 DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
     "doc/curations/*.md",
     "doc/meta/*-next-steps.md",
+    # Audit cases have the same property as curation ledgers, at higher volume: they
+    # contribute NO triples but would be hashed into the manifest, so every ingestion
+    # would flip the graph to stale. Shipped as a default so no project rediscovers
+    # the knob (design §5).
+    "doc/audits/cases/*.md",
+    # Operational leaves are generated in the same store but are not cases. Keep
+    # these explicit so unrelated files under `cases/` remain manifest inputs.
+    "doc/audits/cases/.ingest.lock",
+    "doc/audits/cases/.*.md.*.tmp",
 )
 
 

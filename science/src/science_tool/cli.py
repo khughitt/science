@@ -29,6 +29,7 @@ from science_tool.entities_inventory_cli import entities_group
 from science_tool.evidence_lines_cli import evidence_line_group
 from science_tool.explore_ideas_cli import explore_ideas_group
 from science_tool.feedback_cli import feedback_group
+from science_tool.findings.cli import findings_group
 from science_tool.graph.cli import graph_group
 from science_tool.graph.health_cli import health_command
 from science_tool.hypotheses_cli import hypothesis_group
@@ -213,6 +214,7 @@ main.add_command(validate_cmd)
 main.add_command(patch_group)
 main.add_command(telemetry_group)
 main.add_command(feedback_group)
+main.add_command(findings_group)
 main.add_command(labnote_group)
 main.add_command(search_command)
 main.add_command(data_group)

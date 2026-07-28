@@ -9,12 +9,13 @@ import yaml
 from science_model.source_ref import SourceRef
 
 from science_tool.entity_scan import iter_entity_markdown
+from science_tool.graph.markdown_discovery import (
+    DEFAULT_MARKDOWN_SCAN_ROOTS,
+    is_discoverable_markdown_leaf,
+    uses_entity_directory_policy,
+)
 from science_tool.graph.source_records import MarkdownSourceDocument
 from science_tool.graph.storage_adapters.base import StorageAdapter
-
-# Anchor-surface sidecars (paper `.source.md`) live inside entity roots but are
-# NOT entities; never ingest them as source records.
-SIDECAR_MARKDOWN_SUFFIX = ".source.md"
 
 
 class MarkdownAdapter(StorageAdapter):
@@ -23,7 +24,7 @@ class MarkdownAdapter(StorageAdapter):
 
     def __init__(self, scan_roots: list[str] | None = None, virtual_files: dict[str, str] | None = None) -> None:
         # Roots relative to project_root. Defaults mirror the previous MarkdownProvider.
-        self._scan_roots = scan_roots or ["entities", "research/packages"]
+        self._scan_roots = list(scan_roots or DEFAULT_MARKDOWN_SCAN_ROOTS)
         self._virtual_files = dict(virtual_files or {})
 
     @property
@@ -36,9 +37,13 @@ class MarkdownAdapter(StorageAdapter):
             root = project_root / rel
             if not root.is_dir():
                 continue
-            scan = iter_entity_markdown(root) if rel == "entities" else sorted(root.rglob("*.md"))
+            scan = (
+                iter_entity_markdown(root)
+                if uses_entity_directory_policy(rel)
+                else sorted(root.rglob("*.md"))
+            )
             for path in scan:
-                if path.name.endswith(SIDECAR_MARKDOWN_SUFFIX):
+                if not is_discoverable_markdown_leaf(path.name):
                     continue
                 try:
                     rel_path = str(path.relative_to(project_root))
@@ -46,7 +51,7 @@ class MarkdownAdapter(StorageAdapter):
                     rel_path = str(path)
                 refs_by_path[rel_path] = SourceRef(adapter_name=self.name, path=rel_path)
         for rel_path in self._virtual_files:
-            if rel_path.endswith(".md") and not rel_path.endswith(SIDECAR_MARKDOWN_SUFFIX):
+            if is_discoverable_markdown_leaf(Path(rel_path).name):
                 refs_by_path[rel_path] = SourceRef(adapter_name=self.name, path=rel_path)
         return [refs_by_path[path] for path in sorted(refs_by_path)]
 
