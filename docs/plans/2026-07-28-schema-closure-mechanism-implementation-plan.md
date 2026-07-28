@@ -59,6 +59,9 @@ Measured on `main` at `bbff18fd` before writing this plan. An implementer who fi
 | `_enrich_raw` injects | 18 keys via `setdefault`, incl. `evidence_refs=[]` (`sources.py:1005`) — so any assertion that a loaded entity has `evidence_refs == []` is INERT |
 | ENTITY_SCHEMA rejection branch reads | `validation.schema` and `validation.error` only (`sources.py:604-613`) — never `authored_aliases` |
 | local-profile selection key | `knowledge_profiles.local` (`project_config.py:26`); a top-level `local_profile` is silently ignored and defaults to `"local"` |
+| composed hypothesis profile, gen 2 | **REFUSES** `type`, `canonical_id`, `file_path`, `evidence_refs`, `content`; **admits** `profile`, `aliases`, `ontology_terms`, `related`, `source_refs`. Measured against the real validator, not read off the JSON |
+| `MarkdownAdapter.INJECTED_KEYS` | `{canonical_id, content, file_path}` — one adapter's contract, which `_validate_against_schema:1430` applied to every adapter. `type` is absent from it, so the closed structured path refused every record until Task 5 made `injected` a parameter |
+| projects with `knowledge/sources/*/` | **5** — `natural-systems` (35 source files), `protein-landscape` (3), `seq-feats` (3), `3d-attention-bias` (2), and this repo's `meta/` |
 | undeclared-key audit entry point | `audit_project_sources` (`graph/migrate.py:287`); `REFERENCE_FIELD_NAMES` at `:112`. There is no `graph/reference_fields` module |
 | sites calling `_enrich_raw` before projecting | **5** — `sources.py:432` (markdown), `:1111`, `:1152`, `:1240`, `commons_sources.py:415`. Every one needs `build`'s `enrich` callback; none may keep enriching outside it |
 | commons needs the CLASS pre-construction | `commons_sources.py:405` reads `"summary" in schema.model_fields` to decide the `description` → `summary` mapping, and `test_graph_commons_sources.py:294` (`test_translate_topic_description_flows_to_content_preview`) pins it with `assert not hasattr(entity, "summary")`. Answered by `declares_field`, not by handing the class back |
@@ -232,7 +235,7 @@ def test_this_mechanism_closes_NO_new_kind() -> None:
 ```bash
 (cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py tests/test_value_reconciliation.py tests/test_hypothesis_entity.py -q)
 ```
-Expected: PASS. Then run the whole model suite (it is fast): `uv run --frozen pytest -q`.
+Expected: PASS. Then run the whole model suite (it is fast): `(cd science/model && uv run --frozen pytest -q)`.
 
 - [ ] **Step 8: Check the tool side still sees the same set**
 
@@ -986,22 +989,54 @@ The ruling above widens a **warning** surface across every project with structur
 
 **Measure the audit rows, not the YAML keys.** Counting reference-shaped keys across source files answers the wrong question twice over: it counts *declared* fields that were never extras, and it counts files no structured adapter loads. The only thing that matters is how many `undeclared_key` rows the audit actually emits — so run the audit, before and after.
 
+**The five projects, enumerated.** These are every Dropbox-resident project with a `knowledge/sources/*/` tree, found with `ls -d ~/d/*/knowledge/sources` plus this repo's own `meta/`. Non-manifest source files in each, for scale:
+
+| project | source files |
+|---|---|
+| `~/d/natural-systems` | 35 |
+| `~/d/protein-landscape` | 3 |
+| `~/d/seq-feats` | 3 |
+| `~/d/3d-attention-bias` | 2 |
+| `meta/` (in this repo) | present |
+
+Re-run the discovery command before measuring — a project added since this plan was written belongs in the sweep, and a list is only a starting point.
+
+**Running both revisions.** The comparison needs the audit executed by two different toolkit revisions against the same project files. Do it with a second worktree rather than by stashing, so the branch implementation stays intact:
+
 ```bash
-# Run on the merge-base first, then on this branch, for each project
-(cd science && uv run --frozen python -c "
+BASE=$(git merge-base HEAD main)
+git worktree add /tmp/schema-closure-base "$BASE"
+```
+
+Write the probe once, outside both trees, so each revision runs identical code:
+
+```bash
+cat > /tmp/undeclared-count.py <<'EOF'
 import sys, pathlib
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.migrate import audit_project_sources
-root = pathlib.Path(sys.argv[1])
-verdict = audit_project_sources(load_project_sources(root))
-rows = [r for r in verdict.rows if r['check'] == 'undeclared_key']   # read ValidationVerdict for the real attribute
-print(root.name, len(rows), sorted({r['field'] for r in rows}))
-" ~/d/<project>)
+for arg in sys.argv[1:]:
+    root = pathlib.Path(arg).expanduser()
+    verdict = audit_project_sources(load_project_sources(root))
+    rows = [r for r in verdict.rows if r["check"] == "undeclared_key"]
+    print(f"{root.name}\t{len(rows)}\t{sorted({r['field'] for r in rows})}")
+EOF
 ```
 
-Two corrections to note, because getting either wrong measures nothing: `REFERENCE_FIELD_NAMES` lives at `graph/migrate.py:112`, **not** in a `graph/reference_fields` module, which does not exist; and the audit entry point is `audit_project_sources` (`graph/migrate.py:287`), which returns a `ValidationVerdict[AuditRow]` — read that type for how to reach its rows rather than assuming `.rows`. Call the real path; a hand-rolled reimplementation of the `undeclared_key` predicate would measure your reimplementation, not the diagnostic.
+Then run it under each revision, from that revision's `science/` package:
 
-Run it against every Dropbox-resident project that has `knowledge/sources/*/`, on the merge-base and again on this branch, and record the delta per project in your report. **If any project gains more than ~20 rows, stop and report before committing** — that is no longer a diagnostic widening but a corpus finding, and it needs a ruling this plan does not contain.
+```bash
+PROJECTS="$HOME/d/natural-systems $HOME/d/protein-landscape $HOME/d/seq-feats $HOME/d/3d-attention-bias $PWD/meta"
+(cd /tmp/schema-closure-base/science && uv run --frozen python /tmp/undeclared-count.py $PROJECTS) > /tmp/undeclared-before.tsv
+(cd science && uv run --frozen python /tmp/undeclared-count.py $PROJECTS) > /tmp/undeclared-after.tsv
+diff -u /tmp/undeclared-before.tsv /tmp/undeclared-after.tsv || true
+```
+
+Clean up with `git worktree remove /tmp/schema-closure-base` once the numbers are recorded.
+
+`verdict.rows` and `r["check"]` are written from the shape `audit_project_sources` returns — a `ValidationVerdict[AuditRow]` (`graph/migrate.py:287`). **Read that type before running**, and adjust the two accessors if they differ; a probe that raises `AttributeError` measures nothing, and one that silently yields `[]` measures nothing while looking like good news. `REFERENCE_FIELD_NAMES` lives at `graph/migrate.py:112`, **not** in a `graph/reference_fields` module, which does not exist. Call the real path; a hand-rolled reimplementation of the `undeclared_key` predicate would measure your reimplementation, not the diagnostic.
+
+**The threshold is 20 rows, per project.** If any single project gains **21 or more** `undeclared_key` rows, stop and report before committing — that is no longer a diagnostic widening but a corpus finding, and it needs a ruling this plan does not contain. Record the exact per-project delta either way; "no change" is a result worth writing down, and on four of these five projects it is the likely one.
 
 - [ ] **Step 10: Run the structured-source and diagnostic suites**
 
@@ -1063,6 +1098,7 @@ def test_build_validates_a_closed_kind_before_projecting(tmp_path) -> None:
             {**_valid_hypothesis_mapping(), "shadow_key": "v"},
             project_schema=project_schema,
             path="entities/hypotheses/0001-x.md",
+            injected=frozenset(),
         )
 
 
@@ -1073,6 +1109,7 @@ def test_build_admits_a_valid_closed_kind(tmp_path) -> None:
         _valid_hypothesis_mapping(),
         project_schema=project_schema,
         path="entities/hypotheses/0001-x.md",
+        injected=frozenset(),      # the mapping is entirely authored -- nothing to hide
     )
     assert entity.kind == "hypothesis"
 
@@ -1086,6 +1123,7 @@ def test_build_does_not_validate_an_OPEN_kind(tmp_path) -> None:
         {**_valid_concept_mapping(), "shadow_key": "v"},
         project_schema=project_schema,
         path="entities/concepts/0001-x.md",
+        injected=frozenset(),
     )
     assert entity.kind == "concept"
 ```
@@ -1171,14 +1209,56 @@ Expected: FAIL with `AttributeError: 'EntityRegistry' object has no attribute 'b
 
 **The import cycle is certain, not contingent.** `sources.py:64` already does `from science_tool.graph.entity_registry import ... EntityRegistry`, so `entity_registry.py` importing anything from `sources.py` closes the loop. Do not attempt the import and see; extract first.
 
-Create `science/src/science_tool/graph/entity_schema_validation.py` and **move** (not copy) `_validate_against_schema` (`sources.py:1401-1437`) and `_validate_dataset_gen3` (`sources.py:1440-1461`) into it verbatim, docstrings included, renamed to `validate_against_schema` / `validate_dataset_gen3`. Their five dependencies are all cycle-free — verified against the tree:
+Create `science/src/science_tool/graph/entity_schema_validation.py` and **move** (not copy) `_validate_against_schema` (`sources.py:1401-1437`) and `_validate_dataset_gen3` (`sources.py:1440-1461`) into it, docstrings included, renamed to `validate_against_schema` / `validate_dataset_gen3`.
+
+**One change during the move, and it is not cosmetic.** `_validate_against_schema:1430` reads:
+
+```python
+    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
+```
+
+That is the Markdown adapter's contract applied to every adapter, and it is wrong in both directions — measured against the composed hypothesis profile, not reasoned about:
+
+| mapping | composed schema says |
+|---|---|
+| the bare valid hypothesis | ACCEPTED |
+| `+ type` (structured loader backfills it unconditionally) | **REFUSED** |
+| `+ canonical_id` | REFUSED (in `INJECTED_KEYS`, so hidden today) |
+| `+ file_path` | REFUSED (in `INJECTED_KEYS`, so hidden today) |
+| `+ evidence_refs` (structured loader backfills `[]`) | **REFUSED** |
+| `+ content` | REFUSED (in `INJECTED_KEYS`, so hidden today — **even when authored**) |
+| `+ profile`, `+ aliases`, `+ ontology_terms` | ACCEPTED |
+
+So the closed structured path is unreachable as the plan previously had it — `type` alone refuses every record, and Task 4's keystone negative control could not have passed. And in the other direction, an authored `content` on a structured hypothesis was stripped by this line and the record accepted: a silent drop inside the check whose entire purpose is to stop silent drops.
+
+Take the set as a parameter instead:
+
+```python
+def validate_against_schema(
+    raw: dict[str, Any],
+    *,
+    kind: str,
+    path: str,
+    project_schema: ProjectSchema | None,
+    injected: frozenset[str],
+) -> None:
+```
+
+and the body line becomes:
+
+```python
+    authored = {key: value for key, value in raw.items() if key not in injected}
+```
+
+Everything else moves verbatim, `validate_dataset_gen3` included and unchanged. `MarkdownAdapter` is then **not** a dependency of the new module — drop it from the import list below, and from `sources.py` only if nothing else there uses it (`:528` does, so it stays).
+
+Their remaining dependencies are all cycle-free — verified against the tree:
 
 | Dependency | From | Imports `entity_registry`? |
 |---|---|---|
 | `PROJECT_MIXIN_NAMES`, `EntityValidationError` | `science_model.entity_schema` | no (different package) |
 | `ProjectSchema` | `science_tool.entity_profiles` | no |
 | `gen3_shape_issue` | `science_tool.datasets.capability_shape` | no |
-| `MarkdownAdapter.INJECTED_KEYS` | `science_tool.graph.storage_adapters.markdown` | no |
 
 **The new module's header, in full.** A "move the bodies" instruction with no import block is not executable — the two functions between them need six names:
 
@@ -1198,13 +1278,12 @@ from typing import TYPE_CHECKING, Any
 from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
 
 from science_tool.datasets.capability_shape import gen3_shape_issue
-from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
 if TYPE_CHECKING:
     from science_tool.entity_profiles import ProjectSchema
 ```
 
-`ProjectSchema` is annotation-only in both signatures, so it stays under `TYPE_CHECKING`; the other five are used at runtime. Copy the import *lines* from `sources.py` — `:47`, `:53`, `:86` — rather than retyping the module paths.
+`ProjectSchema` is annotation-only in both signatures, so it stays under `TYPE_CHECKING`; the other four are used at runtime. Copy the import *lines* from `sources.py` — `:47`, `:53` — rather than retyping the module paths. `MarkdownAdapter` (`:86`) is deliberately absent: the `injected` parameter replaced it, and importing a storage adapter into the validation module would be the coupling this change removes.
 
 **What `sources.py` is left holding.** Checked per name against the post-move file, because F401 at Step 10 will find these anyway and the answer differs per name:
 
@@ -1239,7 +1318,13 @@ Read every hit and classify it. Three populations, and only the first gets renam
 ```bash
 (cd science && uv run --frozen pytest -q -k "registry or kind_class or extension_registration or book_kind or talk_kind or undeclared_key" 2>&1 | tail -5)
 ```
-Expected: PASS. Then `grep -rn '\.resolve(' src/science_tool/graph/ | grep -v 'resolver\.\|\.resolve()'` should return **only** `resolve_class` hits — anything else is a caller the sweep missed.
+Expected: PASS. Then confirm nothing was missed inside the loading package:
+
+```bash
+(cd science && grep -rn '\.resolve_class(\|\.resolve(' src/science_tool/graph/ | grep -v 'resolver\.\|\.resolve()')
+```
+
+Every hit must be a `resolve_class` one. The pattern has to name `resolve_class` explicitly — a bare `\.resolve(` no longer matches the renamed method, so the earlier spelling of this check would have reported "clean" by finding nothing at all. The `src/` path is relative to `science/`, which is why the whole thing is a subshell.
 
 - [ ] **Step 5: Implement `build`**
 
@@ -1275,6 +1360,7 @@ Second, a method **inside `class EntityRegistry`**, at the same indentation as `
         *,
         project_schema: "ProjectSchema | None",
         path: str,
+        injected: frozenset[str],
         enrich: "Callable[[dict[str, Any]], frozenset[str]] | None" = None,
     ) -> Entity:
         """Validate a raw mapping against its composed profile, THEN project it onto the model.
@@ -1293,12 +1379,31 @@ Second, a method **inside `class EntityRegistry`**, at the same indentation as `
         records that did nothing wrong. Validate authored -> enrich -> project. Every adapter
         gets that order by construction instead of re-deriving it.
 
+        `injected` is the same argument one layer down, and it is REQUIRED because there is no
+        safe default. Enrichment is not the only bookkeeping: every adapter also assembles keys
+        of its own before `build` is reached, and each assembles a DIFFERENT set. The moved
+        validator used to subtract `MarkdownAdapter.INJECTED_KEYS` universally, which is one
+        adapter's contract applied to all of them -- wrong in both directions, measured against
+        the composed hypothesis schema:
+          - the structured loader backfills `type`, and `type` is REFUSED. Every closed
+            structured record would fail for a key no author wrote. So would `canonical_id`,
+            `file_path`, and an unconditionally-backfilled `evidence_refs`.
+          - `content` is stripped for everyone, so an AUTHORED `content` on a structured record
+            was silently removed and the record accepted -- the fail-silent this programme exists
+            to abolish, sitting inside the check meant to abolish it.
+
+        A caller passes the keys IT contributed and the author did not. The subtraction happens
+        at the call site because that is the only place both are known; hiding a key the author
+        actually wrote is the failure mode, and it is why this is not a per-adapter constant.
+
         Raises EntityKindNotRegisteredError (unknown kind), ValueError (composed-schema refusal),
         or EntityProjectionError (projection refusal) -- three distinct failures, kept distinct so
         the Markdown adapter can keep classifying them into its three rejection codes.
         """
         schema = self.resolve_class(kind)
-        validate_against_schema(raw, kind=kind, path=path, project_schema=project_schema)
+        validate_against_schema(
+            raw, kind=kind, path=path, project_schema=project_schema, injected=injected
+        )
         validate_dataset_gen3(raw, kind=kind, path=path, project_schema=project_schema)
         authored_aliases = enrich(raw) if enrich is not None else frozenset()
         try:
@@ -1392,7 +1497,12 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
 
     try:
         entity = context.registry.build(
-            kind, candidate, project_schema=context.project_schema, path=path, enrich=_enrich,
+            kind,
+            candidate,
+            project_schema=context.project_schema,
+            path=path,
+            injected=MarkdownAdapter.INJECTED_KEYS,
+            enrich=_enrich,
         )
     except EntityKindNotRegisteredError:
         return CanonicalMarkdownValidation(kind=kind, rejection=CanonicalMarkdownRejection.UNKNOWN_KIND)
@@ -1417,6 +1527,8 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
     )
 ```
 
+**Markdown passes `MarkdownAdapter.INJECTED_KEYS` with no subtraction, deliberately.** That is exactly what the moved validator did for this path, so the Markdown behaviour is unchanged and this branch stays behaviourally inert there — which is the whole premise of the mechanism tranche. It does leave one residual: an author who writes `content:` in Markdown frontmatter still has it hidden from validation. That is a real hole, it is **pre-existing**, it is now confined to one adapter instead of applying to all of them, and closing it changes what the Markdown path accepts — so it belongs to a slice, not here. Record it in the plan's follow-up section rather than fixing it in passing.
+
 `sources.py` needs `EntityProjectionError` added to its existing `from science_tool.graph.entity_registry import …` at `:64` — `EntityKindNotRegisteredError` is already there. `commons_sources.py:32` imports from the same module and needs it too if its `build` call catches projection failures.
 
 **Order matters in that `except` chain:** `EntityProjectionError` subclasses `ValueError`, so it must be caught first. The `PROJECT_SCHEMA` branch drops `schema=` — verified against its consumer at `sources.py:598-603`, which reads only `.error` and re-raises it.
@@ -1424,6 +1536,40 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
 - [ ] **Step 8: Route the other four producing sites through `build`**
 
 **Every one of these four enriches before projecting today** — `sources.py:1111`, `:1152`, `:1240`, and `commons_sources.py:415`, verified by grep. So every one gets an `enrich` closure; leaving `_enrich_raw` outside the call would put enrichment *before* validation and break the order Step 7(a) exists to enforce, and dropping it would lose both the eighteen defaults and `authored_aliases`. Each closure is written out below rather than described as "same as Markdown", because the arguments differ per site.
+
+**Each also declares its own bookkeeping keys.** Step 5 made `injected` a required parameter; here is where the three non-Markdown values come from. Add these two module-level constants to `sources.py`, beside the other loader constants:
+
+```python
+# Keys these loaders ASSEMBLE rather than read from the author. Only the ones the composed schema
+# refuses need listing -- `profile`, `aliases`, `ontology_terms`, `related` and `source_refs` are
+# admitted (measured), so hiding them would only widen the blind spot. `id`, `kind` and `title`
+# are NOT here on purpose: they are policy values for real schema fields, and the schema requires
+# all three, so hiding them would refuse every record for a missing key the loader had supplied.
+_STRUCTURED_INJECTED_KEYS: frozenset[str] = frozenset(
+    {"canonical_id", "type", "file_path", "evidence_refs"}
+)
+_LEGACY_INJECTED_KEYS: frozenset[str] = _STRUCTURED_INJECTED_KEYS
+```
+
+and in `commons_sources.py`:
+
+```python
+# Commons assembles `scope`/`profile` and rewrites `file_path`; `summary` is DERIVED from the
+# record's `description` at :405 and is likewise not the author's key.
+_COMMONS_INJECTED_KEYS: frozenset[str] = frozenset(
+    {"canonical_id", "type", "file_path", "evidence_refs", "scope", "summary"}
+)
+```
+
+**`authored` is computed, never assumed, and the subtraction is the whole safety property.** At each site it is the set of keys the *record* carried before the loader touched anything:
+
+```python
+        authored = frozenset(record.model_dump(exclude_unset=True))
+```
+
+Compute it immediately after loading `record`, before assembling `raw`. Commons uses `frozenset(fm)` — the record's own frontmatter — which is already in scope at `_materialize_commons_candidate:385`.
+
+Without the subtraction, an author who writes `evidence_refs: [paper:x]` on a closed structured record has it hidden from validation and silently accepted, which is the exact defect this change removes from the Markdown side. **Verified**, against the real composed hypothesis profile: with the subtraction, the valid control is ACCEPTED and each of `shadow_key`, an authored `content`, and an authored `evidence_refs` is REFUSED.
 
 **(a) `model` — `sources.py:1111-1122`.** Replace the `_enrich_raw` / `resolve` / `model_validate` / `_authored_aliases` block with:
 
@@ -1439,7 +1585,12 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
             )
 
         entity = registry.build(
-            "model", raw, project_schema=project_schema, path=record.source_path, enrich=_enrich,
+            "model",
+            raw,
+            project_schema=project_schema,
+            path=record.source_path,
+            injected=_LEGACY_INJECTED_KEYS - authored,
+            enrich=_enrich,
         )
 ```
 
@@ -1461,6 +1612,7 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
             raw,
             project_schema=project_schema,
             path=record.source_path,
+            injected=_LEGACY_INJECTED_KEYS - authored,
             enrich=_enrich,
         )
 ```
@@ -1483,6 +1635,7 @@ This is the complete Markdown call site, replacing `sources.py:403-451`. The clo
                 raw,
                 project_schema=project_schema,
                 path=record.source_path or default_path,
+                injected=_STRUCTURED_INJECTED_KEYS - authored,
                 enrich=_enrich,
             )
 ```
@@ -1514,6 +1667,7 @@ This is the only site that needed the class for something other than constructio
         raw,
         project_schema=project_schema,
         path=str(record.body_path),
+        injected=_COMMONS_INJECTED_KEYS - frozenset(fm),
         enrich=_enrich,
     )
 ```
@@ -1556,13 +1710,18 @@ def test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES(
     # collecting zero mappings and then failing on `next()`, which reads like a fixture bug.
     import science_tool.graph.entity_registry as reg_mod
 
+    # Record the AUTHORED VIEW -- `raw` minus `injected` -- because that is the mapping the
+    # validator ranges over. Spying on `raw` alone would assert the wrong thing now that
+    # bookkeeping is subtracted inside the validator rather than absent from `raw`: the structured
+    # loader backfills `evidence_refs` unconditionally, so it IS in `raw` and is supposed to be.
     seen: list[dict] = []
     real = reg_mod.validate_against_schema
-    monkeypatch.setattr(
-        reg_mod,
-        "validate_against_schema",
-        lambda raw, **kw: (seen.append(dict(raw)), real(raw, **kw))[1],
-    )
+
+    def _spy(raw, **kw):
+        seen.append({k: v for k, v in raw.items() if k not in kw["injected"]})
+        return real(raw, **kw)
+
+    monkeypatch.setattr(reg_mod, "validate_against_schema", _spy)
     _write_structured_project(tmp_path, [{"canonical_id": "widget:0002-y", "title": "W2"}])
     load_project_sources(tmp_path)
 
@@ -1570,6 +1729,37 @@ def test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES(
     assert "evidence_refs" not in row, "an unauthored field reached validation as an authored one"
     assert row["title"] == "W2"  # the authored ones DO arrive -- not a vacuously empty mapping
 ```
+
+Then the two boundary controls, which also belong here rather than in Task 4: both need `_STRUCTURED_INJECTED_KEYS`, which Step 8 creates, and one needs composed validation on the structured path, which Step 8 wires.
+
+```python
+def test_the_loaders_OWN_bookkeeping_keys_do_not_refuse_the_row(tmp_path: Path) -> None:
+    # The control above passes only if `type`, `canonical_id`, `file_path` and the backfilled
+    # `evidence_refs` are hidden from the composed schema -- MEASURED: each is refused by the
+    # hypothesis profile, and the structured loader adds all four to every row. This test asserts
+    # the same thing from the other side, so the reason the control passes is pinned rather than
+    # incidental. If `_STRUCTURED_INJECTED_KEYS` loses an entry, this is what says which one.
+    from science_tool.graph.sources import _STRUCTURED_INJECTED_KEYS
+
+    assert {"type", "canonical_id", "file_path", "evidence_refs"} <= _STRUCTURED_INJECTED_KEYS
+    assert not {"id", "kind", "title"} & _STRUCTURED_INJECTED_KEYS, (
+        "id/kind/title are REQUIRED by the composed schema; hiding them refuses every record"
+    )
+
+
+def test_an_AUTHORED_bookkeeping_key_is_still_refused(tmp_path: Path) -> None:
+    # The opposing control, and the one that makes `injected` a subtraction rather than a constant.
+    # `content` is bookkeeping for the Markdown adapter, which injects the body under that name.
+    # It is NOT bookkeeping here: a structured row authoring `content` authored it, `hypothesis`
+    # does not declare it, and the composed schema refuses it (measured). Before this branch, the
+    # validator stripped `content` for every adapter unconditionally, so this row was silently
+    # accepted -- a fail-silent living inside the check that exists to end fail-silence.
+    _write_closed_kind_project(tmp_path, [{**_valid_hypothesis_row(), "content": "prose"}])
+    with pytest.raises(ValueError, match="does not satisfy its schema"):
+        load_project_sources(tmp_path)
+```
+
+Together with the keystone pair from Task 4, these make the authored/bookkeeping boundary checkable in **both** directions: bookkeeping the loader added must not refuse a clean record, and a key the author actually wrote must never be hidden because some *other* adapter treats that name as bookkeeping.
 
 If `build` ends up calling `validate_against_schema` through a module reference rather than a direct import, patch whatever binding it actually uses — the rule is *patch the name the caller resolves*, and the failure mode of getting it wrong (an empty `seen`) looks like a broken fixture rather than a broken patch.
 
@@ -1672,13 +1862,18 @@ def _dotted(func: ast.expr) -> list[str] | None:
 def _local_entity_names(tree: ast.Module, entity_names: frozenset[str]) -> frozenset[str]:
     """Entity class names PLUS every local name this module binds to one.
 
-    Two binding forms, and both are ordinary code rather than evasion:
-      `from science_model.entities import MethodEntity as ME`  -> ME
-      `EntityType = MethodEntity`                              -> EntityType
+    Three binding forms, all ordinary code rather than evasion:
+      `from science_model.entities import MethodEntity as ME`  -> ME       (ImportFrom)
+      `EntityType = MethodEntity`                              -> EntityType  (Assign)
+      `Annotated: type[Entity] = MethodEntity`                 -> Annotated   (AnnAssign)
+
+    The annotated form is a separate AST node, not a flavour of `Assign`, and a draft that handled
+    only `Assign` missed it -- adding a type annotation is the single most likely edit to make to
+    a line like this, so missing it is missing the common case.
 
     There is nothing in the names `ME` or `EntityType` to recognize, so the binding has to be
-    derived from the module's own statements. The assignment pass runs to a fixed point because
-    rebinding chains (`A = MethodEntity; B = A`) are one edit away from being written.
+    derived from the module's own statements. The pass runs to a fixed point because rebinding
+    chains (`A = MethodEntity; B = A`) are one edit away from being written.
     """
     local = set(entity_names)
     for node in ast.walk(tree):
@@ -1690,9 +1885,12 @@ def _local_entity_names(tree: ast.Module, entity_names: frozenset[str]) -> froze
     while changed:
         changed = False
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target, value = node.targets[0], node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                target, value = node.target, node.value  # `X: type[Entity] = MethodEntity`
+            else:
                 continue
-            target, value = node.targets[0], node.value
             if not isinstance(target, ast.Name) or target.id in local:
                 continue
             segments = _dotted(value) if isinstance(value, ast.Name | ast.Attribute) else None
@@ -1773,7 +1971,7 @@ def test_the_guarded_METHOD_still_exists() -> None:
 
 def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> None:
     # An AST guard that silently matches nothing passes forever. Pin the detector against all
-    # ELEVEN bypass spellings -- including the ones that defeated four earlier drafts -- so a
+    # TWELVE bypass spellings -- including the ones that defeated five earlier drafts -- so a
     # refactor that breaks the matching fails HERE rather than turning the gate into a no-op.
     #
     # The probe carries real imports and real assignments because `_local_entity_names` reads
@@ -1788,6 +1986,7 @@ def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> 
         "\n"
         "EntityType = MethodEntity\n"                    # local rebinding
         "Indirect = EntityType\n"                        # and a chain, to pin the fixed point
+        "Annotated: type[Entity] = MethodEntity\n"       # ANNOTATED rebinding -- ast.AnnAssign
         "\n"
         "def f(registry, context, reg, resolver, path, kind, raw):\n"
         "    registry.resolve_class(kind)\n"
@@ -1801,16 +2000,17 @@ def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> 
         "    ME.model_validate(raw)\n"                   # aliased classmethod -- must match
         "    EntityType(**raw)\n"                        # LOCAL REBINDING -- must match
         "    Indirect.model_validate(raw)\n"             # rebinding chain -- must match
+        "    Annotated(**raw)\n"                         # annotated rebinding -- must match
         "    resolver.resolve(kind)\n"                   # a DIFFERENT resolver -- must not match
         "    path.resolve()\n"                           # pathlib -- must not match
         "    SkippedEntity(path='x')\n"                  # a dataclass, not an entity -- no match
         "    isinstance(raw, Entity)\n",                 # a type USE, not construction -- no match
         encoding="utf-8",
     )
-    assert _class_obtaining_lines(probe) == [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    assert _class_obtaining_lines(probe) == [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 ```
 
-**This probe was executed against the real detector before this plan was written** — eleven hits at lines 10–20, and all four negatives correctly ignored, with zero offenders on the real `graph/` tree. The negatives are the ones that broke earlier drafts: `SkippedEntity(path='x')` (which an `endswith("Entity")` match flags, and which `sources.py` constructs five times) and `isinstance(raw, Entity)` (which the import-surface draft flagged in twelve modules). The six *positives* added across the last two revisions — module-qualified, aliased, rebound, and a rebinding chain — are all ordinary Python, not evasion, and four successive drafts missed them one or two at a time. Each miss was found by someone writing the bypass down, never by the guard.
+**This probe was executed against the real detector before this plan was written** — twelve hits at lines 11–22, and all four negatives correctly ignored, with zero offenders on the real `graph/` tree. The negatives are the ones that broke earlier drafts: `SkippedEntity(path='x')` (which an `endswith("Entity")` match flags, and which `sources.py` constructs five times) and `isinstance(raw, Entity)` (which the import-surface draft flagged in twelve modules). The seven *positives* added across the last three revisions — module-qualified, aliased, rebound, chained, and annotated — are all ordinary Python, not evasion, and five successive drafts missed them one or two at a time. Every one of those misses was found by someone writing the bypass down and running it. None was found by reasoning about the detector, which is the argument for keeping this probe exhaustive rather than representative.
 
 **What remains uncovered, named rather than implied.** The detector is a static, single-module analysis. It does not see `getattr(registry, "resolve_" + "class")`, a class arriving as a function *parameter* (`def f(model: type[Entity]): model(**raw)`), or one pulled out of a dict at runtime (`CORE_KIND_MODELS[kind](**raw)` — which is why `entity_registry.py` is the excluded module rather than a special case). Each needs a data-flow analysis this test is not, and each is deliberate code rather than an ordinary idiom someone reaches for by accident. The durable barrier is that `build` is the only operation returning a *validated* entity; the guard's job is to keep the accidental bypasses out, and the list above is what it does not claim.
 
@@ -1820,7 +2020,7 @@ def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> 
 (cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py -q -k "resolves_a_class or actually_SEE")
 ```
 
-**Do not predict this result — read it.** Expected after Task 5: PASS. If any module still appears, it is a producing site Task 5 missed — route it through `build` rather than exempting it. If a module calls `.resolve(x)` on something that is *not* an `EntityRegistry` (the `verdict/` pattern, were it ever to move into `graph/`), that is a genuine finding about the guard's precision: report it, and prefer narrowing the match (e.g. requiring the receiver to be named `registry`) over adding a module exemption.
+**Do not predict this result — read it.** Expected after Task 5: PASS. If any module still appears, it is a producing site Task 5 missed — route it through `build` rather than exempting it. If a module calls `.resolve(x)` on something that is *not* an `EntityRegistry` (the `verdict/` pattern, were it ever to move into `graph/`), that cannot reach this guard at all — it matches `resolve_class`, which is unique in the tree, and that uniqueness is the entire reason Step 4 renamed the method. **Do not "narrow" the match by requiring the receiver to be named `registry`.** An earlier draft suggested exactly that as a fallback; it restores the naming-convention hole the rename was performed to close, and `reg.resolve_class(kind)` would walk straight through it. If the guard ever seems imprecise, report it — the fix is not a receiver heuristic.
 
 - [ ] **Step 3: Run the guard alongside the full boundary file**
 
@@ -1886,10 +2086,17 @@ Predicted alongside it: `test_GATE_2_every_ARMED_component_resolves_to_a_package
 
 - [ ] **Step 4: Mutation 4 — remove a packaged mixin file armed by a row**
 
-`git mv science/model/src/science_model/schemas/mixin-hypothesis-1.0.json /tmp/`
+Rename the file **inside the worktree** — `git mv` to a path outside the repository exits 128 with "outside repository", so `/tmp/` does not work:
+
+```bash
+git mv science/model/src/science_model/schemas/mixin-hypothesis-1.0.json \
+       science/model/src/science_model/schemas/mixin-hypothesis-1.0.json.disabled
+```
+
+The `.json.disabled` suffix matters: `_packaged_schema_names()` filters on `.endswith(".json")`, so a file renamed to something still ending in `.json` would still be found and the mutation would do nothing.
 Run: `(cd science/model && uv run --frozen pytest tests/test_schema_closed_gate.py -q)`
 **Targets** `test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file` — must FAIL, naming `hypothesis/1.0`.
-Predicted alongside it: nothing. `test_GATE_2_every_armed_project_mixin_pins_its_own_kind` skips the missing file by design, so one missing artifact reports as one failure. **Revert** (`git mv` back, or `git checkout --`).
+Predicted alongside it: nothing. `test_GATE_2_every_armed_project_mixin_pins_its_own_kind` skips the missing file by design, so one missing artifact reports as one failure. **Revert:** `git mv science/model/src/science_model/schemas/mixin-hypothesis-1.0.json.disabled science/model/src/science_model/schemas/mixin-hypothesis-1.0.json`, then confirm `git status --short` is clean.
 
 - [ ] **Step 5: Mutation 5a — restore `extra="ignore"` on `StructuredEntitySource`**
 
@@ -1942,7 +2149,7 @@ An *import* of an entity class is deliberately **not** the mutation here: twelve
 Change `STRUCTURED_DROP_KEYS` to `frozenset({"kind", "title"})`.
 Run: `(cd science && uv run --frozen pytest tests/test_entity_construction_boundary.py tests/test_undeclared_key_diagnostic.py -q)`
 **Targets** `test_kind_is_the_only_declared_DROP` — must FAIL.
-Predicted alongside it: `test_a_shadow_key_reaches_the_normalized_mapping` and any normalization test whose fixture carries `title`, because a dropped `title` fails the base schema's `required`. Trace each to the drop set before accepting it. **Revert.**
+Predicted alongside it: **nothing.** An earlier draft predicted `test_a_shadow_key_reaches_the_normalized_mapping` would fail — it does not: its input carries no `title` at all, so adding `title` to the drop set changes nothing about it. And on the real loader paths, `title` is restored by the loader's own backfill *after* normalization, so a dropped `title` never reaches the schema. The drop-set gate is the only thing that sees this mutation, which is exactly what makes it worth having: nothing downstream would have noticed. **Revert.**
 
 - [ ] **Step 9: Mutation 6 — closed descriptor with `home=None`**
 
@@ -2062,3 +2269,4 @@ Run once, at the end, by the top-level agent:
 - **Widening `REFERENCE_FIELD_NAMES` or the `undeclared_key` diagnostic.** A warning surface is not the mechanism this design builds; a wrong answer should become unreachable, not discouraged.
 - **The remaining 44 unclosed core kinds** and the 16 authored non-core kinds.
 - **`render_update`'s stale-owned-key hole**, recorded in the writer-containment plan's follow-up section. Independent of this work.
+- **The Markdown adapter's authored-`content` blind spot.** `build` now takes `injected` per adapter, and Markdown passes `MarkdownAdapter.INJECTED_KEYS` verbatim so its behaviour is unchanged — which means an author who writes `content:` in Markdown frontmatter still has it hidden from the composed schema. Pre-existing, and now confined to one adapter rather than applied to all of them, but not closed. Closing it changes what the Markdown path accepts, so it belongs to a kind slice. The fix is the same subtraction every other adapter already does: `MarkdownAdapter.INJECTED_KEYS - frozenset(authored_frontmatter)`.
