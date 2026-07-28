@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 7. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 8. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -31,6 +31,15 @@
 > append-only real genesis history (§4), aggregate case-leaf validation (§5),
 > descriptor-relative path judgment plus NUL refusal (§2, §8), and independent golden
 > vectors for every persisted hash (§Testing).
+>
+> **Revision 8 composes producer output rather than widening instrument state.**
+> A registered producer returns `FindingProducerResult`, which contains an unchanged
+> `InstrumentResult[AuditFinding]` plus `ProducerMetrics` from the same observation
+> pass (§6). Adding metrics directly to `InstrumentResult` was rejected because that
+> type governs instruments across the toolkit, most of which are not finding producers;
+> a mutable `HealthContext` metrics side channel was rejected because it would make the
+> producer contract implicit. This revision also corrects the §11 pseudocode to use the
+> revision-6 name `AuditFinding`.
 >
 > **Revision 4** closes five narrow contract issues: the acceptance key omitted matching
 > fields the matcher actually consults (§10), `evidence` had no wire schema despite
@@ -120,8 +129,10 @@ currently derives issues from coverage metrics and from archive lag (§Grounding
 Verified against the tree at `8db7aad9`.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
-  (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is well-formed and the uniform
-  channel needs no new machinery.
+  (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is the unchanged status-and-row
+  component of the producer channel. Metrics are orthogonal to whether an instrument ran,
+  so §6 composes the instrument result with producer metrics rather than widening this
+  toolkit-wide primitive.
 
 - **A partial migration is already in flight, and its tolerance branch is why it
   stalled.** `_drain_instrument_results` (`graph/health.py:108`) unpacks
@@ -573,6 +584,41 @@ alphabetize and destroy the order `HEALTH_CHECKS` encodes today:
 FindingSection(id="datasets", title="Datasets", section_order=300)
 ```
 
+**One composed result is the producer return contract.** A producer must return findings,
+instrument status, and metrics from one observation pass:
+
+```python
+class FindingProducerResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument: InstrumentResult[AuditFinding]
+    metrics: ProducerMetrics = Field(default_factory=ProducerMetrics)
+
+    @model_validator(mode="after")
+    def _unwired_has_no_metrics(self) -> FindingProducerResult:
+        if self.instrument.status == "unwired" and self.metrics.model_dump():
+            raise ValueError("an unwired producer cannot report metrics")
+        return self
+```
+
+`InstrumentResult` keeps its toolkit-wide meaning: `ok`, `empty`, or `unwired`, with
+typed rows and an optional reason/code. It does not acquire a metrics field merely
+because one family of its callers needs measurements. `FindingProducerResult` is the
+generic producer boundary shared by health checks, validation modules, `data_audit`,
+and later Pi lenses; it is not `HealthCheck`-specific.
+
+Composition also closes two less explicit alternatives:
+
+- A producer does not mutate `HealthContext` to publish metrics. Findings and metrics
+  cannot come from different passes or be separated by a hidden side channel.
+- A producer does not return a tuple. The named frozen model is the one runtime type the
+  uniform-channel ratchet can enforce and the registry can validate.
+
+An `unwired` instrument carries no rows by `InstrumentResult`'s existing invariant and
+must carry empty producer metrics: measurements from an instrument that did not run are
+not observations. An `ok` or `empty` result may carry a caveat in `reason` and validated
+metrics, preserving the existing partial-input semantics.
+
 **Producer registration carries a metrics schema.** A producer that emits metrics declares
 their type at registration, and the derived registry validates each producer's metrics
 object against it. Without this, §11's `ProducerMetrics` would be an untyped escape hatch —
@@ -604,7 +650,8 @@ The derived registry **fails early** on:
 3. A finding whose severity, subject type, identifier namespace, or qualifiers violate
    its rule.
 4. A rule declaring producer remediation without a registered trusted handler.
-5. A registered producer returning anything except the uniform result channel.
+5. A registered producer returning anything except `FindingProducerResult`, including a
+   bare `InstrumentResult`, tuple, row list, or report mapping.
 6. Project configuration attempting to add or override a toolkit rule.
 7. Two rules claiming the same `display_order` within a `section`, or two sections
    claiming the same `section_order`.
@@ -910,11 +957,11 @@ report.
 ```python
 class ReportedFinding(TypedDict):
     producer_id: str                 # which producer observed it
-    finding: Finding
+    finding: AuditFinding
 
 class AcceptedFinding(TypedDict):
     producer_id: str
-    finding: Finding
+    finding: AuditFinding
     acceptance_key: str              # §10 — the accepting entry's frozen key
     reason: str                      # the acceptance's own recorded reason
 
@@ -939,7 +986,9 @@ class AuditReport(TypedDict):
   exactly with independent attestation. Accepted findings carry the same claimed
   provenance, plus the key of the entry that accepted them.
 - **`ProducerMetrics` is validated, not free-form** — against the metrics schema the
-  producer declared at registration (§6).
+  producer declared at registration (§6). The report builder receives those metrics
+  through the same `FindingProducerResult` that carried the producer's instrument
+  status and findings; it never re-runs a producer or reads mutable context state.
 - **`totals`** carries `findings_by_severity`, `findings_total`, `accepted_total`, and
   `unwired_total`. `accepted` and `unwired` are **not** in `findings_total`, preserving
   today's exclusions. `total_issues` is replaced by `totals.findings_total`; §9
@@ -956,9 +1005,11 @@ class AuditReport(TypedDict):
 
 ## Testing
 
-1. **Uniform-channel ratchet** — a registered producer returning anything but the uniform
-   result channel fails. The `_drain_instrument_results` non-`InstrumentResult`
-   passthrough is removed, not deprecated.
+1. **Uniform-channel ratchet** — a registered producer returning anything but
+   `FindingProducerResult` fails. A bare `InstrumentResult`, tuple, row list, or report
+   mapping is refused. The `_drain_instrument_results` non-`InstrumentResult`
+   passthrough is removed, not deprecated; the replacement drain accepts exactly the
+   composed result and validates its metrics through the registry.
 2. **Rule-completeness ratchet** — undeclared rule id, duplicate rule id, producer
    remediation without a registered handler, and colliding `display_order` within a
    section each fail.
@@ -1002,7 +1053,8 @@ class AuditReport(TypedDict):
     `(producer_id, finding_id)` in one report are refused at the producer boundary, not
     at occurrence upsert.
 15. **Producer metrics are validated** — a metrics object violating the schema the
-    producer declared at registration fails.
+    producer declared at registration fails; a composed result carrying non-empty
+    metrics with `instrument.status == "unwired"` fails before report assembly.
 16. **Evidence is typed, frozen, and bounded** — a `LocationEvidence` path that is
     absolute, traverses `..`, or resolves through a symlink is refused; `line` and `span`
     together are refused; a `span` with `end_line < start_line`, with equal lines and
