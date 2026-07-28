@@ -2160,3 +2160,12 @@ Updated user guidance:
 `docs/user-guide/health-and-validation.md` documents `findings`,
 `totals.findings_total`, `accepted`, `metrics`, `caveats`, and
 `unwired`.
+
+### Final fix addendum
+
+The final whole-branch fix wave landed in `bd59e249` and `6083796a`.
+Refreshed verification passed 1,678 model tests, 11,763 toolkit tests, and
+1,186 tests in the exact Task 4 scoped selection. Ruff and Pyright passed, as
+did package-local format checks for all 208 Python files changed from
+`4a68e477..HEAD`. The unrelated repository-wide formatter baseline remains
+known-red at 731 files and is not reported as a passing gate.
