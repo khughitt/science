@@ -17,6 +17,7 @@ Generated from canonical Science toolkit sources. Do not edit.
 | `science-create-graph` | `commands/create-graph.md` |
 | `science-create-project` | `commands/create-project.md` |
 | `science-critique-approach` | `commands/critique-approach.md` |
+| `science-curate-skills` | `commands/curate-skills.md` |
 | `science-curate` | `commands/curate.md` |
 | `science-dag-audit` | `commands/dag-audit.md` |
 | `science-discuss` | `commands/discuss.md` |

@@ -55,7 +55,7 @@ def baseline_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def feedback_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """`feedback_cli._get_feedback_dir` reads SCIENCE_FEEDBACK_DIR before falling back to
+    """`feedback_cli.resolve_feedback_dir` reads SCIENCE_FEEDBACK_DIR before falling back to
     the user's config dir. Redirect it so a test never writes to the real one."""
     target = tmp_path / "feedback"
     monkeypatch.setenv("SCIENCE_FEEDBACK_DIR", str(target))

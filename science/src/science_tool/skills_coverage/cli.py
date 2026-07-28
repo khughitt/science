@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import click
+import yaml
+from pydantic import ValidationError
 
 from science_model.skill_coverage.coverage import (
     SkillCoverageError,
@@ -15,6 +18,18 @@ from science_tool.skills_coverage.scan import (
     SkillCoverageScanError,
     scan_portfolio,
     write_report_atomically,
+)
+from science_tool.feedback import FeedbackStoreError, load_all_entries
+from science_tool.feedback_cli import resolve_feedback_dir
+from science_tool.skills_coverage.curate import (
+    CurateConflictError,
+    CurateDispositionError,
+    CurateSelectionError,
+    CurateStatusError,
+    apply_plan,
+    build_curate_plan,
+    coverage_context,
+    serialize_curate_plan,
 )
 
 
@@ -38,6 +53,80 @@ def coverage_command(output: Path | None, project: str | None) -> None:
     except (SkillCoverageScanError, SkillCoverageError) as exc:
         raise click.ClickException(str(exc)) from exc
     text = serialize_coverage_report(report)
+    if output is not None:
+        write_report_atomically(output, text)
+    else:
+        click.echo(text, nl=False)
+
+
+@click.command(name="curate")
+@click.option(
+    "--apply",
+    "apply_",
+    is_flag=True,
+    help=(
+        "File feedback for the plan in ~/.config/science/feedback "
+        "(or $SCIENCE_FEEDBACK_DIR). Default: report only, no writes."
+    ),
+)
+@click.option("--term", "terms", multiple=True, help="With --apply, file only these term(s). Repeatable.")
+@click.option("--project", "project", default=None, help="Restrict the scan to one registered project.")
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text")
+@click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Write the complete report to PATH (atomically) instead of stdout. "
+                   "Report-only: cannot be combined with --apply.")
+def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fmt: str, output: Path | None) -> None:
+    """Triage uncovered skill-coverage gaps into `science feedback` (report-first)."""
+    if terms and not apply_:
+        raise click.ClickException("--term requires --apply")
+    # --output is report-only. Combined with --apply, a failing report-write would
+    # follow a committed feedback write (a retry would then double-record), so reject
+    # the combination outright. Apply results already print to stdout (redirect for audit).
+    if apply_ and output is not None:
+        raise click.ClickException("--output cannot be combined with --apply (results go to stdout)")
+    feedback_dir = resolve_feedback_dir()
+    if feedback_dir.exists() and not feedback_dir.is_dir():
+        raise click.ClickException(f"feedback directory is not a directory: {feedback_dir}")
+    try:
+        report = scan_portfolio(only=project)
+    except (SkillCoverageScanError, SkillCoverageError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    try:
+        entries = load_all_entries(feedback_dir)
+    except (
+        FeedbackStoreError,
+        OSError,
+        UnicodeError,
+        ValidationError,
+        yaml.YAMLError,
+    ) as exc:
+        raise click.ClickException(f"could not load feedback entries from {feedback_dir}: {exc}") from exc
+    try:
+        plan = build_curate_plan(report.candidates, entries, coverage_context(report), report.scope.to_dict())
+    except (CurateConflictError, CurateStatusError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if apply_:
+        try:
+            plan = apply_plan(plan, feedback_dir, today=date.today().isoformat(),
+                              selected_terms=set(terms) or None)
+        except (CurateDispositionError, CurateSelectionError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        except (
+            FeedbackStoreError,
+            OSError,
+            UnicodeError,
+            ValidationError,
+            yaml.YAMLError,
+        ) as exc:
+            raise click.ClickException(
+                f"could not apply feedback plan in {feedback_dir}: {exc}. "
+                "Earlier rows may already have been committed; "
+                "inspect the feedback store before retrying."
+            ) from exc
+
+    text = serialize_curate_plan(plan, fmt)
     if output is not None:
         write_report_atomically(output, text)
     else:

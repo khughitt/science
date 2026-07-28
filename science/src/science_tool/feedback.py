@@ -54,6 +54,18 @@ _SUMMARY_STOPWORDS = {
 }
 
 
+class FeedbackStoreError(ValueError):
+    """A feedback ID or path violates the feedback-store boundary."""
+
+
+def _validate_feedback_id(value: str) -> str:
+    if _ID_RE.fullmatch(value) is None:
+        raise FeedbackStoreError(
+            f"invalid canonical feedback ID {value!r}; expected fb-YYYY-MM-DD-NNN"
+        )
+    return value
+
+
 class FeedbackOccurrence(BaseModel):
     """One filing of a feedback lesson.
 
@@ -89,6 +101,11 @@ class FeedbackEntry(BaseModel):
     related: list[str] = Field(default_factory=list)
     concern: str = "tooling"
     occurrences: list[FeedbackOccurrence] = Field(default_factory=list)
+
+    @field_validator("id")
+    @classmethod
+    def _check_id(cls, value: str) -> str:
+        return _validate_feedback_id(value)
 
     @field_validator("concern")
     @classmethod
@@ -192,17 +209,54 @@ def record_occurrence(
 
 def save_entry(feedback_dir: Path, entry: FeedbackEntry) -> Path:
     """Write a feedback entry to a YAML file. Returns the file path."""
+    entry_id = _validate_feedback_id(entry.id)
     feedback_dir.mkdir(parents=True, exist_ok=True)
-    path = feedback_dir / f"{entry.id}.yaml"
+    path = _feedback_entry_path(feedback_dir, entry_id)
+    resolved_path = _resolve_store_path(feedback_dir, path)
     data = entry.model_dump(mode="json")
-    path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    resolved_path.write_text(
+        yaml.dump(data, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
     return path
 
 
-def load_entry(path: Path) -> FeedbackEntry:
-    """Load a feedback entry from a YAML file."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return FeedbackEntry.model_validate(data)
+def load_entry(feedback_dir: Path, entry_id: str) -> FeedbackEntry:
+    """Load one canonical feedback ID from the configured store."""
+    path = _feedback_entry_path(feedback_dir, _validate_feedback_id(entry_id))
+    resolved_path = _resolve_store_path(feedback_dir, path)
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"Feedback entry not found: {entry_id}")
+    return _load_entry_path(feedback_dir, path)
+
+
+def _feedback_entry_path(feedback_dir: Path, entry_id: str) -> Path:
+    return feedback_dir / f"{entry_id}.yaml"
+
+
+def _resolve_store_path(feedback_dir: Path, path: Path) -> Path:
+    resolved_dir = feedback_dir.resolve()
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(resolved_dir):
+        raise FeedbackStoreError(
+            f"feedback path resolves outside feedback store {resolved_dir}: {path}"
+        )
+    if resolved_path.parent != resolved_dir or resolved_path.name != path.name:
+        raise FeedbackStoreError(
+            f"feedback path does not resolve to its canonical store location: {path}"
+        )
+    return resolved_path
+
+
+def _load_entry_path(feedback_dir: Path, path: Path) -> FeedbackEntry:
+    resolved_path = _resolve_store_path(feedback_dir, path)
+    data = yaml.safe_load(resolved_path.read_text(encoding="utf-8"))
+    entry = FeedbackEntry.model_validate(data)
+    if path.stem != entry.id:
+        raise FeedbackStoreError(
+            f"feedback filename {path.name!r} does not match entry id {entry.id!r}"
+        )
+    return entry
 
 
 def next_feedback_id(feedback_dir: Path, date_str: str) -> str:
@@ -225,7 +279,7 @@ def load_all_entries(feedback_dir: Path) -> list[FeedbackEntry]:
         return []
     entries = []
     for path in sorted(feedback_dir.glob("fb-*.yaml")):
-        entries.append(load_entry(path))
+        entries.append(_load_entry_path(feedback_dir, path))
     return entries
 
 
@@ -271,12 +325,7 @@ def update_entry(
     concern: str | None = None,
 ) -> FeedbackEntry:
     """Update fields on an existing entry. Raises FileNotFoundError if not found."""
-    path = feedback_dir / f"{entry_id}.yaml"
-    if not path.exists():
-        msg = f"Feedback entry not found: {entry_id}"
-        raise FileNotFoundError(msg)
-
-    entry = load_entry(path)
+    entry = load_entry(feedback_dir, entry_id)
 
     if status is not None:
         if status in ("addressed", "deferred", "wontfix") and resolution is None:
@@ -528,11 +577,7 @@ def scaffold_test_for_feedback(
     dry_run: bool = False,
 ) -> FeedbackTestScaffold:
     """Write a failing pytest scaffold for a feedback entry."""
-    entry_path = feedback_dir / f"{entry_id}.yaml"
-    if not entry_path.exists():
-        raise FileNotFoundError(f"Feedback entry not found: {entry_id}")
-
-    entry = load_entry(entry_path)
+    entry = load_entry(feedback_dir, entry_id)
     target_path = _scaffold_output_path(project_root, entry_id, out_path)
     suggested_target = _suggested_next_test_target(entry.target)
     if target_path.exists() and not force:

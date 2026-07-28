@@ -76,7 +76,7 @@ knowledge, and generated-write commands for materialization or reports.
 | `curate`, `big-picture`, `wander`, `qa-audit` | Specialized | Read-only | Curation support, generated synthesis checks, serendipitous review queues, and advisory QA audits. |
 | `bib`, `doi`, `paper`, `paper-fetch`, `book-split`, `distill` | Specialized | Mixed | Literature metadata, source text, book outlines, and public knowledge graph snapshots. |
 | `entities` | Canonical / migration-only | Mixed | Inventory, archive, consolidation, migration, and local-kind registration. |
-| `skills` | Specialized | Read-only | Skills tree linting. |
+| `skills` | Specialized | External-write / Read-only | Lint the skills tree, scan registered projects for coverage gaps, and curate uncovered gaps into global feedback. `skills curate` is report-only by default; `--apply` writes under `~/.config/science/feedback` (or `$SCIENCE_FEEDBACK_DIR`). |
 | `agents` | Specialized | Generated-write / External-write | Generate the committed cross-agent distributions, or install them as project links or user-scope external links for Codex, Crush, or OpenCode. |
 
 ## Dataset Commands

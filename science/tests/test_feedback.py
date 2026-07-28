@@ -71,7 +71,7 @@ def test_save_and_load_round_trip(tmp_path: Path):
     path = tmp_path / "fb-2026-03-25-001.yaml"
     assert path.exists()
 
-    loaded = load_entry(path)
+    loaded = load_entry(tmp_path, entry.id)
     assert loaded.id == entry.id
     assert loaded.target == entry.target
     assert loaded.category == entry.category
@@ -79,6 +79,82 @@ def test_save_and_load_round_trip(tmp_path: Path):
     assert loaded.detail == entry.detail
     assert loaded.status == "open"
     assert loaded.recurrence == 1
+
+
+@pytest.mark.parametrize(
+    "entry_id",
+    [
+        "../outside",
+        "/tmp/outside",
+        "fb-2026-03-25-1",
+    ],
+)
+def test_feedback_entry_rejects_noncanonical_ids(entry_id: str) -> None:
+    with pytest.raises(ValidationError, match="canonical feedback ID"):
+        FeedbackEntry(id=entry_id, target="command:test", summary="Test")
+
+
+def test_save_entry_rejects_traversal_after_model_mutation(tmp_path: Path) -> None:
+    feedback_dir = tmp_path / "feedback"
+    outside = tmp_path / "outside.yaml"
+    entry = FeedbackEntry(
+        id="fb-2026-03-25-001",
+        target="command:test",
+        summary="Test",
+    )
+    entry.id = "../outside"
+
+    with pytest.raises(ValueError, match="canonical feedback ID"):
+        save_entry(feedback_dir, entry)
+
+    assert not outside.exists()
+
+
+def test_load_all_entries_rejects_filename_id_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "fb-2026-03-25-001.yaml"
+    path.write_text(
+        "id: fb-2026-03-25-002\n"
+        "target: command:test\n"
+        "summary: Test\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="filename.*does not match"):
+        load_all_entries(tmp_path)
+
+
+def test_load_all_entries_rejects_symlink_escape(tmp_path: Path) -> None:
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    outside = tmp_path / "outside.yaml"
+    outside.write_text(
+        "id: fb-2026-03-25-001\n"
+        "target: command:test\n"
+        "summary: Test\n",
+        encoding="utf-8",
+    )
+    (feedback_dir / "fb-2026-03-25-001.yaml").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="outside feedback store"):
+        load_all_entries(feedback_dir)
+
+
+def test_save_entry_rejects_symlink_escape(tmp_path: Path) -> None:
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    outside = tmp_path / "outside.yaml"
+    outside.write_text("sentinel\n", encoding="utf-8")
+    (feedback_dir / "fb-2026-03-25-001.yaml").symlink_to(outside)
+    entry = FeedbackEntry(
+        id="fb-2026-03-25-001",
+        target="command:test",
+        summary="Test",
+    )
+
+    with pytest.raises(ValueError, match="outside feedback store"):
+        save_entry(feedback_dir, entry)
+
+    assert outside.read_text(encoding="utf-8") == "sentinel\n"
 
 
 def test_next_feedback_id_empty_dir(tmp_path: Path):
@@ -222,7 +298,7 @@ def test_update_entry_status(tmp_path: Path):
     )
     assert updated.status == "addressed"
     assert updated.resolution == "commit:abc123 — fixed it"
-    reloaded = load_entry(tmp_path / "fb-2026-03-25-001.yaml")
+    reloaded = load_entry(tmp_path, "fb-2026-03-25-001")
     assert reloaded.status == "addressed"
 
 
@@ -520,7 +596,7 @@ def test_legacy_yaml_without_concern_loads_as_tooling(tmp_path):
         "target: command:x\nsummary: s\n",
         encoding="utf-8",
     )
-    entry = load_entry(path)
+    entry = load_entry(tmp_path, "fb-2026-01-01-001")
     assert entry.concern == "tooling"
 
 
@@ -545,7 +621,7 @@ def test_update_entry_sets_concern(tmp_path):
     save_entry(tmp_path, FeedbackEntry(id="fb-2026-06-28-001", target="skill:statistics", summary="a", concern="tooling"))
     updated = update_entry(tmp_path, "fb-2026-06-28-001", concern="methodology:statistics")
     assert updated.concern == "methodology:statistics"
-    assert load_entry(tmp_path / "fb-2026-06-28-001.yaml").concern == "methodology:statistics"
+    assert load_entry(tmp_path, "fb-2026-06-28-001").concern == "methodology:statistics"
 
 
 def test_update_entry_rejects_unknown_concern(tmp_path):
@@ -617,7 +693,7 @@ class TestNonLossyOccurrences:
             "summary: s\nrecurrence: 3\n",
             encoding="utf-8",
         )
-        entry = load_entry(path)
+        entry = load_entry(tmp_path, "fb-2026-01-01-001")
         assert entry.recurrence == 3
         assert len(entry.occurrences) == 3
         assert entry.occurrences[0].project == "legacy-proj"

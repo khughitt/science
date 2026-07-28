@@ -23,7 +23,7 @@ def feedback_group() -> None:
     """Feedback management commands."""
 
 
-def _get_feedback_dir() -> Path:
+def resolve_feedback_dir() -> Path:
     import os
 
     from science_tool.registry.config import get_science_config_dir
@@ -68,7 +68,7 @@ def feedback_add(
         save_entry,
     )
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     recent_index = _parse_from_recent_index(ctx.args, from_recent=from_recent)
     if recent_index is not None:
         from science_tool.telemetry import feedback_context_from_recent_event, get_telemetry_dir, read_events
@@ -98,7 +98,7 @@ def feedback_add(
         merge_path = fb_dir / f"{merge_into}.yaml"
         if not merge_path.exists():
             raise click.ClickException(f"Feedback entry not found: {merge_into}")
-        dup = load_entry(merge_path)
+        dup = load_entry(fb_dir, merge_into)
     else:
         dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
 
@@ -193,7 +193,7 @@ def feedback_list(
     if status == "all":
         status = None
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     entries = list_entries(fb_dir, status=status, target=target, category=category, project=project, concern=concern)
 
     columns = [
@@ -259,7 +259,7 @@ def feedback_update(
     """Update a feedback entry."""
     from science_tool.feedback import update_entry as _update
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     try:
         entry = _update(
             fb_dir,
@@ -299,7 +299,7 @@ def feedback_triage(
     """Show open entries grouped or clustered for triage."""
     from science_tool.feedback import attach_telemetry_to_triage_rows, cluster_for_triage, group_for_triage
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     if cluster_mode or output_format == "json":
         rows = cluster_for_triage(fb_dir, target=target, concern=concern, since_days=since_days)
         if with_telemetry:
@@ -412,7 +412,7 @@ def feedback_scaffold_test(entry_id: str, out_path: Path | None, dry_run: bool, 
     """Create a failing pytest scaffold for one feedback entry."""
     from science_tool.feedback import scaffold_test_for_feedback
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     try:
         result = scaffold_test_for_feedback(
             fb_dir,
@@ -439,7 +439,7 @@ def feedback_report(status: str | None, project: str | None, concern: str | None
     """Generate a markdown report of feedback entries."""
     from science_tool.feedback import render_report
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     report = render_report(fb_dir, status=status, project=project, concern=concern)
     click.echo(report)
 
@@ -465,7 +465,7 @@ def feedback_targets(status: str | None, output_format: str, output_path: Path |
     if status == "all":
         status = None
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     rows = list_targets(fb_dir, status=status)
     columns = [
         ("target", "Target"),
@@ -504,7 +504,7 @@ def feedback_regression_candidates(output_format: str, output_path: Path | None)
     """
     from science_tool.feedback import list_regression_candidates
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     rows = list_regression_candidates(fb_dir)
     if not rows and output_format != "json":
         click.echo("No open positive feedback to convert into regression tests.")
@@ -550,11 +550,11 @@ def feedback_show(entry_id: str) -> None:
     """Show one feedback entry in full, including every recorded occurrence."""
     from science_tool.feedback import load_entry
 
-    fb_dir = _get_feedback_dir()
+    fb_dir = resolve_feedback_dir()
     path = fb_dir / f"{entry_id}.yaml"
     if not path.exists():
         raise click.ClickException(f"Feedback entry not found: {entry_id}")
-    entry = load_entry(path)
+    entry = load_entry(fb_dir, entry_id)
     import yaml
 
     click.echo(yaml.dump(entry.model_dump(mode="json"), default_flow_style=False, sort_keys=False))
