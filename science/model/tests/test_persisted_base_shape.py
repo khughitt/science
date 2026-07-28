@@ -59,6 +59,30 @@ def test_unknown_keys_are_ALLOWED() -> None:
     EntityValidator().validate_persisted_base_shape(_ok() | {"stance": "supports"})
 
 
+def test_base_shape_admits_what_a_closed_kinds_composed_schema_refuses() -> None:
+    # THE contrast the "necessary, NOT sufficient" claim rests on: one mapping that PASSES this
+    # operation and FAILS full composed entity-schema validation. `hypothesis` is in
+    # PROJECT_MIXIN_NAMES, so its composed schema sets `unevaluatedProperties: false` -- the
+    # closure `proposition`/`evidence-line` do not have yet. The shadow key `stance` is
+    # unevaluated by base 2.0 + hypothesis/1.0 alike, so it alone trips `validate_as` there; this
+    # operation, checking base 2.0 only, has no closure to trip and admits it. That gap is
+    # precisely why this operation is not a substitute for entity-schema validation.
+    from science_model.entity_schema.profile import default_profile_for_kind
+
+    payload = {
+        "id": "hypothesis:0001-x",
+        "kind": "hypothesis",
+        "title": "concept:a affects concept:b",
+        "created": "2026-07-27",
+        "updated": "2026-07-27",
+        "status": "draft",
+        "stance": "supports",
+    }
+    EntityValidator().validate_persisted_base_shape(payload)
+    with pytest.raises(EntityValidationError, match="stance"):
+        EntityValidator().validate_as(payload, default_profile_for_kind("hypothesis"))
+
+
 def test_it_does_not_weaken_validate_as() -> None:
     # `validate_as` must still refuse a base-only profile. If this ever passes, the separate
     # operation has been folded back into the sufficient one and the distinction is lost.
