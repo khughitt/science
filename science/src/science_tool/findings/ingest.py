@@ -165,11 +165,16 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
     try:
         raw = json.loads(text)
     except RecursionError as exc:
-        raise IngestError(f"could not parse {path}: excessive nesting") from exc
+        # Decoder recursion behavior is version-dependent; normalize it to the
+        # portable public nesting boundary enforced below for accepted payloads.
+        raise IngestError(
+            f"could not parse {path}: excessive nesting exceeds "
+            f"{MAX_REPORT_NESTING}"
+        ) from exc
     except ValueError as exc:
         # JSONDecodeError is a ValueError. The broader base also covers CPython's
-        # bounded-integer refusal. Decoder nesting behavior varies by Python version;
-        # the explicit post-decode check below enforces the portable boundary.
+        # bounded-integer refusal. The explicit post-decode check enforces the
+        # portable nesting limit when the decoder accepts deep input.
         raise IngestError(f"could not parse {path}: {exc}") from exc
     _require_bounded_json_nesting(raw, path)
     if not isinstance(raw, dict):

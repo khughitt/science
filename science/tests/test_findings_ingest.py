@@ -26,9 +26,6 @@ from science_tool.findings.storage import CASES_DIRNAME, MAX_CASE_BYTES, load_ca
 from science_tool.graph.errors import EntityIdentityCollisionError
 
 
-EXPECTED_MAX_REPORT_NESTING = 100
-
-
 class Q(BaseModel):
     model_config = ConfigDict(extra="forbid")
     field: str = ""
@@ -224,24 +221,6 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         },
     )
     return AuditReport(**{**base, **overrides})
-
-
-def _nested_list(depth: int) -> object:
-    value: object = 0
-    for _ in range(depth):
-        value = [value]
-    return value
-
-
-def _report_with_metric_nesting(depth: int) -> dict:
-    report = _report(
-        metrics={
-            "dataset_anomalies": {
-                "nested": _nested_list(depth),
-            }
-        }
-    )
-    return report.model_dump(mode="json")
 
 
 def _provenance(report: AuditReport) -> IngestionProvenance:
@@ -1502,6 +1481,27 @@ def test_load_report_wraps_a_deep_nesting_parse_error(tmp_path):
 
     with pytest.raises(IngestError, match="could not parse.*excessive nesting"):
         load_report(tmp_path, path)
+
+
+EXPECTED_MAX_REPORT_NESTING = 100
+
+
+def _nested_list(depth: int) -> object:
+    value: object = 0
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def _report_with_metric_nesting(depth: int) -> dict:
+    report = _report(
+        metrics={
+            "dataset_anomalies": {
+                "nested": _nested_list(depth),
+            }
+        }
+    )
+    return report.model_dump(mode="json")
 
 
 def test_load_report_accepts_the_maximum_json_nesting(tmp_path):
