@@ -74,10 +74,11 @@ RENAMED_KEYS: dict[str, str] = {"author_stated_evidence": "source_stated_evidenc
 # for that reason.
 REFUSED_KEYS: frozenset[str] = frozenset({"confidence"})
 
-# NOT migrated, and that is the ruling (2026-07-14): `promoted_from` is a PROJECT EXTENSION
-# (protein-landscape). Its `origins` rename was refuted by the model -- `OriginRecord.type` is a
-# required enum naming WHO had the idea, and the authored values are source paths naming WHERE the
-# entity came from. Any type the migration picked would be fabricated provenance.
+# NOT migrated, and that is the surviving ruling (2026-07-14). The PROJECT EXTENSION ownership
+# claim is superseded: `promoted_from` is a per-kind core field. Its `origins` rename was refuted by
+# the model -- `OriginRecord.type` is a required enum naming WHO had the idea, and the authored
+# values are source paths naming WHERE the entity came from. Any type the migration picked would be
+# fabricated provenance.
 
 
 class MigrationRefused(RuntimeError):
