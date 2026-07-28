@@ -5,13 +5,20 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from science_tool.feedback import normalize_target
+from science_tool.feedback import (
+    FeedbackEntry,
+    load_entry,
+    next_feedback_id,
+    normalize_target,
+    record_occurrence,
+    save_entry,
+)
 
 if TYPE_CHECKING:
     from science_model.skill_coverage.coverage import Candidate, CoverageReport
-    from science_tool.feedback import FeedbackEntry
 
 CONCERN = "tooling"
 CATEGORY = "gap"
@@ -195,3 +202,83 @@ def build_curate_plan(
             )
         )
     return CuratePlan(mode="report", scope=dict(scope), rows=rows, context=context)
+
+
+def _summary(row: CurateRow) -> str:
+    return (
+        f"skill corpus lacks coverage for {row.term} "
+        f"({row.n_plans} plans / {row.n_projects} projects)"
+    )
+
+
+def _detail(row: CurateRow) -> str:
+    cand = row.candidate
+    assert cand is not None  # rows created by build_curate_plan always carry their candidate
+    lines = [
+        f"score: {cand.score}",
+        f"likely_archetype: {cand.likely_archetype}",
+        "evidence:",
+    ]
+    for triple in cand.evidence:
+        lines.append(f"  - {triple.project} / {triple.plan_ref} / {triple.dataset_ref}")
+    return "\n".join(lines)
+
+
+def _open_id(row: CurateRow) -> str:
+    return next(match.id for match in row.existing if match.status == "open")
+
+
+def apply_plan(
+    plan: CuratePlan,
+    feedback_dir: Path,
+    *,
+    today: str,
+    selected_terms: set[str] | None = None,
+) -> CuratePlan:
+    if selected_terms is not None:
+        unknown = sorted(selected_terms - {row.term for row in plan.rows})
+        if unknown:
+            raise CurateSelectionError(unknown)
+
+    plan.mode = "apply"
+    for row in plan.rows:
+        if row.disposition in ("skip", "skip-addressed-conflict"):
+            row.applied = False
+            continue
+        if selected_terms is not None and row.term not in selected_terms:
+            row.applied = False
+            continue
+        if row.disposition == "recur":
+            entry = load_entry(feedback_dir / f"{_open_id(row)}.yaml")
+            record_occurrence(
+                entry,
+                date=today,
+                project=PROJECT,
+                category=CATEGORY,
+                detail=_detail(row),
+            )
+            save_entry(feedback_dir, entry)
+            row.result = {
+                "action": "recurred",
+                "id": entry.id,
+                "recurrence_after": entry.recurrence,
+            }
+        else:
+            entry = FeedbackEntry(
+                id=next_feedback_id(feedback_dir, today),
+                created=today,
+                project=PROJECT,
+                target=target_for(row.term),
+                category=CATEGORY,
+                summary=_summary(row),
+                detail=_detail(row),
+                concern=CONCERN,
+            )
+            save_entry(feedback_dir, entry)
+            row.result = {
+                "action": "created",
+                "id": entry.id,
+                "recurrence_after": entry.recurrence,
+            }
+        row.applied = True
+    return plan
