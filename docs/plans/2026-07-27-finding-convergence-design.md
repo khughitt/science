@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 17. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 18. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -150,6 +150,14 @@
 > The exhaustive rule-ID table also includes the runner-owned
 > `validate.sidecar.legacy_removed` → `validate.sidecar-removed` mapping that revision
 > 15's `validate/checks/` pass could not see.
+>
+> **Revision 18 closes the finite-dispatch rule-string surface.** The five
+> policy-sensitive families are not the only f-strings in validation: benchmark support
+> fields, identity tiers/spec defects, relation-audit defect codes, and workflow
+> fingerprint codes also format IDs at emission. Their existing IDs remain exact, but
+> Plan 2 replaces each formatter with a toolkit-owned `key -> FindingRule` map and an
+> equality guard against its upstream finite key authority (§6). Unknown keys fail;
+> emission never constructs a rule string.
 
 ## Motivation
 
@@ -792,6 +800,23 @@ enter findings, metrics, or totals.
 | `f"{kind}.unbacked-inverse"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
 | `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
 | `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
+
+**Four additional finite dispatch surfaces preserve their IDs through explicit maps.**
+They do not carry the gate/severity/acceptance policy that makes the five families above
+distinct, but they still may not format strings at emission:
+
+| Source | Frozen declaration map |
+|---|---|
+| `benchmark_metadata.py` support list fields | Keys exactly `{"evidence", "notes"}`; values `benchmark.task-support-evidence-invalid` and `benchmark.task-support-notes-invalid`. |
+| `identity_context.py` required tiers | Keys exactly `{"assembly", "gene", "protein", "variant"}`; values `identity.<tier>-undeclared`. |
+| `identity_context.py` molecular specs | Cartesian product of prefixes `{"identity.gene", "identity.protein"}` and suffixes `{"malformed", "namespace-unsupported", "declared-unresolved", "registry-unavailable", "registry-invalid"}`. |
+| `relations.py` relation defects | Keys equal the relation-audit module's declared defect-code authority; values retain `relation.<code>`. |
+| `workflow_runs.py` fingerprint findings | Keys equal the workflow-fingerprint finding-code authority; values retain the existing `run.*` IDs. |
+
+Each map is declared once beside its producer. Tests assert key-set equality with the
+upstream authority (or the exact frozen finite set where no exported authority exists).
+The emission site performs a lookup and raises on a missing key. These are declarations
+derived from toolkit code, not a license for a generic rule-string factory.
 
 The adjacent `prose_lints.numeric-verification.coverage` INFO site is **not** a
 finding-rule declaration. Its verified / unverifiable / mismatch / error values are a
@@ -1495,7 +1520,10 @@ class AuditReport(TypedDict):
     findings, and every old nonconforming ID is absent from declarations and emissions.
     All non-policy INFO sites emit
     `ValidationNotice`, not an `AuditFinding`; the check executes once and its notice and
-    producer result derive from the same frozen observation batch.
+    producer result derive from the same frozen observation batch. Benchmark,
+    identity-context, relation, and workflow finite-dispatch key sets equal their
+    declaration maps, and their emission sites perform lookups rather than formatting
+    rule strings.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
