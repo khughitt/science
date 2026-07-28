@@ -348,10 +348,41 @@ def _write_entity_file(
     project_root: Path,
     as_of: date | None = None,
 ) -> None:
-    """Workbench writer: delegates to the shared entity writer with the legacy body."""
-    from science_tool.entities import write_entity_file
+    """Workbench writer: owned-allowlist frontmatter, never a full model dump.
 
-    write_entity_file(entity, project_root=project_root, body=workbench_entity_body(entity), as_of=as_of)
+    An UPSERT. `compile_workbench` is re-run over the same rows routinely, so the destination
+    usually exists; rendering it as a create would overwrite the author's title, status and body
+    on every recompile. Deliberately NOT `entities.write_entity_file`, which renders the whole
+    model and would re-introduce the skeleton dump on this path.
+    """
+    from science_tool.dag.entity_frontmatter import read_existing_target, render_create, render_update
+    from science_tool.entities import _atomic_replace_text, resolve_path_policy
+
+    today = (as_of or date.today()).isoformat()
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    dest = project_root / resolve_path_policy(entity.kind, project_root=project_root).root / f"{local_part}.md"
+
+    if dest.exists():
+        # ADMIT FIRST. `read_existing_target` refuses a wrong-identity, undated or unparseable
+        # destination. Reading the file directly and defaulting `created` -- as an earlier draft
+        # of this plan did -- lets `render_update` overwrite id/kind/created/updated and hand
+        # `certify_persisted` a mapping that is valid only because it was just repaired.
+        existing_frontmatter, existing_body, _current = read_existing_target(dest, entity)
+        text = render_update(
+            entity,
+            existing_frontmatter=existing_frontmatter,
+            body=existing_body,
+            created=str(existing_frontmatter["created"]),
+            updated=today,
+        )
+    else:
+        text = render_create(
+            entity, body=workbench_entity_body(entity), created=today, updated=today
+        )
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_replace_text(dest, text)
 
 
 def compile_workbench(

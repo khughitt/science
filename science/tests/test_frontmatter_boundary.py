@@ -140,7 +140,7 @@ _ALLOWED_EMITTERS: dict[tuple[str, str], str] = {
     ("src/science_tool/entities.py", "_render_markdown"): "pending-normalization: no created/updated force-quoting",
     ("src/science_tool/entities.py", "build_entity_markdown"): "pending-normalization: no created/updated force-quoting",
     ("src/science_tool/entities.py", "_merge_extra_frontmatter"): "pending-normalization: no created/updated force-quoting",
-    ("src/science_tool/dag/workbench_apply.py", "_render_entity_text_from_frontmatter"): "pending-normalization: no created/updated force-quoting on RMW path",
+    ("src/science_tool/dag/entity_frontmatter.py", "render_from_frontmatter"): "pending-normalization: no created/updated force-quoting on RMW path",
     # --- structural: fence spacing / body handling differ from canonical.
     ("src/science_tool/annotation/source_text.py", "render_source_md"): "structural: ---\\n\\n spacing + passage-offset fixpoint loop",
     ("src/science_tool/graph/decision_log.py", "render_owner_file"): "structural: ---\\n\\n spacing + rstrip body",

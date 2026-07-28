@@ -11,10 +11,14 @@ from typing import Literal
 
 import yaml
 from pydantic import ValidationError
-from science_model.entities import EvidenceLineEntity
-from science_model.frontmatter import split_frontmatter
-from science_model.propositions import PropositionEntity
 
+from science_tool.dag.entity_frontmatter import (
+    MalformedTargetError,
+    WorkbenchEntity,
+    read_existing_target,
+    render_create,
+    render_update,
+)
 from science_tool.dag.workbench import (
     CompileResult,
     WorkbenchFile,
@@ -26,12 +30,10 @@ from science_tool.data_root import project_config_path
 from science_tool.entities import (
     EntityCommandError,
     local_part_conforms,
-    render_entity_text,
     resolve_path_policy,
 )
 
 ApplyStatus = Literal["applied", "no-op"]
-WorkbenchEntity = PropositionEntity | EvidenceLineEntity
 _PROPOSITION_ROW_FIELDS: tuple[str, ...] = (
     "subject",
     "predicate",
@@ -43,47 +45,6 @@ _PROPOSITION_ROW_FIELDS: tuple[str, ...] = (
     "discusses",
     "claim_layer",
     "identification_strength",
-)
-_RENDERER_DERIVED_FRONTMATTER_KEYS: frozenset[str] = frozenset(
-    (
-        "canonical_id",
-        "content_preview",
-        "content",
-        "file_path",
-        "type",
-    )
-)
-_PROPOSITION_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
-    (
-        "id",
-        "kind",
-        "subject",
-        "object",
-        "predicate",
-        "polarity",
-        "legacy_relation_label",
-        "legacy_patch",
-        "legacy_edge_id",
-        "discusses",
-        "claim_layer",
-        "identification_strength",
-        "created",
-        "updated",
-    )
-)
-_EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS: frozenset[str] = frozenset(
-    (
-        "id",
-        "kind",
-        "stance",
-        "target",
-        "source",
-        "evidence_type",
-        "quantitative_result",
-        "belief_eligible",
-        "created",
-        "updated",
-    )
 )
 
 
@@ -208,90 +169,12 @@ def _validated_entity_target_path(project_root: Path, *, kind: str, entity_id: s
     return resolved
 
 
-def _parse_existing_target_text(text: str) -> tuple[dict[str, object], str]:
-    return split_frontmatter(text)
-
-
-def _read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str, object], str, str]:
-    expected_id = entity.id
-    expected_kind = entity.kind
-    try:
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            current_text = handle.read()
-        frontmatter, body = _parse_existing_target_text(current_text)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
-        raise WorkbenchApplyError(f"malformed existing entity target {path}: {exc}") from exc
-    existing_kind = frontmatter.get("kind")
-    if frontmatter.get("id") != expected_id or existing_kind != expected_kind:
-        raise WorkbenchApplyError(
-            f"malformed existing entity target {path}: expected {expected_kind} {expected_id}"
-        )
-    if frontmatter.get("created") is None or frontmatter.get("updated") is None:
-        raise WorkbenchApplyError(f"malformed existing entity target {path}: missing created/updated")
-    return frontmatter, body, current_text
-
-
-def _generated_frontmatter(entity: WorkbenchEntity, *, created: str, updated: str) -> dict[str, object]:
-    generated_text = render_entity_text(entity, body="", created=created, updated=updated)
-    try:
-        _prefix, frontmatter_text, _body = generated_text.split("---\n", 2)
-    except ValueError as exc:
-        raise WorkbenchApplyError(f"could not render entity frontmatter for {entity.id}") from exc
-    loaded = yaml.safe_load(frontmatter_text) or {}
-    if not isinstance(loaded, dict):
-        raise WorkbenchApplyError(f"could not render entity frontmatter for {entity.id}")
-    return loaded
-
-
-def _render_entity_text_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
-    # allow_unicode + wide: this is a read-modify-write, so an escaping/folding dumper rewrites
-    # authored fields the edit never touched. Same rule as `entities._dump_frontmatter`.
-    dumped = yaml.safe_dump(
-        frontmatter,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-        width=10_000,
-    )
-    return "---\n" + dumped + "---\n" + body
-
-
-def _workbench_frontmatter_keys(entity: WorkbenchEntity) -> frozenset[str]:
-    if entity.kind == "proposition":
-        return _PROPOSITION_WORKBENCH_FRONTMATTER_KEYS
-    if entity.kind == "evidence-line":
-        return _EVIDENCE_LINE_WORKBENCH_FRONTMATTER_KEYS
-    raise WorkbenchApplyError(f"unsupported workbench entity kind: {entity.kind}")
-
-
-def _render_workbench_entity_update(
-    entity: WorkbenchEntity,
-    *,
-    existing_frontmatter: dict[str, object],
-    body: str,
-    created: str,
-    updated: str,
-) -> str:
-    final_frontmatter = {
-        key: value
-        for key, value in existing_frontmatter.items()
-        if key not in _RENDERER_DERIVED_FRONTMATTER_KEYS
-    }
-    generated_frontmatter = _generated_frontmatter(entity, created=created, updated=updated)
-    for key in _workbench_frontmatter_keys(entity):
-        if key in generated_frontmatter:
-            final_frontmatter[key] = generated_frontmatter[key]
-    final_frontmatter["created"] = created
-    final_frontmatter["updated"] = updated
-    return _render_entity_text_from_frontmatter(final_frontmatter, body)
-
-
 def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) -> PlannedWorkbenchEdit:
     path = _target_path(project_root, entity)
     today = as_of.isoformat()
     if not path.exists():
         body = workbench_entity_body(entity)
-        final_text = render_entity_text(entity, body=body, created=today, updated=today)
+        final_text = render_create(entity, body=body, created=today, updated=today)
         return PlannedWorkbenchEdit(
             path=path,
             reason="entity",
@@ -303,10 +186,13 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
             entity_id=entity.id,
         )
 
-    frontmatter, body, current_text = _read_existing_target(path, entity)
+    try:
+        frontmatter, body, current_text = read_existing_target(path, entity)
+    except MalformedTargetError as exc:
+        raise WorkbenchApplyError(str(exc)) from exc
     created = str(frontmatter["created"])
     existing_updated = str(frontmatter["updated"])
-    unchanged_timestamp_text = _render_workbench_entity_update(
+    unchanged_timestamp_text = render_update(
         entity,
         existing_frontmatter=frontmatter,
         body=body,
@@ -316,7 +202,7 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     if unchanged_timestamp_text == current_text:
         final_text = current_text
     else:
-        final_text = _render_workbench_entity_update(
+        final_text = render_update(
             entity,
             existing_frontmatter=frontmatter,
             body=body,

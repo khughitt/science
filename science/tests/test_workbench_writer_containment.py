@@ -7,6 +7,8 @@ entity-model tests' minimal-construction pattern as precedent for a production w
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
@@ -71,3 +73,169 @@ def test_empty_triple_terms_fail_at_PARSE_time(field: str) -> None:
     # the `Predicate("")` conversion; subject and object were not protected by anything.
     with pytest.raises(ValidationError):
         _row(**{field: ""})
+
+
+_SKELETON_KEYS = frozenset({
+    "datapackage", "accessions", "parent_dataset", "license", "local_path", "xrefs", "siblings",
+    "consumed_by", "produced_by", "scope", "provisional", "pre_registered", "deprecated_ids",
+    "profile", "project",
+})
+
+
+def _created_frontmatter(tmp_path, entity) -> dict:
+    """Frontmatter of the file the CREATE path would write for `entity`."""
+    import yaml
+
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    edit = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    return yaml.safe_load(edit.final_text.split("---\n", 2)[1])
+
+
+def test_created_proposition_carries_only_owned_keys(tmp_path) -> None:
+    from science_tool.dag.entity_frontmatter import CREATE_ONLY_KEYS, PROPOSITION_OWNED_KEYS
+
+    fm = _created_frontmatter(tmp_path, _proposition_for_row(_row()))
+    allowed = PROPOSITION_OWNED_KEYS | CREATE_ONLY_KEYS
+    assert set(fm) <= allowed, f"unowned keys persisted: {sorted(set(fm) - allowed)}"
+
+
+def test_created_evidence_line_carries_no_skeleton_fields(tmp_path) -> None:
+    # The 391-document uniform set from mm30. Each of these was written as an empty default.
+    line = _evidence_line_for_stub(
+        EvidenceStub(stance="supports", source="paper:S"), target_id="proposition:0001-x", index=0
+    )
+    fm = _created_frontmatter(tmp_path, line)
+    assert not (set(fm) & _SKELETON_KEYS), f"skeleton fields persisted: {sorted(set(fm) & _SKELETON_KEYS)}"
+
+
+def test_created_entity_has_a_non_empty_title(tmp_path) -> None:
+    fm = _created_frontmatter(tmp_path, _proposition_for_row(_row()))
+    assert fm["title"].strip()
+
+
+def test_created_evidence_line_keeps_a_deliberate_false(tmp_path) -> None:
+    # `belief_eligible=False` is a staging DECISION -- an empirical stub with no dataset_usage is
+    # staged ineligible. It must survive the allowlist projection, because a stamped-ineligible
+    # line that serializes as eligible is a belief-affecting silent change.
+    from science_model.reasoning import EvidenceType
+
+    stub = EvidenceStub(stance="supports", evidence_type=EvidenceType.EMPIRICAL_DATA)
+    line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
+    assert line.belief_eligible is False
+    fm = _created_frontmatter(tmp_path, line)
+    assert fm["belief_eligible"] is False
+
+
+def test_title_is_CREATE_ONLY() -> None:
+    # Adding `title` to a per-kind update set would overwrite an author's replacement on the next
+    # apply and contradict design §5.2. The delta between create and update is exactly this.
+    from science_tool.dag.entity_frontmatter import (
+        CREATE_ONLY_KEYS,
+        EVIDENCE_LINE_OWNED_KEYS,
+        PROPOSITION_OWNED_KEYS,
+    )
+
+    assert CREATE_ONLY_KEYS == frozenset({"title", "status"})
+    for owned in (PROPOSITION_OWNED_KEYS, EVIDENCE_LINE_OWNED_KEYS):
+        assert "title" not in owned
+        assert "status" not in owned
+
+
+def test_update_preserves_an_authors_replacement_title(tmp_path) -> None:
+    # The reason title is create-only, proved behaviourally rather than by set arithmetic.
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    import yaml
+
+    entity = _proposition_for_row(_row())
+    first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    # Replace the title in the FRONTMATTER ONLY. `str.replace` over the whole file also rewrites
+    # the body heading, and then a substring assertion passes even when the frontmatter title was
+    # overwritten -- an inert proof of exactly the thing this test exists to catch.
+    frontmatter, body = first.final_text.split("---\n", 2)[1:]
+    edited = yaml.safe_load(frontmatter) | {"title": "An author's real title"}
+    first.path.write_text(
+        "---\n" + yaml.safe_dump(edited, sort_keys=False, allow_unicode=True) + "---\n" + body,
+        encoding="utf-8",
+    )
+
+    second = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
+
+    reloaded = yaml.safe_load(second.final_text.split("---\n", 2)[1])
+    assert reloaded["title"] == "An author's real title"
+
+
+def test_recompiling_preserves_an_authors_title_and_body(tmp_path) -> None:
+    # `compile_workbench` is re-run routinely. If its writer rendered every call as a create, the
+    # second run would silently overwrite the title an author wrote and the prose under it -- on
+    # the path that writes most entities.
+    import yaml
+
+    from science_tool.dag import workbench as wb
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
+                                 "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}
+    )
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
+
+    written = next((tmp_path / "entities").rglob("*.md"))
+    frontmatter, body = written.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    edited = yaml.safe_load(frontmatter) | {"title": "An author's real title"}
+    written.write_text(
+        "---\n" + yaml.safe_dump(edited, sort_keys=False, allow_unicode=True) + "---\n"
+        + body + "\nAuthored prose.\n",
+        encoding="utf-8",
+    )
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 28))
+
+    after = written.read_text(encoding="utf-8")
+    assert yaml.safe_load(after.split("---\n", 2)[1])["title"] == "An author's real title"
+    assert "Authored prose." in after
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        pytest.param({"id": "question:wrong"}, id="wrong-id"),
+        pytest.param({"kind": "question"}, id="wrong-kind"),
+        pytest.param({"created": None}, id="missing-created"),
+    ],
+)
+def test_compile_refuses_a_PARSEABLE_but_inadmissible_destination(tmp_path, corruption) -> None:
+    # THE defect this admission rule exists for, and the one the two tests above CANNOT reach:
+    # a destination that parses fine but is not this entity's file, or has no dates.
+    # `render_update` overwrites id, kind, created and updated, so without `read_existing_target`
+    # running FIRST the file is repaired into validity and `certify_persisted` passes on a record
+    # that was never admissible. Malformed YAML does not prove this -- it raises during parsing
+    # even when the admission checks are skipped entirely.
+    import yaml
+
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import MalformedTargetError
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
+                                 "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}
+    )
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
+
+    written = next((tmp_path / "entities").rglob("*.md"))
+    frontmatter, body = written.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    corrupted = yaml.safe_load(frontmatter) | corruption
+    corrupted = {k: v for k, v in corrupted.items() if v is not None}  # None means "remove the key"
+    written.write_text(
+        "---\n" + yaml.safe_dump(corrupted, sort_keys=False, allow_unicode=True) + "---\n" + body,
+        encoding="utf-8",
+    )
+    before = written.read_bytes()
+
+    with pytest.raises(MalformedTargetError):
+        wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 28))
+
+    assert written.read_bytes() == before, "a refused destination was modified anyway"

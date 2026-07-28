@@ -13,8 +13,10 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
 import yaml
 
+from science_tool.dag.entity_frontmatter import MalformedTargetError
 from science_tool.dag.workbench import (
     EvidenceStub,
     WorkbenchFile,
@@ -214,10 +216,12 @@ def test_default_as_of_stamps_today(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_malformed_existing_entity_falls_back_gracefully(tmp_path: Path) -> None:
-    """A corrupt/unparseable existing entity file does not crash compile_workbench.
+def test_malformed_existing_entity_is_REFUSED(tmp_path: Path) -> None:
+    """A corrupt existing entity file is refused; the file is left byte-identical.
 
-    The fallback uses the injected as_of date for both created and updated.
+    Inverted deliberately (design §5.3). The old behaviour silently replaced the file, which
+    destroys an author's content exactly when something is already wrong with it -- and it
+    disagreed with the apply path, which has always refused a malformed target.
     """
     _seed_project(tmp_path)
     wb = WorkbenchFile(
@@ -241,14 +245,10 @@ def test_malformed_existing_entity_falls_back_gracefully(tmp_path: Path) -> None
 
     # Overwrite with malformed YAML frontmatter.
     prop_path.write_text("---\n: : bad yaml\n---\n", encoding="utf-8")
+    before = prop_path.read_bytes()
 
-    # Compile again with a new date — must NOT raise.
-    as_of = date(2026, 6, 13)
-    result = compile_workbench(wb, project_root=tmp_path, as_of=as_of)
+    # Compile again with a new date — must be refused, not silently replaced.
+    with pytest.raises(MalformedTargetError):
+        compile_workbench(wb, project_root=tmp_path, as_of=date(2026, 6, 13))
 
-    assert len(result.propositions) == 1
-    fm = _read_frontmatter(prop_path)
-    assert fm.get("created") == as_of.isoformat(), (
-        f"Expected created fallback to {as_of.isoformat()!r}, got {fm.get('created')!r}"
-    )
-    assert fm.get("updated") == as_of.isoformat(), f"Expected updated={as_of.isoformat()!r}, got {fm.get('updated')!r}"
+    assert prop_path.read_bytes() == before
