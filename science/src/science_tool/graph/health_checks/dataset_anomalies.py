@@ -17,7 +17,12 @@ from science_model.audit import (
 
 from science_tool.datasets.semantics import dataset_class_for, runtime_state_for
 from science_tool.findings.producers import FindingProducer
-from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
+from science_tool.graph.health_checks.base import (
+    HealthCheck,
+    HealthContext,
+    composed_result,
+    context_sources,
+)
 from science_tool.instruments import InstrumentResult
 
 DATASET_RULE_CODES: tuple[str, ...] = (
@@ -656,6 +661,7 @@ def _dataset_qualifiers(row: dict[str, object]) -> dict[str, object]:
 
 def run_check(context: HealthContext):
     observed = check_dataset_anomalies(context.project_root)
+    canonical_entity_ids = frozenset(entity.canonical_id for entity in context_sources(context).entities)
     findings = [
         RULES[str(row["code"])].build(
             subject=_dataset_subject(row),
@@ -665,6 +671,7 @@ def run_check(context: HealthContext):
             evidence=([LocationEvidence(path=str(row["file_path"]))] if row["file_path"] else []),
         )
         for row in observed.rows
+        if str(row["entity_id"]) in canonical_entity_ids
     ]
     return composed_result(cast("InstrumentResult[object]", observed), findings)
 
@@ -690,7 +697,7 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
 CHECK = HealthCheck(
     name="dataset_anomalies",
     description="Run dataset lineage, access, and package invariant checks.",
-    requires_sources=False,
+    requires_sources=True,
     run=run_check,
     producer=PRODUCER,
 )

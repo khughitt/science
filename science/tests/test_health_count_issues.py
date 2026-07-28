@@ -367,11 +367,12 @@ def test_each_count_ledger_row_executes_its_real_producer_and_preserves_count(
         producer = SCHEMA_INVALID_PRODUCER
         expected_count = 1
     else:
+        source_entities = [SimpleNamespace(canonical_id="dataset:d")] if producer_id == "dataset_anomalies" else []
         context = HealthContext(
             project_root=tmp_path,
             sources=cast(
                 ProjectSources,
-                SimpleNamespace(entities=[]),
+                SimpleNamespace(entities=source_entities),
             ),
         )
         result, expected_count = _one_issue_result(
