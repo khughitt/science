@@ -8,6 +8,7 @@ because a check downstream of a lossy step validates the loss, not the input.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,203 @@ from science_model.source_contracts import StructuredEntitySource
 from science_tool.entity_profiles import ProjectSchema, load_project_schema_if_pinned
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import load_project_sources, registry_for_project
+
+
+_REGISTRY_MODULE = "entity_registry.py"
+
+
+def _entity_loading_package() -> Path:
+    return Path(__file__).resolve().parents[1] / "src" / "science_tool" / "graph"
+
+
+def _entity_class_names() -> frozenset[str]:
+    """Every concrete entity model name, DERIVED -- 24 of them, not a literal list.
+
+    `endswith("Entity")` was tried and is wrong: it matches `SkippedEntity`, a plain dataclass
+    constructed five times in `sources.py`, and the guard would have failed on it forever with no
+    way out but an exemption. Ask the model package which classes are actually entities.
+    """
+    import science_model.entities as entities_module
+    from science_model.patch_definition import PatchDefinitionEntity
+    from science_model.propositions import PropositionEntity
+
+    names = {
+        name
+        for name, obj in vars(entities_module).items()
+        if isinstance(obj, type) and issubclass(obj, entities_module.Entity)
+    }
+    # These two live outside `entities.py` but are registered entity models like any other.
+    return frozenset(names | {PatchDefinitionEntity.__name__, PropositionEntity.__name__})
+
+
+def _dotted(func: ast.expr) -> list[str] | None:
+    """Flatten a call target into its dotted segments, or None if it is not a plain name path.
+
+    `entities.MethodEntity.model_validate` -> ["entities", "MethodEntity", "model_validate"].
+    Matching on SEGMENTS rather than on AST shape is what makes the guard blind to import style:
+    a bare name, a module-qualified name, and a `self._registry` chain all reduce to the same
+    question -- does any segment name an entity class, or the resolver.
+    """
+    parts: list[str] = []
+    node: ast.expr = func
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None  # a subscript or call result -- not a name path we can rule on
+    parts.append(node.id)
+    return list(reversed(parts))
+
+
+def _local_entity_names(tree: ast.Module, entity_names: frozenset[str]) -> frozenset[str]:
+    """Entity class names PLUS every local name this module binds to one.
+
+    Three binding forms, all ordinary code rather than evasion:
+      `from science_model.entities import MethodEntity as ME`  -> ME       (ImportFrom)
+      `EntityType = MethodEntity`                              -> EntityType  (Assign)
+      `Annotated: type[Entity] = MethodEntity`                 -> Annotated   (AnnAssign)
+
+    The annotated form is a separate AST node, not a flavour of `Assign`, and a draft that handled
+    only `Assign` missed it -- adding a type annotation is the single most likely edit to make to
+    a line like this, so missing it is missing the common case.
+
+    There is nothing in the names `ME` or `EntityType` to recognize, so the binding has to be
+    derived from the module's own statements. The pass runs to a fixed point because rebinding
+    chains (`A = MethodEntity; B = A`) are one edit away from being written.
+    """
+    local = set(entity_names)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in entity_names and alias.asname:
+                    local.add(alias.asname)
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target, value = node.targets[0], node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                target, value = node.target, node.value  # `X: type[Entity] = MethodEntity`
+            else:
+                continue
+            if not isinstance(target, ast.Name) or target.id in local:
+                continue
+            segments = _dotted(value) if isinstance(value, ast.Name | ast.Attribute) else None
+            if segments and any(s in local for s in segments):
+                local.add(target.id)
+                changed = True
+    return frozenset(local)
+
+
+def _class_obtaining_lines(module: Path) -> list[int]:
+    """Lines that obtain an entity class in order to build from it.
+
+    Two things count: the resolver (`…resolve_class(kind)`, any receiver) and any call whose
+    target path passes through an entity class (`MethodEntity(**raw)`,
+    `MethodEntity.model_validate(raw)`, `entities.MethodEntity(**raw)`, `ME(**raw)` after an
+    aliased import). Earlier drafts matched AST SHAPE and kept missing spellings one at a time:
+    an Attribute-only walk never sees the ordinary constructor (`ast.Name` func), and a
+    Name-or-one-Attribute walk never sees `entities.MethodEntity(...)`, which is not obfuscation
+    but an ordinary import style. Reducing the target to segments removes the whole category.
+
+    No receiver-name heuristic either: an earlier draft matched the bare name `resolve` and had to
+    discriminate on whether the receiver variable was called `registry`, which enforces a naming
+    convention -- `reg.resolve(kind)` slipped straight through. Task 5 Step 4 renamed the method
+    to `resolve_class`, which occurs nowhere else in the tree, so ANY receiver spelling is caught.
+
+    Deliberately over-broad in one direction: `MethodEntity.model_fields` inside a call target
+    also matches. That is a class being obtained to read from, which is what
+    `EntityRegistry.declares_field` now exists to answer without handing the class out. The tree
+    has zero such calls today, so the strictness costs nothing and closes the near-miss.
+    """
+    entity_names = _entity_class_names()
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    local = _local_entity_names(tree, entity_names)
+    hits: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        segments = _dotted(node.func)
+        if segments and any(s == "resolve_class" or s in local for s in segments):
+            hits.add(node.lineno)
+    return sorted(hits)  # ast.walk is breadth-first, so raw order is not source order
+
+
+def test_NOTHING_in_the_loading_package_resolves_a_class_to_build_from() -> None:
+    # The guard is over CALLS, not imports. Twelve modules in this package import `Entity` for
+    # isinstance checks and annotations and construct nothing -- banning the import would make
+    # those the violation and force either a rewrite of unrelated code or an exemption list, and
+    # an exemption list is the enumerated-scope hole this project has been bitten by before.
+    #
+    # Obtaining a class in order to build from it reduces to one question: does the call target's
+    # dotted path pass through `resolve_class` or an entity class (under any import spelling)?
+    # There were five such sites; `build` makes it zero. Scope is DERIVED from the package tree,
+    # so a sixth adapter is inside it automatically.
+    offenders: dict[str, list[int]] = {}
+    for module in sorted(_entity_loading_package().rglob("*.py")):
+        if module.name == _REGISTRY_MODULE:
+            continue  # `build` calls it -- the one legitimate call, by construction
+        lines = _class_obtaining_lines(module)
+        if lines:
+            offenders[module.name] = lines
+    assert not offenders, (
+        f"modules obtaining an entity class outside the registry: {offenders}. "
+        "Construct through `registry.build(kind, raw, ...)`, which validates first."
+    )
+
+
+def test_the_guarded_METHOD_still_exists() -> None:
+    # Without this, the gate above is disarmed by a rename rather than by a fix: if
+    # `resolve_class` is ever renamed back to `resolve`, every call site stops matching and the
+    # guard goes permanently, silently green. The name is load-bearing, so assert it.
+    from science_tool.graph.entity_registry import EntityRegistry
+
+    assert hasattr(EntityRegistry, "resolve_class")
+    assert not hasattr(EntityRegistry, "resolve"), (
+        "`resolve` is back; the guard matches `resolve_class` and no longer sees the call sites"
+    )
+
+
+def test_the_guard_can_actually_SEE_every_violation_spelling(tmp_path: Path) -> None:
+    # An AST guard that silently matches nothing passes forever. Pin the detector against all
+    # TWELVE bypass spellings -- including the ones that defeated five earlier drafts -- so a
+    # refactor that breaks the matching fails HERE rather than turning the gate into a no-op.
+    #
+    # The probe carries real imports and real assignments because `_local_entity_names` reads
+    # both: `ME` is invisible without the `as` clause that bound it, and `EntityType` without the
+    # assignment that did.
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "from science_model import entities\n"
+        "from science_model.entities import Entity, MethodEntity\n"
+        "from science_model.entities import MethodEntity as ME\n"
+        "from science_tool.graph.sources import SkippedEntity\n"
+        "\n"
+        "EntityType = MethodEntity\n"  # local rebinding
+        "Indirect = EntityType\n"  # and a chain, to pin the fixed point
+        "Annotated: type[Entity] = MethodEntity\n"  # ANNOTATED rebinding -- ast.AnnAssign
+        "\n"
+        "def f(registry, context, reg, resolver, path, kind, raw):\n"
+        "    registry.resolve_class(kind)\n"
+        "    context.registry.resolve_class(kind)\n"
+        "    reg.resolve_class(kind)\n"  # arbitrary receiver -- must match
+        "    MethodEntity.model_validate(raw)\n"  # classmethod construction -- must match
+        "    MethodEntity(**raw)\n"  # ORDINARY constructor -- must match
+        "    entities.MethodEntity(**raw)\n"  # module-qualified -- must match
+        "    entities.MethodEntity.model_validate(raw)\n"  # module-qualified classmethod -- match
+        "    ME(**raw)\n"  # ALIASED import -- must match
+        "    ME.model_validate(raw)\n"  # aliased classmethod -- must match
+        "    EntityType(**raw)\n"  # LOCAL REBINDING -- must match
+        "    Indirect.model_validate(raw)\n"  # rebinding chain -- must match
+        "    Annotated(**raw)\n"  # annotated rebinding -- must match
+        "    resolver.resolve(kind)\n"  # a DIFFERENT resolver -- must not match
+        "    path.resolve()\n"  # pathlib -- must not match
+        "    SkippedEntity(path='x')\n"  # a dataclass, not an entity -- no match
+        "    isinstance(raw, Entity)\n",  # a type USE, not construction -- no match
+        encoding="utf-8",
+    )
+    assert _class_obtaining_lines(probe) == [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
 
 
 def _armed_registry(tmp_path: Path) -> tuple[EntityRegistry, ProjectSchema]:
