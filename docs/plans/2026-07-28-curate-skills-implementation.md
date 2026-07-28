@@ -15,6 +15,8 @@
 - Only **`uncovered`** candidates are filed. Feedback field values are fixed: `target = "skill-coverage:<term>"`, `project = "science"`, `category = "gap"`, `concern = "tooling"`.
 - Correlation match key is **`(normalize_target(entry.target), entry.concern == "tooling")`** — never a raw `fnmatch` namespace glob, never target-only.
 - **Fail early** on more than one *open* match for a term (raise, nonzero exit, no writes).
+- A match's `status` must be `open` or a known resolved status (`addressed`, `deferred`, `wontfix`). `FeedbackEntry.status` is an unvalidated `str`; any other value is a hard error, never silently treated as resolved/SKIP.
+- When `--output` is set, its parent directory is verified **before** any feedback write, so a failed report-write can never follow a committed `--apply` (which would double-record on retry).
 - `recurrence_after` is **always present** in a result = the entry's `recurrence` after the write. `FeedbackEntry` seeds one occurrence for every entry (validator floor 1), so a NEW entry is `recurrence_after: 1` and a RECUR is prior + 1.
 - Default is report-only (writes nothing). `--term` is `--apply`-only. An unknown `--term` is a hard error.
 - No skill files are authored; the only side effect is under `~/.config/science/feedback` (or `$SCIENCE_FEEDBACK_DIR`).
@@ -31,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: `science_model.skill_coverage.coverage.Candidate` (`.proposed_scope`, `.likely_archetype`, `.score`, `.evidence[]` of `EvidenceTriple{project, plan_ref, dataset_ref}`) and `.CoverageReport`; `science_tool.feedback.FeedbackEntry`, `normalize_target`.
-- Produces: `ExistingMatch`, `CurateRow`, `CurateContext`, `CuratePlan`, `CurateConflictError`; `build_curate_plan(candidates, entries, context, scope) -> CuratePlan`; `coverage_context(report) -> CurateContext`. Later tasks rely on these exact names.
+- Produces: `ExistingMatch`, `CurateRow`, `CurateContext`, `CuratePlan`, `CurateConflictError`, `CurateStatusError`; `build_curate_plan(candidates, entries, context, scope) -> CuratePlan`; `coverage_context(report) -> CurateContext`. Later tasks rely on these exact names.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -46,6 +48,7 @@ from science_tool.feedback import FeedbackEntry
 from science_tool.skills_coverage.curate import (
     CurateConflictError,
     CurateContext,
+    CurateStatusError,
     build_curate_plan,
 )
 
@@ -58,8 +61,10 @@ def _cand(term: str, *, score: float = 0.5, projects=(("p1", "plan:a"),)) -> Can
     return Candidate(proposed_scope=term, likely_archetype="measurement-qa", score=score, evidence=evidence)
 
 
-def _entry(target: str, *, status: str = "open", concern: str = "tooling") -> FeedbackEntry:
-    return FeedbackEntry(id=f"fb-2026-07-28-{abs(hash((target, status))) % 900 + 100:03d}",
+def _entry(target: str, *, status: str = "open", concern: str = "tooling", n: int = 0) -> FeedbackEntry:
+    # `n` gives each fixture entry a distinct id; two entries that share a target
+    # must still be two rows, so the conflict/status paths get real, non-colliding ids.
+    return FeedbackEntry(id=f"fb-2026-07-28-{100 + n:03d}",
                          target=target, summary="s", concern=concern, status=status, category="gap")
 
 
@@ -89,8 +94,8 @@ def test_normalized_target_dedup() -> None:
 
 def test_cross_concern_is_not_a_match() -> None:
     entries = [
-        _entry("skill-coverage:data-product:x", status="open", concern="methodology:qa"),
-        _entry("skill-coverage:data-product:x", status="open", concern="methodology:qa"),
+        _entry("skill-coverage:data-product:x", status="open", concern="methodology:qa", n=0),
+        _entry("skill-coverage:data-product:x", status="open", concern="methodology:qa", n=1),
     ]
     plan = build_curate_plan([_cand("data-product:x")], entries, _CTX, _SCOPE)
     assert plan.rows[0].disposition == "new"  # different concern ignored, no conflict
@@ -98,10 +103,20 @@ def test_cross_concern_is_not_a_match() -> None:
 
 def test_multiple_open_fails_early() -> None:
     entries = [
-        _entry("skill-coverage:data-product:x", status="open"),
-        _entry("skill-coverage:data-product:x", status="open"),
+        _entry("skill-coverage:data-product:x", status="open", n=0),
+        _entry("skill-coverage:data-product:x", status="open", n=1),
     ]
-    with pytest.raises(CurateConflictError):
+    with pytest.raises(CurateConflictError) as exc:
+        build_curate_plan([_cand("data-product:x")], entries, _CTX, _SCOPE)
+    assert exc.value.ids == ["fb-2026-07-28-100", "fb-2026-07-28-101"]  # both, sorted
+    assert "merge" in str(exc.value)
+
+
+def test_unknown_status_fails_early() -> None:
+    # status is an unvalidated str on FeedbackEntry; an unexpected value must not
+    # silently bucket as resolved/SKIP.
+    entries = [_entry("skill-coverage:data-product:x", status="bogus")]
+    with pytest.raises(CurateStatusError):
         build_curate_plan([_cand("data-product:x")], entries, _CTX, _SCOPE)
 
 
@@ -169,6 +184,7 @@ if TYPE_CHECKING:
 CONCERN = "tooling"
 CATEGORY = "gap"
 PROJECT = "science"
+RESOLVED_STATUSES = ("addressed", "deferred", "wontfix")  # mirrors feedback.VALID_STATUSES minus "open"
 
 
 def target_for(term: str) -> str:
@@ -184,6 +200,19 @@ class CurateConflictError(Exception):
         super().__init__(
             f"{term}: {len(ids)} open skill-coverage entries ({', '.join(ids)}); "
             "merge them before curating"
+        )
+
+
+class CurateStatusError(Exception):
+    """A matched feedback entry carries a status outside the known vocabulary."""
+
+    def __init__(self, term: str, offenders: list[tuple[str, str]]) -> None:
+        self.term = term
+        self.offenders = offenders
+        detail = ", ".join(f"{eid}={status!r}" for eid, status in offenders)
+        super().__init__(
+            f"{term}: feedback entries with unknown status ({detail}); "
+            f"expected open or one of {', '.join(RESOLVED_STATUSES)}"
         )
 
 
@@ -287,7 +316,10 @@ def build_curate_plan(
         term = cand.proposed_scope
         matches = by_norm.get(normalize_target(target_for(term)), [])
         opens = [m for m in matches if m.status == "open"]
-        resolved = [m for m in matches if m.status != "open"]
+        resolved = [m for m in matches if m.status in RESOLVED_STATUSES]
+        unknown = [m for m in matches if m.status != "open" and m.status not in RESOLVED_STATUSES]
+        if unknown:
+            raise CurateStatusError(term, sorted((m.id, m.status) for m in unknown))
         if len(opens) > 1:
             raise CurateConflictError(term, sorted(m.id for m in opens))
         if opens:
@@ -319,7 +351,7 @@ def build_curate_plan(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_plan.py -q`
-Expected: PASS (8 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -401,6 +433,18 @@ def test_apply_recur_records_occurrence_with_metadata(tmp_path: Path) -> None:
     assert entry.recurrence == 2  # seeded 1 + one recurrence
     occ = entry.occurrences[-1]
     assert (occ.project, occ.category) == ("science", "gap")
+    assert occ.detail is not None
+    assert "score:" in occ.detail and "p1 / plan:a" in occ.detail  # evidence snapshot recorded
+
+
+def test_apply_recur_targets_the_open_entry_when_resolved_also_present(tmp_path: Path) -> None:
+    # A term with one open + one resolved entry recurs against the OPEN id, not the resolved one.
+    save_entry(tmp_path, _open_entry("data-product:x"))  # id fb-2026-07-28-500, open
+    save_entry(tmp_path, FeedbackEntry(id="fb-2026-07-28-400", target="skill-coverage:data-product:x",
+                                       summary="s", concern="tooling", category="gap", status="wontfix"))
+    plan = build_curate_plan([_cand("data-product:x")], list_entries(tmp_path, status=None), _CTX, _SCOPE)
+    apply_plan(plan, tmp_path, today="2026-07-28")
+    assert plan.rows[0].result == {"action": "recurred", "id": "fb-2026-07-28-500", "recurrence_after": 2}
 
 
 def test_apply_twice_from_empty_is_new_then_recur(tmp_path: Path) -> None:
@@ -542,7 +586,7 @@ def apply_plan(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_apply.py tests/skills_coverage/test_curate_plan.py -q`
-Expected: PASS (14 tests).
+Expected: PASS (16 tests: 7 apply + 9 plan).
 
 - [ ] **Step 5: Commit**
 
@@ -603,11 +647,19 @@ def test_json_apply_reports_result(tmp_path) -> None:
     assert obj["rows"][0]["result"]["action"] == "created"
 
 
-def test_text_render_names_gaps_and_counts() -> None:
+def test_text_render_names_gaps_counts_and_archetype() -> None:
     text = serialize_curate_plan(_plan(), "text")
     assert "data-product:x" in text
     assert "new" in text
+    assert "measurement-qa" in text  # likely_archetype is decision-critical for the reviewer
     assert "covered-not-loaded: 4" in text and "unmapped: 2" in text
+
+
+def test_text_render_header_names_scoped_project() -> None:
+    cand = Candidate(proposed_scope="data-product:x", likely_archetype="measurement-qa", score=0.5,
+                     evidence=(EvidenceTriple(project="p1", plan_ref="plan:a", dataset_ref="dataset:d"),))
+    plan = build_curate_plan([cand], [], CurateContext(0, 0, ()), {"mode": "project", "project": "mm30"})
+    assert "project mm30" in serialize_curate_plan(plan, "text")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -627,14 +679,19 @@ def serialize_curate_plan(plan: CuratePlan, fmt: str) -> str:
 
 
 def _render_text(plan: CuratePlan) -> str:
-    lines = [f"skill-coverage curate ({plan.mode}) — scope {plan.scope.get('mode', '?')}"]
+    header = f"skill-coverage curate ({plan.mode}) — scope {plan.scope.get('mode', '?')}"
+    project = plan.scope.get("project")
+    if project:
+        header += f" · project {project}"
+    lines = [header]
     if not plan.rows:
         lines.append("  no uncovered gaps")
     for row in plan.rows:
         tag = row.disposition
         if row.applied is not None:
             tag += " [applied]" if row.applied else " [not applied]"
-        line = f"  {tag}: {row.term}  score={row.score}  {row.n_plans} plans / {row.n_projects} projects"
+        line = (f"  {tag}: {row.term}  [{row.likely_archetype}]  score={row.score}  "
+                f"{row.n_plans} plans / {row.n_projects} projects")
         if row.existing:
             line += "  existing=" + ",".join(f"{m.id}:{m.status}" for m in row.existing)
         if row.result is not None:
@@ -650,7 +707,7 @@ def _render_text(plan: CuratePlan) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_serialize.py -q`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -664,22 +721,26 @@ git commit -m "feat(skills-curate): serialize the plan as text and canonical JSO
 ### Task 4: CLI command `science skills curate` + feedback-dir helper
 
 **Files:**
-- Modify: `science/src/science_tool/feedback_cli.py` (add public `resolve_feedback_dir`; keep `_get_feedback_dir` delegating)
+- Modify: `science/src/science_tool/feedback_cli.py` (rename `_get_feedback_dir` → public `resolve_feedback_dir`; migrate its 10 internal call sites)
+- Modify: `science/src/science_tool/autonomy/cli.py` (migrate the import + call at ~218/243)
+- Modify: `science/tests/test_autonomy_lifecycle_cli.py` (docstring reference at ~58)
 - Modify: `science/src/science_tool/skills_coverage/cli.py` (add `curate_command`)
 - Modify: `science/src/science_tool/skills_lint/cli.py` (register on `skills_group`)
 - Test: `science/tests/skills_coverage/test_curate_cli.py`
 
 **Interfaces:**
 - Consumes: `scan_portfolio`, `write_report_atomically`; Task 1–3 `build_curate_plan`, `apply_plan`, `serialize_curate_plan`, `coverage_context`, `CurateConflictError`, `CurateSelectionError`; `science_tool.feedback.load_all_entries`, `resolve_feedback_dir`.
-- Produces: `science skills curate [--apply] [--term T]… [--project P] [--format text|json] [--output PATH]`.
+- Produces: `science skills curate [--apply] [--term T]… [--project P] [--format text|json] [--output PATH]`; public `resolve_feedback_dir()` (replaces the private `_get_feedback_dir`).
 
-- [ ] **Step 1: Add a public feedback-dir helper (additive — do NOT rename)**
+- [ ] **Step 1: Rename the feedback-dir helper and migrate every caller atomically**
 
-`_get_feedback_dir` is imported by `science_tool.autonomy.cli` (`autonomy/cli.py:218`),
-so renaming it would break `autonomy finish` at runtime. Instead, add a public
-function and make the private one delegate, changing no external caller. In
-`science/src/science_tool/feedback_cli.py` replace the body of `_get_feedback_dir`
-with:
+`_get_feedback_dir` is a private helper with callers in three files. Rename it to
+the public `resolve_feedback_dir` and update all callers in the same commit — the
+project forbids compatibility/delegating shims, so the private name is removed, not
+kept alongside.
+
+In `science/src/science_tool/feedback_cli.py`, rename the definition (the body is
+unchanged from the private version):
 
 ```python
 def resolve_feedback_dir() -> Path:
@@ -688,14 +749,26 @@ def resolve_feedback_dir() -> Path:
     from science_tool.registry.config import get_science_config_dir
 
     return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
-
-
-def _get_feedback_dir() -> Path:
-    # Retained for existing callers (e.g. science_tool.autonomy.cli); delegates to the public name.
-    return resolve_feedback_dir()
 ```
 
-Verify no caller is orphaned: `grep -rn _get_feedback_dir science/src/science_tool/` should still resolve (the function still exists).
+Then replace all ten internal `_get_feedback_dir()` call sites in that same file
+(they read `fb_dir = _get_feedback_dir()`) with `resolve_feedback_dir()`. A blanket
+replace is safe — the only definition and all uses live in this one file plus the
+two callers below:
+
+```bash
+sed -i 's/_get_feedback_dir/resolve_feedback_dir/g' \
+  src/science_tool/feedback_cli.py \
+  src/science_tool/autonomy/cli.py \
+  tests/test_autonomy_lifecycle_cli.py
+```
+
+`autonomy/cli.py` (the `from science_tool.feedback_cli import _get_feedback_dir`
+import at ~218 and its use at ~243) and the docstring at
+`tests/test_autonomy_lifecycle_cli.py:58` are the only sites outside `feedback_cli.py`.
+
+Verify the old name is fully gone before committing:
+`grep -rn _get_feedback_dir science/` must return nothing.
 
 - [ ] **Step 2: Write the failing CLI test**
 
@@ -774,6 +847,7 @@ def test_report_run_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     obj = json.loads(result.output)
     assert obj["mode"] == "report"
+    assert set(obj["context"]) == {"covered_not_loaded", "unmapped", "skipped_projects"}  # context extracted
     assert not fb.exists() or load_all_entries(fb) == []  # no writes
 
 
@@ -804,6 +878,27 @@ def test_output_untouched_on_failure(tmp_path: Path, monkeypatch) -> None:
     result = CliRunner().invoke(skills_group, ["curate", "--output", str(out)])
     assert result.exit_code != 0
     assert out.read_text(encoding="utf-8") == "PRIOR"
+
+
+def test_output_writes_full_payload_not_stdout(tmp_path: Path, monkeypatch) -> None:
+    fb, term = _setup(tmp_path, monkeypatch)
+    out = tmp_path / "plan.json"
+    result = CliRunner().invoke(skills_group, ["curate", "--format", "json", "--output", str(out)])
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == ""  # payload went to the file, not stdout
+    obj = json.loads(out.read_text(encoding="utf-8"))
+    assert obj["mode"] == "report" and any(r["term"] == term for r in obj["rows"])
+
+
+def test_apply_output_failure_writes_no_feedback(tmp_path: Path, monkeypatch) -> None:
+    # A real gap exists, so apply WOULD write — but a bad --output parent must be
+    # caught first, leaving the feedback store untouched (no half-commit on retry).
+    fb, _ = _setup(tmp_path, monkeypatch)
+    out = tmp_path / "missing-dir" / "plan.json"  # parent does not exist
+    result = CliRunner().invoke(skills_group, ["curate", "--apply", "--output", str(out)])
+    assert result.exit_code != 0
+    assert not out.exists()
+    assert not fb.exists() or load_all_entries(fb) == []  # apply never ran
 ```
 
 - [ ] **Step 3: Run test to verify it fails**
@@ -841,6 +936,10 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
     """Triage uncovered skill-coverage gaps into `science feedback` (report-first)."""
     if terms and not apply_:
         raise click.ClickException("--term requires --apply")
+    # Preflight the output destination BEFORE any feedback write, so an unwritable
+    # --output can never follow a committed --apply (which a retry would double-record).
+    if output is not None and not output.parent.is_dir():
+        raise click.ClickException(f"--output parent directory does not exist: {output.parent}")
     try:
         report = scan_portfolio(only=project)
     except (SkillCoverageScanError, SkillCoverageError) as exc:
@@ -879,14 +978,14 @@ skills_group.add_command(curate_command)
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd science && uv run --frozen pytest tests/skills_coverage/test_curate_cli.py -q`
-Expected: PASS (4 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 6: Lint, type-check, commit**
 
 ```bash
-cd science && uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py && uv run --frozen pyright src/science_tool/skills_coverage
-git add science/src/science_tool/skills_coverage/cli.py science/src/science_tool/skills_lint/cli.py science/src/science_tool/feedback_cli.py science/tests/skills_coverage/test_curate_cli.py
-git commit -m "feat(skills-curate): science skills curate CLI command"
+cd science && uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py && uv run --frozen pyright src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py
+git add science/src/science_tool/skills_coverage/cli.py science/src/science_tool/skills_lint/cli.py science/src/science_tool/feedback_cli.py science/src/science_tool/autonomy/cli.py science/tests/test_autonomy_lifecycle_cli.py science/tests/skills_coverage/test_curate_cli.py
+git commit -m "feat(skills-curate): science skills curate CLI command; rename feedback-dir helper"
 ```
 
 ---
@@ -1018,15 +1117,29 @@ git commit -m "docs(skills-curate): document science skills curate in the covera
 
 ## Final verification
 
-After all tasks, from `science/`:
+After all tasks, from `science/`, run these exact commands in order:
 
 ```bash
+# 1. The feature's own tests + the generated-mirror guard
 uv run --frozen pytest tests/skills_coverage tests/test_agent_assets.py -q
-uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py
-uv run --frozen pyright            # repo-wide: the single pyrightconfig governs all trees; catches cross-module breaks (e.g. autonomy)
+
+# 2. Command-doc + agent-adapter guards that Task 5's new command feeds
+uv run --frozen pytest tests/test_command_docs.py tests/test_agent_cli_compatibility.py -q
+
+# 3. Autonomy CLI tests — Task 4 renamed the feedback-dir helper they depend on
+uv run --frozen pytest tests -k autonomy -q
+
+# 4. Lint the packages touched (ruff is per-package; run from science/)
+uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py
+
+# 5. Types repo-wide — the single pyrightconfig governs all trees; catches the
+#    cross-module break the helper rename could cause (e.g. autonomy)
+uv run --frozen pyright
 ```
 
-Then run the affected content-guard / command-doc modules the new command touches
-(`tests/test_command_docs.py`, `tests/test_codex_skills.py` if present), plus the
-autonomy CLI tests (`tests/ -k autonomy`) since Task 4 touched `feedback_cli.py`,
-before the top-level agent runs the full suite once.
+Then the **top-level agent** (never a subagent — the full suite runs ~2-3 min and
+auto-backgrounds past the 120s timeout) runs the whole suite once:
+
+```bash
+uv run --frozen pytest -q
+```

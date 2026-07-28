@@ -117,6 +117,12 @@ term should have become covered once a skill was authored, yet it is still
 `uncovered`), the row is tagged `skip-addressed-conflict` so the anomaly is
 surfaced, not hidden.
 
+The partition recognizes only the known status vocabulary: `open` and the resolved
+set `{addressed, deferred, wontfix}` (`feedback.VALID_STATUSES`). `FeedbackEntry.status`
+is an unvalidated `str`, so a matched entry carrying any other value is a **hard
+error** (fail early), never silently folded into "resolved" and skipped — a
+malformed store must be fixed, not guessed past.
+
 **Report-only default.** With no `--apply` the CLI prints the plan and writes
 nothing — the `report-only` tier exactly as `science wander`'s CLI behaves. The
 report is deterministic and ordered (by score desc, then term) so it is
@@ -163,7 +169,15 @@ JSON only on stdout, which the Layer-2 command consumes). `--output PATH` carrie
 the **complete selected-format** representation, written atomically (reusing
 `write_report_atomically`) — it is not a JSON-only escape hatch. All counts and
 ids are structural fields in the JSON payload, never presentation-only strings,
-so the wrapper reads them directly.
+so the wrapper reads them directly. The **default `text`** render is the human
+review surface, so it must carry the decision-critical fields: the header names
+the scope mode **and** the selected `--project` when scoped, and each row shows
+its `likely_archetype` alongside term, disposition, score, and counts.
+
+When `--output` is set, its parent directory is verified **before** any
+`--apply` write. Otherwise an unwritable destination would raise only after the
+feedback store was already mutated, and a retry would record a second occurrence;
+the preflight makes the apply-then-serialize pair fail atomically.
 
 ### Feedback record mapping
 
@@ -279,6 +293,16 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
 16. **Open+resolved RECUR payload** — a term with one open and one `wontfix`
     match yields RECUR whose `existing[]` lists **both**, and `result.id` is the
     open entry (the one that received the occurrence). Guards R2-precedence.
+17. **Unknown status → fail-early** — a matched entry whose `status` is outside
+    `{open, addressed, deferred, wontfix}` aborts the run rather than being
+    silently treated as resolved/SKIP. Guards the status-vocabulary contract.
+18. **Text render carries decision fields** — the default `text` output names
+    each row's `likely_archetype` and, when `--project` scopes the scan, the
+    project in the header (not just the scope mode).
+19. **`--output` preflight is atomic** — with a real gap present, `--apply
+    --output <bad-parent>/plan.json` aborts **before** any feedback write (the
+    store stays empty and no file is created); a successful `--output` writes the
+    full payload to the file and nothing to stdout.
 
 ## Code layout
 
