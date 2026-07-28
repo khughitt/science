@@ -16,7 +16,7 @@
 - Correlation match key is **`(normalize_target(entry.target), entry.concern == "tooling")`** — never a raw `fnmatch` namespace glob, never target-only.
 - **Fail early** on more than one *open* match for a term (raise, nonzero exit, no writes).
 - A match's `status` must be `open` or a known resolved status (`addressed`, `deferred`, `wontfix`). `FeedbackEntry.status` is an unvalidated `str`; any other value is a hard error, never silently treated as resolved/SKIP.
-- `--output` is **report-only**: combining it with `--apply` is a hard error. This keeps apply atomic — a failing report-write can never follow a committed feedback write (which a retry would double-record). Apply results go to stdout; redirect there for an audit trail.
+- `--output` is **report-only**: combining it with `--apply` is a hard error. This ensures a failing report-write can never follow a committed feedback write (which a retry would double-record) — it does not make the multi-row feedback write itself transactional. Apply results go to stdout; redirect there for an audit trail.
 - `recurrence_after` is **always present** in a result = the entry's `recurrence` after the write. `FeedbackEntry` seeds one occurrence for every entry (validator floor 1), so a NEW entry is `recurrence_after: 1` and a RECUR is prior + 1.
 - Default is report-only (writes nothing). `--term` is `--apply`-only. An unknown `--term` is a hard error.
 - No skill files are authored; the only side effect is under `~/.config/science/feedback` (or `$SCIENCE_FEEDBACK_DIR`).
@@ -761,7 +761,7 @@ git commit -m "feat(skills-curate): serialize the plan as text and canonical JSO
 ### Task 4: CLI command `science skills curate` + feedback-dir helper
 
 **Files:**
-- Modify: `science/src/science_tool/feedback_cli.py` (rename `_get_feedback_dir` → public `resolve_feedback_dir`; migrate its 10 internal call sites)
+- Modify: `science/src/science_tool/feedback_cli.py` (rename `_get_feedback_dir` → public `resolve_feedback_dir`; migrate its 9 internal call sites)
 - Modify: `science/src/science_tool/autonomy/cli.py` (migrate the import + call at ~218/243)
 - Modify: `science/tests/test_autonomy_lifecycle_cli.py` (docstring reference at ~58)
 - Modify: `science/src/science_tool/skills_coverage/cli.py` (add `curate_command`)
@@ -769,7 +769,7 @@ git commit -m "feat(skills-curate): serialize the plan as text and canonical JSO
 - Test: `science/tests/skills_coverage/test_curate_cli.py`
 
 **Interfaces:**
-- Consumes: `scan_portfolio`, `write_report_atomically`; Task 1–3 `build_curate_plan`, `apply_plan`, `serialize_curate_plan`, `coverage_context`, `CurateConflictError`, `CurateSelectionError`; `science_tool.feedback.load_all_entries`, `resolve_feedback_dir`.
+- Consumes: `scan_portfolio`, `write_report_atomically`; Task 1–3 `build_curate_plan`, `apply_plan`, `serialize_curate_plan`, `coverage_context`, `CurateConflictError`, `CurateStatusError`, `CurateSelectionError`; `science_tool.feedback.load_all_entries`, `resolve_feedback_dir`.
 - Produces: `science skills curate [--apply] [--term T]… [--project P] [--format text|json] [--output PATH]`; public `resolve_feedback_dir()` (replaces the private `_get_feedback_dir`).
 
 - [ ] **Step 1: Rename the feedback-dir helper and migrate every caller atomically**
@@ -791,10 +791,10 @@ def resolve_feedback_dir() -> Path:
     return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
 ```
 
-Then replace all ten internal `_get_feedback_dir()` call sites in that same file
-(they read `fb_dir = _get_feedback_dir()`) with `resolve_feedback_dir()`. A blanket
-replace is safe — the only definition and all uses live in this one file plus the
-two callers below:
+Then replace all **nine** internal `_get_feedback_dir()` call sites in that same
+file (each reads `fb_dir = _get_feedback_dir()`) with `resolve_feedback_dir()`. A
+blanket replace is safe — the only definition and all uses live in this one file
+plus the two callers below. Run from `science/`:
 
 ```bash
 sed -i 's/_get_feedback_dir/resolve_feedback_dir/g' \
@@ -807,8 +807,8 @@ sed -i 's/_get_feedback_dir/resolve_feedback_dir/g' \
 import at ~218 and its use at ~243) and the docstring at
 `tests/test_autonomy_lifecycle_cli.py:58` are the only sites outside `feedback_cli.py`.
 
-Verify the old name is fully gone before committing:
-`grep -rn _get_feedback_dir science/` must return nothing.
+Verify the old name is fully gone before committing — still from `science/`:
+`rg -n _get_feedback_dir .` must return nothing.
 
 - [ ] **Step 2: Write the failing CLI test**
 
@@ -986,7 +986,8 @@ from science_tool.skills_coverage.curate import (
 @click.option("--project", "project", default=None, help="Restrict the scan to one registered project.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text")
 @click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None,
-              help="Write the complete report to PATH (atomically) instead of stdout.")
+              help="Write the complete report to PATH (atomically) instead of stdout. "
+                   "Report-only: cannot be combined with --apply.")
 def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fmt: str, output: Path | None) -> None:
     """Triage uncovered skill-coverage gaps into `science feedback` (report-first)."""
     if terms and not apply_:
@@ -1038,8 +1039,11 @@ Expected: PASS (7 tests).
 
 - [ ] **Step 6: Lint, type-check, commit**
 
+Run the validation in a subshell so the `cd` does not leak into `git add` (whose
+paths are repo-root-relative, matching the other tasks):
+
 ```bash
-cd science && uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py && uv run --frozen pyright src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py
+(cd science && uv run --frozen ruff check src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py && uv run --frozen pyright src/science_tool/skills_coverage src/science_tool/feedback_cli.py src/science_tool/autonomy/cli.py)
 git add science/src/science_tool/skills_coverage/cli.py science/src/science_tool/skills_lint/cli.py science/src/science_tool/feedback_cli.py science/src/science_tool/autonomy/cli.py science/tests/test_autonomy_lifecycle_cli.py science/tests/skills_coverage/test_curate_cli.py
 git commit -m "feat(skills-curate): science skills curate CLI command; rename feedback-dir helper"
 ```
@@ -1150,7 +1154,7 @@ science skills curate                        # print the plan (report-only)
 science skills curate --apply                # file every new/recur row
 science skills curate --apply --term <term>  # file only the named term(s)
 science skills curate --project mm30         # scope the scan to one project
-science skills curate --format json --output plan.json
+science skills curate --format json --output plan.json   # report-only; not with --apply
 ```
 
 Each accepted gap becomes a feedback entry with `target: skill-coverage:<term>`,
@@ -1160,6 +1164,11 @@ matches are resolved (`wontfix`/`addressed`/`deferred`) is reported but not
 re-filed. More than one open entry for a term is a hard error — merge them first.
 Only `uncovered` gaps are filed; `covered-not-loaded` and `unmapped` appear in the
 report's context counts as project-side follow-ups.
+
+`--output` is **report-only** — it cannot be combined with `--apply`. This keeps a
+committed feedback write from ever being followed by a failing report-write (which a
+retry would double-record); to capture an apply run, redirect its stdout instead
+(`science skills curate --apply --format json > applied.json`).
 ```
 
 - [ ] **Step 2: Commit**

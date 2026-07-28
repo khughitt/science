@@ -178,9 +178,11 @@ its `likely_archetype` alongside term, disposition, score, and counts.
 failing report-write after a committed feedback write would leave the store
 half-applied (and a retry would double-record an occurrence), and reserving the
 destination cannot make a later write infallible (a read-only or full target
-still fails after the mutation). Rejecting the combination outright keeps apply
-atomic by construction; apply results are emitted to stdout, which a shell
-redirect can capture for an audit trail.
+still fails after the mutation). Rejecting the combination outright guarantees a
+report-write failure can never *follow* a committed feedback write — it does not
+claim the multi-row feedback write is itself transactional (it is not). Apply
+results are emitted to stdout, which a shell redirect can capture for an audit
+trail.
 
 ### Feedback record mapping
 
@@ -303,9 +305,9 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
     each row's `likely_archetype` and, when `--project` scopes the scan, the
     project in the header (not just the scope mode).
 19. **`--output` is report-only** — `--apply --output …` is rejected **before**
-    any feedback write (the store stays empty, no file is created), so apply is
-    atomic by construction; a report-mode `--output` writes the full payload to
-    the file and nothing to stdout.
+    any feedback write (the store stays empty, no file is created), so a report-write
+    failure can never follow a committed feedback write; a report-mode `--output`
+    writes the full payload to the file and nothing to stdout.
 20. **`coverage_context` counts exact values** — a constructed `CoverageReport`
     with two `covered-not-loaded`, one `unmapped`, one `uncovered`, and one
     skipped project yields `CurateContext(covered_not_loaded=2, unmapped=1,
