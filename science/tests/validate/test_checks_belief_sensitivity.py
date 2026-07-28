@@ -76,7 +76,7 @@ def test_fragile_single_line_flags_when_drop_flips(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
     _write_two_support_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
-    assert any(r.severity is Severity.WARN for r in results)
+    assert any(r.severity == Severity.WARN.value for r in results)
 
 
 def test_fragile_single_line_flags_diagnostic_only_contestation(tmp_path: Path):
@@ -85,7 +85,7 @@ def test_fragile_single_line_flags_diagnostic_only_contestation(tmp_path: Path):
     from science_tool.validate.checks.evidence_lines import check_belief_fragile_single_line
     _write_support_plus_diagnostic_graph(tmp_path)
     results = list(check_belief_fragile_single_line(_ctx(tmp_path)))
-    assert any(r.severity is Severity.WARN for r in results)
+    assert any(r.severity == Severity.WARN.value for r in results)
 
 
 def test_fragile_single_line_skips_single_kept_unit_plus_excluded_circular(tmp_path: Path):
@@ -111,7 +111,7 @@ def test_nonreproducible_errors_when_stored_belief_mismatches(tmp_path: Path):
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
 
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_silent_when_inputs_changed(tmp_path: Path):
@@ -150,7 +150,7 @@ def test_nonreproducible_errors_on_corrupted_scalar_band(tmp_path: Path):
     corrupted = rows[0] | {"net_band": [0.0, 0.0]}
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_errors_on_corrupted_diagnostic_count(tmp_path: Path):
@@ -166,7 +166,7 @@ def test_nonreproducible_errors_on_corrupted_diagnostic_count(tmp_path: Path):
     corrupted = rows[0] | {"diagnostic_dispute_count": 0}
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_uses_latest_matching_row_not_latest_per_claim(tmp_path: Path):
@@ -188,7 +188,7 @@ def test_nonreproducible_uses_latest_matching_row_not_latest_per_claim(tmp_path:
         encoding="utf-8",
     )
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_silent_when_policy_identity_differs(tmp_path: Path):
@@ -223,7 +223,7 @@ def test_nonreproducible_normalizes_pre_policy_stored_row(tmp_path: Path):
     legacy["belief_state"] = "speculative"
     snap.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)
 
 
 def test_nonreproducible_silent_when_authored_capped_absent(tmp_path: Path):
@@ -258,4 +258,4 @@ def test_nonreproducible_errors_when_authored_capped_mismatches(tmp_path: Path):
     corrupted = rows[0] | {"authored_capped": True}
     snap.write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
     results = list(check_belief_nonreproducible(ctx))
-    assert any(r.severity is Severity.ERROR for r in results)
+    assert any(r.severity == Severity.ERROR.value for r in results)

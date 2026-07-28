@@ -41,7 +41,7 @@ def _evaluate(entities: list[dict], packages: dict[str, dict | None]):
 
 
 def _rules(entities, packages):
-    return [(r.severity, r.rule) for r in _evaluate(entities, packages)]
+    return [(r.severity, r.rule_id) for r in _evaluate(entities, packages)]
 
 
 DP = "results/meta/r1/combined/datapackage.yaml"
@@ -141,7 +141,7 @@ def test_datapackage_read_error_reports_stamp_missing_and_continues() -> None:
         return {"science": {"support": {"unit": "dataset", "observed": 1}}}
 
     results = list(evaluate_aggregation_support(entities, read_datapackage))
-    rules = [(r.severity, r.rule) for r in results]
+    rules = [(r.severity, r.rule_id) for r in results]
 
     assert (Severity.ERROR, "aggregation-support.stamp-missing") in rules
     assert (Severity.ERROR, "aggregation-support.below-floor") in rules
@@ -162,7 +162,7 @@ def test_unsafe_absolute_datapackage_path_reports_stamp_missing_without_reading(
         raise AssertionError(f"unsafe path was read: {rel}")
 
     results = list(evaluate_aggregation_support(entities, read_datapackage))
-    assert (Severity.ERROR, "aggregation-support.stamp-missing") in [(r.severity, r.rule) for r in results]
+    assert (Severity.ERROR, "aggregation-support.stamp-missing") in [(r.severity, r.rule_id) for r in results]
     assert absolute_dp in results[0].message
 
 
@@ -180,7 +180,7 @@ def test_unsafe_traversal_datapackage_path_reports_stamp_missing_without_reading
 
     results = list(evaluate_aggregation_support(entities, read_datapackage))
     assert (Severity.ERROR, "aggregation-support.stamp-missing") in [
-        (r.severity, r.rule) for r in results
+        (r.severity, r.rule_id) for r in results
     ]
     assert traversal_dp in results[0].message
 
@@ -270,12 +270,27 @@ def _seed_mm30_shape(root: Path, observed) -> None:
 @contextmanager
 def _only_aggregation_support_check():
     import science_tool.validate.checks as checks
+    import science_tool.validate.checks.aggregation_support as module
+    from science_tool.findings.producers import FindingProducer
     from science_tool.validate.checks import CheckEntry
     from science_tool.validate.checks.aggregation_support import check_aggregation_support
 
     original_checks = list(checks.CANONICAL_CHECKS)
+    producer = FindingProducer(
+        producer_id="validate.aggregation-support",
+        namespace="validate_checks",
+        source_module="validate/checks/aggregation_support.py",
+        rules=tuple(module.RULES.values()),
+        sections=(module.SECTION,),
+    )
     checks.CANONICAL_CHECKS[:] = [
-        CheckEntry(section="aggregation support", order=34, fn=check_aggregation_support)
+        CheckEntry(
+            section="aggregation support",
+            order=34,
+            fn=check_aggregation_support,
+            produce=lambda batch: batch.producer_result(),
+            producer=producer,
+        )
     ]
     try:
         yield
@@ -302,7 +317,7 @@ def test_e2e_below_floor_reports_error(tmp_path: Path) -> None:
     _seed_mm30_shape(tmp_path, observed=1)
     with _only_aggregation_support_check():
         result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
-    assert any(r.rule == "aggregation-support.below-floor" for r in result.results)
+    assert any(r.rule_id == "aggregation-support.below-floor" for r in result.results)
     assert result.errors >= 1
 
 
@@ -312,7 +327,7 @@ def test_e2e_at_floor_is_warn_not_error(tmp_path: Path) -> None:
     _seed_mm30_shape(tmp_path, observed=4)
     with _only_aggregation_support_check():
         result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
-    rules = [r.rule for r in result.results]
+    rules = [r.rule_id for r in result.results]
     assert "aggregation-support.below-expected" in rules
     assert "aggregation-support.below-floor" not in rules
     assert result.errors == 0

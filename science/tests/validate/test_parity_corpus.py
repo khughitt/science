@@ -57,8 +57,8 @@ def test_combined_fixture_emits_intended_warn_and_error() -> None:
         "Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. "
         "Add it to science.yaml peers: or use a local ref."
     ) in messages
-    assert any(item.severity is Severity.WARN for item in result.results)
-    assert any(item.severity is Severity.ERROR for item in result.results)
+    assert any(item.severity == Severity.WARN.value for item in result.results)
+    assert any(item.severity == Severity.ERROR.value for item in result.results)
 
 
 def test_isolated_copy_excludes_sidecars_and_is_independent(
@@ -90,10 +90,12 @@ def test_sidecar_env_var_disables_python_sidecar_import(tmp_path: Path, monkeypa
         "\n".join(
             [
                 "from science_tool.validate import Result, Severity, hook",
+                "from science_tool.validate.checks.manifest import RULES",
                 "",
                 '@hook("extra_checks")',
                 "def extra(ctx):",
-                '    return [Result(Severity.WARN, None, None, "sidecar imported", "local.extra", None)]',
+                '    return [Result(Severity.WARN, None, None, "sidecar imported", '
+                'RULES["manifest.check"], None, {"key": ["sidecar"]})]',
             ]
         ),
         encoding="utf-8",

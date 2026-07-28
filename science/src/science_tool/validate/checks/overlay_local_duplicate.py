@@ -23,12 +23,23 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE = "commons.overlay-local-duplicate"
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="overlay-local-duplicate",
+    section_title="overlay local duplicate",
+    section_order=140,
+    rule_ids=("commons.overlay-local-duplicate",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def _ids_under(ctx: ValidateContext, subdir: str) -> dict[str, str]:
@@ -50,8 +61,8 @@ def _ids_under(ctx: ValidateContext, subdir: str) -> dict[str, str]:
     return ids
 
 
-@Check(section="overlay/local duplicate (id held as both a local owner and an overlay)", order=1)
-def check_overlay_local_duplicate(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=1, producer_id="validate.overlay-local-duplicate", rules=tuple(RULES.values()))
+def check_overlay_local_duplicate(ctx: ValidateContext) -> Iterator[CheckObservation]:
     overlay_ids = _ids_under(ctx, "overlays")
     if not overlay_ids:
         return
@@ -60,16 +71,12 @@ def check_overlay_local_duplicate(ctx: ValidateContext) -> Iterator[Result]:
         overlay_path = overlay_ids.get(canonical_id)
         if overlay_path is None:
             continue
-        yield Result(
-            Severity.ERROR,
-            Path(local_path),
-            None,
-            (
-                f"{canonical_id}: held both as a local owner ({local_path}) and as an "
-                f"overlay ({overlay_path}). This is always a duplicate — the overlay is "
-                f"the correct form. Delete the local entity {local_path}; keeping it "
-                f"shadows the overlay, and converting it to a second overlay would collide."
-            ),
-            RULE,
-            None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=Path(local_path),
+            line=None,
+            message=f"{canonical_id}: held both as a local owner ({local_path}) and as an overlay ({overlay_path}). This is always a duplicate — the overlay is the correct form. Delete the local entity {local_path}; keeping it shadows the overlay, and converting it to a second overlay would collide.",
+            rule=RULES["commons.overlay-local-duplicate"],
+            task=None,
+            qualifiers={"key": []},
         )

@@ -66,7 +66,7 @@ def _results(root: Path) -> list:
 
 
 def _rules(root: Path) -> list[str]:
-    return [r.rule for r in _results(root)]
+    return [r.rule_id for r in _results(root)]
 
 
 def test_a_SELF_SUPERSESSION_is_an_ERROR_through_the_runner(tmp_path: Path) -> None:
@@ -76,11 +76,11 @@ def test_a_SELF_SUPERSESSION_is_an_ERROR_through_the_runner(tmp_path: Path) -> N
     _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
                             "relations": [_supersedes("interpretation:i1")]})
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_an_ILLEGAL_KIND_PAIR_is_an_ERROR_through_the_runner(tmp_path: Path) -> None:
@@ -91,11 +91,11 @@ def test_an_ILLEGAL_KIND_PAIR_is_an_ERROR_through_the_runner(tmp_path: Path) -> 
                             "relations": [_supersedes("dataset:d")]})
     _dataset(tmp_path, "d")
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.illegal-kind-pair"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.illegal-kind-pair"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_a_BARE_AMENDS_SELF_EDGE_is_an_ERROR_though_NOBODY_WROTE_THAT_RULE(tmp_path: Path) -> None:
@@ -109,11 +109,11 @@ def test_a_BARE_AMENDS_SELF_EDGE_is_an_ERROR_though_NOBODY_WROTE_THAT_RULE(tmp_p
     _write(tmp_path, "i1", {"id": "interpretation:i1", "kind": "interpretation",
                             "relations": [{"predicate": "sci:amends", "target": "interpretation:i1"}]})
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_an_UNSUPPORTED_GRAPH_LAYER_is_REPORTED_and_does_not_CRASH_the_CHECK(tmp_path: Path) -> None:
@@ -130,11 +130,11 @@ def test_an_UNSUPPORTED_GRAPH_LAYER_is_REPORTED_and_does_not_CRASH_the_CHECK(tmp
          "object": "interpretation:i2", "graph_layer": "graph/not-a-layer"},
     ])
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.unsupported-graph-layer"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.unsupported-graph-layer"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
     assert "graph/not-a-layer" in findings[0].message
 
 
@@ -162,11 +162,11 @@ def test_an_ARCHIVED_SUBJECT_is_an_ERROR_because_a_FROZEN_record_cannot_AUTHOR(t
          "object": "interpretation:live"},
     ])
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.unknown-subject"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.unknown-subject"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
 
 
 def test_an_ARCHIVED_OBJECT_is_FINE_because_a_LIVE_record_MAY_POINT_AT_HISTORY(tmp_path: Path) -> None:
@@ -200,11 +200,11 @@ def test_a_SELF_SUPERSESSION_in_RELATIONS_YAML_is_an_ERROR_at_THAT_FILE(tmp_path
          "object": "interpretation:i1"},
     ])
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.self-referential"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.self-referential"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
 
 
 def test_an_ILLEGAL_KIND_PAIR_in_RELATIONS_YAML_is_an_ERROR_at_THAT_FILE(tmp_path: Path) -> None:
@@ -215,11 +215,11 @@ def test_an_ILLEGAL_KIND_PAIR_in_RELATIONS_YAML_is_an_ERROR_at_THAT_FILE(tmp_pat
         {"subject": "interpretation:i1", "predicate": "sci:supersedes", "object": "dataset:d"},
     ])
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.illegal-kind-pair"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.illegal-kind-pair"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.ERROR
-    assert findings[0].path == tmp_path / "knowledge/sources/local/relations.yaml"
+    assert findings[0].severity == Severity.ERROR.value
+    assert findings[0].subject.path == "knowledge/sources/local/relations.yaml"
     assert "interpretation:i1" in findings[0].message   # the SUBJECT, not just the file
 
 
@@ -235,13 +235,13 @@ def test_a_CYCLE_is_an_ERROR_on_EVERY_EDGE_that_forms_it(tmp_path: Path) -> None
     _write(tmp_path, "b", {"id": "interpretation:b", "kind": "interpretation",
                            "relations": [_supersedes("interpretation:a")]})
 
-    findings = [r for r in _results(tmp_path) if r.rule == "relation.cycle"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "relation.cycle"]
 
     assert len(findings) == 2
-    assert {f.severity for f in findings} == {Severity.ERROR}
-    assert {f.path for f in findings} == {
-        tmp_path / "entities/interpretations/a.md",
-        tmp_path / "entities/interpretations/b.md",
+    assert {f.severity for f in findings} == {Severity.ERROR.value}
+    assert {f.subject.path for f in findings} == {
+        "entities/interpretations/a.md",
+        "entities/interpretations/b.md",
     }
 
 

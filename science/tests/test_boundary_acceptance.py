@@ -209,7 +209,7 @@ def test_acceptance_sync_then_clean(tmp_path: Path):
     # against real git -- an earlier draft asserted the opposite.
     assert "tests/migration/archive/test_pilot.py" not in staged
 
-    rules = [finding.rule for finding in _findings(repo)]
+    rules = [finding.rule_id for finding in _findings(repo)]
     assert "boundary.tracked-ignored" not in rules  # ignored AND untracked, so no contradiction
     assert "boundary.generated-drift" not in rules
     assert "boundary.unreachable-tracked" not in rules
@@ -230,7 +230,7 @@ def test_acceptance_anchoring_the_warned_rule_is_the_remedy(tmp_path: Path):
     _git(repo, "add", "-A")
     staged = _git(repo, "ls-files", capture_output=True).stdout.split()
     assert "tests/migration/archive/test_pilot.py" in staged
-    assert "boundary.unanchored-pattern" not in {finding.rule for finding in _findings(repo)}
+    assert "boundary.unanchored-pattern" not in {finding.rule_id for finding in _findings(repo)}
 
 
 def test_acceptance_verify_current_tree_is_transactional(tmp_path: Path):
@@ -460,20 +460,20 @@ def test_acceptance_pins_the_seven_check_severity_contract(tmp_path: Path):
 
     drift = _mm30(tmp_path / "drift")
     _git(drift, "add", ".gitignore", "science.yaml")
-    observed.update((finding.rule, finding.severity) for finding in _findings(drift))
+    observed.update((finding.rule_id, finding.severity) for finding in _findings(drift))
 
     tracked = _mm30(tmp_path / "tracked")
     assert _invoke(tracked, "sync").exit_code == 0
     _git(tracked, "add", "-A")
     _git(tracked, "add", "-f", "data/raw/GSE1234_series_matrix.txt")
-    observed.update((finding.rule, finding.severity) for finding in _findings(tracked))
+    observed.update((finding.rule_id, finding.severity) for finding in _findings(tracked))
 
     conflict = _mm30(tmp_path / "conflict")
     assert _invoke(conflict, "sync").exit_code == 0
     conflict_ignore = conflict / ".gitignore"
     conflict_ignore.write_text(f"*.parquet\n{conflict_ignore.read_text()}")
     _git(conflict, "add", ".gitignore")
-    observed.update((finding.rule, finding.severity) for finding in _findings(conflict))
+    observed.update((finding.rule_id, finding.severity) for finding in _findings(conflict))
 
     unreachable = _mm30(tmp_path / "unreachable")
     assert _invoke(unreachable, "sync").exit_code == 0
@@ -482,6 +482,6 @@ def test_acceptance_pins_the_seven_check_severity_contract(tmp_path: Path):
     assert "/data/external/**\n" in generated
     unreachable_ignore.write_text(generated.replace("/data/external/**\n", "/data/external/\n", 1))
     _git(unreachable, "add", ".gitignore")
-    observed.update((finding.rule, finding.severity) for finding in _findings(unreachable))
+    observed.update((finding.rule_id, finding.severity) for finding in _findings(unreachable))
 
     assert observed == _ENFORCEMENT_CONTRACT

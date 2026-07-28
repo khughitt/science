@@ -42,9 +42,11 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-from science_tool.validate.checks import Check
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _REQUIRED_SECTIONS = (
     "Recent Progress",
@@ -55,28 +57,61 @@ _REQUIRED_SECTIONS = (
 _PRIOR_RE = re.compile(r"^prior:[ \t]*['\"]?([^'\"]*?)['\"]?[ \t]*$")
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "gap_analysis", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="gap-analysis",
+    section_title="gap analysis",
+    section_order=112,
+    rule_ids=("gap-analysis.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="research gap analysis...", order=9)
-def check_gap_analysis(ctx: ValidateContext) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["gap-analysis.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+@Check(section=SECTION, order=9, producer_id="validate.gap-analysis", rules=tuple(RULES.values()))
+def check_gap_analysis(ctx: ValidateContext) -> Iterator[CheckObservation]:
     paths = [path for path in sorted((ctx.doc_dir / "meta").glob("next-steps-*.md")) if path.is_file()]
     if not paths:
-        yield _result(Severity.INFO, None, "No next-steps analysis found (doc/meta/next-steps-*.md)")
+        yield _result(
+            Severity.INFO,
+            None,
+            "No next-steps analysis found (doc/meta/next-steps-*.md)",
+            key=["no-analysis"],
+        )
         return
 
     for path in paths:
         yield from _check_next_steps_file(ctx, path)
 
 
-def _check_next_steps_file(ctx: ValidateContext, path: Path) -> Iterator[Result]:
+def _check_next_steps_file(ctx: ValidateContext, path: Path) -> Iterator[CheckObservation]:
     relative = path.relative_to(ctx.project_root).as_posix()
     text = ctx.read_text_cached(path)
 
     for section in _REQUIRED_SECTIONS:
         if f"## {section}" not in text:
-            yield _result(Severity.WARN, relative, f"Next-steps {relative} missing section: {section}")
+            yield _result(
+                Severity.WARN,
+                relative,
+                f"Next-steps {relative} missing section: {section}",
+                key=["required-section", section],
+            )
 
     prior_value = _prior_value(text)
     if prior_value is None or prior_value == "":
@@ -88,6 +123,7 @@ def _check_next_steps_file(ctx: ValidateContext, path: Path) -> Iterator[Result]
             Severity.WARN,
             relative,
             f"{relative}: broken prior link '{prior_value}' (resolved to {candidate_path_string})",
+            key=["prior", prior_value],
         )
 
 

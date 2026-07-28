@@ -1,25 +1,8 @@
-"""Scope declarations for the producer namespaces.
-
-**This file is NOT design test 29** (producer-namespace completeness), and does not
-pretend to be. Test 29 requires comparing filesystem-discovered producers against
-registered ones. Plan 1 registers ZERO producers, so that comparison would be
-`set() == set()` — a guard that passes because there is nothing to check. A green
-vacuous assertion is worse than an absent one: it reads as coverage it does not have,
-which is the failure mode this repo has already been bitten by.
-
-**Test 29 is therefore deferred to Plan 2**, where the first real producers exist and
-the comparison can fail.
-
-What this file does guard now is the precondition test 29 will need: every registered
-namespace declares WHERE its producers live. A namespace whose scope nobody defined
-cannot be walked, so Plan 2 could not write test 29 for it.
-"""
+"""Filesystem equality guards for every registered producer namespace."""
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from science_tool.findings.producers import PRODUCER_NAMESPACES
 
@@ -46,30 +29,36 @@ def test_no_namespace_is_declared_without_being_registered():
     assert not extra, f"scope declared for unregistered namespaces: {sorted(extra)}"
 
 
-@pytest.mark.parametrize("namespace", sorted(NAMESPACE_DIRS))
-def test_each_declared_scope_exists_on_disk(namespace: str):
-    target = SRC / NAMESPACE_DIRS[namespace]
-    assert target.exists(), f"{namespace}: declared scope {target} does not exist"
-
-
-def test_phase_boundary_ratchet_no_producers_are_registered_yet():
-    """A PHASE-BOUNDARY RATCHET, not a placeholder.
-
-    It states a fact that is true in Plan 1 and false the instant Plan 2 registers its
-    first producer: at that moment the tree goes red, and the only correct way to make
-    it green is to write design test 29 -- the real discovery-versus-registration
-    comparison -- IN THE SAME COMMIT that registers the producer.
-
-    Deleting it is not the correct response. Replacing it is. A commit that removes
-    this and adds no equality guard has moved the codebase from "cannot check
-    completeness" to "does not check completeness" while turning the tree green, which
-    is the exact substitution this ratchet exists to make impossible.
-    """
+def _registered_source_modules(namespace: str) -> set[str]:
     from science_tool.findings.catalog import registered_producers
 
-    assert not registered_producers(), (
-        "producers are now registered, so design test 29 (producer-namespace "
-        "completeness) can and must be written: compare the modules discovered under "
-        "each NAMESPACE_DIRS entry against the registered producers, and REPLACE this "
-        "ratchet with that comparison in this same commit."
-    )
+    return {
+        producer.source_module
+        for producer in registered_producers()
+        if producer.namespace == namespace
+    }
+
+
+def test_health_namespace_equals_filesystem() -> None:
+    directory = SRC / "graph" / "health_checks"
+    discovered = {
+        f"graph/health_checks/{path.name}"
+        for path in directory.glob("*.py")
+        if path.name not in {"__init__.py", "base.py"}
+    }
+    assert _registered_source_modules("health_checks") == discovered
+
+
+def test_validation_namespace_equals_filesystem() -> None:
+    directory = SRC / "validate" / "checks"
+    discovered = {
+        f"validate/checks/{path.name}"
+        for path in directory.glob("*.py")
+        if path.name != "__init__.py"
+    }
+    discovered.add("validate/runtime.py")
+    assert _registered_source_modules("validate_checks") == discovered
+
+
+def test_data_audit_namespace_equals_filesystem() -> None:
+    assert _registered_source_modules("data_audit") == {"data_audit.py"}

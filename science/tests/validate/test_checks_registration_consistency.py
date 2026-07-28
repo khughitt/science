@@ -33,7 +33,7 @@ def _write_registry(config_dir: Path, *, path: Path, registry_id: str | None) ->
 
 
 def _warnings(results: Iterable[Result]) -> list[str]:
-    return [r.message for r in results if r.severity is Severity.WARN]
+    return [r.message for r in results if r.severity == Severity.WARN.value]
 
 
 def test_divergent_registry_id_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

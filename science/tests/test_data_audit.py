@@ -5,12 +5,16 @@ import subprocess
 from pathlib import Path
 
 from science_tool.data_audit import (
+    DataAuditSnapshot,
     Quadrant,
+    Violation,
     audit_project,
+    data_audit_result,
     location,
     propose_results_target,
     render_json,
 )
+from science_tool.data_policy import FileClass
 from science_tool.data_worktree import DEFAULT_DATA_DIRS
 
 
@@ -225,3 +229,24 @@ def test_audit_notes_warn_on_tracked_file_under_data_root(tmp_path: Path) -> Non
     assert len(warnings) == 1
     assert warnings[0].severity == "warning"
     assert "data/processed/tracked.bin" in warnings[0].message
+
+
+# Generic findings describe detected state, not the internal fixer plan.
+def test_data_finding_message_does_not_expose_proposed_fix_target() -> None:
+    result = data_audit_result(
+        DataAuditSnapshot(
+            violations=(
+                Violation(
+                    quadrant=Quadrant.STRANDED_RECORD,
+                    path="data/processed/run/RESULTS.md",
+                    file_class=FileClass.RECORD,
+                    proposed_target="results/run/RESULTS.md",
+                ),
+            ),
+            notes=(),
+        )
+    )
+
+    message = result.instrument.rows[0].message
+    assert "results/run/RESULTS.md" not in message
+    assert "proposed target" not in message

@@ -22,6 +22,26 @@ RowT = TypeVar("RowT")
 PREEXISTING_AUDIT_PREFIX = "pre-existing audit failure:"
 
 
+def serialize_json(
+    payload: Any,
+    *,
+    indent: int | None = 2,
+    sort_keys: bool = False,
+    ensure_ascii: bool = True,
+    default: Callable[[Any], Any] | None = None,
+    separators: tuple[str, str] | None = None,
+) -> str:
+    """Serialize an output payload through the canonical JSON authority."""
+    return json.dumps(
+        payload,
+        indent=indent,
+        sort_keys=sort_keys,
+        ensure_ascii=ensure_ascii,
+        default=default,
+        separators=separators,
+    )
+
+
 def summarize_preexisting_warnings(
     warnings: Sequence[str], *, show_preexisting: bool
 ) -> tuple[list[str], str | None]:
@@ -62,6 +82,7 @@ def emit(
     sort_keys: bool = False,
     ensure_ascii: bool = True,
     default: Callable[[Any], Any] | None = None,
+    separators: tuple[str, str] | None = None,
     sink: BoundedSink | None = None,
 ) -> None:
     """Emit ``payload`` as JSON when ``output_format == "json"``, else ``render_text()``.
@@ -78,12 +99,13 @@ def emit(
     When ``sink`` is None the historical unbudgeted behaviour is preserved exactly.
     """
     if output_format == "json":
-        rendered = json.dumps(
+        rendered = serialize_json(
             payload,
             indent=indent,
             sort_keys=sort_keys,
             ensure_ascii=ensure_ascii,
             default=default,
+            separators=separators,
         )
         if sink is None:
             click.echo(rendered)

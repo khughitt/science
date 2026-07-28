@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import AuditFinding, ProducerMetrics
@@ -19,6 +20,16 @@ class ValidationNotice(BaseModel):
     path: Path | None
     line: int | None
     message: str
+
+    @property
+    def severity(self) -> Literal["info"]:
+        """Notices are informational observations, not policy findings."""
+        return "info"
+
+    @property
+    def rule_id(self) -> None:
+        """Notices deliberately have no rule declaration or finding identity."""
+        return None
 
 
 @dataclass(frozen=True)

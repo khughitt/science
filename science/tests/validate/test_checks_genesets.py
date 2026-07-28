@@ -48,7 +48,7 @@ def _row(**extra: object) -> dict[str, object]:
 
 
 def _rules(results: list[Result]) -> list[str]:
-    return [r.rule for r in results]
+    return [r.rule_id for r in results]
 
 
 def _ctx(root: Path) -> ValidateContext:
@@ -283,7 +283,7 @@ def test_malformed_collection_errors() -> None:
         )
     )
     assert _rules(results) == ["geneset.collection-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_boolean_numeric_collection_fields_are_malformed() -> None:
@@ -357,8 +357,8 @@ def test_unavailable_registry_infos() -> None:
             registry_meta_by_id={_GENE_REGISTRY: None},
         )
     )
-    assert _rules(results) == ["geneset.identifier-registry-unavailable"]
-    assert results[0].severity is Severity.INFO
+    assert _rules(results) == [None]
+    assert results[0].severity == Severity.INFO.value
 
 
 def test_declared_unresolved_infos_and_skips_registry_validation() -> None:
@@ -372,8 +372,8 @@ def test_declared_unresolved_infos_and_skips_registry_validation() -> None:
             registry_meta_by_id={},
         )
     )
-    assert _rules(results) == ["geneset.identifier-declared-unresolved"]
-    assert results[0].severity is Severity.INFO
+    assert _rules(results) == [None]
+    assert results[0].severity == Severity.INFO.value
 
 
 def test_check_genesets_rejects_unsafe_member_resource_path(tmp_path: Path) -> None:
@@ -383,7 +383,7 @@ def test_check_genesets_rejects_unsafe_member_resource_path(tmp_path: Path) -> N
     results = list(check_genesets(_ctx(tmp_path)))
 
     assert _rules(results) == ["geneset.members-resource-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_check_genesets_reports_malformed_member_resource_bytes(tmp_path: Path) -> None:
@@ -394,7 +394,7 @@ def test_check_genesets_reports_malformed_member_resource_bytes(tmp_path: Path) 
     results = list(check_genesets(_ctx(tmp_path)))
 
     assert _rules(results) == ["geneset.members-resource-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_check_genesets_reads_local_members_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -438,7 +438,7 @@ def test_check_genesets_reports_malformed_rows(tmp_path: Path, monkeypatch: pyte
     results = list(check_genesets(_ctx(tmp_path)))
 
     assert _rules(results) == ["geneset.members-resource-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_check_genesets_unbuilt_members_resource_infos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -450,5 +450,5 @@ def test_check_genesets_unbuilt_members_resource_infos(tmp_path: Path, monkeypat
 
     results = list(check_genesets(_ctx(tmp_path)))
 
-    assert _rules(results) == ["geneset.members-resource-unavailable"]
-    assert results[0].severity is Severity.INFO
+    assert _rules(results) == [None]
+    assert results[0].severity == Severity.INFO.value

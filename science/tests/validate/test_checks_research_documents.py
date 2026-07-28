@@ -55,13 +55,13 @@ def test_new_research_document_checks_register_after_hypotheses() -> None:
     importlib.reload(bias_audits)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-7:]] == [
-        ("hypotheses...", 5),
-        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
-        ("project README conventions...", 10),
-        ("discussion documents...", 11),
-        ("discussion documents...", 12),
-        ("discussion documents...", 13),
-        ("discussion documents...", 14),
+        ("hypotheses", 5),
+        ("hypotheses", 6),  # check_dangling_lineage -- the cross-record lineage layer
+        ("project readme", 10),
+        ("discussions", 11),
+        ("prereg", 12),
+        ("hypothesis comparisons", 13),
+        ("bias audits", 14),
     ]
 
 
@@ -77,7 +77,7 @@ def test_project_readme_exists_info_and_legacy_section_warnings(tmp_path: Path) 
     results = list(check_project_readme(ctx))
 
     assert [(result.severity, result.message) for result in results] == [
-        (Severity.INFO, "README.md exists"),
+            (Severity.INFO, "README.md exists"),
         (
             Severity.WARN,
             "README.md contains legacy task-queue section '## Current Priorities' — migrate tasks to tasks/active/ via /science:tasks",
@@ -408,7 +408,7 @@ def test_research_question_found_in_entities(tmp_path: Path) -> None:
     entities_dir.joinpath("research-question.md").write_text("# Research Question\n", encoding="utf-8")
 
     results = list(check_research_scope(ctx))
-    assert not any(r.severity is Severity.ERROR and "research-question" in r.message for r in results)
+    assert not any(r.severity == Severity.ERROR.value and "research-question" in r.message for r in results)
 
 
 def test_synthesis_frontmatter_requires_per_kind_fields(tmp_path: Path) -> None:

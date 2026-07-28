@@ -96,7 +96,7 @@ def test_notes_scan_order_is_deterministic_and_emits_info(tmp_path: Path) -> Non
     _write_note(tmp_path, "notes/methods/a.md", _valid_note("method"))
     _write_note(tmp_path, "notes/datasets/a.md", _valid_note("dataset"))
 
-    info_messages = [result.message for result in check_notes(_ctx(tmp_path)) if result.severity is Severity.INFO]
+    info_messages = [result.message for result in check_notes(_ctx(tmp_path)) if result.severity == Severity.INFO.value]
 
     assert info_messages == [
         "Checking notes/topics/a.md...",

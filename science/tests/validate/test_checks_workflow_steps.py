@@ -37,7 +37,7 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _rules(results) -> list[tuple[str, Severity]]:
-    return [(r.rule, r.severity) for r in results]
+    return [(r.rule_id, r.severity) for r in results]
 
 
 def test_step_applying_unclassified_method_is_an_error(tmp_path: Path) -> None:
@@ -77,6 +77,25 @@ def test_partial_binding_warns_once_per_unbound_param(tmp_path: Path) -> None:
         ("workflow-step.seed-binding-missing", Severity.WARN),
         ("workflow-step.seed-binding-missing", Severity.WARN),
     ]
+    assert {tuple(result.qualifiers["key"]) for result in results} == {
+        ("param", "b"),
+        ("param", "c"),
+    }
+
+
+def test_duplicate_seed_param_emits_one_semantic_finding(tmp_path: Path) -> None:
+    root = _project(
+        tmp_path,
+        method_frontmatter="stochasticity: seedable\nseed_params: [a, a]\n",
+        step_frontmatter="method: method:leiden\n",
+    )
+
+    results = list(check_workflow_step_seed_bindings(_ctx(root)))
+
+    assert _rules(results) == [
+        ("workflow-step.seed-binding-missing", Severity.WARN)
+    ]
+    assert results[0].qualifiers["key"] == ["param", "a"]
 
 
 def test_nondeterministic_method_without_rationale_warns(tmp_path: Path) -> None:

@@ -21,7 +21,8 @@ the old and new producer shapes.
 independent of `science_tool`.
 
 **Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md),
-revision 21 (`cc6c21c5`). Section references below are to that document.
+revision 22 (the Task 4 prose-identity ruling). Section references below are to that
+document.
 
 ## Global Constraints
 
@@ -588,7 +589,7 @@ def test_pathless_validation_result_is_project_scoped(tmp_path):
 
 def test_prose_advisory_count_is_not_an_identity_field():
     assert ProseAdvisoryQualifiers.model_fields.keys() == {"check", "count"}
-    assert ProseHitQualifiers.model_fields.keys() == {"check"}
+    assert ProseHitQualifiers.model_fields.keys() == {"check", "match"}
     assert ValidationQualifiers.model_fields.keys() == {"key", "task"}
     assert CorrespondenceQualifiers.model_fields.keys() == {
         "task",
@@ -647,11 +648,13 @@ Expected: FAIL with `ModuleNotFoundError`.
 # science/src/science_tool/validate/findings.py
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 from science_model.audit import (
     AuditFinding,
+    Evidence,
     FindingRule,
     FindingSubject,
     LocationEvidence,
@@ -675,6 +678,7 @@ class ValidationQualifiers(BaseModel):
 class ProseHitQualifiers(BaseModel):
     model_config = ConfigDict(extra="forbid")
     check: str
+    match: str
 
 
 class ProseAdvisoryQualifiers(BaseModel):
@@ -731,13 +735,17 @@ def build_validation_finding(
     line: int | None,
     message: str,
     qualifiers: dict[str, object],
+    evidence: Sequence[Evidence] = (),
 ) -> AuditFinding:
     return rule.build(
         subject=validation_subject(project_root, path),
         severity=severity,
         qualifiers=qualifiers,
         message=message,
-        evidence=list(validation_evidence(project_root, path, line)),
+        evidence=[
+            *validation_evidence(project_root, path, line),
+            *evidence,
+        ],
     )
 ```
 
@@ -1279,6 +1287,7 @@ class Result:
     rule: FindingRule
     task: str | None
     qualifiers: Mapping[str, object]
+    evidence: tuple[Evidence, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule, FindingRule):
@@ -1302,6 +1311,7 @@ class Result:
             line=self.line,
             message=self.message,
             qualifiers=observed,
+            evidence=self.evidence,
         )
 ```
 
@@ -1531,7 +1541,7 @@ Special policy that must not be inferred mechanically:
 | `correspondence_drift.py` | Fixed `plan.correspondence-drift`; `CorrespondenceQualifiers.evidence_signature` is identity-bearing; override and delete the old future-kind f-string comment. |
 | `hypotheses.py` dangling lineage | One literal `hypothesis.dangling-lineage`, never a family; severity remains `severity_for_kind("hypothesis")`. |
 | `annotations.py` | Exactly `annotations.{kind}` for every member of `ISSUE_KINDS`; declared set equals `ISSUE_KINDS`. |
-| `prose_lints.py` WARN hits | `prose-lints.hit`, `PathSubject`, identity qualifier `check`, line as evidence, visible. |
+| `prose_lints.py` WARN hits | `prose-lints.hit`, `PathSubject`, identity qualifiers `check` + normalized `match`, all locations as evidence, visible. Match normalization is NFKC + whitespace collapse + case-folding. Different matches remain distinct; repeated semantically identical matches group. Evidence over the 100-entry bound is summarized, never truncated. Line, span, list position, and occurrence ordinal are forbidden identity. |
 | `prose_lints.py` INFO configured severity | `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, non-identity `count`, hidden. |
 | `prose_lints.py` config | `prose-lints.config`, `ProjectSubject`, visible INFO. |
 | `prose_lints.py` numeric coverage | No rule. Yield one `ValidationMetricObservation` containing the exact four tallies; declare `NumericVerificationMetrics`. |
@@ -1552,6 +1562,9 @@ Create `validate/test_finding_families.py` with the following executable tests:
 - correspondence drift remains exactly `plan.correspondence-drift` and evidence-scoped;
 - the three hypothesis gate IDs remain exact;
 - prose WARN/advisory rules retain distinct visibility;
+- prose WARN identity is path + `check` + normalized `match`; semantic duplicates group
+  with complete bounded-or-summarized location evidence, while different matches remain
+  distinct;
 - numeric verification coverage appears only in metrics;
 - all emitted validation IDs satisfy the `FindingRule` grammar, declared mappings equal
   the complete 31-row table above, and every old nonconforming ID is absent;
@@ -1854,7 +1867,9 @@ Rewrite affected tests rather than introducing adapters. At minimum:
   document findings/accepted/metrics/caveats/unwired as separate channels while leaving
   the current `science.yaml` acceptance example unchanged for Plan 2.
 
-Add the count-ledger test with one fixture case per §9 row. It must assert:
+Add the count-ledger test with one real converter fixture case per §9 row, including
+each layered-claim subrow, numeric-verification metrics, accepted and unwired channels,
+both data-audit row classes, and the prose semantic-duplicate case. It must assert:
 
 ```python
 assert report.totals.findings_total == len(report.findings)
@@ -1863,7 +1878,12 @@ assert not (set(accepted_ids) & set(unsuppressed_ids))
 ```
 
 and specifically assert that `legacy_task_type` and `invalid_entity_aspects` each add one
-where their old omission added zero. No producer may reduce a current count.
+where their old omission added zero. No producer may reduce a current count except the
+authorized `prose-lints.hit` grouping of semantically indistinguishable
+`(path, check, normalized match)` duplicates. That exception is necessary because the
+producer uniqueness invariant makes separate rows impossible without forbidden unstable
+identity from line, span, list position, or occurrence ordinal. All locations remain
+evidence on the grouped finding, subject to summarize-not-truncate evidence bounds.
 
 - [ ] **Step 12: Run the atomic scoped suite**
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from science_model.audit import AuditFinding, PathSubject
 
 from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.validate.acceptance import (
@@ -11,7 +12,6 @@ from science_tool.validate.acceptance import (
     entry_suppresses,
     filter_accepted_warnings,
 )
-from science_tool.validate.result import Result, Severity
 
 
 def test_pre_migration_key_encodes_matcher_semantics_not_raw_yaml():
@@ -69,8 +69,23 @@ _SIG = f"{SIGNATURE_VERSION}:" + "a" * 64                       # the bare hash 
 _LABELED = f"evidence-signature: {_SIG}"       # the complete labeled token that IS scoped
 
 
-def _warn(rule: str, path: str, message: str) -> Result:
-    return Result(Severity.WARN, Path(path), None, message, rule, None)
+def _finding(
+    rule: str,
+    path: str,
+    message: str,
+    *,
+    severity: str = "warn",
+) -> AuditFinding:
+    return AuditFinding(
+        rule_id=rule,
+        subject=PathSubject(path=path),
+        severity=severity,
+        message=message,
+    )
+
+
+def _warn(rule: str, path: str, message: str) -> AuditFinding:
+    return _finding(rule, path, message)
 
 
 def test_evidence_scoped_rule_is_declared():
@@ -166,14 +181,7 @@ def test_legacy_validate_acceptance_removes_only_the_warning(tmp_path: Path):
         encoding="utf-8",
     )
     warning = _warn("code.metadata-gap", "x.py", "gap")
-    error = Result(
-        Severity.ERROR,
-        Path("x.py"),
-        None,
-        "gap",
-        "code.metadata-gap",
-        None,
-    )
+    error = _finding("code.metadata-gap", "x.py", "gap", severity="error")
 
     assert filter_accepted_warnings(tmp_path, [warning, error]) == [error]
 
@@ -188,7 +196,7 @@ def _drift_manifest(root: Path, entry_lines: str) -> None:
     )
 
 
-def _drift_warn() -> Result:
+def _drift_warn() -> AuditFinding:
     return _warn("plan.correspondence-drift", "entities/plans/0001-x.md", f"under-claims ... {_LABELED}")
 
 

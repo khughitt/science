@@ -6,6 +6,11 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
+from science_model.audit import FindingRule
+from science_model.audit.fingerprint import canonical_json
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.aliases import load_manual_aliases
 from science_tool.commons.config import resolve_commons_root
@@ -14,9 +19,9 @@ from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_r
 from science_tool.commons.geneset_resources import is_geneset_frontmatter, read_member_rows
 from science_tool.graph.dataset_independence import DEPENDENCE_ROLES
 from science_tool.validate._helpers import dataset_frontmatters, entity_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 DatasetRefStatus = Literal["resolved", "missing", "unavailable", "non_dataset"]
 
@@ -26,12 +31,45 @@ _ROLES = ("analyzed", "set_definition_source", "validation_source", "cited", "up
 _OVERLAPS = ("full", "partial", "unknown")
 
 
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-influence",
+    section_title="dataset influence",
+    section_order=144,
+    rule_ids=(
+        "dataset-influence.dataset-usage-malformed",
+        "dataset-influence.derivation-inputs-invalid",
+        "dataset-influence.overlap-unknown-candidate",
+        "dataset-influence.paper-datasets-retired",
+        "dataset-influence.ref-not-dataset",
+        "dataset-influence.ref-unresolved",
+        "dataset-influence.ref-unresolved-unavailable",
+        "dataset-influence.self-reference",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
 def _identity_dataset_ref(ref: str) -> str:
     return ref
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str] | None = None,
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key or []},
+    )
 
 
 def _usage_defect(entry: Any) -> str | None:
@@ -77,7 +115,7 @@ def evaluate_dataset_influence(
     dataset_ref_status: dict[str, DatasetRefStatus],
     row_usage_refs: Iterable[tuple[str, str, str]],
     canonicalize_dataset_ref: Callable[[str], str] = _identity_dataset_ref,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     refs_to_check: list[tuple[str, str, str]] = []
     for fm in frontmatters:
         ident = str(fm.get("id") or "?")
@@ -89,19 +127,29 @@ def evaluate_dataset_influence(
                 Severity.ERROR,
                 path,
                 f"{ident}: {defect}",
-                "dataset-influence.dataset-usage-malformed",
+                RULES["dataset-influence.dataset-usage-malformed"],
             )
             continue
 
+        emitted_self_references: set[tuple[str, str]] = set()
+        seen_usage_entries: set[str] = set()
         for entry in usage_entries:
+            entry_key = canonical_json(entry).decode("utf-8")
+            if entry_key in seen_usage_entries:
+                continue
+            seen_usage_entries.add(entry_key)
             ref = canonicalize_dataset_ref(str(entry["ref"]))
             if kind == "dataset" and ref == ident:
-                yield _result(
-                    Severity.ERROR,
-                    path,
-                    f"{ident}: dataset_usage must not reference itself",
-                    "dataset-influence.self-reference",
-                )
+                identity = ("dataset-usage", ref)
+                if identity not in emitted_self_references:
+                    emitted_self_references.add(identity)
+                    yield _result(
+                        Severity.ERROR,
+                        path,
+                        f"{ident}: dataset_usage must not reference itself",
+                        RULES["dataset-influence.self-reference"],
+                        key=list(identity),
+                    )
                 continue
             refs_to_check.append((ref, ident, str(path or "")))
             role = entry["role"]
@@ -111,31 +159,42 @@ def evaluate_dataset_influence(
                     path,
                     f"{ident}: dataset_usage {ref!r} has a dependence role ({role}) with overlap=unknown"
                     " — B2 treats it as a candidate (no shared-source collapse) until overlap is curated to full",
-                    "dataset-influence.overlap-unknown-candidate",
+                    RULES["dataset-influence.overlap-unknown-candidate"],
+                    key=["dataset-usage", ref, str(role), "unknown"],
                 )
 
         derivation = fm.get("derivation")
         if kind == "dataset" and isinstance(derivation, dict):
             inputs = derivation.get("inputs")
             if isinstance(inputs, list):
+                seen_inputs: set[str] = set()
                 for index, raw_ref in enumerate(inputs):
+                    input_key = canonical_json(raw_ref).decode("utf-8")
+                    if input_key in seen_inputs:
+                        continue
+                    seen_inputs.add(input_key)
                     defect = _derivation_input_defect(raw_ref)
                     if defect is not None:
                         yield _result(
                             Severity.ERROR,
                             path,
                             f"{ident}: derivation.inputs[{index}] invalid -- {defect}",
-                            "dataset-influence.derivation-inputs-invalid",
+                            RULES["dataset-influence.derivation-inputs-invalid"],
+                            key=["derivation-input", input_key],
                         )
                         continue
                     ref = canonicalize_dataset_ref(raw_ref)
                     if ref == ident:
-                        yield _result(
-                            Severity.ERROR,
-                            path,
-                            f"{ident}: derivation.inputs must not reference itself",
-                            "dataset-influence.self-reference",
-                        )
+                        identity = ("derivation-input", ref)
+                        if identity not in emitted_self_references:
+                            emitted_self_references.add(identity)
+                            yield _result(
+                                Severity.ERROR,
+                                path,
+                                f"{ident}: derivation.inputs must not reference itself",
+                                RULES["dataset-influence.self-reference"],
+                                key=list(identity),
+                            )
                     refs_to_check.append((ref, ident, str(path or "")))
 
         if kind == "paper":
@@ -144,11 +203,12 @@ def evaluate_dataset_influence(
                     Severity.ERROR,
                     path,
                     f"{ident}: paper.datasets is retired; use dataset_usage entries instead",
-                    "dataset-influence.paper-datasets-retired",
+                    RULES["dataset-influence.paper-datasets-retired"],
+                    key=["paper-datasets"],
                 )
 
     refs_to_check.extend(row_usage_refs)
-    for ref, consumer, path in refs_to_check:
+    for ref, consumer, path in sorted(set(refs_to_check)):
         status = dataset_ref_status.get(ref, "missing")
         if status == "resolved":
             continue
@@ -157,21 +217,24 @@ def evaluate_dataset_influence(
                 Severity.INFO,
                 path,
                 f"{consumer}: dataset ref {ref!r} cannot be checked because registry resources are unavailable",
-                "dataset-influence.ref-unresolved-unavailable",
+                RULES["dataset-influence.ref-unresolved-unavailable"],
+                key=["dataset-reference", consumer, ref],
             )
         elif status == "non_dataset":
             yield _result(
                 Severity.ERROR,
                 path,
                 f"{consumer}: dataset ref {ref!r} resolves to a non-dataset entity",
-                "dataset-influence.ref-not-dataset",
+                RULES["dataset-influence.ref-not-dataset"],
+                key=["dataset-reference", consumer, ref],
             )
         else:
             yield _result(
                 Severity.WARN,
                 path,
                 f"{consumer}: dataset ref {ref!r} does not resolve to a local or commons dataset",
-                "dataset-influence.ref-unresolved",
+                RULES["dataset-influence.ref-unresolved"],
+                key=["dataset-reference", consumer, ref],
             )
 
 
@@ -329,8 +392,8 @@ def _row_usage_refs(
     return refs
 
 
-@Check(section="dataset influence", order=36)
-def check_dataset_influence(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=36, producer_id="validate.dataset-influence", rules=tuple(RULES.values()))
+def check_dataset_influence(ctx: ValidateContext) -> Iterator[CheckObservation]:
     frontmatters = entity_frontmatters(ctx)
     resolver = _DatasetRefResolver(
         frontmatters,

@@ -90,7 +90,7 @@ def test_empirical_belief_eligible_no_dataset_usage_errors(tmp_path: Path) -> No
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 
@@ -111,7 +111,7 @@ def test_empirical_belief_eligible_empty_list_dataset_usage_errors(tmp_path: Pat
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 
@@ -132,7 +132,7 @@ def test_empirical_belief_eligible_absent_no_dataset_usage_errors(tmp_path: Path
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "evidence.empirical.requires_dataset_usage"
+    assert r.rule_id == "evidence.empirical.requires-dataset-usage"
     assert r.path == p
 
 

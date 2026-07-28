@@ -12,9 +12,15 @@ from science_model.audit.fingerprint import canonical_json
 
 from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.data_root import project_config_path
-from science_tool.validate.result import Result, Severity
 
 EVIDENCE_SCOPED_RULES: frozenset[str] = frozenset({"plan.correspondence-drift"})
+
+
+def canonical_acceptance_severity(severity: object) -> str | None:
+    """Return the matcher spelling, or ``None`` for a wildcard value."""
+    if not isinstance(severity, str):
+        return None
+    return "warn" if severity in {"warn", "warning"} else severity
 
 
 def _pre_migration_key_fields(entry: dict[str, Any]) -> dict[str, object]:
@@ -22,9 +28,9 @@ def _pre_migration_key_fields(entry: dict[str, Any]) -> dict[str, object]:
     if not isinstance(rule, str):
         raise ValueError("acceptance entry has no string rule")
     fields: dict[str, object] = {"rule": rule}
-    severity = entry.get("severity")
-    if isinstance(severity, str):
-        fields["severity"] = "warn" if severity in {"warn", "warning"} else severity
+    severity = canonical_acceptance_severity(entry.get("severity"))
+    if severity is not None:
+        fields["severity"] = severity
     for name in ("path", "task"):
         value = entry.get(name)
         if isinstance(value, str):
@@ -149,11 +155,10 @@ def _text_matches(value: str, needles: object) -> bool:
 
 
 def _severity_matches(entry_severity: object, finding_severity: str) -> bool:
-    if not isinstance(entry_severity, str):
+    canonical_entry = canonical_acceptance_severity(entry_severity)
+    if canonical_entry is None:
         return True
-    norm = "warn" if entry_severity in {"warn", "warning"} else entry_severity
-    fnorm = "warn" if finding_severity in {"warn", "warning"} else finding_severity
-    return norm == fnorm
+    return canonical_entry == canonical_acceptance_severity(finding_severity)
 
 
 def entry_matches(
@@ -217,26 +222,30 @@ def entry_suppresses(
     return True
 
 
-def filter_accepted_warnings(project_root: Path, results: list[Result]) -> list[Result]:
+def filter_accepted_warnings(
+    project_root: Path,
+    results: list[AuditFinding],
+) -> list[AuditFinding]:
     entries = accepted_validation_entries(project_root)
     if not entries:
         return results
-    kept: list[Result] = []
-    for result in results:
-        if result.severity is not Severity.WARN:
-            kept.append(result)
+    kept: list[AuditFinding] = []
+    for finding in results:
+        if finding.severity != "warn":
+            kept.append(finding)
             continue
+        fields = legacy_validation_fields(finding)
         suppressed = any(
             entry_suppresses(
                 entry,
-                rule=result.rule,
-                severity=result.severity.value,
-                path=str(result.path) if result.path is not None else None,
-                task=result.task,
-                message=result.message,
+                rule=finding.rule_id,
+                severity=finding.severity,
+                path=cast(str | None, fields["path"]),
+                task=cast(str | None, fields["task"]),
+                message=finding.message,
             )
             for entry in entries
         )
         if not suppressed:
-            kept.append(result)
+            kept.append(finding)
     return kept

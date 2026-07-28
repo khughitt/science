@@ -42,6 +42,8 @@ from pathlib import Path
 
 from rdflib import RDF, Graph, URIRef
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.belief import (
     BeliefMagnitude,
     BeliefResult,
@@ -53,9 +55,9 @@ from science_tool.graph.belief_scalar import belief_scalar_enabled
 from science_tool.graph.bundle_belief import BundleBeliefResult, belief_for_entity
 from science_tool.graph.io import SCI_NS, entity_uri_for_ref
 from science_tool.graph.store import _graph_uri
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE_MISSING_BASIS = "verdict.missing-basis"
 RULE_REFUTATION_MASKED = "verdict.refutation-masked"
@@ -77,6 +79,19 @@ _QUALIFYING_STANCES: dict[str, frozenset[str]] = {
 _ADMITS_NEGATIVE_ADJUDICATION = frozenset({"partially-supported", "weakened", "refuted"})
 
 
+SECTION, RULES = declare_validation_rules(
+    section_id="verdict-agreement",
+    section_title="verdict agreement",
+    section_order=149,
+    rule_ids=(
+        "verdict.disagrees-with-computed",
+        "verdict.missing-basis",
+        "verdict.refutation-masked",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
 @dataclass(frozen=True)
 class _Composition:
     """One reading of the composed evidence, uniform over the bundle and direct branches.
@@ -87,13 +102,13 @@ class _Composition:
     """
 
     magnitude: BeliefMagnitude
-    direct: BeliefResult          # evidence attached to the hypothesis IRI itself
-    core: list[BeliefResult]      # per CORE member; empty when the hypothesis has none
+    direct: BeliefResult  # evidence attached to the hypothesis IRI itself
+    core: list[BeliefResult]  # per CORE member; empty when the hypothesis has none
     core_uris: list[URIRef]
 
 
-@Check(section="verdict agreement", order=28)
-def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=28, producer_id="validate.verdict-agreement", rules=tuple(RULES.values()))
+def check_verdict_agreement(ctx: ValidateContext) -> Iterator[CheckObservation]:
     knowledge, provenance = _load_belief_graphs(ctx)
     if knowledge is None or provenance is None:
         return
@@ -104,7 +119,7 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
     for uri in sorted(_hypotheses(knowledge), key=str):
         raw = next(knowledge.objects(uri, SCI_NS.verdict), None)
         if raw is None:
-            continue                  # absent == no adjudication recorded. Legal, and common.
+            continue  # absent == no adjudication recorded. Legal, and common.
         verdict = str(raw)
 
         composition = _compose(knowledge, provenance, uri, scalar_enabled=scalar_enabled)
@@ -116,45 +131,41 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
         # true. Short-circuiting would skip the hard invariant for exactly the files with the
         # weakest evidentiary footing -- suppressing it where it matters most.
         if not _has_qualifying_basis(verdict, composition, falsified=falsified):
-            yield Result(
-                Severity.WARN,
-                path,
-                None,
-                # The message names the basis the check ACTUALLY LOOKS FOR. Offering "or a
-                # falsification on the hypothesis" would tell the author to write a record the
-                # materializer refuses (materialize.py:1274). The two reaches differ; this says so.
-                f"{uri}: verdict {verdict!r} has no qualifying basis (no admissible, "
-                f"polarity-agreeing evidence line on the hypothesis or a core member, and no "
-                f"falsification on a core proposition member). A verdict is an adjudication "
-                f"OF something.",
-                RULE_MISSING_BASIS,
-                None,
+            yield validation_observation(
+                severity=Severity.WARN,
+                path=path,
+                line=None,
+                message=f"{uri}: verdict {verdict!r} has no qualifying basis (no admissible, polarity-agreeing evidence line on the hypothesis or a core member, and no falsification on a core proposition member). A verdict is an adjudication OF something.",
+                rule=RULES["verdict.missing-basis"],
+                task=None,
+                qualifiers={"key": []},
             )
 
         # THE HARD INVARIANT. `supported` cannot stand on top of an unresolved decisive refutation
         # of the hypothesis or of its core conjunction. `partially-supported` is deliberately NOT
         # included: a refuted member is exactly what that verdict is for.
         if verdict == "supported" and _has_decisive_refutation(composition):
-            yield Result(
-                Severity.ERROR,
-                path,
-                None,
-                f"{uri}: verdict 'supported' with an unresolved decisive refutation of the "
-                f"hypothesis or a core member",
-                RULE_REFUTATION_MASKED,
-                None,
+            yield validation_observation(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=f"{uri}: verdict 'supported' with an unresolved decisive refutation of the hypothesis or a core member",
+                rule=RULES["verdict.refutation-masked"],
+                task=None,
+                qualifiers={"key": []},
             )
 
         # Explanatory disagreement -- REPORT ONLY. Never a ceiling, never a rewrite.
         reason = _disagreement(verdict, composition, falsified=falsified)
         if reason is not None:
-            yield Result(
-                Severity.WARN,
-                path,
-                None,
-                f"{uri}: authored verdict {verdict!r} disagrees with composed belief: {reason}",
-                RULE_DISAGREES,
-                None,
+            yield validation_observation(
+                severity=Severity.WARN,
+                path=path,
+                line=None,
+                message=f"{uri}: authored verdict {verdict!r} disagrees with composed belief: {reason}",
+                rule=RULES["verdict.disagrees-with-computed"],
+                task=None,
+                qualifiers={"key": []},
             )
 
 
@@ -163,9 +174,7 @@ def check_verdict_agreement(ctx: ValidateContext) -> Iterator[Result]:
 # ---------------------------------------------------------------------------------------------
 
 
-def _compose(
-    knowledge: Graph, provenance: Graph, uri: URIRef, *, scalar_enabled: bool
-) -> _Composition:
+def _compose(knowledge: Graph, provenance: Graph, uri: URIRef, *, scalar_enabled: bool) -> _Composition:
     """The authoritative composition, plus the two things it cannot see.
 
     ☠️ DIRECT whole-hypothesis evidence is collected SEPARATELY. When core members exist,
@@ -219,11 +228,7 @@ def _has_decisive_refutation(composition: _Composition) -> bool:
     is there an ADMITTED decisive refuting unit? `dispute_units` is the reduced, admitted,
     non-diagnostic list -- the same list `aggregate_belief` itself tests.
     """
-    return any(
-        is_decisive_refutation(unit)
-        for belief in _admitted(composition)
-        for unit in belief.dispute_units
-    )
+    return any(is_decisive_refutation(unit) for belief in _admitted(composition) for unit in belief.dispute_units)
 
 
 def _has_stance(composition: _Composition, stances: frozenset[str]) -> bool:
@@ -241,10 +246,7 @@ def _has_stance(composition: _Composition, stances: frozenset[str]) -> bool:
 
 
 def _has_falsified_core_member(knowledge: Graph, composition: _Composition) -> bool:
-    return any(
-        next(knowledge.subjects(SCI_NS.falsifies, member), None) is not None
-        for member in composition.core_uris
-    )
+    return any(next(knowledge.subjects(SCI_NS.falsifies, member), None) is not None for member in composition.core_uris)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -252,9 +254,7 @@ def _has_falsified_core_member(knowledge: Graph, composition: _Composition) -> b
 # ---------------------------------------------------------------------------------------------
 
 
-def _has_qualifying_basis(
-    verdict: str, composition: _Composition, *, falsified: bool
-) -> bool:
+def _has_qualifying_basis(verdict: str, composition: _Composition, *, falsified: bool) -> bool:
     if _has_stance(composition, _QUALIFYING_STANCES[verdict]):
         return True
     return falsified and verdict in _ADMITS_NEGATIVE_ADJUDICATION
@@ -282,10 +282,7 @@ def _disagreement(verdict: str, composition: _Composition, *, falsified: bool) -
         # support anywhere, EVERY portion is unsettled by definition. Such a hypothesis is not
         # partially supported; it is UNSUPPORTED.
         if not _has_support(composition):
-            return (
-                "nothing is supported: no admissible supporting evidence on the hypothesis or "
-                "on any core member"
-            )
+            return "nothing is supported: no admissible supporting evidence on the hypothesis or on any core member"
         if not _has_unsettled_portion(composition, falsified=falsified):
             return "nothing is partial: no unresolved or contested portion, and nothing refuted"
         return None
@@ -316,10 +313,7 @@ def _has_unsettled_portion(composition: _Composition, *, falsified: bool) -> boo
     """
     if _has_decisive_refutation(composition) or falsified:
         return True
-    return any(
-        belief.magnitude == BeliefMagnitude.SPECULATIVE or belief.contested
-        for belief in _portions(composition)
-    )
+    return any(belief.magnitude == BeliefMagnitude.SPECULATIVE or belief.contested for belief in _portions(composition))
 
 
 def _has_support(composition: _Composition) -> bool:
@@ -344,9 +338,7 @@ def _speculative_reason(composition: _Composition) -> str:
         return "no admissible evidence composes to any support at all"
 
     unsupported = [
-        uri
-        for uri, belief in zip(composition.core_uris, composition.core, strict=True)
-        if not belief.support_units
+        uri for uri, belief in zip(composition.core_uris, composition.core, strict=True) if not belief.support_units
     ]
     if unsupported:
         return (

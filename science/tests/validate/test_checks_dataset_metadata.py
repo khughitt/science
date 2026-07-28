@@ -32,7 +32,7 @@ def _load_checks_with_dataset_metadata_fresh() -> None:
 
 
 def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
-    return [(r.severity, r.rule) for r in evaluate_dataset_metadata(datasets)]
+    return [(r.severity, r.rule_id) for r in evaluate_dataset_metadata(datasets)]
 
 
 def _results(datasets: list[dict]):
@@ -129,7 +129,7 @@ def test_missing_dataset_class_is_info_advisory() -> None:
     ds = _ds(origin="external", license="MIT")
     ds.pop("dataset_class")
 
-    assert (Severity.INFO, "dataset.legacy-missing-class") in _rules([ds])
+    assert (Severity.INFO, None) in _rules([ds])
 
 
 def test_source_class_reference_does_not_imply_dataset_class_reference() -> None:
@@ -187,7 +187,7 @@ def test_reference_missing_source_url_uses_access_block_only() -> None:
         ]
     )
 
-    assert any(result.rule == "dataset.reference-missing-source-url" for result in results)
+    assert any(result.rule_id == "dataset.reference-missing-source-url" for result in results)
 
 
 def test_reference_and_pointer_runtime_artifacts_warn() -> None:
@@ -234,7 +234,7 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
 
     result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
 
-    assert any(r.rule == "dataset.license-missing" for r in result.results)
+    assert any(r.rule_id == "dataset.license-missing" for r in result.results)
 
 
 def _schema(name: str) -> dict:

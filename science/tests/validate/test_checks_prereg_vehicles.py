@@ -76,7 +76,7 @@ def _write_prereg(
 
 
 def _rules(results: list[Result]) -> list[str]:
-    return [result.rule or "" for result in results]
+    return [result.rule_id or "" for result in results]
 
 
 def _vehicle_block(path: str, digest: str) -> str:
@@ -655,7 +655,7 @@ def test_the_prose_message_does_not_assert_the_path_is_a_substrate(project: Path
     _write_prereg(project, body="results land in `build/out.json`\n")
 
     results = list(check_prereg_vehicles(_ctx(project)))
-    prose = [r for r in results if r.rule == "prereg.prose-path-nondurable"]
+    prose = [r for r in results if r.rule_id == "prereg.prose-path-nondurable"]
 
     assert len(prose) == 1
     message = prose[0].message

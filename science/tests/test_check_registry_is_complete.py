@@ -90,5 +90,5 @@ def test_a_registered_check_REACHES_a_real_project(tmp_path: Path) -> None:
 
     assert materialize_graph(tmp_path).is_file()      # prove the check has something to read
 
-    rules = {result.rule for result in runner.run(tmp_path, strict=False, verbose=False).results}
+    rules = {result.rule_id for result in runner.run(tmp_path, strict=False, verbose=False).results}
     assert "verdict.missing-basis" in rules

@@ -58,8 +58,8 @@ def test_attested_capturable_component_is_error(tmp_path):
     )
     _write_run(tmp_path, "r1", bad)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-authored-capturable"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.fingerprint-authored-capturable"]
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_unknown_capturable_component_is_warn(tmp_path):
@@ -69,8 +69,8 @@ def test_unknown_capturable_component_is_warn(tmp_path):
     )
     _write_run(tmp_path, "r1", bad)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-incomplete"]
-    assert results[0].severity is Severity.WARN
+    assert [r.rule_id for r in results] == ["run.fingerprint-incomplete"]
+    assert results[0].severity == Severity.WARN.value
 
 
 def test_malformed_fingerprint_is_error(tmp_path):
@@ -81,8 +81,8 @@ def test_malformed_fingerprint_is_error(tmp_path):
     assert bad != CLEAN, "replace() found no match against CLEAN; fixture text has drifted"
     _write_run(tmp_path, "r1", bad)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.fingerprint-malformed"]
+    assert results[0].severity == Severity.ERROR.value
 
 
 def _origin(*extra: str) -> str:
@@ -115,8 +115,8 @@ def test_commons_origin_digest_mismatch_is_error(tmp_path):
     commons = _commons("    source_ref: imported.md\n", "    source_digest: deadbeef\n")
     _write_run(tmp_path, "r1", commons)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-origin-unverified"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.fingerprint-origin-unverified"]
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_commons_origin_absolute_source_ref_is_error(tmp_path):
@@ -128,8 +128,8 @@ def test_commons_origin_absolute_source_ref_is_error(tmp_path):
     commons = _commons(f"    source_ref: {outside}\n")
     _write_run(tmp_path, "r1", commons)
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-origin-unverified"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.fingerprint-origin-unverified"]
+    assert results[0].severity == Severity.ERROR.value
     assert "must be relative" in results[0].message
 
 
@@ -149,8 +149,8 @@ def test_fingerprint_without_a_declaration_is_an_error(tmp_path):
     """A capture with nothing to have been captured from is orphaned."""
     _write_run(tmp_path, "r1", CLEAN.replace(EXECUTION, ""))
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-declaration-drift"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.fingerprint-declaration-drift"]
+    assert results[0].severity == Severity.ERROR.value
     assert "declares no `execution:`" in results[0].message
 
 
@@ -158,9 +158,9 @@ def test_declaration_drift_is_an_error(tmp_path):
     """Edit `execution.executor` after registering and the fingerprint goes stale."""
     _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: external\n", 1))
     results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
-               if r.rule == "run.fingerprint-declaration-drift"]
+               if r.rule_id == "run.fingerprint-declaration-drift"]
     assert len(results) == 1
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "executor" in results[0].message
     assert "re-register" in results[0].message
 
@@ -169,7 +169,7 @@ def test_declaration_drift_on_locality_is_an_error(tmp_path):
     _write_run(tmp_path, "r1", CLEAN.replace(
         "  input_artifact_locality: science-managed\n", "  input_artifact_locality: external\n", 1))
     results = [r for r in check_run_fingerprint_obligations(_ctx(tmp_path))
-               if r.rule == "run.fingerprint-declaration-drift"]
+               if r.rule_id == "run.fingerprint-declaration-drift"]
     assert len(results) == 1
     assert "input_artifact_locality" in results[0].message
 
@@ -183,14 +183,14 @@ def test_declaration_alone_emits_nothing(tmp_path):
 def test_malformed_declaration_is_an_error(tmp_path):
     _write_run(tmp_path, "r1", "execution:\n  executor: teleporter\n")
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.execution-malformed"]
-    assert results[0].severity is Severity.ERROR
+    assert [r.rule_id for r in results] == ["run.execution-malformed"]
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_malformed_declaration_does_not_also_report_drift(tmp_path):
     """One defect, one finding: an unparseable declaration cannot be compared."""
     _write_run(tmp_path, "r1", CLEAN.replace("  executor: local\n", "  executor: teleporter\n", 1))
-    rules = [r.rule for r in check_run_fingerprint_obligations(_ctx(tmp_path))]
+    rules = [r.rule_id for r in check_run_fingerprint_obligations(_ctx(tmp_path))]
     assert rules == ["run.execution-malformed"]
 
 
@@ -207,5 +207,5 @@ def test_a_run_in_a_subdirectory_is_checked(tmp_path):
         encoding="utf-8",
     )
     results = list(check_run_fingerprint_obligations(_ctx(tmp_path)))
-    assert [r.rule for r in results] == ["run.fingerprint-declaration-drift"]
+    assert [r.rule_id for r in results] == ["run.fingerprint-declaration-drift"]
     assert results[0].path.name == "deep.md"

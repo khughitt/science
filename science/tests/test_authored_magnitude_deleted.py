@@ -88,7 +88,7 @@ def _authoring_rules(tmp_path: Path) -> set[str]:
 
     materialize_graph(tmp_path)
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
-    return {result.rule for result in check_belief_authoring(ctx)} & _AUTHORING_RULES
+    return {result.rule_id for result in check_belief_authoring(ctx)} & _AUTHORING_RULES
 
 
 @pytest.mark.parametrize(

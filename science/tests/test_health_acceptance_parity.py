@@ -1,40 +1,56 @@
-from __future__ import annotations
-
 from pathlib import Path
 
-from science_tool.correspondence.signature import SIGNATURE_VERSION
-from science_tool.graph.health import _partition_accepted_validation_findings
+from science_model.audit import PathSubject, ReportedFinding
 
-_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64
-
-
-def _finding(rule: str, path: str, message: str) -> dict:
-    return {"severity": "warn", "path": path, "line": None, "message": message, "rule": rule, "task": None}
+from science_tool.validate.acceptance import partition_health_acceptances
+from science_tool.validate.checks.manifest import RULES
 
 
-def _manifest(root: Path, health: str) -> None:
-    (root / "science.yaml").write_text(f"name: f\nprofile: research\n{health}", encoding="utf-8")
-
-
-def test_path_only_entry_does_not_suppress_scoped_rule_in_health(tmp_path: Path):
-    _manifest(
-        tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
-        '      path: "entities/plans/0001-x.md"\n      reason: "x"\n',
+def _finding(message: str):
+    return RULES["manifest.check"].build(
+        subject=PathSubject(path="science.yaml"),
+        severity="warn",
+        qualifiers={"key": ["profile"]},
+        message=message,
     )
-    finding = _finding("plan.correspondence-drift", "entities/plans/0001-x.md", f"... evidence-signature: {_SIG}")
-    remaining, accepted = _partition_accepted_validation_findings(tmp_path, [finding])
-    assert remaining == [finding] and accepted == []
 
 
-def test_valid_signature_entry_suppresses_in_health(tmp_path: Path):
-    _manifest(
-        tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
-        '      path: "entities/plans/0001-x.md"\n      reason: "input not deliverable"\n'
-        f'      message_contains: "evidence-signature: {_SIG}"\n',
+def test_health_acceptance_partitions_current_shape_without_overlap(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "science.yaml").write_text(
+        """
+name: test
+health:
+  accepted_validation:
+    - rule: manifest.check
+      severity: warning
+      path: science.yaml
+      message_contains: [missing profile]
+      reason: reviewed
+""".lstrip(),
+        encoding="utf-8",
     )
-    finding = _finding("plan.correspondence-drift", "entities/plans/0001-x.md", f"... evidence-signature: {_SIG}")
-    remaining, accepted = _partition_accepted_validation_findings(tmp_path, [finding])
-    assert remaining == [] and len(accepted) == 1
-    assert accepted[0]["accepted_reason"] == "input not deliverable"
+    matched = ReportedFinding(
+        producer_id="validate",
+        finding=_finding("missing profile"),
+    )
+    other = ReportedFinding(
+        producer_id="validate",
+        finding=_finding("different warning"),
+    )
+    remaining, accepted = partition_health_acceptances(
+        tmp_path,
+        [matched, other],
+    )
+    accepted_ids = {item.acceptance_key for item in accepted}
+    assert [item.finding.message for item in remaining] == ["different warning"]
+    assert len(accepted_ids) == 1
+    assert not ({item.finding.message for item in accepted} & {item.finding.message for item in remaining})
+
+
+def test_non_validation_findings_are_never_accepted(tmp_path: Path) -> None:
+    item = ReportedFinding(producer_id="other", finding=_finding("missing profile"))
+    remaining, accepted = partition_health_acceptances(tmp_path, [item])
+    assert remaining == [item]
+    assert accepted == []

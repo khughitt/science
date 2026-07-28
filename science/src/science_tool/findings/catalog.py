@@ -12,8 +12,22 @@ from science_tool.graph.sources import registry_for_project
 
 
 def registered_producers() -> tuple[FindingProducer, ...]:
-    """Plan 2's atomic cutover replaces the empty tuple with all three namespaces."""
-    return ()
+    """Return the complete producer catalog without introducing import cycles."""
+    from science_tool.data_audit import DATA_AUDIT_PRODUCER
+    from science_tool.graph.health_checks import HEALTH_CHECKS
+    from science_tool.graph.health_checks.schema_invalid import (
+        SCHEMA_INVALID_PRODUCER,
+    )
+    from science_tool.validate.checks import CANONICAL_CHECKS
+    from science_tool.validate.runtime import VALIDATION_RUNTIME_PRODUCER
+
+    return (
+        *(check.producer for check in HEALTH_CHECKS),
+        SCHEMA_INVALID_PRODUCER,
+        *(entry.producer for entry in CANONICAL_CHECKS),
+        VALIDATION_RUNTIME_PRODUCER,
+        DATA_AUDIT_PRODUCER,
+    )
 
 
 def build_registry_for_entity_registry(

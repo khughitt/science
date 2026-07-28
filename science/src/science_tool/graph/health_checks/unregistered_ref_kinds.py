@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import (
+    FindingRule,
+    FindingSection,
+    IdentifierSubject,
+    LocationEvidence,
+    TextEvidence,
+)
+
+from science_tool.findings.producers import FindingProducer
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.health_checks.base import (
     IDENTITY_REFERENCE_FIELDS,
     NO_ENTITIES_REASON,
     PROJECT_SOURCES_EMPTY,
     HealthCheck,
+    HealthContext,
+    composed_result,
     context_sources,
 )
 from science_tool.graph.sources import (
@@ -30,6 +42,39 @@ class UnregisteredRefKind(TypedDict):
     mention_count: int
     refs: list[str]
     sources: list[str]
+
+
+class UnregisteredRefKindQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    mention_count: int
+    refs: list[str]
+
+
+SECTION = FindingSection(
+    id="unregistered-ref-kinds",
+    title="Unregistered reference kinds",
+    section_order=210,
+)
+RULE = FindingRule(
+    id="refs.unregistered-kind",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"identifier"}),
+    identifier_namespaces=frozenset({"reference-kind"}),
+    qualifier_schema=UnregisteredRefKindQualifiers,
+    identity_qualifiers=("field",),
+    title="Unregistered reference kind",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="unregistered_ref_kinds",
+    namespace="health_checks",
+    source_module="graph/health_checks/unregistered_ref_kinds.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
 
 
 class _UnregisteredRefKindAccumulator(TypedDict):
@@ -114,10 +159,38 @@ def _string_refs(value: object) -> list[str]:
     return []
 
 
+def run_check(context: HealthContext):
+    observed = collect_unregistered_ref_kinds(
+        context.project_root,
+        sources=context_sources(context),
+    )
+    findings = [
+        RULE.build(
+            subject=IdentifierSubject(namespace="reference-kind", value=row["kind"]),
+            severity="warn",
+            qualifiers={
+                "field": row["field"],
+                "mention_count": row["mention_count"],
+                "refs": row["refs"],
+            },
+            message=(
+                f"Reference kind {row['kind']} is not registered in {row['field']} "
+                f"({row['mention_count']} mention(s))."
+            ),
+            evidence=[
+                *[LocationEvidence(path=path) for path in row["sources"]],
+                TextEvidence(label="references", text=", ".join(row["refs"])),
+            ],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="unregistered_ref_kinds",
     description="Find identity refs whose prefix is not a registered entity kind.",
     requires_sources=True,
-    run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=context_sources(context)),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

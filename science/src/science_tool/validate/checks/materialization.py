@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entity_scan import iter_entity_markdown
 from science_tool.kind_descriptors import kind_can_author_relation
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 #: Top-level frontmatter key -> the relation name (and thus predicate) that DOES materialize.
 #: The key materializes nothing on every kind; whether the relation is authorable in its
@@ -33,6 +35,15 @@ _NON_MATERIALIZING: dict[str, str] = {
     "supersedes": "sci:supersedes",
     "amends": "sci:amends",
 }
+
+SECTION, RULES = declare_validation_rules(
+    section_id="materialization",
+    section_title="materialization",
+    section_order=158,
+    rule_ids=("materialization.non-materializing-field",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
 
 def _remediation(key: str, predicate: str, kind: object) -> str:
     """The actionable half of the message, for this key on this kind.
@@ -55,14 +66,11 @@ def _remediation(key: str, predicate: str, kind: object) -> str:
             f"endpoint for that relation), so there is no supported spelling for this lineage: "
             f"remove the key, or widen the relation's endpoints if the lineage is real."
         )
-    return (
-        f"Author it as a relations: entry with 'predicate: {predicate}' and a "
-        f"'target: <target-id>' instead."
-    )
+    return f"Author it as a relations: entry with 'predicate: {predicate}' and a 'target: <target-id>' instead."
 
 
-@Check(section="non-materializing frontmatter fields", order=23)
-def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=23, producer_id="validate.materialization", rules=tuple(RULES.values()))
+def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[CheckObservation]:
     entities_root = ctx.project_root / "entities"
     if not entities_root.is_dir():
         return
@@ -74,14 +82,12 @@ def check_non_materializing_fields(ctx: ValidateContext) -> Iterator[Result]:
         for key, predicate in _NON_MATERIALIZING.items():
             if key not in fm:  # PRESENCE, not value -- null/[] are still findings
                 continue
-            yield Result(
-                Severity.ERROR,
-                path,
-                None,
-                (
-                    f"{entity_id}: top-level '{key}:' materializes no triples and is "
-                    f"silently ignored by the graph. {_remediation(key, predicate, kind)}"
-                ),
-                "non-materializing-field",
-                None,
+            yield validation_observation(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=f"{entity_id}: top-level '{key}:' materializes no triples and is silently ignored by the graph. {_remediation(key, predicate, kind)}",
+                rule=RULES["materialization.non-materializing-field"],
+                task=None,
+                qualifiers={"key": ["frontmatter-field", key]},
             )

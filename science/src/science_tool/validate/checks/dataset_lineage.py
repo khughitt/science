@@ -20,18 +20,45 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.checks.reference_collections import _commons_has_dataset
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="dataset-lineage",
+    section_title="dataset lineage",
+    section_order=135,
+    rule_ids=(
+        "dataset.lineage.commons-unavailable",
+        "dataset.lineage.cycle",
+        "dataset.lineage.member-parent",
+        "dataset.lineage.ref",
+        "dataset.lineage.unresolved",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-def _err(path: str | None, message: str, rule: str) -> Result:
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
+
+
+def _err(path: str | None, message: str, rule: FindingRule) -> CheckObservation:
     return _result(Severity.ERROR, path, message, rule)
 
 
@@ -39,7 +66,7 @@ def evaluate_dataset_lineage(
     datasets: list[dict[str, Any]],
     *,
     commons_cache: dict[str, bool | None] | None = None,
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Pure core: ``datasets`` are raw frontmatter dicts (each with ``_path``).
 
     ``commons_cache`` is injectable for unit tests so they never hit the real
@@ -74,7 +101,7 @@ def evaluate_dataset_lineage(
             yield _err(
                 path,
                 f"{ident}: parent_dataset must be a 'dataset:' reference, got {parent!r}",
-                "dataset.lineage.ref",
+                RULES["dataset.lineage.ref"],
             )
             continue
 
@@ -83,7 +110,7 @@ def evaluate_dataset_lineage(
             yield _err(
                 path,
                 f"{ident}: parent_dataset {parent!r} is a member_of collection member, not a sub-cohort parent",
-                "dataset.lineage.member-parent",
+                RULES["dataset.lineage.member-parent"],
             )
 
         if parent in by_id:
@@ -95,14 +122,14 @@ def evaluate_dataset_lineage(
             yield _err(
                 path,
                 f"{ident}: parent_dataset {parent!r} does not resolve to a dataset entity (not in project or commons)",
-                "dataset.lineage.unresolved",
+                RULES["dataset.lineage.unresolved"],
             )
         elif present is None:
             yield _result(
                 Severity.INFO,
                 path,
                 f"{ident}: parent_dataset {parent!r} is non-local and the commons is unavailable; cannot verify",
-                "dataset.lineage.commons-unavailable",
+                RULES["dataset.lineage.commons-unavailable"],
             )
         # present is True → resolved in commons, no defect
 
@@ -116,12 +143,12 @@ def evaluate_dataset_lineage(
                 yield _err(
                     by_id[start].get("_path"),
                     f"{start}: parent_dataset chain forms a cycle",
-                    "dataset.lineage.cycle",
+                    RULES["dataset.lineage.cycle"],
                 )
                 break
             seen.add(cur)
 
 
-@Check(section="dataset lineage", order=53)
-def check_dataset_lineage(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=53, producer_id="validate.dataset-lineage", rules=tuple(RULES.values()))
+def check_dataset_lineage(ctx: ValidateContext) -> Iterator[CheckObservation]:
     yield from evaluate_dataset_lineage(dataset_frontmatters(ctx))

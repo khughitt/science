@@ -57,12 +57,12 @@ def test_importing_checks_registers_first_canonical_checks_in_order() -> None:
     importlib.reload(hypotheses)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[:6]] == [
-        ("tooling scaffold...", 0),
-        ("project manifest...", 1),
-        ("directory structure...", 2),
-        ("research scope...", 3),
-        ("document structure...", 4),
-        ("hypotheses...", 5),
+        ("tooling", 0),
+        ("manifest", 1),
+        ("directory structure", 2),
+        ("research scope", 3),
+        ("document structure", 4),
+        ("hypotheses", 5),
     ]
 
 
@@ -97,7 +97,7 @@ def test_tooling_accepts_git_source(tmp_path: Path) -> None:
         "pyproject.toml present",
         "  science Git source is worktree-safe",
     ]
-    assert all(result.severity is Severity.INFO for result in results)
+    assert all(result.severity == Severity.INFO.value for result in results)
 
 
 def test_tooling_reports_malformed_pyproject_once(tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ def test_tooling_reports_malformed_pyproject_once(tmp_path: Path) -> None:
 
     results = list(check_tooling(ctx))
 
-    warnings = [result for result in results if result.severity is Severity.WARN]
+    warnings = [result for result in results if result.severity == Severity.WARN.value]
     assert len(warnings) == 1
     assert "could not be parsed" in warnings[0].message
 
@@ -124,7 +124,7 @@ def test_tooling_handles_wrong_shaped_dependency_groups(tmp_path: Path) -> None:
 
     results = list(check_tooling(ctx))
 
-    warnings = [result for result in results if result.severity is Severity.WARN]
+    warnings = [result for result in results if result.severity == Severity.WARN.value]
     assert len(warnings) == 1
     assert "does not list science" in warnings[0].message
 
@@ -148,7 +148,7 @@ def test_tooling_rejects_external_path_source(tmp_path: Path) -> None:
     results = list(check_tooling(ctx))
 
     assert any(
-        result.severity is Severity.WARN and "breaks in nested worktrees" in result.message
+        result.severity == Severity.WARN.value and "breaks in nested worktrees" in result.message
         for result in results
     )
 
@@ -166,7 +166,7 @@ def test_manifest_reports_missing_required_fields_and_bad_knowledge_profiles(tmp
     assert "  name: present" in messages
     assert "science.yaml missing required field: created" in messages
     assert "science.yaml missing required knowledge_profiles section" in messages
-    assert any(result.severity is Severity.ERROR for result in results)
+    assert any(result.severity == Severity.ERROR.value for result in results)
 
 
 def test_manifest_validates_knowledge_profile_shapes(tmp_path: Path) -> None:
@@ -847,7 +847,7 @@ def test_layout_version_below_3_errors(tmp_path: Path) -> None:
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
     from science_tool.validate.checks.manifest import check_manifest
     results = list(check_manifest(ctx))
-    assert any(r.severity is Severity.ERROR and "layout_version" in r.message for r in results)
+    assert any(r.severity == Severity.ERROR.value and "layout_version" in r.message for r in results)
 
 
 # ---------------------------------------------------------------------------

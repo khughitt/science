@@ -50,11 +50,11 @@ def test_registration_includes_papers_and_gap_analysis_before_project_readme() -
     importlib.reload(project_readme)
 
     assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-5:]] == [
-        ("hypotheses...", 5),
-        ("hypotheses...", 6),  # check_dangling_lineage -- the cross-record lineage layer
-        ("paper summaries...", 7),
-        ("research gap analysis...", 9),
-        ("project README conventions...", 10),
+        ("hypotheses", 5),
+        ("hypotheses", 6),  # check_dangling_lineage -- the cross-record lineage layer
+        ("papers", 7),
+        ("gap analysis", 9),
+        ("project readme", 10),
     ]
 
 

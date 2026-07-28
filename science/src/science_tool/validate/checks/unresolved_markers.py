@@ -39,21 +39,40 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.markers import scan_markers
 from science_tool.markers_lifted import filter_lifted
-from science_tool.validate.checks import Check
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.checks import Check, CheckObservation
+from science_tool.validate.result import Severity
 
 if TYPE_CHECKING:
     from science_tool.validate.context import ValidateContext
 
 
-def _result(message: str) -> Result:
-    return Result(Severity.WARN, None, None, message, "unresolved_markers", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="unresolved-markers",
+    section_title="unresolved markers",
+    section_order=111,
+    rule_ids=("unresolved-markers.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="for unresolved markers...", order=8)
-def check_unresolved_markers(ctx: "ValidateContext") -> Iterable[Result]:
+def _result(token: str, message: str) -> CheckObservation:
+    return validation_observation(
+        severity=Severity.WARN,
+        path=None,
+        line=None,
+        message=message,
+        rule=RULES["unresolved-markers.check"],
+        task=None,
+        qualifiers={"key": ["token", token]},
+    )
+
+
+@Check(section=SECTION, order=8, producer_id="validate.unresolved-markers", rules=tuple(RULES.values()))
+def check_unresolved_markers(ctx: "ValidateContext") -> Iterable[CheckObservation]:
     if not ctx.doc_dir.is_dir():
         return []
 
@@ -64,11 +83,16 @@ def check_unresolved_markers(ctx: "ValidateContext") -> Iterable[Result]:
     for hit in filtered_hits:
         severity_by_token.setdefault(hit.token, hit.severity)
 
-    results: list[Result] = []
+    results: list[CheckObservation] = []
     for token, count in sorted(counts.items()):
         if count > 0 and severity_by_token.get(token, "warn") == "warn":
             examples = _marker_examples(ctx.project_root, [hit for hit in filtered_hits if hit.token == token])
-            results.append(_result(f"{count} [{token}] marker(s) found in documents; examples: {examples}"))
+            results.append(
+                _result(
+                    token,
+                    f"{count} [{token}] marker(s) found in documents; examples: {examples}",
+                )
+            )
     return results
 
 

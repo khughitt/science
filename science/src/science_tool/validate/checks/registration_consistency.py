@@ -13,18 +13,37 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, Path(PROJECT_CONFIG_FILENAME), None, message, "registration", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="registration-consistency",
+    section_title="registration consistency",
+    section_order=103,
+    rule_ids=("registration.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="registration consistency...", order=2)
-def check_registration_consistency(ctx: ValidateContext) -> Iterator[Result]:
+def _result(severity: Severity, message: str) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(PROJECT_CONFIG_FILENAME),
+        line=None,
+        message=message,
+        rule=RULES["registration.check"],
+        task=None,
+        qualifiers={"key": []},
+    )
+
+
+@Check(section=SECTION, order=2, producer_id="validate.registration-consistency", rules=tuple(RULES.values()))
+def check_registration_consistency(ctx: ValidateContext) -> Iterator[CheckObservation]:
     committed_id = ctx.manifest.get("id")
     if not committed_id:
         return  # no committed id to compare against the registry

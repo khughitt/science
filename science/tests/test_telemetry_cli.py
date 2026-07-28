@@ -14,6 +14,7 @@ from science_tool.cli import main
 from science_tool.telemetry import append_event, read_events
 from science_tool.validate import Check, Result, Severity, ValidateContext
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
+from science_tool.validate.findings import declare_validation_rules
 
 
 @pytest.fixture
@@ -76,9 +77,31 @@ def test_telemetry_group_preserves_nonzero_ctx_exit(
     # it afterwards. Clearing without restoring silently disarms every later `runner.run` in the
     # session -- see the fixture's docstring.
 
-    @Check(section="demo", order=10)
+    section, rules = declare_validation_rules(
+        section_id="demo",
+        section_title="demo",
+        section_order=10,
+        rule_ids=("demo.error",),
+    )
+
+    @Check(
+        section=section,
+        order=10,
+        producer_id="validate.demo",
+        rules=tuple(rules.values()),
+    )
     def demo_check(ctx: ValidateContext) -> list[Result]:
-        return [Result(Severity.ERROR, Path("science.yaml"), 1, "broken", "demo.error", None)]
+        return [
+            Result(
+                severity=Severity.ERROR,
+                path=Path("science.yaml"),
+                line=1,
+                message="broken",
+                rule=rules["demo.error"],
+                task=None,
+                qualifiers={"key": ["broken"]},
+            )
+        ]
 
     project = tmp_path / "project"
     project.mkdir()

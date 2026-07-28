@@ -186,11 +186,11 @@ def results(root: Path) -> list:
 
 
 def rules(root: Path) -> set[str]:
-    return {result.rule for result in results(root)}
+    return {result.rule_id for result in results(root)}
 
 
 def messages(root: Path, rule: str) -> list[str]:
-    return [result.message for result in results(root) if result.rule == rule]
+    return [result.message for result in results(root) if result.rule_id == rule]
 
 
 @pytest.fixture
@@ -308,7 +308,7 @@ def test_the_three_rules_fire_INDEPENDENTLY(project: Path) -> None:
         "verdict.refutation-masked",
         "verdict.disagrees-with-computed",
     }
-    assert {r.rule: r.severity for r in results(root)} == {
+    assert {r.rule_id: r.severity for r in results(root)} == {
         "verdict.missing-basis": Severity.WARN,            # >=11 of 15 cannot satisfy it -- never ERROR
         "verdict.refutation-masked": Severity.ERROR,       # the one hard invariant
         "verdict.disagrees-with-computed": Severity.WARN,  # explanatory, never a ceiling
@@ -454,7 +454,7 @@ def test_missing_basis_is_WARN_and_UNGATED(project: Path) -> None:
     # asserting over the whole result list would test the OTHER rule's existence as a side effect
     # and fail on a correct emitter.
     root = build(project, verdict="supported")
-    missing = [r for r in results(root) if r.rule == "verdict.missing-basis"]
+    missing = [r for r in results(root) if r.rule_id == "verdict.missing-basis"]
 
     assert [r.severity for r in missing] == [Severity.WARN]
     assert "verdict.missing-basis" not in cumulative_rules("hygiene")

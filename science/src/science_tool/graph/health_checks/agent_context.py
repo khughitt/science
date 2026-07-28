@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from science_tool.graph.health_checks.base import HealthCheck
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import FindingRule, FindingSection, PathSubject, TextEvidence
+
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
 from science_tool.instruments import InstrumentResult
 
 
@@ -14,6 +18,39 @@ class AgentContextFinding(TypedDict):
     source_file: str
     detail: str
     fix: str
+
+
+class AgentContextQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+SECTION = FindingSection(id="agent-context", title="Agent context", section_order=208)
+_CODES = (
+    "claude_md_legacy_includes",
+    "claude_md_not_minimal",
+    "agents_md_legacy_includes",
+    "agents_md_digest_markers_missing",
+    "overview_too_long",
+)
+RULES = {
+    code: FindingRule(
+        id=f"agent-context.{code.replace('_', '-')}",
+        severities=frozenset({"warn"}),
+        subject_types=frozenset({"path"}),
+        qualifier_schema=AgentContextQualifiers,
+        title=code.replace("_", " ").title(),
+        section=SECTION.id,
+        display_order=index,
+    )
+    for index, code in enumerate(_CODES, start=1)
+}
+PRODUCER = FindingProducer(
+    producer_id="agent_context",
+    namespace="health_checks",
+    source_module="graph/health_checks/agent_context.py",
+    rules=tuple(RULES.values()),
+    sections=(SECTION,),
+)
 
 
 OVERVIEW_LINE_BUDGET = 150
@@ -108,10 +145,25 @@ def _claude_md_is_minimal(path: Path) -> bool:
     return lines == ["@AGENTS.md"]
 
 
+def run_check(context: HealthContext):
+    observed = collect_agent_context_findings(context.project_root)
+    findings = [
+        RULES[row["code"]].build(
+            subject=PathSubject(path=row["source_file"]),
+            severity="warn",
+            qualifiers={},
+            message=row["detail"],
+            evidence=[TextEvidence(label="fix", text=row["fix"])],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="agent_context",
     description="Check CLAUDE.md, AGENTS.md, and core/overview.md for session-context drift.",
     requires_sources=False,
-    run=lambda context: collect_agent_context_findings(context.project_root),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

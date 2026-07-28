@@ -49,7 +49,7 @@ def test_top_level_supersedes_on_interpretation_is_an_error(tmp_path: Path) -> N
     assert "sci:supersedes" in msg            # the predicate
     assert "target" in msg and "<target-id>" in msg   # current field name, schematic target
     assert "interpretation:0000-y" not in msg  # must NOT echo the authored value
-    assert results[0].rule == "non-materializing-field"
+    assert results[0].rule_id == "materialization.non-materializing-field"
 
 
 def test_top_level_amends_on_interpretation_is_an_error(tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_malformed_non_string_kind_still_flags_and_does_not_crash(tmp_path: Path
     )
     results = _results(tmp_path)
     assert [r.severity for r in results] == [Severity.ERROR]
-    assert results[0].rule == "non-materializing-field"
+    assert results[0].rule_id == "materialization.non-materializing-field"
 
 
 def test_null_valued_supersedes_is_an_error(tmp_path: Path) -> None:
@@ -153,7 +153,7 @@ def test_inadmissible_kind_is_not_told_to_author_the_relation(tmp_path: Path) ->
     # ...replaced by the reason it cannot be authored at all.
     assert "cannot" in msg
     assert "question" in msg
-    assert results[0].rule == "non-materializing-field"
+    assert results[0].rule_id == "materialization.non-materializing-field"
 
 
 def test_admissible_kind_still_gets_the_relations_prescription(tmp_path: Path) -> None:

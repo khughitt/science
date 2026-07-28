@@ -23,7 +23,7 @@ def findings_group() -> None:
 
 
 def _registry(entity_registry: EntityRegistry):
-    """The derived registry. Plan 2 populates it from real producers."""
+    """Build the derived registry from the active deterministic producers."""
     from science_tool.findings.catalog import build_registry_for_entity_registry
 
     return build_registry_for_entity_registry(entity_registry)

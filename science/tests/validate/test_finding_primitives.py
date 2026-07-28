@@ -63,7 +63,10 @@ def test_validation_path_without_a_line_has_no_evidence(tmp_path):
 
 def test_prose_advisory_count_is_not_an_identity_field():
     assert ProseAdvisoryQualifiers.model_fields.keys() == {"check", "count"}
-    assert ProseHitQualifiers.model_fields.keys() == {"check"}
+    assert ProseHitQualifiers.model_fields.keys() == {
+        "check",
+        "match",
+    }
     assert ValidationQualifiers.model_fields.keys() == {"key", "task"}
     assert CorrespondenceQualifiers.model_fields.keys() == {
         "task",

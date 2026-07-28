@@ -37,7 +37,7 @@ def test_draft_with_present_deliverable_fires_under_claim(tmp_path: Path):
     results = _run(tmp_path)
     assert len(results) == 1
     r = results[0]
-    assert r.rule == "plan.correspondence-drift"
+    assert r.rule_id == "plan.correspondence-drift"
     assert r.severity.value == "warn"
     assert not r.path.is_absolute()  # project-relative
     assert "plan:0001" in r.message and "draft" in r.message and "complete" in r.message

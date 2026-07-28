@@ -20,7 +20,7 @@ def test_active_without_pointer_errors():
     results = list(evaluate_dataset_acquisition([_fm(status="active")]))
     assert len(results) == 1
     assert results[0].severity is Severity.ERROR
-    assert results[0].rule == "dataset.acquired-without-pointer"
+    assert results[0].rule_id == "dataset.acquired-without-pointer"
 
 
 def test_active_with_datapackage_is_ok():

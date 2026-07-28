@@ -606,5 +606,5 @@ def test_editing_the_declaration_after_registering_is_caught_as_drift(git_projec
         encoding="utf-8",
     )
     ctx = ValidateContext.from_project_root(git_project, strict=False, verbose=False)
-    rules = [r.rule for r in check_run_fingerprint_obligations(ctx)]
+    rules = [r.rule_id for r in check_run_fingerprint_obligations(ctx)]
     assert rules == ["run.fingerprint-declaration-drift"]

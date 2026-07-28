@@ -27,15 +27,61 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
 from science_tool.entities import valid_statuses
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.findings import (
+    ValidationQualifiers,
+    declare_validation_rules,
+    rule_kind_segment,
+)
 from science_tool.validate.kind_severity import severity_for_kind
-from science_tool.validate.result import Result
 
 
-def _result(kind: str, path: Path, message: str) -> Result:
+SECTION, RULES = declare_validation_rules(
+    section_id="status-vocabulary",
+    section_title="status vocabulary",
+    section_order=124,
+    rule_ids=(),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def status_vocabulary_rules(
+    active_kinds: frozenset[str],
+) -> tuple[FindingRule, ...]:
+    segments = [rule_kind_segment(kind) for kind in active_kinds]
+    if len(segments) != len(set(segments)):
+        raise ValueError("active kind names collide after kebab rule normalization")
+    return tuple(
+        status_vocabulary_rule(kind, display_order=SECTION.section_order * 100 + index)
+        for index, kind in enumerate(sorted(active_kinds), start=1)
+    )
+
+
+def status_vocabulary_rule(
+    kind: str,
+    *,
+    display_order: int | None = None,
+) -> FindingRule:
+    return FindingRule(
+        id=f"{rule_kind_segment(kind)}.status-vocabulary",
+        severities=frozenset({severity_for_kind(kind).value}),
+        subject_types=frozenset({"path"}),
+        qualifier_schema=ValidationQualifiers,
+        identity_qualifiers=("key",),
+        title=f"{kind} status vocabulary",
+        section=SECTION.id,
+        display_order=display_order or SECTION.section_order * 100 + 1,
+        default_visibility="visible",
+    )
+
+
+def _result(kind: str, path: Path, message: str) -> CheckObservation:
     """KIND-scoped rule, KIND-graded severity -- both on the axis that carries the meaning.
 
     This check first shipped grading severity by `layout_version >= 3`, copying
@@ -61,11 +107,25 @@ def _result(kind: str, path: Path, message: str) -> Result:
     and leave every other kind a WARN that gates nothing. No compatibility alias for the old generic
     name: a second spelling of one rule is the drift this axis exists to prevent.
     """
-    return Result(severity_for_kind(kind), path, None, message, f"{kind}.status-vocabulary", None)
+    return validation_observation(
+        severity=severity_for_kind(kind),
+        path=path,
+        line=None,
+        message=message,
+        rule=status_vocabulary_rule(kind),
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
-@Check(section="entity status vocabulary", order=20)
-def check_status_vocabulary(ctx: ValidateContext) -> Iterator[Result]:
+@Check(
+    section=SECTION,
+    order=20,
+    producer_id="validate.status-vocabulary",
+    rules=tuple(RULES.values()),
+    kind_rule_factory=status_vocabulary_rules,
+)
+def check_status_vocabulary(ctx: ValidateContext) -> Iterator[CheckObservation]:
     entities_root = ctx.project_root / "entities"
     if not entities_root.is_dir():
         return

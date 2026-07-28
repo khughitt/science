@@ -106,7 +106,9 @@ def test_collect_unresolved_refs_excludes_identity_collision(tmp_path: Path) -> 
 
 def test_build_health_report_diagnostic_load_is_nonstrict(tmp_path: Path) -> None:
     _duplicate_owner(tmp_path)
-    report = build_health_report(tmp_path)  # must not raise
-    # `build_health_report` returns a HealthReport dict; it has no `project_root`
-    # key, so assert on a real key that proves the report assembled successfully.
-    assert isinstance(report["total_issues"], int)
+    report = build_health_report(
+        tmp_path,
+        ingestion_ref="health:test",
+        generated_at="2026-07-28T12:00:00+00:00",
+    )  # must not raise
+    assert isinstance(report.totals.findings_total, int)

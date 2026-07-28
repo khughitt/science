@@ -32,6 +32,8 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.boundary.config import (
     DEFAULT_UNMANAGED_ALLOW,
     BoundaryConfig,
@@ -55,11 +57,29 @@ from science_tool.boundary.gitio import (
 from science_tool.boundary.walk import git_ascii_casefold, iter_repo_files, manifest_candidates, matches_tracked_path
 from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.project_config import ProjectConfigError, load_project_config
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 GITIGNORE = Path(".gitignore")
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="boundary",
+    section_title="boundary",
+    section_order=162,
+    rule_ids=(
+        "boundary.declaration-conflict",
+        "boundary.generated-drift",
+        "boundary.ignored-undeclared",
+        "boundary.index-violation",
+        "boundary.invalid-declaration",
+        "boundary.tracked-ignored",
+        "boundary.unanchored-pattern",
+        "boundary.unreachable-tracked",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def _is_unanchored_dir_pattern(pattern: str) -> bool:
@@ -132,29 +152,22 @@ def _conflict_subjects(project_root: Path, root_path: str) -> list[str]:
     return sorted(set(probes) | set(iter_repo_files(project_root, base)))
 
 
-@Check(section="version-control boundary", order=14)
-def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=14, producer_id="validate.boundary", rules=tuple(RULES.values()))
+def check_boundary(ctx: ValidateContext) -> Iterator[CheckObservation]:
     root = ctx.project_root
     if not is_git_worktree(root):
         return
 
     # ---- universal: tracked-ignored -------------------------------------
     for hit in tracked_ignored(root):
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=Path(hit.path),
             line=None,
-            message=(
-                f"{hit.path} is tracked but matches ignore rule {hit.pattern!r} "
-                f"({hit.source}:{hit.line}). Ignore rules are not retroactive, so git will "
-                f"never report this on its own, and ripgrep, editor search and ruff all stop "
-                f"seeing the file. Resolve by `git rm --cached` if it belongs outside version "
-                f"control, or by moving it / narrowing the rule if it belongs inside. Do not "
-                f"use `git add -f` or a `!` negation: that records the conflict instead of "
-                f"removing it."
-            ),
-            rule="boundary.tracked-ignored",
+            message=f"{hit.path} is tracked but matches ignore rule {hit.pattern!r} ({hit.source}:{hit.line}). Ignore rules are not retroactive, so git will never report this on its own, and ripgrep, editor search and ruff all stop seeing the file. Resolve by `git rm --cached` if it belongs outside version control, or by moving it / narrowing the rule if it belongs inside. Do not use `git add -f` or a `!` negation: that records the conflict instead of removing it.",
+            rule=RULES["boundary.tracked-ignored"],
             task=None,
+            qualifiers={"key": []},
         )
 
     # ---- declaration load, BEFORE unanchored-pattern needs the allowlist --
@@ -176,31 +189,33 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     # MM30's bare `archive` is not in the default allowlist, so the motivating
     # case still fires.
     all_unmanaged = unmanaged_rules(root)
+    reported_unanchored: set[tuple[str, str]] = set()
     for rule in unanchored_findings(all_unmanaged, allowed):
-        yield Result(
+        identity = (rule.source, rule.pattern)
+        if identity in reported_unanchored:
+            continue
+        reported_unanchored.add(identity)
+        yield validation_observation(
             severity=Severity.WARN,
             path=Path(rule.source),
             line=rule.line,
-            message=(
-                f"ignore pattern {rule.pattern!r} is unanchored and matches a directory of "
-                f"that name at ANY depth. Anchor it (`/{rule.pattern.lstrip('/')}`) so it "
-                f"cannot silently swallow tracked source in an unrelated subtree. If the "
-                f"depth-independence is deliberate, add it to boundary.unmanaged_allow."
-            ),
-            rule="boundary.unanchored-pattern",
+            message=f"ignore pattern {rule.pattern!r} is unanchored and matches a directory of that name at ANY depth. Anchor it (`/{rule.pattern.lstrip('/')}`) so it cannot silently swallow tracked source in an unrelated subtree. If the depth-independence is deliberate, add it to boundary.unmanaged_allow.",
+            rule=RULES["boundary.unanchored-pattern"],
             task=None,
+            qualifiers={"key": ["pattern", rule.pattern]},
         )
 
     if cfg_error is not None:
         # NEVER downgrade a broken declaration to "undeclared": that would
         # disable five checks exactly when the configuration is wrong.
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=Path(PROJECT_CONFIG_FILENAME),
             line=None,
-            message=(f"boundary declaration is invalid, so no declared-root check can run: {cfg_error}"),
-            rule="boundary.invalid-declaration",
+            message=f"boundary declaration is invalid, so no declared-root check can run: {cfg_error}",
+            rule=RULES["boundary.invalid-declaration"],
             task=None,
+            qualifiers={"key": []},
         )
         return
 
@@ -231,63 +246,57 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
         except ManagedBlockError:
             pass
     if gitignore_error is not None:
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=GITIGNORE,
             line=None,
-            message=(
-                "cannot verify the science-managed boundary block because the root "
-                f".gitignore is unsafe to read: {gitignore_error}"
-            ),
-            rule="boundary.generated-drift",
+            message=f"cannot verify the science-managed boundary block because the root .gitignore is unsafe to read: {gitignore_error}",
+            rule=RULES["boundary.generated-drift"],
             task=None,
+            qualifiers={"key": []},
         )
     elif managed_body != expected:
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=GITIGNORE,
             line=None,
-            message=(
-                "the science-managed boundary block is missing or stale. Run "
-                "`science boundary sync` to regenerate it from science.yaml."
-            ),
-            rule="boundary.generated-drift",
+            message="the science-managed boundary block is missing or stale. Run `science boundary sync` to regenerate it from science.yaml.",
+            rule=RULES["boundary.generated-drift"],
             task=None,
+            qualifiers={"key": []},
         )
     elif indexed_managed_body != expected:
-        yield Result(
+        yield validation_observation(
             severity=Severity.ERROR,
             path=GITIGNORE,
             line=None,
-            message=(
-                "the root .gitignore has the current science-managed boundary block but "
-                "does not have a tracked, present, regular worktree source backed by a "
-                "stage-0 regular blob containing the current managed block. A clone would "
-                "not receive the generated boundary. Stage it explicitly with "
-                "`git add -f .gitignore` after reviewing any repository-level exclude "
-                "that prevented ordinary staging."
-            ),
-            rule="boundary.generated-drift",
+            message="the root .gitignore has the current science-managed boundary block but does not have a tracked, present, regular worktree source backed by a stage-0 regular blob containing the current managed block. A clone would not receive the generated boundary. Stage it explicitly with `git add -f .gitignore` after reviewing any repository-level exclude that prevented ordinary staging.",
+            rule=RULES["boundary.generated-drift"],
             task=None,
+            qualifiers={"key": []},
         )
 
     # ---- declared: allowlist integrity ----------------------------------
+    invalid_allow_entries: set[tuple[str, str]] = set()
     for entry in cfg.unmanaged_allow:
         # Source membership is checked on its own. An earlier draft also required
         # the pattern to be non-default, which exempted
         # {source: "typo/.gitignore", pattern: ".venv/"} -- a silent no-op.
         if entry.source not in governed:
-            yield Result(
+            identity = (entry.source, entry.pattern)
+            if identity in invalid_allow_entries:
+                continue
+            invalid_allow_entries.add(identity)
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=Path(PROJECT_CONFIG_FILENAME),
                 line=None,
-                message=(
-                    f"boundary.unmanaged_allow names {entry.source!r}, which is not a tracked "
-                    f"in-worktree .gitignore file. The entry can never match, so it is a silent "
-                    f"no-op rather than an excuse."
-                ),
-                rule="boundary.invalid-declaration",
+                message=f"boundary.unmanaged_allow names {entry.source!r}, which is not a tracked in-worktree .gitignore file. The entry can never match, so it is a silent no-op rather than an excuse.",
+                rule=RULES["boundary.invalid-declaration"],
                 task=None,
+                qualifiers={
+                    "key": ["unmanaged-allow", entry.source, entry.pattern]
+                },
             )
 
     # ---- declared: index invariant --------------------------------------
@@ -326,18 +335,21 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                     f"root-relative path {relative!r} does not match any declared tracked glob "
                     f"{list(declared_root.tracked)!r}"
                 )
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=Path(indexed),
                 line=None,
-                message=(
-                    f"{indexed!r} is indexed at or below {declared_root.storage_class.value} root "
-                    f"{declared_root.path!r}, but {detail}. Effective negations and untracked "
-                    "ignore sources cannot override science.yaml. Remove the path from the "
-                    "index with `git rm --cached -- <path>`."
-                ),
-                rule="boundary.index-violation",
+                message=f"{indexed!r} is indexed at or below {declared_root.storage_class.value} root {declared_root.path!r}, but {detail}. Effective negations and untracked ignore sources cannot override science.yaml. Remove the path from the index with `git rm --cached -- <path>`.",
+                rule=RULES["boundary.index-violation"],
                 task=None,
+                qualifiers={
+                    "key": [
+                        "declared-root",
+                        declared_root.path,
+                        "relative",
+                        relative,
+                    ]
+                },
             )
 
     by_location = {(r.source, r.line): r for r in all_unmanaged}
@@ -350,6 +362,7 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
     # excuses undeclared noise; it may never excuse a rule that targets a
     # declared root, or it would reopen the adjudication this check closes.
     conflicted: set[tuple[str, int]] = set()
+    reported_conflicts: set[tuple[str, str, str]] = set()
     for declared_root in declared:
         subjects = _conflict_subjects(root, declared_root)
         for probe, owners in sorted(matching_unmanaged_rules(root, subjects).items()):
@@ -358,25 +371,29 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
                 if key not in by_location or key in conflicted:
                     continue  # already reported
                 conflicted.add(key)
-                yield Result(
+                identity = (owner.source, owner.pattern, declared_root)
+                if identity in reported_conflicts:
+                    continue
+                reported_conflicts.add(identity)
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=Path(owner.source),
                     line=owner.line,
-                    message=(
-                        f"hand-written rule {owner.pattern!r} matches {probe} inside declared "
-                        f"root {declared_root!r}. The declaration in science.yaml is the single "
-                        f"authority for that root; a rule outside the managed block re-opens "
-                        f"per-case adjudication. (Detected by evaluating the unmanaged rules in "
-                        f"isolation under git's own engine and peeling away each reported rule, "
-                        f"so wildcards and nested .gitignore scoping are accounted for and a rule "
-                        f"shadowed by the managed block, or by another hand-written rule, is "
-                        f"still reported.)"
-                    ),
-                    rule="boundary.declaration-conflict",
+                    message=f"hand-written rule {owner.pattern!r} matches {probe} inside declared root {declared_root!r}. The declaration in science.yaml is the single authority for that root; a rule outside the managed block re-opens per-case adjudication. (Detected by evaluating the unmanaged rules in isolation under git's own engine and peeling away each reported rule, so wildcards and nested .gitignore scoping are accounted for and a rule shadowed by the managed block, or by another hand-written rule, is still reported.)",
+                    rule=RULES["boundary.declaration-conflict"],
                     task=None,
+                    qualifiers={
+                        "key": [
+                            "pattern",
+                            owner.pattern,
+                            "declared-root",
+                            declared_root,
+                        ]
+                    },
                 )
 
     # ---- declared: ignored-undeclared -----------------------------------
+    reported_undeclared: set[tuple[str, str]] = set()
     for rule in all_unmanaged:
         # A negation ignores nothing, so this predicate is simply false of it --
         # and `unmanaged_allow` rejects `!` patterns, so a finding here could
@@ -389,18 +406,18 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
             rule.line,
         ) in conflicted:
             continue
-        yield Result(
+        identity = (rule.source, rule.pattern)
+        if identity in reported_undeclared:
+            continue
+        reported_undeclared.add(identity)
+        yield validation_observation(
             severity=Severity.WARN,
             path=Path(rule.source),
             line=rule.line,
-            message=(
-                f"rule {rule.pattern!r} ignores project material with no declared storage class. "
-                f"Declare a root in science.yaml, or add it to boundary.unmanaged_allow. There is "
-                f"no shape heuristic here: a rule is excused because it was declared, never "
-                f"because it looks like tooling."
-            ),
-            rule="boundary.ignored-undeclared",
+            message=f"rule {rule.pattern!r} ignores project material with no declared storage class. Declare a root in science.yaml, or add it to boundary.unmanaged_allow. There is no shape heuristic here: a rule is excused because it was declared, never because it looks like tooling.",
+            rule=RULES["boundary.ignored-undeclared"],
             task=None,
+            qualifiers={"key": ["pattern", rule.pattern]},
         )
 
     # ---- declared: unreachable-tracked ----------------------------------
@@ -411,16 +428,14 @@ def check_boundary(ctx: ValidateContext) -> Iterator[Result]:
         for candidate in manifest_candidates(root, declared_root):
             if candidate in visible:
                 continue
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=Path(candidate),
                 line=None,
-                message=(
-                    f"{candidate} matches a tracked: glob of manifest root "
-                    f"{declared_root.path!r} but git will not surface it -- `git add .` stages "
-                    f"nothing and no diagnostic reports a problem. The usual cause is a bare "
-                    f"directory exclude stopping git descending. Run `science boundary sync`."
-                ),
-                rule="boundary.unreachable-tracked",
+                message=f"{candidate} matches a tracked: glob of manifest root {declared_root.path!r} but git will not surface it -- `git add .` stages nothing and no diagnostic reports a problem. The usual cause is a bare directory exclude stopping git descending. Run `science boundary sync`.",
+                rule=RULES["boundary.unreachable-tracked"],
                 task=None,
+                qualifiers={
+                    "key": ["declared-root", declared_root.path, "candidate", candidate]
+                },
             )

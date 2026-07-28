@@ -12,6 +12,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.code.classification import classify_code_file
 from science_tool.code.git import last_content_change_date
 from science_tool.code.hardcoded_paths import find_hardcoded_paths
@@ -21,13 +25,48 @@ from science_tool.code.workflow_refs import find_workflow_references
 from science_tool.graph.storage_adapters.code import CodeAdapter
 from science_tool.paths import resolve_paths
 from science_tool.tasks import known_task_ids
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, rel_path: str, message: str, rule: str, *, line: int | None = None) -> Result:
-    return Result(severity, Path(rel_path), line, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="code-files",
+    section_title="code files",
+    section_order=105,
+    rule_ids=(
+        "code.ghost",
+        "code.hardcoded-path",
+        "code.malformed-block",
+        "code.metadata-gap",
+        "code.orphaned-executable",
+        "code.produced-by-unresolved",
+        "code.uncommitted",
+        "code.unreadable",
+        "code.unresolved-task",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    rel_path: str,
+    message: str,
+    rule: FindingRule,
+    *,
+    line: int | None = None,
+    key: list[str] | None = None,
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(rel_path),
+        line=line,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key or []},
+    )
 
 
 def _is_workflow_file(rel_path: str) -> bool:
@@ -35,8 +74,8 @@ def _is_workflow_file(rel_path: str) -> bool:
     return name == "Snakefile" or name.endswith(".smk")
 
 
-@Check(section="code files...", order=6)
-def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=6, producer_id="validate.code-files.code-files", rules=tuple(RULES.values()))
+def check_code_files(ctx: ValidateContext) -> Iterator[CheckObservation]:
     paths = resolve_paths(ctx.project_root)
     adapter = CodeAdapter(
         code_roots=paths.code_roots,
@@ -47,12 +86,8 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
     if not refs:
         return
     task_ids = known_task_ids(paths.tasks_dir)
-    code_root_names = tuple(
-        root.relative_to(ctx.project_root).as_posix() for root in paths.code_roots
-    )
-    workflow_files = [
-        ctx.project_root / ref.path for ref in refs if _is_workflow_file(ref.path)
-    ]
+    code_root_names = tuple(root.relative_to(ctx.project_root).as_posix() for root in paths.code_roots)
+    workflow_files = [ctx.project_root / ref.path for ref in refs if _is_workflow_file(ref.path)]
     workflow_refs = find_workflow_references(
         workflow_files, project_root=ctx.project_root, code_root_names=code_root_names
     )
@@ -72,16 +107,23 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
                 Severity.WARN,
                 ref.path,
                 f"Could not read code file {ref.path}: {exc}",
-                "code.unreadable",
+                RULES["code.unreadable"],
+                key=["file"],
             )
             continue
+        seen_hardcoded_paths: set[tuple[str, str]] = set()
         for finding in find_hardcoded_paths(text, extra_prefixes=hardcoded_prefixes):
+            identity = (finding.pattern, finding.line)
+            if identity in seen_hardcoded_paths:
+                continue
+            seen_hardcoded_paths.add(identity)
             yield _result(
                 Severity.WARN,
                 ref.path,
                 f"Hardcoded path {finding.pattern!r} at line {finding.line_number}: {finding.line}",
-                "code.hardcoded-path",
+                RULES["code.hardcoded-path"],
                 line=finding.line_number,
+                key=["hardcoded-path", *identity],
             )
         metadata = parse_code_metadata(text)
         if not metadata.present:
@@ -89,7 +131,8 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
                 Severity.WARN,
                 ref.path,
                 f"Code artifact has no science:code block: {ref.path}",
-                "code.ghost",
+                RULES["code.ghost"],
+                key=["metadata-block"],
             )
             continue
         if metadata.fields is None:
@@ -97,7 +140,8 @@ def check_code_files(ctx: ValidateContext) -> Iterator[Result]:
                 Severity.WARN,
                 ref.path,
                 f"Malformed science:code block in {ref.path}: {metadata.error}",
-                "code.malformed-block",
+                RULES["code.malformed-block"],
+                key=["metadata-block"],
             )
             continue
         yield from _check_valid_block(ctx, ref.path, metadata.fields, task_ids, text, workflow_refs)
@@ -110,7 +154,7 @@ def _check_valid_block(
     task_ids: set[str],
     text: str,
     workflow_refs: dict[str, list[str]],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     status = str(fields.get("status") or "")
     if status not in CODE_FILE_STATUSES:
         expected = ", ".join(sorted(CODE_FILE_STATUSES))
@@ -119,18 +163,25 @@ def _check_valid_block(
             if status
             else f"Code-file block missing required `status` field (expected one of {expected})"
         )
-        yield _result(Severity.WARN, rel_path, message, "code.metadata-gap")
+        yield _result(
+            Severity.WARN,
+            rel_path,
+            message,
+            RULES["code.metadata-gap"],
+            key=["status"],
+        )
 
     raw_task_ids = fields.get("task_ids")
     if isinstance(raw_task_ids, list):
-        for entry in raw_task_ids:
+        for entry in dict.fromkeys(str(item) for item in raw_task_ids):
             task_id = str(entry)
             if task_id not in task_ids:
                 yield _result(
                     Severity.WARN,
                     rel_path,
                     f"Code-file references unknown task id {task_id!r} (no such task in tasks/)",
-                    "code.unresolved-task",
+                    RULES["code.unresolved-task"],
+                    key=["task-id", task_id],
                 )
     elif raw_task_ids is not None:
         # Present but not a list (e.g. `task_ids: t999` -> a scalar string):
@@ -139,7 +190,8 @@ def _check_valid_block(
             Severity.WARN,
             rel_path,
             f"Code-file `task_ids` must be a list, got {type(raw_task_ids).__name__}",
-            "code.metadata-gap",
+            RULES["code.metadata-gap"],
+            key=["task-ids-type"],
         )
 
     if last_content_change_date(rel_path, repo_root=ctx.project_root) is None:
@@ -150,13 +202,12 @@ def _check_valid_block(
                 f"Code-file has a valid block but no committed content date "
                 f"(untracked or never committed); freshness will not see it: {rel_path}"
             ),
-            "code.uncommitted",
+            RULES["code.uncommitted"],
+            key=["content-date"],
         )
 
     raw_decision_bearing = fields.get("decision_bearing")
-    declared_decision_bearing = (
-        raw_decision_bearing if isinstance(raw_decision_bearing, bool) else None
-    )
+    declared_decision_bearing = raw_decision_bearing if isinstance(raw_decision_bearing, bool) else None
     classification = classify_code_file(
         rel_path,
         text,
@@ -172,23 +223,25 @@ def _check_valid_block(
             Severity.WARN,
             rel_path,
             f"Decision-bearing executable not referenced by any workflow (orphaned): {rel_path}",
-            "code.orphaned-executable",
+            RULES["code.orphaned-executable"],
+            key=["workflow-reference"],
         )
 
 
-@Check(section="code provenance", order=7)
-def check_produced_by_unresolved(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=7, producer_id="validate.code-files.produced-by-unresolved", rules=())
+def check_produced_by_unresolved(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Flag a dataset's produced_by ref that does not resolve to a registered code-file."""
     sources = ctx.project_sources(include_commons=False)
     code_ids = {e.canonical_id for e in sources.entities if e.kind == "code-file"}
     for entity in sources.entities:
         if entity.kind not in ("dataset", "data-package"):
             continue
-        for ref in getattr(entity, "produced_by", []) or []:
+        for ref in dict.fromkeys(getattr(entity, "produced_by", []) or []):
             if ref not in code_ids:
                 yield _result(
                     Severity.WARN,
                     entity.file_path,
                     f"produced_by references unregistered code-file {ref!r}",
-                    "code.produced-by-unresolved",
+                    RULES["code.produced-by-unresolved"],
+                    key=["produced-by", ref],
                 )

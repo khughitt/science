@@ -93,11 +93,22 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import markdown_entity_kinds
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
+
+SECTION, RULES = declare_validation_rules(
+    section_id="id-prefixes",
+    section_title="id prefixes",
+    section_order=123,
+    rule_ids=("id-prefixes.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
 
 def prefix_rules() -> dict[str, str]:
     # Every id-prefixed kind is a markdown policy kind: concept, dataset, and (as of
@@ -114,8 +125,21 @@ QUOTE = "[\"']?"
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "id-prefixes", None)
+def _result(
+    severity: Severity,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=None,
+        line=None,
+        message=message,
+        rule=RULES["id-prefixes.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _display_path(project_root: Path, path: Path) -> str:
@@ -134,12 +158,12 @@ def _extract_field(text: str, name: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-@Check(section="per-kind id-prefix conformance...", order=19)
-def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=19, producer_id="validate.id-prefixes", rules=tuple(RULES.values()))
+def check_id_prefixes(ctx: ValidateContext) -> Iterator[CheckObservation]:
     if os.environ.get("SCIENCE_VALIDATE_SKIP_ID_PREFIX"):
         return
 
-    violations: list[str] = []
+    violations: list[tuple[str, str, str]] = []
     for root in (ctx.project_root / "entities",):
         if not root.is_dir():
             continue
@@ -161,13 +185,26 @@ def check_id_prefixes(ctx: ValidateContext) -> Iterator[Result]:
             if expected is None:
                 continue
             if not item_id.startswith(expected):
+                display_path = _display_path(ctx.project_root, path)
                 violations.append(
-                    f"{_display_path(ctx.project_root, path)}: kind={item_type} but id={item_id} "
-                    f"(expected prefix '{expected}')"
+                    (
+                        display_path,
+                        item_type,
+                        f"{display_path}: kind={item_type} but id={item_id} "
+                        f"(expected prefix '{expected}')",
+                    )
                 )
 
     if violations:
-        for violation in violations:
-            yield _result(Severity.WARN, f"id-prefix mismatch: {violation}")
+        for path, item_type, violation in violations:
+            yield _result(
+                Severity.WARN,
+                f"id-prefix mismatch: {violation}",
+                key=[path, item_type],
+            )
     else:
-        yield _result(Severity.INFO, "  all kind/id prefixes conform")
+        yield _result(
+            Severity.INFO,
+            "  all kind/id prefixes conform",
+            key=["summary"],
+        )

@@ -153,6 +153,7 @@ RULE_AUTHORED_CAPTURABLE = "run.fingerprint-authored-capturable"
 @dataclass(frozen=True, slots=True)
 class FingerprintFinding:
     rule: str
+    component: str
     message: str
 
 
@@ -162,12 +163,18 @@ def _evaluate_component(
     if obligation is Obligation.NOT_APPLICABLE:
         if component is not None:
             return FingerprintFinding(
-                RULE_INCOMPLETE, f"{name} is not applicable for this executor but is present"
+                RULE_INCOMPLETE,
+                name,
+                f"{name} is not applicable for this executor but is present",
             )
         return None
 
     if component is None:
-        return FingerprintFinding(RULE_INCOMPLETE, f"{name} is required but absent")
+        return FingerprintFinding(
+            RULE_INCOMPLETE,
+            name,
+            f"{name} is required but absent",
+        )
 
     if obligation is Obligation.MUST_CAPTURED:
         if component.provenance is ComponentProvenance.CAPTURED:
@@ -175,14 +182,21 @@ def _evaluate_component(
         if component.provenance is ComponentProvenance.ATTESTED:
             return FingerprintFinding(
                 RULE_AUTHORED_CAPTURABLE,
+                name,
                 f"{name} must be captured for this executor but is attested",
             )
-        return FingerprintFinding(RULE_INCOMPLETE, f"{name} must be captured but is unknown")
+        return FingerprintFinding(
+            RULE_INCOMPLETE,
+            name,
+            f"{name} must be captured but is unknown",
+        )
 
     if obligation is Obligation.MAY_ATTESTED:
         if component.provenance is ComponentProvenance.UNKNOWN:
             return FingerprintFinding(
-                RULE_INCOMPLETE, f"{name} must be captured or attested but is unknown"
+                RULE_INCOMPLETE,
+                name,
+                f"{name} must be captured or attested but is unknown",
             )
         return None
 

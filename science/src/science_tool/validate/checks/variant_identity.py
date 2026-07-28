@@ -18,19 +18,52 @@ from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.checks.identity_context import tier_declaration_defect
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 _SUPPORTED = frozenset({"vrs"})
 _FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
 _ROW_MINTING_FORMATS = frozenset({"spdi", "hgvs", "vcf", "rsid"})
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="variant-identity",
+    section_title="variant identity",
+    section_order=141,
+    rule_ids=(
+        "identity.variant-declared-unresolved",
+        "identity.variant-locator-malformed",
+        "identity.variant-malformed",
+        "identity.variant-namespace-unsupported",
+        "identity.variant-no-assembly",
+        "identity.variant-registry-unavailable",
+        "identity.variant-resource-invalid",
+        "identity.variant-resource-unavailable",
+        "identity.variant-rows-minted",
+        "identity.variant-rows-unresolved",
+        "identity.variant-store-unavailable",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _variant_decl(fm: dict[str, Any]) -> Any:
@@ -79,7 +112,7 @@ def _locator_defect(locator: Any) -> str | None:
     return None
 
 
-def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator[CheckObservation]:
     for fm in datasets:
         if fm.get("kind") != "dataset":
             continue
@@ -90,11 +123,15 @@ def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator
         ident = fm.get("id", "?")
         loc = "identity_context.molecular_ids.variant"
         if not isinstance(decl, dict):
-            yield _result(Severity.ERROR, path, f"{ident}: {loc} must be an object", "identity.variant-malformed")
+            yield _result(
+                Severity.ERROR, path, f"{ident}: {loc} must be an object", RULES["identity.variant-malformed"]
+            )
             continue
         defect = tier_declaration_defect(decl)
         if defect is not None:
-            yield _result(Severity.ERROR, path, f"{ident}: malformed {loc} -- {defect}", "identity.variant-malformed")
+            yield _result(
+                Severity.ERROR, path, f"{ident}: malformed {loc} -- {defect}", RULES["identity.variant-malformed"]
+            )
             continue
         namespace = str(decl["namespace"])
         if namespace not in _SUPPORTED:
@@ -102,7 +139,7 @@ def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator
                 Severity.ERROR,
                 path,
                 f"{ident}: variant namespace {namespace!r} is not supported (expected one of {sorted(_SUPPORTED)})",
-                "identity.variant-namespace-unsupported",
+                RULES["identity.variant-namespace-unsupported"],
             )
             continue
         if decl.get("resolution_status") == "declared_unresolved":
@@ -110,7 +147,7 @@ def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator
                 Severity.INFO,
                 path,
                 f"{ident}: variant identity declared_unresolved (honoured, RCM-D2)",
-                "identity.variant-declared-unresolved",
+                RULES["identity.variant-declared-unresolved"],
             )
             continue
         locator_defect = _locator_defect(decl.get("locator"))
@@ -119,18 +156,18 @@ def evaluate_variant_declaration(datasets: Iterable[dict[str, Any]]) -> Iterator
                 Severity.ERROR,
                 path,
                 f"{ident}: malformed {loc}.locator -- {locator_defect}",
-                "identity.variant-locator-malformed",
+                RULES["identity.variant-locator-malformed"],
             )
 
 
-@Check(section="variant identity", order=33)
-def check_variant_identity(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=33, producer_id="validate.variant-identity", rules=tuple(RULES.values()))
+def check_variant_identity(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = dataset_frontmatters(ctx)
     yield from evaluate_variant_declaration(datasets)
     yield from _evaluate_variant_rows(ctx, datasets)
 
 
-def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, Any]]) -> Iterator[Result]:
+def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, Any]]) -> Iterator[CheckObservation]:
     import csv
     import sqlite3
 
@@ -224,7 +261,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.ERROR,
                 path,
                 f"{ident}: variant row minting requires identity_context.assembly.seqcol_digest",
-                "identity.variant-no-assembly",
+                RULES["identity.variant-no-assembly"],
             )
             continue
 
@@ -238,7 +275,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                     Severity.INFO,
                     path,
                     f"{ident}: variant rsID registry unavailable; row VRS IDs cannot be minted: {error}",
-                    "identity.variant-registry-unavailable",
+                    RULES["identity.variant-registry-unavailable"],
                 )
                 continue
 
@@ -249,7 +286,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.ERROR,
                 path,
                 f"{ident}: variant resource {locator['resource']!r} is invalid: {error}",
-                "identity.variant-resource-invalid",
+                RULES["identity.variant-resource-invalid"],
             )
             continue
         if resource_path is None:
@@ -257,7 +294,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.INFO,
                 path,
                 f"{ident}: variant resource {locator['resource']!r} unavailable; row VRS IDs cannot be minted",
-                "identity.variant-resource-unavailable",
+                RULES["identity.variant-resource-unavailable"],
             )
             continue
 
@@ -310,7 +347,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.INFO,
                 path,
                 f"{ident}: variant rsID registry unavailable; row VRS IDs cannot be minted: {error}",
-                "identity.variant-registry-unavailable",
+                RULES["identity.variant-registry-unavailable"],
             )
             continue
         except (SequenceStoreError, VariantStoreUnavailable) as error:
@@ -318,7 +355,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.INFO,
                 path,
                 f"{ident}: variant store unavailable; row VRS IDs cannot be minted: {error}",
-                "identity.variant-store-unavailable",
+                RULES["identity.variant-store-unavailable"],
             )
             continue
         except UnicodeDecodeError as error:
@@ -330,7 +367,7 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.ERROR,
                 path,
                 f"{ident}: variant resource {locator['resource']!r} is invalid: {invalid_resource}",
-                "identity.variant-resource-invalid",
+                RULES["identity.variant-resource-invalid"],
             )
             continue
 
@@ -340,14 +377,14 @@ def _evaluate_variant_rows(ctx: ValidateContext, datasets: Iterable[dict[str, An
                 Severity.ERROR,
                 path,
                 f"{ident}: variant rows unresolved: minted={minted}; defects: {counts}",
-                "identity.variant-rows-unresolved",
+                RULES["identity.variant-rows-unresolved"],
             )
         else:
             yield _result(
                 Severity.INFO,
                 path,
                 f"{ident}: variant rows minted: minted={minted}",
-                "identity.variant-rows-minted",
+                RULES["identity.variant-rows-minted"],
             )
 
 

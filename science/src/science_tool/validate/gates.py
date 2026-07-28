@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from science_tool.validate.result import Result
+from science_model.audit import AuditFinding
 
 # Ordered, cumulative. Index = severity of the gate; each tier adds its rules
 # on top of every lower tier.
@@ -110,10 +110,13 @@ def cumulative_rules(tier: str) -> frozenset[str]:
     return frozenset(rules)
 
 
-def gated_findings(results: Iterable[Result], tier: str) -> list[Result]:
+def gated_findings(
+    results: Iterable[AuditFinding],
+    tier: str,
+) -> list[AuditFinding]:
     """The findings whose rule is gated at `tier`."""
     rules = cumulative_rules(tier)
-    return [result for result in results if result.rule in rules]
+    return [finding for finding in results if finding.rule_id in rules]
 
 
 def resolve_gate_tier(fail_on: str | None, manifest: Mapping[str, Any]) -> str:

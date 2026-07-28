@@ -122,7 +122,7 @@ def test_local_owner_shadowing_commons_canonical_errors(
 
     assert len(results) == 1
     r = results[0]
-    assert r.severity is Severity.ERROR
+    assert r.severity == Severity.ERROR.value
     assert r.path == Path("entities/papers/Adams2025.md")
     assert "paper:Adams2025" in r.message
     assert "overlay" in r.message.lower()

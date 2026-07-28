@@ -59,6 +59,22 @@ def test_unknown_cite_key_origin_warns(tmp_path: Path) -> None:
     assert any("Ghost2020" in message for message in warns), warns
 
 
+def test_duplicate_unknown_cite_key_origin_emits_one_semantic_finding(
+    tmp_path: Path,
+) -> None:
+    _write(
+        tmp_path / "entities" / "questions" / "0001-a.md",
+        "---\nid: question:a\norigins:\n"
+        "  - type: literature\n    ref: cite:Ghost2020\n"
+        "  - type: literature\n    ref: cite:Ghost2020\n"
+        "---\nBody.\n",
+    )
+
+    results = list(check_origin_refs(_ctx(tmp_path)))
+
+    assert len(_messages(results, Severity.WARN)) == 1
+
+
 def test_known_cite_key_origin_is_clean(tmp_path: Path) -> None:
     _write(
         tmp_path / "papers" / "references.bib",

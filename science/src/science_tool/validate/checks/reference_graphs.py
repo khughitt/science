@@ -6,6 +6,10 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.member import ResolutionState, evaluate_key_resolution, parse_member_of
 from science_tool.commons.reference_graph import (
     REFERENCE_GRAPH_FORMATS,
@@ -18,13 +22,45 @@ from science_tool.commons.reference_graph import (
 )
 from science_tool.commons.reference_graph_resources import graph_resource_available, read_edge_rows, read_node_rows
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="reference-graphs",
+    section_title="reference graphs",
+    section_order=143,
+    rule_ids=(
+        "reference-graph.collection-malformed",
+        "reference-graph.edge-count-mismatch",
+        "reference-graph.edge-resource-malformed",
+        "reference-graph.edge-resource-unavailable",
+        "reference-graph.graph-resource-malformed",
+        "reference-graph.graph-resource-unavailable",
+        "reference-graph.member-count-mismatch",
+        "reference-graph.member-deprecated",
+        "reference-graph.member-malformed",
+        "reference-graph.member-not-member-of",
+        "reference-graph.member-resolution-unknown",
+        "reference-graph.member-unresolved",
+        "reference-graph.node-index-malformed",
+        "reference-graph.node-index-unavailable",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _is_int(value: object) -> bool:
@@ -103,7 +139,7 @@ def evaluate_reference_graphs(
     node_rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception | None],
     edge_rows_by_dataset_id: dict[str, list[dict[str, Any]] | Exception | None],
     member_datasets: Iterable[dict[str, Any]],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     collections = [fm for fm in datasets if is_reference_graph_frontmatter(fm)]
     nodes_by_collection: dict[str, dict[str, ReferenceGraphNode]] = {}
 
@@ -116,7 +152,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{ident}: malformed bio.reference_graph collection -- {defect}",
-                "reference-graph.collection-malformed",
+                RULES["reference-graph.collection-malformed"],
             )
             continue
 
@@ -126,14 +162,14 @@ def evaluate_reference_graphs(
                 Severity.INFO,
                 path,
                 f"{ident}: graph_resource is unavailable; graph artifact cannot be verified",
-                "reference-graph.graph-resource-unavailable",
+                RULES["reference-graph.graph-resource-unavailable"],
             )
         elif isinstance(graph_available, Exception):
             yield _result(
                 Severity.ERROR,
                 path,
                 f"{ident}: graph_resource malformed -- {graph_available}",
-                "reference-graph.graph-resource-malformed",
+                RULES["reference-graph.graph-resource-malformed"],
             )
 
         raw_nodes = node_rows_by_dataset_id.get(ident)
@@ -142,14 +178,14 @@ def evaluate_reference_graphs(
                 Severity.INFO,
                 path,
                 f"{ident}: node_index_resource is unavailable; member resolution cannot be verified",
-                "reference-graph.node-index-unavailable",
+                RULES["reference-graph.node-index-unavailable"],
             )
         elif isinstance(raw_nodes, Exception):
             yield _result(
                 Severity.ERROR,
                 path,
                 f"{ident}: node_index_resource malformed -- {raw_nodes}",
-                "reference-graph.node-index-malformed",
+                RULES["reference-graph.node-index-malformed"],
             )
         else:
             try:
@@ -159,7 +195,7 @@ def evaluate_reference_graphs(
                     Severity.ERROR,
                     path,
                     f"{ident}: node_index_resource malformed -- {exc}",
-                    "reference-graph.node-index-malformed",
+                    RULES["reference-graph.node-index-malformed"],
                 )
             else:
                 if len(nodes) != fm["member_count"]:
@@ -167,7 +203,7 @@ def evaluate_reference_graphs(
                         Severity.ERROR,
                         path,
                         f"{ident}: member_count={fm['member_count']} but node_index_resource has {len(nodes)} node rows",
-                        "reference-graph.member-count-mismatch",
+                        RULES["reference-graph.member-count-mismatch"],
                     )
                 nodes_by_collection[ident] = _node_by_key(nodes)
 
@@ -178,7 +214,7 @@ def evaluate_reference_graphs(
                     Severity.INFO,
                     path,
                     f"{ident}: edge_resource is unavailable; edge count cannot be verified",
-                    "reference-graph.edge-resource-unavailable",
+                    RULES["reference-graph.edge-resource-unavailable"],
                 )
             continue
         if isinstance(raw_edges, Exception):
@@ -186,7 +222,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{ident}: edge_resource malformed -- {raw_edges}",
-                "reference-graph.edge-resource-malformed",
+                RULES["reference-graph.edge-resource-malformed"],
             )
             continue
         try:
@@ -196,7 +232,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{ident}: edge_resource malformed -- {exc}",
-                "reference-graph.edge-resource-malformed",
+                RULES["reference-graph.edge-resource-malformed"],
             )
             continue
         if fm.get("edge_count") is not None and len(edges) != fm["edge_count"]:
@@ -204,7 +240,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{ident}: edge_count={fm['edge_count']} but edge_resource has {len(edges)} rows",
-                "reference-graph.edge-count-mismatch",
+                RULES["reference-graph.edge-count-mismatch"],
             )
 
     for member in member_datasets:
@@ -218,7 +254,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{member_id}: bio.reference_graph.member must use derivation.kind=member_of",
-                "reference-graph.member-not-member-of",
+                RULES["reference-graph.member-not-member-of"],
             )
             continue
         defect = _member_defect(derivation)
@@ -227,7 +263,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{member_id}: malformed bio.reference_graph.member -- {defect}",
-                "reference-graph.member-malformed",
+                RULES["reference-graph.member-malformed"],
             )
             continue
         member_of = parse_member_of(member)
@@ -248,7 +284,7 @@ def evaluate_reference_graphs(
                     f"{member_id}: parent reference graph {member_of.parent_dataset!r} unavailable; "
                     "member resolution cannot be verified"
                 ),
-                "reference-graph.member-resolution-unknown",
+                RULES["reference-graph.member-resolution-unknown"],
             )
             continue
         if state is ResolutionState.UNRESOLVED:
@@ -256,7 +292,7 @@ def evaluate_reference_graphs(
                 Severity.ERROR,
                 path,
                 f"{member_id}: member_key {member_of.member_key!r} is absent from {member_of.parent_dataset}",
-                "reference-graph.member-unresolved",
+                RULES["reference-graph.member-unresolved"],
             )
             continue
 
@@ -268,12 +304,12 @@ def evaluate_reference_graphs(
                 Severity.WARN,
                 path,
                 f"{member_id}: member_key {member_of.member_key!r} is {node.status}{replacement}",
-                "reference-graph.member-deprecated",
+                RULES["reference-graph.member-deprecated"],
             )
 
 
-@Check(section="reference graph collections", order=35)
-def check_reference_graphs(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=35, producer_id="validate.reference-graphs", rules=tuple(RULES.values()))
+def check_reference_graphs(ctx: ValidateContext) -> Iterator[CheckObservation]:
     datasets = dataset_frontmatters(ctx)
     collections = [fm for fm in datasets if is_reference_graph_frontmatter(fm)]
     collection_ids = {str(fm["id"]) for fm in collections if isinstance(fm.get("id"), str) and fm["id"]}

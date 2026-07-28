@@ -71,7 +71,7 @@ def test_sign_less_predicate_with_positive_polarity_errors(tmp_path: Path) -> No
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.polarity.aptitude"
+    assert r.rule_id == "proposition.polarity.aptitude"
     assert r.path == p
 
 
@@ -135,7 +135,7 @@ def test_sign_meaningful_predicate_with_not_applicable_polarity_errors(tmp_path:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.polarity.aptitude"
+    assert r.rule_id == "proposition.polarity.aptitude"
     assert r.path == p
 
 
@@ -149,7 +149,7 @@ def test_sign_meaningful_predicate_with_missing_polarity_errors(tmp_path: Path) 
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.polarity.aptitude"
+    assert r.rule_id == "proposition.polarity.aptitude"
     assert r.path == p
 
 
@@ -178,7 +178,7 @@ def test_associates_with_with_not_applicable_polarity_errors(tmp_path: Path) -> 
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.polarity.aptitude"
+    assert r.rule_id == "proposition.polarity.aptitude"
     assert r.path == p
 
 
@@ -230,7 +230,7 @@ def test_no_propositions_dir_is_clean(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rule: proposition.claim_layer.canonical
+# Rule: proposition.claim-layer.canonical
 # ---------------------------------------------------------------------------
 
 
@@ -260,7 +260,7 @@ def test_non_canonical_claim_layer_errors(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.claim_layer.canonical"
+    assert r.rule_id == "proposition.claim-layer.canonical"
     assert r.path == p
 
 
@@ -306,7 +306,7 @@ def test_bogus_identification_strength_errors(tmp_path: Path) -> None:
     assert len(results) == 1
     r = results[0]
     assert r.severity == Severity.ERROR
-    assert r.rule == "proposition.identification.canonical"
+    assert r.rule_id == "proposition.identification.canonical"
     assert r.path == p
 
 

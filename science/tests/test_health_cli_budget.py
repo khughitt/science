@@ -1,171 +1,113 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from science_tool.budget.measure import visible_len
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
 
-REPORT = {
-    "validation": [
-        {
-            "severity": "warning",
-            "path": f"p{i}",
-            "line": None,
-            "rule": "r",
-            "task": None,
-            "message": "m" * 80,
-        }
-        for i in range(361)
-    ],
-    "managed_artifacts": [],
-    "unresolved_refs": [],
-    "unregistered_ref_kinds": [],
-    "lingering_tags_lines": [],
-    "agent_context": [],
-    "identity_policy": [],
-    "entity_identity": [],
-    "dataset_anomalies": [],
-    "schema_invalid": [],
-    "tooling_scaffold": [],
-    "accepted_validation": [],
-    "unwired_checks": [],
-    "legacy_task_type": [],
-    "invalid_entity_aspects": [],
-    # All four LayeredClaimHealthReport keys. The adoption table at health_cli.py:376
-    # reads both coverage metrics UNCONDITIONALLY, and the rival-model table reads its
-    # list — a fixture carrying only `migration_issues` raises KeyError before any
-    # assertion runs.
-    "layered_claims": {
-        "proposition_claim_layer_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
-        "causal_leaning_identification_coverage": {"numerator": 0, "denominator": 0, "fraction": 0.0},
-        "rival_model_packets_missing_discriminating_predictions": [],
-        "migration_issues": [],
-    },
-    "cross_paper_evidence": {
-        "status": "ok",
-        "empty_state": "no_propositions",
-        "summary": {},
-        "findings": [],
-        "propositions": [],
-    },
-    "prose_epistemics": {
-        "applicable": False,
-        "summary": {},
-        "coverage": {},
-        "sources": [],
-        "findings": [],
-    },
-    "total_issues": 361,
-}
 
+def test_health_json_budget_uses_complete_report_totals(tmp_path: Path) -> None:
+    tasks = tmp_path / "tasks" / "active"
+    tasks.mkdir(parents=True)
+    for index in range(45):
+        (tasks / f"t{index:03d}.md").write_text(
+            f"---\nid: t{index:03d}\ntitle: task {index}\ntype: dev\npriority: P1\n"
+            "status: proposed\naspects: []\ncreated: 2026-04-13\n---\nbody\n",
+            encoding="utf-8",
+        )
 
-@pytest.fixture
-def stub_report(monkeypatch: pytest.MonkeyPatch) -> None:
-    """build_health_report is imported INSIDE health_command, so patch it at its source."""
-    import science_tool.graph.health as health_module
-
-    monkeypatch.setattr(health_module, "build_health_report", lambda *_a, **_k: dict(REPORT))
-
-
-def _invoke(args: list[str]):
-    return CliRunner().invoke(main, args, prog_name="science")
-
-
-def test_severity_and_output_options_exist() -> None:
-    result = _invoke(["health", "--help"])
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--format",
+            "json",
+            "--check",
+            "legacy_task_type",
+        ],
+    )
     assert result.exit_code == 0, result.output
-    assert "--severity" in result.output
-    assert "--output" in result.output
+    payload = json.loads(result.output)
+    assert len(payload["findings"]) == 40
+    assert payload["totals"]["findings_total"] == 45
 
 
-def test_table_output_stays_within_budget(stub_report: None) -> None:
-    result = _invoke(["health"])
+def test_health_output_file_receives_complete_report(tmp_path: Path) -> None:
+    output = tmp_path / "health.json"
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--format",
+            "json",
+            "--check",
+            "tooling_scaffold",
+            "--output",
+            str(output),
+        ],
+    )
     assert result.exit_code == 0, result.output
-    assert visible_len(result.output) <= BUDGETS["health"].max_chars
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    assert payload["totals"]["findings_total"] == 1
 
 
-def test_json_output_stays_within_budget(stub_report: None) -> None:
-    result = _invoke(["health", "--format", "json"])
-    assert result.exit_code == 0, result.output
-    assert visible_len(result.output) <= BUDGETS["health"].max_chars
-
-
-def test_filtered_report_never_claims_clean(stub_report: None) -> None:
-    result = _invoke(["health", "--severity", "error"])
-    assert result.exit_code == 0, result.output
-    assert "Project is clean" not in result.output
-    assert "361" in result.output
-
-
-def test_table_output_file_is_non_empty_and_complete(stub_report: None, tmp_path: Path) -> None:
-    """The defect the previous plan shipped: table + --output wrote nothing."""
-    target = tmp_path / "health.txt"
-    result = _invoke(["health", "--output", str(target)])
-    assert result.exit_code == 0, result.output
-    written = target.read_text()
-    assert len(written) > BUDGETS["health"].max_chars
-    assert written.count("m") >= 361 * 80
-
-
-def test_json_output_file_is_complete(stub_report: None, tmp_path: Path) -> None:
-    target = tmp_path / "health.json"
-    result = _invoke(["health", "--format", "json", "--output", str(target)])
-    assert result.exit_code == 0, result.output
-    payload = json.loads(target.read_text())
-    assert len(payload["validation"]) == 361
-    assert "section_omitted" not in payload
-
-
-def test_list_checks_also_routes_through_the_sink(tmp_path: Path) -> None:
-    target = tmp_path / "checks.txt"
-    result = _invoke(["health", "--list-checks", "--output", str(target)])
-    assert result.exit_code == 0, result.output
-    assert target.read_text().strip() != ""
-
-
-def _report_with(validation: list[dict], accepted: list[dict] | None = None) -> dict:
-    report = dict(REPORT)
-    report["validation"] = validation
-    report["accepted_validation"] = accepted or []
-    report["total_issues"] = len(validation)
-    return report
-
-
-def test_validation_count_is_broken_out_by_severity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The headline figure must be reconcilable with `science validate`.
-
-    fb-2026-07-26-006: health printed `Validation (N)` as a bare integer. It is
-    `science validate`'s own finding set under four narrowings -- non-strict, no
-    Python sidecar, info-severity dropped, minus the acceptance ledger -- none of
-    which appeared on screen, so the number could not be reconciled with the one
-    `science validate` reports.
-    """
-    from science_tool.graph import health as health_module
-
-    rows = [
-        {"severity": "error", "path": "a", "line": None, "rule": "r", "task": None, "message": "m"},
-        {"severity": "warning", "path": "b", "line": None, "rule": "r", "task": None, "message": "m"},
-        {"severity": "warning", "path": "c", "line": None, "rule": "r", "task": None, "message": "m"},
-    ]
-    accepted = [
-        {"severity": "warning", "path": "d", "line": None, "rule": "r", "task": None,
-         "message": "m", "accepted_reason": "known"},
-    ]
-    monkeypatch.setattr(
-        health_module, "build_health_report", lambda *_a, **_k: _report_with(rows, accepted)
+def test_health_table_reports_findings_hidden_by_severity(tmp_path: Path) -> None:
+    tasks = tmp_path / "tasks" / "active"
+    tasks.mkdir(parents=True)
+    (tasks / "t001.md").write_text(
+        "---\nid: t001\ntitle: task\ntype: dev\npriority: P1\n"
+        "status: proposed\naspects: []\ncreated: 2026-04-13\n---\nbody\n",
+        encoding="utf-8",
     )
 
-    result = CliRunner().invoke(main, ["health", "--format", "table"], prog_name="science")
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "legacy_task_type",
+            "--severity",
+            "error",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
-    assert "1 error" in result.output
-    assert "2 warning" in result.output
-    # The scope that makes the figure reconcilable.
-    assert "--strict" in result.output
-    assert "sidecar" in result.output
-    assert "1 accepted-warning ledger entries" in result.output
+    assert "Findings displayed: 0 of 1 total." in result.output
+    assert "Project is clean." not in result.output
+
+
+def test_health_table_reports_section_cap_and_stays_within_budget(
+    tmp_path: Path,
+) -> None:
+    tasks = tmp_path / "tasks" / "active"
+    tasks.mkdir(parents=True)
+    for index in range(45):
+        (tasks / f"t{index:03d}.md").write_text(
+            f"---\nid: t{index:03d}\ntitle: task {index}\ntype: dev\npriority: P1\n"
+            "status: proposed\naspects: []\ncreated: 2026-04-13\n---\nbody\n",
+            encoding="utf-8",
+        )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "legacy_task_type",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Findings displayed: 40 of 45 total." in result.output
+    assert visible_len(result.output) <= BUDGETS["health"].max_chars

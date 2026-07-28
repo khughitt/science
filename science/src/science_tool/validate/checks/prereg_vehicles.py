@@ -28,11 +28,16 @@ from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from science_model.audit import FindingRule
+from science_model.audit.fingerprint import canonical_json
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.prereg_frozen import frozen_because
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 # Data-gated mode commits the decision rule before any vehicle is admissible,
 # so it legitimately names none. The template section is the declaration.
@@ -57,8 +62,41 @@ _INLINE_CODE = re.compile(r"`([^`\n]+)`")
 _PATH_GRAMMAR = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_./+-]*/[A-Za-z0-9_./+-]*$")
 
 
-def _result(severity: Severity, relative: str, message: str, rule: str) -> Result:
-    return Result(severity, Path(relative), None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="prereg-vehicles",
+    section_title="prereg vehicles",
+    section_order=116,
+    rule_ids=(
+        "prereg.prose-path-nondurable",
+        "prereg.vehicle-gitignored",
+        "prereg.vehicle-hash-drift",
+        "prereg.vehicle-missing",
+        "prereg.vehicle-uncontent-addressed",
+        "prereg.vehicle-undeclared",
+        "prereg.vehicle-untracked",
+        "prereg.vehicle-unverifiable",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(
+    severity: Severity,
+    relative: str,
+    message: str,
+    rule: FindingRule,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(relative),
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": key},
+    )
 
 
 def _git_ok(root: Path, *args: str) -> bool:
@@ -136,11 +174,7 @@ def _strip_fenced_blocks(body: str) -> str:
             if opener is None:
                 opener = marker
                 continue
-            if (
-                marker[0] == opener[0]
-                and len(marker) >= len(opener)
-                and not line[match.end(1) :].strip()
-            ):
+            if marker[0] == opener[0] and len(marker) >= len(opener) and not line[match.end(1) :].strip():
                 opener = None
                 continue
             # Neither an opener nor a valid closer: content inside the block.
@@ -259,7 +293,7 @@ def _check_prose_paths(
     relative: str,
     body: str,
     entries: list[Any],
-) -> Iterator[Result]:
+) -> Iterator[CheckObservation]:
     """Yield `prereg.prose-path-nondurable` for each non-durable path this document names in prose.
 
     Two suppressions here are not self-evident from the code:
@@ -291,11 +325,17 @@ def _check_prose_paths(
         state = _nondurable_state(ctx.project_root, candidate)
         if state is None:
             continue
-        yield _result(Severity.WARN, relative, _prose_message(relative, candidate, state), _RULE_PROSE)
+        yield _result(
+            Severity.WARN,
+            relative,
+            _prose_message(relative, candidate, state),
+            RULES["prereg.prose-path-nondurable"],
+            key=["prose-path", candidate],
+        )
 
 
-@Check(section="discussion documents...", order=13)
-def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=13, producer_id="validate.prereg-vehicles", rules=tuple(RULES.values()))
+def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[CheckObservation]:
     entities_root = ctx.project_root / resolve_path_policy("pre-registration").root
     if not entities_root.is_dir():
         return
@@ -327,7 +367,8 @@ def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
                     f"pre-registration that names its data only in prose is frozen by path, not by "
                     f"content: declare each vehicle as 'path' + 'sha256', or state the "
                     f"'{_DATA_GATED_MARKER} (data-gated mode)' section if no vehicle is admissible yet.",
-                    "prereg.vehicle-undeclared",
+                    RULES["prereg.vehicle-undeclared"],
+                    key=["vehicles"],
                 )
         elif not is_repo:
             yield _result(
@@ -335,29 +376,43 @@ def check_prereg_vehicles(ctx: ValidateContext) -> Iterator[Result]:
                 relative,
                 f"{relative} declares vehicles but {ctx.project_root} is not a git repository, so "
                 f"their durability cannot be verified.",
-                "prereg.vehicle-unverifiable",
+                RULES["prereg.vehicle-unverifiable"],
+                key=["repository"],
             )
         else:
+            seen_entries: set[str] = set()
             for entry in entries:
-                yield from _check_vehicle(ctx, relative, entry)
+                entry_key = canonical_json(entry).decode("utf-8")
+                if entry_key in seen_entries:
+                    continue
+                seen_entries.add(entry_key)
+                yield from _check_vehicle(ctx, relative, entry, entry_key=entry_key)
 
         if is_repo and freeze_reason is not None and not data_gated:
             yield from _check_prose_paths(ctx, relative, body, entries)
 
 
-def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[Result]:
+def _check_vehicle(
+    ctx: ValidateContext,
+    relative: str,
+    entry: Any,
+    *,
+    entry_key: str | None = None,
+) -> Iterator[CheckObservation]:
     """Report the FIRST way this vehicle fails to be frozen, if any.
 
     The conditions are ordered by how fundamental they are: an unresolvable or
     non-durable path makes its recorded hash moot, so reporting the hash as well
     would be noise.
     """
+    semantic_entry = entry_key or canonical_json(entry).decode("utf-8")
     if not isinstance(entry, dict) or not entry.get("path"):
         yield _result(
             Severity.ERROR,
             relative,
             f"{relative} has a 'vehicles:' entry with no 'path': {entry!r}.",
-            "prereg.vehicle-uncontent-addressed",
+            RULES["prereg.vehicle-uncontent-addressed"],
+            key=["vehicle-entry", semantic_entry],
         )
         return
 
@@ -369,7 +424,8 @@ def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[
             relative,
             f"{relative} freezes vehicle {declared_path!r} by path alone. Record its 'sha256:' — a "
             f"path names where the data was, not which data it was.",
-            "prereg.vehicle-uncontent-addressed",
+            RULES["prereg.vehicle-uncontent-addressed"],
+            key=["vehicle-entry", semantic_entry],
         )
         return
 
@@ -379,7 +435,8 @@ def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[
             Severity.ERROR,
             relative,
             f"{relative} freezes vehicle {declared_path!r}, which does not exist.",
-            "prereg.vehicle-missing",
+            RULES["prereg.vehicle-missing"],
+            key=["vehicle-entry", semantic_entry],
         )
         return
 
@@ -390,7 +447,8 @@ def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[
             f"{relative} freezes vehicle {declared_path!r}, which is gitignored. An ignored file is "
             f"a local build product, not a frozen record: regenerating it destroys the registered "
             f"content irrecoverably. Commit it, or declare it as a content-addressed dataset entity.",
-            "prereg.vehicle-gitignored",
+            RULES["prereg.vehicle-gitignored"],
+            key=["vehicle-entry", semantic_entry],
         )
         return
 
@@ -400,7 +458,8 @@ def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[
             relative,
             f"{relative} freezes vehicle {declared_path!r}, which is not tracked by git. An "
             f"uncommitted file cannot be recovered once overwritten.",
-            "prereg.vehicle-untracked",
+            RULES["prereg.vehicle-untracked"],
+            key=["vehicle-entry", semantic_entry],
         )
         return
 
@@ -412,5 +471,6 @@ def _check_vehicle(ctx: ValidateContext, relative: str, entry: Any) -> Iterator[
             f"{relative} freezes vehicle {declared_path!r} at sha256 {str(digest)[:12]}…, but the "
             f"file on disk is {actual[:12]}…. The registered content is gone even though the path "
             f"still resolves.",
-            "prereg.vehicle-hash-drift",
+            RULES["prereg.vehicle-hash-drift"],
+            key=["vehicle-entry", semantic_entry],
         )

@@ -5,18 +5,43 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.paths import ProjectPaths, resolve_paths
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str) -> Result:
-    return Result(severity, Path(path) if path is not None else None, None, message, "directory_structure", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="directory-structure",
+    section_title="directory structure",
+    section_order=104,
+    rule_ids=("directory-structure.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-@Check(section="directory structure...", order=2)
-def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    path: str | None,
+    message: str,
+    *,
+    key: str,
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path is not None else None,
+        line=None,
+        message=message,
+        rule=RULES["directory-structure.check"],
+        task=None,
+        qualifiers={"key": [key]},
+    )
+
+
+@Check(section=SECTION, order=2, producer_id="validate.directory-structure", rules=tuple(RULES.values()))
+def check_directory_structure(ctx: ValidateContext) -> Iterator[CheckObservation]:
     paths = resolve_paths(ctx.project_root)
     profile = paths.profile
 
@@ -39,15 +64,35 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
 
     for name, path in required_dirs:
         if not path.is_dir():
-            yield _result(Severity.ERROR, name, f"Required directory missing: {name}/")
+            yield _result(
+                Severity.ERROR,
+                name,
+                f"Required directory missing: {name}/",
+                key="required-directory",
+            )
         else:
-            yield _result(Severity.INFO, name, f"{name}/ exists")
+            yield _result(
+                Severity.INFO,
+                name,
+                f"{name}/ exists",
+                key="required-directory",
+            )
 
     for name in ("CLAUDE.md", "AGENTS.md"):
         if not (ctx.project_root / name).is_file():
-            yield _result(Severity.ERROR, name, f"Required file missing: {name}")
+            yield _result(
+                Severity.ERROR,
+                name,
+                f"Required file missing: {name}",
+                key="required-file",
+            )
         else:
-            yield _result(Severity.INFO, name, f"{name} exists")
+            yield _result(
+                Severity.INFO,
+                name,
+                f"{name} exists",
+                key="required-file",
+            )
 
     yield from _check_claude(ctx)
     yield from _check_agents(ctx)
@@ -58,7 +103,7 @@ def check_directory_structure(ctx: ValidateContext) -> Iterator[Result]:
     yield from _check_legacy_roots(ctx, profile, paths)
 
 
-def _check_claude(ctx: ValidateContext) -> Iterator[Result]:
+def _check_claude(ctx: ValidateContext) -> Iterator[CheckObservation]:
     claude_path = ctx.project_root / "CLAUDE.md"
     if not claude_path.is_file():
         return
@@ -66,16 +111,22 @@ def _check_claude(ctx: ValidateContext) -> Iterator[Result]:
     lines = ctx.read_text_cached(claude_path).splitlines()
     nonblank = [line.strip() for line in lines if line.strip()]
     if "\n".join(nonblank) != "@AGENTS.md":
-        yield _result(Severity.WARN, "CLAUDE.md", "CLAUDE.md should contain only @AGENTS.md")
+        yield _result(
+            Severity.WARN,
+            "CLAUDE.md",
+            "CLAUDE.md should contain only @AGENTS.md",
+            key="pointer-content",
+        )
     if _has_legacy_core_include(lines):
         yield _result(
             Severity.WARN,
             "CLAUDE.md",
             "CLAUDE.md contains legacy @core/* include(s) — keep core files as pointers from AGENTS.md",
+            key="legacy-core-include",
         )
 
 
-def _check_agents(ctx: ValidateContext) -> Iterator[Result]:
+def _check_agents(ctx: ValidateContext) -> Iterator[CheckObservation]:
     agents_path = ctx.project_root / "AGENTS.md"
     if not agents_path.is_file():
         return
@@ -86,16 +137,18 @@ def _check_agents(ctx: ValidateContext) -> Iterator[Result]:
             Severity.WARN,
             "AGENTS.md",
             "AGENTS.md contains legacy @core/* include(s) — use the Pointers section instead",
+            key="legacy-core-include",
         )
     if "BEGIN: load-bearing-constraints" not in text or "END: load-bearing-constraints" not in text:
         yield _result(
             Severity.WARN,
             "AGENTS.md",
             "AGENTS.md missing managed load-bearing-constraints markers — run /science:curate or refresh from templates/agents-md.md",
+            key="managed-constraint-markers",
         )
 
 
-def _check_overview(ctx: ValidateContext) -> Iterator[Result]:
+def _check_overview(ctx: ValidateContext) -> Iterator[CheckObservation]:
     overview_path = ctx.project_root / "core" / "overview.md"
     if not overview_path.is_file():
         return
@@ -108,18 +161,29 @@ def _check_overview(ctx: ValidateContext) -> Iterator[Result]:
             Severity.WARN,
             "core/overview.md",
             f"core/overview.md is {line_count} lines / {word_count} words; keep it under 150 lines / 1200 words and move evidence narratives into canonical docs",
+            key="size-limit",
         )
 
 
-def _check_readme(ctx: ValidateContext) -> Iterator[Result]:
+def _check_readme(ctx: ValidateContext) -> Iterator[CheckObservation]:
     readme_path = ctx.project_root / "README.md"
     if readme_path.is_file():
-        yield _result(Severity.INFO, "README.md", "README.md exists")
+        yield _result(
+            Severity.INFO,
+            "README.md",
+            "README.md exists",
+            key="required-file",
+        )
     else:
-        yield _result(Severity.WARN, "README.md", "Required project README missing: README.md")
+        yield _result(
+            Severity.WARN,
+            "README.md",
+            "Required project README missing: README.md",
+            key="required-file",
+        )
 
 
-def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[Result]:
+def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[CheckObservation]:
     docs_path = ctx.project_root / "docs"
     doc_path = ctx.project_root / "doc"
     if not docs_path.is_dir() or not doc_path.is_dir():
@@ -133,20 +197,26 @@ def _check_duplicate_docs(ctx: ValidateContext) -> Iterator[Result]:
             Severity.WARN,
             "docs",
             "Duplicate document roots detected: doc/ and docs/",
+            key="duplicate-document-roots",
         )
 
 
-def _check_declared_roots_exist(ctx: ValidateContext, paths: ProjectPaths) -> Iterator[Result]:
+def _check_declared_roots_exist(ctx: ValidateContext, paths: ProjectPaths) -> Iterator[CheckObservation]:
     for label, roots in (("code_roots", paths.code_roots), ("app_roots", paths.app_roots)):
         for root in roots:
             if root == paths.code_dir:
                 continue
             if not root.is_dir():
                 rel = root.relative_to(ctx.project_root).as_posix()
-                yield _result(Severity.ERROR, rel, f"Declared {label} directory missing: {rel}/")
+                yield _result(
+                    Severity.ERROR,
+                    rel,
+                    f"Declared {label} directory missing: {rel}/",
+                    key=f"declared-root:{label}",
+                )
 
 
-def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths) -> Iterator[Result]:
+def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths) -> Iterator[CheckObservation]:
     code_dir_name = paths.code_dir.name
     if profile == "research":
         declared_roots = {p.relative_to(ctx.project_root).as_posix() for p in (*paths.code_roots, *paths.app_roots)}
@@ -158,6 +228,7 @@ def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths)
                     Severity.WARN,
                     dirname,
                     f"Legacy top-level execution root detected: {dirname}/ — consolidate under {code_dir_name}/",
+                    key="legacy-execution-root",
                 )
         pipelines_path = ctx.project_root / code_dir_name / "pipelines"
         if pipelines_path.is_dir():
@@ -165,6 +236,7 @@ def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths)
                 Severity.WARN,
                 f"{code_dir_name}/pipelines",
                 f"Legacy workflow directory detected: {code_dir_name}/pipelines/ — use {code_dir_name}/workflows/",
+                key="legacy-workflow-root",
             )
 
     if profile == "software" and (ctx.project_root / "code").is_dir():
@@ -172,6 +244,7 @@ def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths)
             Severity.WARN,
             "code",
             "Software-profile project has top-level code/ — keep implementation in native roots such as src/",
+            key="software-code-root",
         )
 
     for dirname in ("prompts", "templates"):
@@ -180,6 +253,7 @@ def _check_legacy_roots(ctx: ValidateContext, profile: str, paths: ProjectPaths)
                 Severity.WARN,
                 dirname,
                 f"Legacy top-level AI artifact root detected: {dirname}/ — use .ai/ overrides only when needed",
+                key="legacy-ai-artifact-root",
             )
 
 

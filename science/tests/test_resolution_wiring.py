@@ -104,7 +104,7 @@ def test_validate_reports_a_dangling_successor(tmp_project: Path) -> None:
     write_hypothesis(
         tmp_project, "0001-x", status="superseded", extra={"superseded_by": "hypothesis:9999-nope"}
     )
-    findings = [r for r in run_validate(tmp_project) if r.rule == RULE_DANGLING_LINEAGE]
+    findings = [r for r in run_validate(tmp_project) if r.rule_id == RULE_DANGLING_LINEAGE]
     assert len(findings) == 1
     # ERROR now that `hypothesis` is certified (D5): the emitter routes through
     # `severity_for_kind("hypothesis")`. If that emitter ever hard-codes WARN again, this fails.
@@ -433,7 +433,7 @@ def test_unbacked_inverse_FLIPS_to_error_with_the_kind(tmp_project: Path) -> Non
     write_hypothesis(tmp_project, "0001-x", status="superseded",
                      extra={"superseded_by": "hypothesis:0002-y"})
     write_hypothesis(tmp_project, "0002-y", status="active")
-    findings = [r for r in run_validate(tmp_project) if r.rule == "hypothesis.unbacked-inverse"]
+    findings = [r for r in run_validate(tmp_project) if r.rule_id == "hypothesis.unbacked-inverse"]
 
     assert [f.severity for f in findings] == ["error"]
 
@@ -454,7 +454,7 @@ def test_unbacked_inverse_stays_WARN_for_an_UNCERTIFIED_kind(tmp_project: Path) 
     write_interpretation(tmp_project, "i-v1", status="superseded",
                          extra={"superseded_by": "interpretation:i-v2"})
     write_interpretation(tmp_project, "i-v2", status="active")
-    findings = [r for r in run_validate(tmp_project) if r.rule == "interpretation.unbacked-inverse"]
+    findings = [r for r in run_validate(tmp_project) if r.rule_id == "interpretation.unbacked-inverse"]
 
     assert [f.severity for f in findings] == ["warn"]
     assert "interpretation.unbacked-inverse" not in cumulative_rules("hygiene")

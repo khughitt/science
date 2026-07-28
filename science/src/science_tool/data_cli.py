@@ -4,7 +4,12 @@ from pathlib import Path
 
 import click
 
-from science_tool.data_audit import Violation, audit_project, audit_project_notes, render_json
+from science_tool.data_audit import (
+    Violation,
+    collect_data_audit,
+    data_audit_result,
+    render_json,
+)
 from science_tool.data_audit_fix import apply_fixes
 from science_tool.data_root import DataRootConfigError
 from science_tool.project_config import load_project_config, resolve_data_policy
@@ -97,11 +102,12 @@ def data_audit_command(
         from science_tool.data_policy import DEFAULT_DATA_POLICY
 
         policy = DEFAULT_DATA_POLICY
-    violations = audit_project(project_path, policy)
     try:
-        notes = audit_project_notes(project_path)
+        snapshot = collect_data_audit(project_path, policy)
     except DataRootConfigError as exc:
         raise click.ClickException(str(exc)) from exc
+    violations = list(snapshot.violations)
+    notes = list(snapshot.notes)
 
     sink = BoundedSink(
         lookup("data audit"),
@@ -117,18 +123,25 @@ def data_audit_command(
         else None
     )
 
-    if fix and violations:
+    fresh_violations: list[Violation] = []
+    fresh_notes = []
+    if fix:
+        fresh = collect_data_audit(project_path, policy)
+        fresh_violations = list(fresh.violations)
+        fresh_notes = list(fresh.notes)
+
+    if fix and fresh_violations:
         # The post-fix report is not safely size-bounded before apply_fixes moves files:
         # JSON can add unbounded rewritten-resource details. Require the ceiling-free
         # file sink instead of risking a budget failure after mutation.
         if output_path is None:
             raise click.UsageError(
-                f"data audit --fix would act on {len(violations)} violation(s), and the "
+                f"data audit --fix would act on {len(fresh_violations)} violation(s), and the "
                 f"size of the resulting report cannot be bounded before the moves run. "
                 f"A budget failure after mutating would leave the tree changed with no "
                 f"report. Re-run with --output PATH."
             )
-        overlap = _fix_output_overlap(project_path, output_path, violations)
+        overlap = _fix_output_overlap(project_path, output_path, fresh_violations)
         if overlap is not None:
             kind, audited_path = overlap
             raise click.UsageError(
@@ -138,9 +151,9 @@ def data_audit_command(
 
     if fix:
         def apply_render_and_flush() -> None:
-            outcomes = apply_fixes(project_path, violations)
+            outcomes = apply_fixes(project_path, fresh_violations)
             if emit_json:
-                sink.write(render_json(violations, outcomes, notes))
+                sink.write(render_json(fresh_violations, outcomes, fresh_notes))
             else:
                 performed = sum(1 for o in outcomes if o.performed)
                 flagged = sum(1 for o in outcomes if not o.performed)
@@ -156,7 +169,7 @@ def data_audit_command(
                 )
             sink.flush()
 
-        if violations:
+        if fresh_violations:
             reserved = False
             try:
                 with sink.reserve_output():
@@ -175,6 +188,14 @@ def data_audit_command(
             click.echo(control_notice)
         return
 
+    from science_tool.findings.catalog import build_project_registry
+    from science_tool.findings.producers import validate_producer_result
+
+    validate_producer_result(
+        build_project_registry(project_path),
+        "data-audit",
+        data_audit_result(snapshot),
+    )
     if emit_json:
         sink.write(render_json(violations, notes=notes))
     else:

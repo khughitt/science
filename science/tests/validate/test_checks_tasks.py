@@ -36,7 +36,7 @@ def _ctx(root: Path) -> ValidateContext:
 
 
 def _messages(results: Iterable[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [result.message for result in results if severity is None or result.severity == severity.value]
 
 
 def _write_active(
@@ -352,10 +352,10 @@ def test_loader_registry_includes_tasks_after_graph() -> None:
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        graph_index = next(index for index, entry in enumerate(ordered) if entry[0] == "knowledge graph...")
-        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "task queue...")
+        graph_index = next(index for index, entry in enumerate(ordered) if entry[0] == "graph")
+        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "tasks")
 
         assert tasks_index == graph_index + 1
-        assert ordered[tasks_index] == ("task queue...", 18, "science_tool.validate.checks.tasks")
+        assert ordered[tasks_index] == ("tasks", 18, "science_tool.validate.checks.tasks")
     finally:
         CANONICAL_CHECKS[:] = original_entries

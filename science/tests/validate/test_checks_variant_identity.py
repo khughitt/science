@@ -42,32 +42,32 @@ def test_wellformed_vrs_declaration_passes_silently() -> None:
 
 def test_wrong_namespace_errors() -> None:
     ds = _ds({"namespace": "dbsnp", "locator": _locator()})
-    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity == Severity.ERROR.value]
     assert len(errors) == 1
-    assert errors[0].rule == "identity.variant-namespace-unsupported"
+    assert errors[0].rule_id == "identity.variant-namespace-unsupported"
 
 
 def test_missing_locator_errors() -> None:
     ds = _ds({"namespace": "vrs"})
-    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity == Severity.ERROR.value]
     assert len(errors) == 1
-    assert errors[0].rule == "identity.variant-locator-malformed"
+    assert errors[0].rule_id == "identity.variant-locator-malformed"
 
 
 def test_vcf_locator_requires_columns_map() -> None:
     ds = _ds({"namespace": "vrs", "locator": {"resource": "variants.csv", "format": "vcf"}})
-    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity == Severity.ERROR.value]
     assert len(errors) == 1
-    assert errors[0].rule == "identity.variant-locator-malformed"
+    assert errors[0].rule_id == "identity.variant-locator-malformed"
 
 
 def test_rsid_locator_requires_registry() -> None:
     ds = _ds({"namespace": "vrs", "locator": {"resource": "variants.csv", "format": "rsid", "column": "rsid"}})
 
-    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity is Severity.ERROR]
+    errors = [r for r in evaluate_variant_declaration([ds]) if r.severity == Severity.ERROR.value]
 
     assert len(errors) == 1
-    assert errors[0].rule == "identity.variant-locator-malformed"
+    assert errors[0].rule_id == "identity.variant-locator-malformed"
     assert "rsid locator requires registry" in errors[0].message
 
 
@@ -106,8 +106,8 @@ def test_row_layer_reports_unavailable_rsid_registry_before_row_minting(tmp_path
 
     results = list(check_variant_identity(_ctx(project)))
 
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
 
 
@@ -153,7 +153,9 @@ def test_row_layer_mints_rsid_locator(tmp_path: Path, monkeypatch) -> None:
 
     results = list(check_variant_identity(_ctx(project)))
 
-    assert [r.rule for r in results if r.rule == "identity.variant-rows-minted"] == ["identity.variant-rows-minted"]
+    assert [r.message for r in results if r.rule_id is None] == [
+        "dataset:variants: variant rows minted: minted=2"
+    ]
     assert resolve_calls == [("dataset:variant-labels-dbsnp-human", "rsid_mappings.sqlite")]
     assert calls == [("rs1", "A", "G"), ("rs2", "C", "T")]
 
@@ -185,11 +187,11 @@ def test_row_layer_reports_bad_rsid_sqlite_as_registry_unavailable(tmp_path: Pat
 
     results = list(check_variant_identity(_ctx(project)))
 
-    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
-    assert infos[0].severity is Severity.INFO
+    assert infos[0].severity == Severity.INFO.value
     assert "bad sqlite" in infos[0].message
-    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
 
 
 def test_row_layer_reports_ambiguous_rsid(tmp_path: Path, monkeypatch) -> None:
@@ -218,7 +220,7 @@ def test_row_layer_reports_ambiguous_rsid(tmp_path: Path, monkeypatch) -> None:
 
     results = list(check_variant_identity(_ctx(project)))
 
-    errors = [r for r in results if r.rule == "identity.variant-rows-unresolved"]
+    errors = [r for r in results if r.rule_id == "identity.variant-rows-unresolved"]
     assert len(errors) == 1
     assert "ambiguous-rsid=1" in errors[0].message
 
@@ -243,7 +245,7 @@ def test_row_layer_reports_short_rsid_allele_row_as_resource_invalid(tmp_path: P
 
     results = list(check_variant_identity(_ctx(project)))
 
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
     assert "missing value for column 'ALT'" in errors[0].message
 
@@ -266,19 +268,19 @@ def test_row_layer_reports_registry_unavailable_as_info(tmp_path: Path, monkeypa
 
     results = list(check_variant_identity(_ctx(project)))
 
-    infos = [r for r in results if r.rule == "identity.variant-registry-unavailable"]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
-    assert infos[0].severity is Severity.INFO
-    assert not [r for r in results if r.severity is Severity.ERROR]
+    assert infos[0].severity == Severity.INFO.value
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
 
 
 def test_declared_unresolved_is_info_not_error() -> None:
     ds = _ds({"namespace": "vrs", "resolution_status": "declared_unresolved", "locator": _locator()})
     results = list(evaluate_variant_declaration([ds]))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    infos = [r for r in results if r.severity is Severity.INFO]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    infos = [r for r in results if r.severity == Severity.INFO.value]
     assert len(infos) == 1
-    assert infos[0].rule == "identity.variant-declared-unresolved"
+    assert infos[0].rule_id is None
 
 
 def test_row_layer_reports_unresolved_defects_with_minted_count(tmp_path: Path, monkeypatch) -> None:
@@ -294,9 +296,9 @@ def test_row_layer_reports_unresolved_defects_with_minted_count(tmp_path: Path, 
     monkeypatch.setattr("science_tool.commons.variant.vrs_id", fake_vrs_id)
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-rows-unresolved"]
+    errors = [r for r in results if r.rule_id == "identity.variant-rows-unresolved"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "minted=1" in errors[0].message
     assert "ref-mismatch=1" in errors[0].message
     assert calls == [
@@ -323,8 +325,8 @@ def test_row_layer_locator_resource_can_name_datapackage_resource(tmp_path: Path
 
     results = list(check_variant_identity(_ctx(project)))
 
-    assert not [r for r in results if r.rule == "identity.variant-resource-unavailable"]
-    assert not [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    assert not [r for r in results if "unavailable" in r.message]
+    assert not [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert calls == ["NC_000001.11:100:A:T"]
 
 
@@ -337,10 +339,10 @@ def test_row_layer_reports_sequence_store_unavailable_as_info(tmp_path: Path, mo
     monkeypatch.setattr("science_tool.commons.variant.vrs_id", fake_vrs_id)
 
     results = list(check_variant_identity(_ctx(project)))
-    assert not [r for r in results if r.severity is Severity.ERROR]
-    infos = [r for r in results if r.rule == "identity.variant-store-unavailable"]
+    assert not [r for r in results if r.severity == Severity.ERROR.value]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
-    assert infos[0].severity is Severity.INFO
+    assert infos[0].severity == Severity.INFO.value
 
 
 def test_unsafe_datapackage_path_reports_resource_invalid(tmp_path: Path, monkeypatch) -> None:
@@ -355,9 +357,9 @@ def test_unsafe_datapackage_path_reports_resource_invalid(tmp_path: Path, monkey
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "unsafe datapackage path" in errors[0].message
 
 
@@ -369,9 +371,9 @@ def test_missing_locator_column_reports_resource_invalid(tmp_path: Path, monkeyp
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "missing required column 'variant'" in errors[0].message
 
 
@@ -383,9 +385,9 @@ def test_ragged_csv_row_reports_resource_invalid(tmp_path: Path, monkeypatch) ->
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "ragged row 2" in errors[0].message
 
 
@@ -397,9 +399,9 @@ def test_invalid_utf8_variant_resource_reports_resource_invalid(tmp_path: Path, 
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "cannot decode" in errors[0].message
 
 
@@ -411,10 +413,10 @@ def test_absent_locator_resource_reports_resource_unavailable(tmp_path: Path, mo
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    assert not [r for r in results if r.rule == "identity.variant-resource-invalid"]
-    infos = [r for r in results if r.rule == "identity.variant-resource-unavailable"]
+    assert not [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
-    assert infos[0].severity is Severity.INFO
+    assert infos[0].severity == Severity.INFO.value
 
 
 def test_malformed_quoted_csv_reports_resource_invalid(tmp_path: Path, monkeypatch) -> None:
@@ -425,9 +427,9 @@ def test_malformed_quoted_csv_reports_resource_invalid(tmp_path: Path, monkeypat
     )
 
     results = list(check_variant_identity(_ctx(project)))
-    errors = [r for r in results if r.rule == "identity.variant-resource-invalid"]
+    errors = [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
     assert len(errors) == 1
-    assert errors[0].severity is Severity.ERROR
+    assert errors[0].severity == Severity.ERROR.value
     assert "malformed delimited text" in errors[0].message
 
 
@@ -450,10 +452,10 @@ def test_markdown_entity_without_datapackage_reports_resource_unavailable(tmp_pa
     )
 
     results = list(_evaluate_variant_rows(_ctx(tmp_path), [ds]))
-    assert not [r for r in results if r.rule == "identity.variant-resource-invalid"]
-    infos = [r for r in results if r.rule == "identity.variant-resource-unavailable"]
+    assert not [r for r in results if r.rule_id == "identity.variant-resource-invalid"]
+    infos = [r for r in results if r.rule_id is None]
     assert len(infos) == 1
-    assert infos[0].severity is Severity.INFO
+    assert infos[0].severity == Severity.INFO.value
 
 
 def test_row_expr_builds_vcf_shorthand_from_column_mapping() -> None:

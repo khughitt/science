@@ -14,12 +14,18 @@ from pathlib import Path
 from pydantic import ValidationError
 from science_model.run_fingerprint import ExecutorKind, RunDeclaration, RunFingerprint
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
 from science_tool.entity_scan import iter_entity_markdown
-from science_tool.run_fingerprint_policy import RULE_AUTHORED_CAPTURABLE, evaluate_fingerprint
-from science_tool.validate.checks import Check
+from science_tool.run_fingerprint_policy import (
+    RULE_AUTHORED_CAPTURABLE,
+    RULE_INCOMPLETE,
+    evaluate_fingerprint,
+)
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 RULE_ORIGIN_UNVERIFIED = "run.fingerprint-origin-unverified"
 RULE_MALFORMED = "run.fingerprint-malformed"
@@ -37,6 +43,27 @@ _DECLARED_FIELDS: tuple[str, ...] = (
 )
 
 
+SECTION, RULES = declare_validation_rules(
+    section_id="workflow-runs",
+    section_title="workflow runs",
+    section_order=153,
+    rule_ids=(
+        "run.execution-malformed",
+        "run.fingerprint-authored-capturable",
+        "run.fingerprint-declaration-drift",
+        "run.fingerprint-incomplete",
+        "run.fingerprint-malformed",
+        "run.fingerprint-origin-unverified",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+FINGERPRINT_RULES = {
+    RULE_INCOMPLETE: RULES["run.fingerprint-incomplete"],
+    RULE_AUTHORED_CAPTURABLE: RULES["run.fingerprint-authored-capturable"],
+}
+
+
 def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     """Every workflow-run under the kind's root, at any depth.
 
@@ -48,7 +75,7 @@ def _runs(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     return [(p, ctx.frontmatter(p)) for p in iter_entity_markdown(root)]
 
 
-def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Result | None:
+def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> CheckObservation | None:
     if fp.executor is not ExecutorKind.COMMONS:
         return None
     origin = fp.capture_origin
@@ -57,34 +84,43 @@ def _verify_origin(ctx: ValidateContext, path: Path, fp: RunFingerprint) -> Resu
     if origin.source_ref is None:
         return None
     if Path(origin.source_ref).is_absolute():
-        return Result(
-            severity=Severity.ERROR, path=path, line=None,
+        return validation_observation(
+            severity=Severity.ERROR,
+            path=path,
+            line=None,
             message=f"{path.name}: capture_origin.source_ref {origin.source_ref!r} must be relative to the project root",
-            rule=RULE_ORIGIN_UNVERIFIED, task=None,
+            rule=RULES["run.fingerprint-origin-unverified"],
+            task=None,
+            qualifiers={"key": ["source-ref"]},
         )
     source = ctx.project_root / origin.source_ref
     if not source.is_file():
-        return Result(
-            severity=Severity.ERROR, path=path, line=None,
+        return validation_observation(
+            severity=Severity.ERROR,
+            path=path,
+            line=None,
             message=f"{path.name}: capture_origin.source_ref {origin.source_ref!r} does not exist",
-            rule=RULE_ORIGIN_UNVERIFIED, task=None,
+            rule=RULES["run.fingerprint-origin-unverified"],
+            task=None,
+            qualifiers={"key": ["source-ref"]},
         )
     if origin.source_digest is None:
         return None
     actual = hashlib.sha256(source.read_bytes()).hexdigest()
     if actual != origin.source_digest:
-        return Result(
-            severity=Severity.ERROR, path=path, line=None,
-            message=(
-                f"{path.name}: capture_origin.source_digest {origin.source_digest!r} does not "
-                f"match sha256 of {origin.source_ref!r} ({actual!r})"
-            ),
-            rule=RULE_ORIGIN_UNVERIFIED, task=None,
+        return validation_observation(
+            severity=Severity.ERROR,
+            path=path,
+            line=None,
+            message=f"{path.name}: capture_origin.source_digest {origin.source_digest!r} does not match sha256 of {origin.source_ref!r} ({actual!r})",
+            rule=RULES["run.fingerprint-origin-unverified"],
+            task=None,
+            qualifiers={"key": ["source-digest"]},
         )
     return None
 
 
-def _check_drift(path: Path, declaration: RunDeclaration | None, fp: RunFingerprint) -> Iterator[Result]:
+def _check_drift(path: Path, declaration: RunDeclaration | None, fp: RunFingerprint) -> Iterator[CheckObservation]:
     """The captured fingerprint must still agree with what the run declares.
 
     `register-run` copies the declaration into the fingerprint. Editing
@@ -92,30 +128,32 @@ def _check_drift(path: Path, declaration: RunDeclaration | None, fp: RunFingerpr
     conditions that no longer hold — silently, since every digest still verifies.
     """
     if declaration is None:
-        yield Result(
-            severity=Severity.ERROR, path=path, line=None,
-            message=(
-                f"{path.name}: carries a captured fingerprint but declares no `execution:` "
-                "block; the fingerprint records conditions nothing asserts"
-            ),
-            rule=RULE_DECLARATION_DRIFT, task=None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=path,
+            line=None,
+            message=f"{path.name}: carries a captured fingerprint but declares no `execution:` block; the fingerprint records conditions nothing asserts",
+            rule=RULES["run.fingerprint-declaration-drift"],
+            task=None,
+            qualifiers={"key": ["execution"]},
         )
         return
     for field in _DECLARED_FIELDS:
         declared, captured = getattr(declaration, field), getattr(fp, field)
         if declared != captured:
-            yield Result(
-                severity=Severity.ERROR, path=path, line=None,
-                message=(
-                    f"{path.name}: execution.{field} is {declared!r} but the captured "
-                    f"fingerprint records {captured!r}; re-register the run"
-                ),
-                rule=RULE_DECLARATION_DRIFT, task=None,
+            yield validation_observation(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
+                message=f"{path.name}: execution.{field} is {declared!r} but the captured fingerprint records {captured!r}; re-register the run",
+                rule=RULES["run.fingerprint-declaration-drift"],
+                task=None,
+                qualifiers={"key": ["execution", field]},
             )
 
 
-@Check(section="workflow runs", order=10)
-def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=10, producer_id="validate.workflow-runs", rules=tuple(RULES.values()))
+def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """A workflow-run's declaration and its captured fingerprint must both hold.
 
     `execution:` is authored and stands alone — a run that declares one and has
@@ -130,10 +168,14 @@ def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
             try:
                 declaration = RunDeclaration.model_validate(raw_execution)
             except ValidationError as exc:
-                yield Result(
-                    severity=Severity.ERROR, path=path, line=None,
+                yield validation_observation(
+                    severity=Severity.ERROR,
+                    path=path,
+                    line=None,
                     message=f"{path.name}: malformed execution declaration: {exc.errors()[0]['msg']}",
-                    rule=RULE_EXECUTION_MALFORMED, task=None,
+                    rule=RULES["run.execution-malformed"],
+                    task=None,
+                    qualifiers={"key": ["execution"]},
                 )
                 # An unparseable declaration cannot be compared against anything.
                 continue
@@ -144,22 +186,29 @@ def check_run_fingerprint_obligations(ctx: ValidateContext) -> Iterator[Result]:
         try:
             fingerprint = RunFingerprint.model_validate(raw)
         except ValidationError as exc:
-            yield Result(
-                severity=Severity.ERROR, path=path, line=None,
+            yield validation_observation(
+                severity=Severity.ERROR,
+                path=path,
+                line=None,
                 message=f"{path.name}: malformed fingerprint: {exc.errors()[0]['msg']}",
-                rule=RULE_MALFORMED, task=None,
+                rule=RULES["run.fingerprint-malformed"],
+                task=None,
+                qualifiers={"key": ["fingerprint"]},
             )
             continue
 
         yield from _check_drift(path, declaration, fingerprint)
 
         for finding in evaluate_fingerprint(fingerprint):
-            severity = (
-                Severity.ERROR if finding.rule == RULE_AUTHORED_CAPTURABLE else Severity.WARN
-            )
-            yield Result(
-                severity=severity, path=path, line=None,
-                message=f"{path.name}: {finding.message}", rule=finding.rule, task=None,
+            severity = Severity.ERROR if finding.rule == RULE_AUTHORED_CAPTURABLE else Severity.WARN
+            yield validation_observation(
+                severity=severity,
+                path=path,
+                line=None,
+                message=f"{path.name}: {finding.message}",
+                rule=FINGERPRINT_RULES[finding.rule],
+                task=None,
+                qualifiers={"key": [finding.component]},
             )
 
         origin_result = _verify_origin(ctx, path, fingerprint)

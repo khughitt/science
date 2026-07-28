@@ -323,4 +323,4 @@ def test_qa_check_fires_on_shared_source_without_group(tmp_path: Path) -> None:
     results = list(check_independence_ungrouped_collapse(ctx))
     assert len(results) == 1, f"Expected 1 result, got {len(results)}: {results}"
     assert results[0].severity == Severity.ERROR
-    assert results[0].rule == "independence.ungrouped-collapse"
+    assert results[0].rule_id == "independence.ungrouped-collapse"

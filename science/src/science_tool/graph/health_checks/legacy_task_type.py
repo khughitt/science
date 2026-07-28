@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from science_tool.graph.health_checks.base import HealthCheck
+from pydantic import BaseModel, ConfigDict
+from science_model.audit import EntitySubject, FindingRule, FindingSection, LocationEvidence
+
+from science_tool.findings.producers import FindingProducer
+from science_tool.graph.health_checks.base import HealthCheck, HealthContext, composed_result
 from science_tool.instruments import InstrumentResult
 
 
@@ -13,6 +17,31 @@ class LegacyTaskTypeFinding(TypedDict):
     task_id: str
     legacy_type: str
     source_file: str
+
+
+class LegacyTaskTypeQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    legacy_type: str
+
+
+SECTION = FindingSection(id="legacy-task-type", title="Legacy task type", section_order=213)
+RULE = FindingRule(
+    id="task.legacy-type",
+    severities=frozenset({"warn"}),
+    subject_types=frozenset({"entity"}),
+    qualifier_schema=LegacyTaskTypeQualifiers,
+    title="Legacy task type",
+    section=SECTION.id,
+    display_order=1,
+)
+PRODUCER = FindingProducer(
+    producer_id="legacy_task_type",
+    namespace="health_checks",
+    source_module="graph/health_checks/legacy_task_type.py",
+    rules=(RULE,),
+    sections=(SECTION,),
+)
 
 
 def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskTypeFinding]:
@@ -44,10 +73,25 @@ def collect_legacy_task_type(project_root: Path) -> InstrumentResult[LegacyTaskT
     return InstrumentResult.from_rows(findings)
 
 
+def run_check(context: HealthContext):
+    observed = collect_legacy_task_type(context.project_root)
+    findings = [
+        RULE.build(
+            subject=EntitySubject(ref=f"task:{row['task_id']}"),
+            severity="warn",
+            qualifiers={"legacy_type": row["legacy_type"]},
+            message=f"Task still uses legacy type {row['legacy_type']!r}.",
+            evidence=[LocationEvidence(path=row["source_file"])],
+        )
+        for row in observed.rows
+    ]
+    return composed_result(cast("InstrumentResult[object]", observed), findings)
+
+
 CHECK = HealthCheck(
     name="legacy_task_type",
     description="Find tasks still carrying the legacy type field.",
     requires_sources=False,
-    run=lambda context: collect_legacy_task_type(context.project_root),
-    empty=lambda _root: [],
+    run=run_check,
+    producer=PRODUCER,
 )

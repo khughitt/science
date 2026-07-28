@@ -85,6 +85,39 @@ def test_fix_without_output_refuses(tmp_path: Path):
     assert not (tmp_path / "results/exp1/RESULTS.md").exists()
 
 
+def test_fix_recollects_before_preflight_guards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool import data_cli
+    from science_tool.data_audit import DataAuditSnapshot, Quadrant, Violation
+    from science_tool.data_policy import FileClass
+
+    _init_repo(tmp_path)
+    snapshots = iter(
+        (
+            DataAuditSnapshot(violations=(), notes=()),
+            DataAuditSnapshot(
+                violations=(
+                    Violation(
+                        quadrant=Quadrant.STRANDED_RECORD,
+                        path="data/processed/exp1/RESULTS.md",
+                        file_class=FileClass.RECORD,
+                        proposed_target="results/exp1/RESULTS.md",
+                    ),
+                ),
+                notes=(),
+            ),
+        )
+    )
+    monkeypatch.setattr(data_cli, "collect_data_audit", lambda *_args: next(snapshots))
+
+    result = _run(tmp_path, "--fix", "--json")
+
+    assert result.exit_code != 0
+    assert "--output" in result.output
+
+
 def test_fix_rejects_output_that_is_a_violation_source(tmp_path: Path):
     _init_repo(tmp_path)
     source = tmp_path / "data/processed/exp1/RESULTS.md"

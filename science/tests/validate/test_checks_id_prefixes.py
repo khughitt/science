@@ -41,7 +41,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def _messages(results: Iterable[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [result.message for result in results if severity is None or result.severity == severity.value]
 
 
 def test_matching_prefixes_emit_info(tmp_path: Path) -> None:
@@ -162,7 +162,7 @@ def test_id_prefixes_scans_entities_dir(tmp_path) -> None:
     from science_tool.validate.checks.id_prefixes import check_id_prefixes
     from science_tool.validate.context import ValidateContext
     ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
-    assert any(r.severity is Severity.WARN for r in check_id_prefixes(ctx))
+    assert any(r.severity == Severity.WARN.value for r in check_id_prefixes(ctx))
 
 
 def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:
@@ -177,14 +177,14 @@ def test_loader_registry_includes_id_prefixes_after_tasks_at_order_19() -> None:
 
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
-        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "task queue...")
+        tasks_index = next(index for index, entry in enumerate(ordered) if entry[0] == "tasks")
         id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "per-kind id-prefix conformance..."
+            index for index, entry in enumerate(ordered) if entry[0] == "id prefixes"
         )
 
         assert id_prefixes_index == tasks_index + 1
         assert ordered[id_prefixes_index] == (
-            "per-kind id-prefix conformance...",
+            "id prefixes",
             19,
             "science_tool.validate.checks.id_prefixes",
         )

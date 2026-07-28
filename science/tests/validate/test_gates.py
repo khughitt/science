@@ -1,6 +1,5 @@
-from pathlib import Path
-
 import pytest
+from science_model.audit import AuditFinding, ProjectSubject
 
 from science_tool.validate.gates import (
     GATE_TIERS,
@@ -8,11 +7,13 @@ from science_tool.validate.gates import (
     gated_findings,
     resolve_gate_tier,
 )
-from science_tool.validate.result import Result, Severity
-
-
-def _r(rule: str) -> Result:
-    return Result(Severity.WARN, Path("code/x.py"), None, "msg", rule, None)
+def _r(rule: str) -> AuditFinding:
+    return AuditFinding(
+        rule_id=rule,
+        subject=ProjectSubject(),
+        severity="warn",
+        message="msg",
+    )
 
 
 def test_tier_order_is_stable() -> None:
@@ -57,8 +58,8 @@ def test_hygiene_tier_is_cumulative() -> None:
 
 def test_gated_findings_filters_by_cumulative_rules() -> None:
     findings = [_r("code.ghost"), _r("code.metadata-gap"), _r("manifest")]
-    assert [f.rule for f in gated_findings(findings, "ghost-files")] == ["code.ghost"]
-    assert {f.rule for f in gated_findings(findings, "hygiene")} == {
+    assert [f.rule_id for f in gated_findings(findings, "ghost-files")] == ["code.ghost"]
+    assert {f.rule_id for f in gated_findings(findings, "hygiene")} == {
         "code.ghost",
         "code.metadata-gap",
     }

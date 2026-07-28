@@ -19,6 +19,8 @@ from rdflib import RDF, Graph, Literal, URIRef
 from rdflib.namespace import PROV
 from science_model.reasoning import EvidenceType
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
 from science_tool.graph.belief import (
     aggregate_belief,
@@ -35,14 +37,37 @@ from science_tool.graph.belief_weights import (
 )
 from science_tool.graph.io import SCI_NS
 from science_tool.graph.store import _evidence_targets_for_uri, _graph_uri
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 # Observability keys that, if shared between two "independent" lines on the
 # same target, make them suspect.
 _OBSERVABILITY_KEYS = ("shared_dataset", "shared_lab", "shared_platform", "shared_cohort")
 _B2_DEPENDENCE_ROLES = frozenset({"analyzed", "set_definition_source", "training", "upstream"})
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="evidence-lines",
+    section_title="evidence lines",
+    section_order=148,
+    rule_ids=(
+        "belief.fragile-single-line",
+        "belief.nonreproducible",
+        "evidence.authored-confidence-invalid",
+        "evidence.empirical.requires-dataset-usage",
+        "evidence.proxy-ungated",
+        "evidence.reference-basis-no-identification-strength",
+        "evidence.strength-implausible",
+        "evidence.unscored-line",
+        "evidence.unstanced",
+        "independence.dataset-derived-contradiction",
+        "independence.shared-dataset-refuted",
+        "independence.suspect-circular",
+        "independence.ungrouped-collapse",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def _ev_lines(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -92,8 +117,14 @@ def _derived_literature_coverage(ctx: ValidateContext, propositions: list[tuple[
 #   (b) Proposition source_refs with no matching evidence-line coverage.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=23)
-def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(
+    section=SECTION,
+    order=23,
+    producer_id="validate.evidence-lines.evidence-lines-unstanced",
+    rules=tuple(RULES.values()),
+)
+def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[CheckObservation]:
     lines = _ev_lines(ctx)
     prop_dir = ctx.project_root / resolve_path_policy("proposition").root
     prop_paths: list[Path] = sorted(prop_dir.glob("*.md")) if prop_dir.is_dir() else []
@@ -102,22 +133,24 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
     # Sub-case (a): missing stance or missing/empty target.
     for path, fm in lines:
         if not fm.get("stance"):
-            yield Result(
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=path,
                 line=None,
                 message=f"{path.name}: missing required field 'stance'",
-                rule="evidence.unstanced",
+                rule=RULES["evidence.unstanced"],
                 task=None,
+                qualifiers={"key": ["required-field", "stance"]},
             )
         if not fm.get("target"):
-            yield Result(
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=path,
                 line=None,
                 message=f"{path.name}: missing or empty required field 'target'",
-                rule="evidence.unstanced",
+                rule=RULES["evidence.unstanced"],
                 task=None,
+                qualifiers={"key": ["required-field", "target"]},
             )
 
     # Sub-case (b): uncounted proposition source_refs.
@@ -142,16 +175,14 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
             if prefix == "cite":
                 continue
             if (str(prop_id), ref) not in covered:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.WARN,
                     path=prop_path,
                     line=None,
-                    message=(
-                        f"{prop_path.name}: source '{ref}' on proposition '{prop_id}' "
-                        f"has no matching evidence-line (target={prop_id!r}, source={ref!r})"
-                    ),
-                    rule="evidence.unstanced",
+                    message=f"{prop_path.name}: source '{ref}' on proposition '{prop_id}' has no matching evidence-line (target={prop_id!r}, source={ref!r})",
+                    rule=RULES["evidence.unstanced"],
                     task=None,
+                    qualifiers={"key": ["source-ref", str(prop_id), ref]},
                 )
 
 
@@ -160,24 +191,25 @@ def check_evidence_lines_unstanced(ctx: ValidateContext) -> Iterator[Result]:
 #   Lines with independence in {shared-source, circular} but no group.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=24)
-def check_independence_ungrouped_collapse(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section=SECTION, order=24, producer_id="validate.evidence-lines.independence-ungrouped-collapse", rules=())
+def check_independence_ungrouped_collapse(ctx: ValidateContext) -> Iterator[CheckObservation]:
     _NEEDS_GROUP = {"shared-source", "circular"}
     for path, fm in _ev_lines(ctx):
         independence = fm.get("independence", "")
         if independence in _NEEDS_GROUP:
             group = fm.get("independence_group", "")
             if not group:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: independence='{independence}' requires "
-                        f"'independence_group' to be set (collapse-to is undefined without it)"
-                    ),
-                    rule="independence.ungrouped-collapse",
+                    message=f"{path.name}: independence='{independence}' requires 'independence_group' to be set (collapse-to is undefined without it)",
+                    rule=RULES["independence.ungrouped-collapse"],
                     task=None,
+                    qualifiers={
+                        "key": ["independence-group", str(independence)]
+                    },
                 )
 
 
@@ -187,8 +219,9 @@ def check_independence_ungrouped_collapse(ctx: ValidateContext) -> Iterator[Resu
 #   OR share a non-empty observability key value.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=25)
-def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section=SECTION, order=25, producer_id="validate.evidence-lines.independence-suspect-circular", rules=())
+def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[CheckObservation]:
     lines = _ev_lines(ctx)
 
     # Collect only lines tagged as independent, grouped by target.
@@ -205,52 +238,62 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[Result
                 path_b, fm_b = group[j]
                 shared_key, shared_val = _first_shared_signal(fm_a, fm_b)
                 if shared_key is not None:
-                    yield Result(
+                    yield validation_observation(
                         severity=Severity.WARN,
                         path=path_a,
                         line=None,
-                        message=(
-                            f"{path_a.name} and {path_b.name} are both tagged "
-                            f"independence=independent on the same target but share "
-                            f"{shared_key}={shared_val!r}"
-                        ),
-                        rule="independence.suspect-circular",
+                        message=f"{path_a.name} and {path_b.name} are both tagged independence=independent on the same target but share {shared_key}={shared_val!r}",
+                        rule=RULES["independence.suspect-circular"],
                         task=None,
+                        qualifiers={
+                            "key": [
+                                "shared-signal",
+                                path_b.name,
+                                shared_key,
+                                str(shared_val),
+                            ]
+                        },
                     )
 
     _knowledge, provenance = _load_belief_graphs(ctx)
     if provenance is None:
         return
     for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCommitment):
-        members = [member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)]
+        members = [
+            member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)
+        ]
         for member in members:
             if _line_independence(provenance, member) == "independent":
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=None,
                     line=None,
                     message=f"{member}: authored independence=independent contradicts committed dataset-derived shared-source dependence",
-                    rule="independence.dataset-derived-contradiction",
+                    rule=RULES["independence.dataset-derived-contradiction"],
                     task=None,
+                    qualifiers={"key": ["member", str(member)]},
                 )
     for record in provenance.subjects(RDF.type, SCI_NS.DatasetIndependenceCandidate):
-        members = [member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)]
+        members = [
+            member for member in provenance.objects(record, SCI_NS.independenceMember) if isinstance(member, URIRef)
+        ]
         if len(members) < 2:
             continue
-        eligible = [
-            member
-            for member in members
-            if _line_independence(provenance, member) in (None, "independent")
-        ]
+        eligible = [member for member in members if _line_independence(provenance, member) in (None, "independent")]
         if len(eligible) >= 2:
-            reason = next((str(value) for value in provenance.objects(record, SCI_NS.independenceReason)), "dataset-derived")
-            yield Result(
+            reason = next(
+                (str(value) for value in provenance.objects(record, SCI_NS.independenceReason)), "dataset-derived"
+            )
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=None,
                 line=None,
                 message=f"dataset-derived candidate dependence ({reason}) links {len(eligible)} untagged/authored-independent lines on the same target",
-                rule="independence.suspect-circular",
+                rule=RULES["independence.suspect-circular"],
                 task=None,
+                qualifiers={
+                    "key": ["candidate", *sorted(str(member) for member in eligible)]
+                },
             )
 
     b2_direct_datasets_by_member: dict[str, set[str]] = defaultdict(set)
@@ -266,13 +309,16 @@ def check_independence_suspect_circular(ctx: ValidateContext) -> Iterator[Result
         member = URIRef(member_uri)
         authored_dataset = next((str(value) for value in provenance.objects(member, SCI_NS.sharedDataset)), None)
         if authored_dataset and b2_datasets and authored_dataset not in b2_datasets:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=None,
                 line=None,
                 message=f"{member_uri}: authored shared_dataset {authored_dataset!r} is not supported by dataset-derived independence records",
-                rule="independence.shared-dataset-refuted",
+                rule=RULES["independence.shared-dataset-refuted"],
                 task=None,
+                qualifiers={
+                    "key": ["member", member_uri, "dataset", authored_dataset]
+                },
             )
 
 
@@ -308,9 +354,7 @@ def _direct_dependence_datasets_for_member(provenance, member: URIRef) -> set[st
     return datasets
 
 
-def _first_shared_signal(
-    fm_a: dict, fm_b: dict
-) -> tuple[str, str] | tuple[None, None]:
+def _first_shared_signal(fm_a: dict, fm_b: dict) -> tuple[str, str] | tuple[None, None]:
     """Return (key, value) for the first signal shared between two frontmatters."""
     # Check independence_group first.
     grp_a = fm_a.get("independence_group", "")
@@ -331,21 +375,21 @@ def _first_shared_signal(
 #   strength=strong + evidence_role=background_constraint is contradictory.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=26)
-def check_evidence_strength_implausible(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section=SECTION, order=26, producer_id="validate.evidence-lines.evidence-strength-implausible", rules=())
+def check_evidence_strength_implausible(ctx: ValidateContext) -> Iterator[CheckObservation]:
     for path, fm in _ev_lines(ctx):
         if fm.get("strength") == "strong" and fm.get("evidence_role") == "background_constraint":
-            yield Result(
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=path,
                 line=None,
-                message=(
-                    f"{path.name}: strength='strong' combined with "
-                    f"evidence_role='background_constraint' is implausible — "
-                    f"'strong' requires a direct test, not background framing"
-                ),
-                rule="evidence.strength-implausible",
+                message=f"{path.name}: strength='strong' combined with evidence_role='background_constraint' is implausible — 'strong' requires a direct test, not background framing",
+                rule=RULES["evidence.strength-implausible"],
                 task=None,
+                qualifiers={
+                    "key": ["strength-role", "strong", "background_constraint"]
+                },
             )
 
 
@@ -380,30 +424,26 @@ def _claims(knowledge: Graph) -> Iterator[URIRef]:
                 yield subj
 
 
-@Check(section="evidence lines", order=27)
-def check_belief_authoring(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=27, producer_id="validate.evidence-lines.belief-authoring", rules=())
+def check_belief_authoring(ctx: ValidateContext) -> Iterator[CheckObservation]:
     knowledge, provenance = _load_belief_graphs(ctx)
     if knowledge is None or provenance is None:
         return
     for claim in _claims(knowledge):
-        units = collect_evidence_units(
-            knowledge, provenance, _evidence_targets_for_uri(knowledge, claim)
-        )
+        units = collect_evidence_units(knowledge, provenance, _evidence_targets_for_uri(knowledge, claim))
         belief = aggregate_belief(units)
 
         # #6 evidence.proxy-ungated (line-level, both stances — rule 5 is symmetric)
         for u in (*belief.support_units, *belief.dispute_units):
             if is_proxy_gated(u) and u.evidence_role == "direct_test":
-                yield Result(
+                yield validation_observation(
                     severity=Severity.WARN,
                     path=None,
                     line=None,
-                    message=(
-                        f"{u.line_uri}: indirect/derived proxy as direct_test "
-                        f"without a measurement_model"
-                    ),
-                    rule="evidence.proxy-ungated",
+                    message=f"{u.line_uri}: indirect/derived proxy as direct_test without a measurement_model",
+                    rule=RULES["evidence.proxy-ungated"],
                     task=None,
+                    qualifiers={"key": ["line", str(u.line_uri)]},
                 )
 
 
@@ -413,8 +453,9 @@ def check_belief_authoring(ctx: ValidateContext) -> Iterator[Result]:
 #   (magnitude or contested), the claim's conclusion is not robust.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=29)
-def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section=SECTION, order=29, producer_id="validate.evidence-lines.belief-fragile-single-line", rules=())
+def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """#7 leave-one-out: if dropping any single kept independent unit flips the ordinal
     belief_state (magnitude or contested), the claim's conclusion is not robust."""
     knowledge, provenance = _load_belief_graphs(ctx)
@@ -434,16 +475,14 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
         for drop in sorted(kept_uris):
             reduced = aggregate_belief([u for u in units if u.line_uri != drop])
             if reduced.magnitude != base.magnitude or reduced.contested != base.contested:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.WARN,
                     path=None,
                     line=None,
-                    message=(
-                        f"{claim}: belief_state flips ({base.display()} -> "
-                        f"{reduced.display()}) when dropping a single line ({drop})"
-                    ),
-                    rule="belief.fragile-single-line",
+                    message=f"{claim}: belief_state flips ({base.display()} -> {reduced.display()}) when dropping a single line ({drop})",
+                    rule=RULES["belief.fragile-single-line"],
                     task=None,
+                    qualifiers={"key": ["claim", str(claim), "drop", str(drop)]},
                 )
                 break
 
@@ -456,13 +495,17 @@ def check_belief_fragile_single_line(ctx: ValidateContext) -> Iterator[Result]:
 # ---------------------------------------------------------------------------
 
 _GOLDEN_SCALAR_FIELDS = (
-    "massed_support_score", "massed_dispute_score",
-    "massed_support_band", "massed_dispute_band", "net_band", "net_robust",
+    "massed_support_score",
+    "massed_dispute_score",
+    "massed_support_band",
+    "massed_dispute_band",
+    "net_band",
+    "net_robust",
 )
 
 
-@Check(section="evidence lines", order=30)
-def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=30, producer_id="validate.evidence-lines.belief-nonreproducible", rules=())
+def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """#8 golden: equal inputs (input_hashes + config_version + scalar_enabled + policy identity)
     must reproduce the stored belief. Differing inputs OR a different BeliefPolicy are a
     legitimate change, not flagged."""
@@ -477,7 +520,8 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
         # All stored rows for this claim whose input set matches the current one, then the
         # LATEST among them (file order == append order). Latest-matching, not latest-per-claim.
         matches = [
-            r for r in stored
+            r
+            for r in stored
             if r["claim"] == now["claim"]
             and sorted(r["input_hashes"]) == sorted(now["input_hashes"])
             and r["config_version"] == now["config_version"]
@@ -488,10 +532,7 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
         if not matches:
             continue
         prior = matches[-1]
-        diffs = [
-            f for f in ("belief_state", "contested", "diagnostic_dispute_count")
-            if prior.get(f) != now.get(f)
-        ]
+        diffs = [f for f in ("belief_state", "contested", "diagnostic_dispute_count") if prior.get(f) != now.get(f)]
         # authored_capped compared with an explicit False default so a pre-Slice-B prior row
         # (read_snapshots already normalizes it to False) never produces a spurious
         # belief.nonreproducible error against a current authored_capped == False result.
@@ -502,16 +543,14 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
         if now["scalar_enabled"]:
             diffs += [f for f in _GOLDEN_SCALAR_FIELDS if prior.get(f) != now.get(f)]
         if diffs:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=snap_file,
                 line=None,
-                message=(
-                    f"{now['claim']}: belief not reproducible from identical inputs "
-                    f"(differing fields: {', '.join(diffs)})"
-                ),
-                rule="belief.nonreproducible",
+                message=f"{now['claim']}: belief not reproducible from identical inputs (differing fields: {', '.join(diffs)})",
+                rule=RULES["belief.nonreproducible"],
                 task=None,
+                qualifiers={"key": ["claim", str(now["claim"])]},
             )
 
 
@@ -521,8 +560,14 @@ def check_belief_nonreproducible(ctx: ValidateContext) -> Iterator[Result]:
 #   Staged lines (belief_eligible: false) are exempt. Non-empirical lines unaffected.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=31)
-def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(
+    section=SECTION,
+    order=31,
+    producer_id="validate.evidence-lines.belief-eligible-empirical-has-dataset-usage",
+    rules=(),
+)
+def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """#10 A belief-eligible empirical evidence-line (evidence_type==empirical_data_evidence)
     must declare non-empty dataset_usage. Lines with belief_eligible: false (staged) are exempt.
     Non-empirical types are not subject to this rule."""
@@ -549,17 +594,14 @@ def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> I
         # Check that dataset_usage is non-empty.
         dataset_usage = fm.get("dataset_usage")
         if not dataset_usage:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=path,
                 line=None,
-                message=(
-                    f"{path.name}: empirical evidence-line is belief-eligible but "
-                    f"declares no dataset_usage — add at least one dataset_usage entry "
-                    f"or set belief_eligible: false to stage it"
-                ),
-                rule="evidence.empirical.requires_dataset_usage",
+                message=f"{path.name}: empirical evidence-line is belief-eligible but declares no dataset_usage — add at least one dataset_usage entry or set belief_eligible: false to stage it",
+                rule=RULES["evidence.empirical.requires-dataset-usage"],
                 task=None,
+                qualifiers={"key": ["required-field", "dataset_usage"]},
             )
 
 
@@ -571,8 +613,9 @@ def check_belief_eligible_empirical_has_dataset_usage(ctx: ValidateContext) -> I
 #   negative_control) are recognized-but-non-massed and never flagged.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=28)
-def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(section=SECTION, order=28, producer_id="validate.evidence-lines.evidence-unscored-line", rules=())
+def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """A massable (non-diagnostic) support/dispute line that cannot be scored — surfaces an
     authored-metadata gap. Diagnostic roles (model_criticism/negative_control) are
     recognized-but-non-massed and never flagged."""
@@ -586,16 +629,14 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
         if normalize_evidence_type(fm.get("evidence_type")) == DEFAULT_BELIEF_POLICY.authored_assertion_type:
             conf = fm.get("confidence")
             if not isinstance(conf, (int, float)) or isinstance(conf, bool) or not (0.0 <= conf <= 1.0):
-                yield Result(
+                yield validation_observation(
                     severity=Severity.WARN,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: authored assertion (expert_judgment) has missing or "
-                        f"out-of-range confidence — set confidence in [0, 1] so it can be scored"
-                    ),
-                    rule="evidence.authored-confidence-invalid",
+                    message=f"{path.name}: authored assertion (expert_judgment) has missing or out-of-range confidence — set confidence in [0, 1] so it can be scored",
+                    rule=RULES["evidence.authored-confidence-invalid"],
                     task=None,
+                    qualifiers={"key": ["field", "confidence"]},
                 )
             continue
         role = fm.get("evidence_role") or ""
@@ -609,13 +650,14 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
         if (fm.get("strength") or "") not in STRENGTH_RANK:
             missing.append("strength")
         if missing:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.WARN,
                 path=path,
                 line=None,
                 message=f"evidence-line cannot be scored (missing/unrecognized: {', '.join(missing)})",
-                rule="evidence.unscored-line",
+                rule=RULES["evidence.unscored-line"],
                 task=None,
+                qualifiers={"key": ["fields", *missing]},
             )
 
 
@@ -626,18 +668,21 @@ def check_evidence_unscored_line(ctx: ValidateContext) -> Iterator[Result]:
 #   author set identification_strength: structural. No scoring effect.
 # ---------------------------------------------------------------------------
 
-@Check(section="evidence lines", order=32)
-def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> Iterator[Result]:
+
+@Check(
+    section=SECTION,
+    order=32,
+    producer_id="validate.evidence-lines.reference-basis-no-identification-strength",
+    rules=(),
+)
+def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """#9 authoring nudge (A2/A-D4): lines resting on a reference dataset but declaring no
     identification_strength should consider setting identification_strength: structural."""
     knowledge, provenance = _load_belief_graphs(ctx)
     if knowledge is None or provenance is None:
         return
 
-    reference_uris = {
-        str(s)
-        for s, _, _ in knowledge.triples((None, SCI_NS.sourceClass, Literal("reference")))
-    }
+    reference_uris = {str(s) for s, _, _ in knowledge.triples((None, SCI_NS.sourceClass, Literal("reference")))}
     if not reference_uris:
         return
 
@@ -649,15 +694,12 @@ def check_reference_basis_no_identification_strength(ctx: ValidateContext) -> It
             continue
         if any(provenance.triples((line, SCI_NS.identificationStrength, None))):
             continue
-        yield Result(
+        yield validation_observation(
             severity=Severity.WARN,
             path=None,
             line=None,
-            message=(
-                f"{line}: evidence rests on a reference dataset but declares no "
-                f"identification_strength; if the curated set IS the basis of the claim, "
-                f"set identification_strength: structural (A2/A-D4)"
-            ),
-            rule="evidence.reference-basis-no-identification-strength",
+            message=f"{line}: evidence rests on a reference dataset but declares no identification_strength; if the curated set IS the basis of the claim, set identification_strength: structural (A2/A-D4)",
+            rule=RULES["evidence.reference-basis-no-identification-strength"],
             task=None,
+            qualifiers={"key": ["line", str(line)]},
         )

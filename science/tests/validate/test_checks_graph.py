@@ -40,7 +40,11 @@ def _ctx(root: Path, *, verbose: bool = False, peers: str = "") -> ValidateConte
 
 
 def _messages(results: list[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [
+        result.message
+        for result in results
+        if severity is None or result.severity == severity.value
+    ]
 
 
 def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
@@ -646,9 +650,9 @@ def test_registry_loads_graph_after_notes_at_order_17() -> None:
         importlib.reload(graph)
 
         sections = [entry.section for entry in CANONICAL_CHECKS]
-        graph_index = sections.index("knowledge graph...")
+        graph_index = sections.index("graph")
 
-        assert sections[graph_index - 1] == "notes..."
+        assert sections[graph_index - 1] == "notes"
         assert CANONICAL_CHECKS[graph_index].order == 17
     finally:
         clear_checks_for_tests()

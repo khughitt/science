@@ -12,7 +12,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import Callable, TypedDict, TypeVar
 
+from science_model.audit import AuditFinding, ProducerMetrics
+
+from science_tool.findings.producers import FindingProducer, FindingProducerResult
 from science_tool.graph.sources import ProjectSources
+from science_tool.instruments import InstrumentResult
 
 #: An unscannable project does not raise — ``load_project_sources`` simply returns zero
 #: entities, and every entity-driven check then "finds" nothing. That is the silent
@@ -55,8 +59,32 @@ class HealthCheck:
     name: str
     description: str
     requires_sources: bool
-    run: Callable[[HealthContext], object]
-    empty: Callable[[Path], object]
+    run: Callable[[HealthContext], FindingProducerResult]
+    producer: FindingProducer
+
+
+def composed_result(
+    source: InstrumentResult[object],
+    findings: list[AuditFinding],
+    *,
+    metrics: ProducerMetrics | None = None,
+) -> FindingProducerResult:
+    """Preserve an instrument's status/caveat while replacing its rows atomically."""
+    if source.status == "unwired":
+        instrument = InstrumentResult[AuditFinding].unwired(
+            code=source.code or "health_check_unwired",
+            reason=source.reason,
+        )
+    else:
+        instrument = InstrumentResult.from_rows(
+            findings,
+            code=source.code,
+            reason=source.reason,
+        )
+    return FindingProducerResult(
+        instrument=instrument,
+        metrics=metrics or ProducerMetrics(),
+    )
 
 
 def context_sources(context: HealthContext) -> ProjectSources:

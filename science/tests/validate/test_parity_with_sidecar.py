@@ -22,7 +22,7 @@ from test_parity_canonical_body import (
 from science_tool.cli import main
 
 CopyProject = Callable[[Path], Path]
-_LEGACY_SIDECAR_REMOVED_RULE = "validate.sidecar.legacy_removed"
+_LEGACY_SIDECAR_REMOVED_RULE = "validate.sidecar-removed"
 _PORTING_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
 _REMOVED_MESSAGE = f"validate.local.sh is no longer supported; migrate it using {_PORTING_GUIDE}"
 
@@ -265,7 +265,7 @@ def test_legacy_removed_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> 
                 "path": None,
                 "line": None,
                 "message": message,
-                "rule": "validate.sidecar.legacy_removed",
+                "rule": "validate.sidecar-removed",
             },
             {
                 "severity": "error",

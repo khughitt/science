@@ -29,7 +29,7 @@ def _ds(**kw) -> dict:
 def _rules(datasets: list[dict]) -> list[tuple[Severity, str]]:
     from science_tool.validate.checks.benchmark_metadata import evaluate_benchmark_metadata
 
-    return [(r.severity, r.rule) for r in evaluate_benchmark_metadata(datasets)]
+    return [(r.severity, r.rule_id) for r in evaluate_benchmark_metadata(datasets)]
 
 
 def _results(datasets: list[dict]):
@@ -60,14 +60,14 @@ def test_null_benchmark_warns() -> None:
 
 def test_pointer_dataset_with_non_mapping_benchmark_emits_pointer_info_and_malformed_warning() -> None:
     assert _rules([_ds(dataset_class="pointer", benchmark=["static-association"])]) == [
-        (Severity.INFO, "benchmark.pointer-block"),
+        (Severity.INFO, None),
         (Severity.WARN, "benchmark.block-malformed"),
     ]
 
 
 def test_pointer_dataset_with_null_benchmark_emits_pointer_info_and_malformed_warning() -> None:
     assert _rules([_ds(dataset_class="pointer", benchmark=None)]) == [
-        (Severity.INFO, "benchmark.pointer-block"),
+        (Severity.INFO, None),
         (Severity.WARN, "benchmark.block-malformed"),
     ]
 
@@ -109,8 +109,8 @@ def test_invalid_task_id_is_error_and_mentions_lowercase_kebab_case() -> None:
     results = _results([_ds(benchmark={"tasks": [{"id": "Rank__Genes"}]})])
 
     assert any(
-        result.severity is Severity.ERROR
-        and result.rule == "benchmark.task-id-invalid"
+        result.severity == Severity.ERROR.value
+        and result.rule_id == "benchmark.task-id-invalid"
         and "lowercase kebab-case" in result.message
         for result in results
     )
@@ -160,8 +160,8 @@ def test_task_support_invalid_state_is_error() -> None:
     )
 
     assert any(
-        result.severity is Severity.ERROR
-        and result.rule == "benchmark.task-support-state-invalid"
+        result.severity == Severity.ERROR.value
+        and result.rule_id == "benchmark.task-support-state-invalid"
         and "blockd" in result.message
         for result in results
     )
@@ -204,8 +204,8 @@ def test_task_support_reason_must_be_lowercase_kebab_case() -> None:
     )
 
     assert any(
-        result.severity is Severity.ERROR
-        and result.rule == "benchmark.task-support-reason-invalid"
+        result.severity == Severity.ERROR.value
+        and result.rule_id == "benchmark.task-support-reason-invalid"
         and "lowercase kebab-case" in result.message
         for result in results
     )
@@ -384,7 +384,7 @@ def test_invalid_dataset_class_defaults_to_deposit_for_benchmark_checks() -> Non
     rules = _rules([_ds(dataset_class="bad-class", benchmark={"benchmark_kinds": ["static-association"]})])
 
     assert (Severity.WARN, "benchmark.facets-lack-task-or-limitation") in rules
-    assert (Severity.INFO, "benchmark.pointer-block") not in rules
+    assert (Severity.INFO, None) not in rules
 
 
 def test_perturbation_response_without_intervention_or_contexts_warns() -> None:
@@ -495,7 +495,7 @@ def test_time_series_with_timepoints_does_not_warn() -> None:
 
 
 def test_pointer_dataset_with_benchmark_emits_info() -> None:
-    assert (Severity.INFO, "benchmark.pointer-block") in _rules(
+    assert (Severity.INFO, None) in _rules(
         [
             _ds(
                 dataset_class="pointer",
@@ -561,4 +561,4 @@ def test_runner_surfaces_benchmark_warning_through_full_profile(tmp_path: Path) 
 
     result = run(tmp_path, strict=False, verbose=False, profile="full", enable_python_sidecar=False)
 
-    assert any(r.rule == "benchmark.facets-lack-task-or-limitation" for r in result.results)
+    assert any(r.rule_id == "benchmark.facets-lack-task-or-limitation" for r in result.results)

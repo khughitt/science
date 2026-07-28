@@ -25,7 +25,7 @@ def test_parent_dataset_nonlocal_with_unavailable_commons_is_info_not_error():
             commons_cache={"dataset:commons-parent": None},
         )
     )
-    assert [r.severity.name for r in results] == ["INFO"]
+    assert [r.severity for r in results] == ["info"]
 
 
 def test_parent_dataset_resolved_in_commons_is_clean():

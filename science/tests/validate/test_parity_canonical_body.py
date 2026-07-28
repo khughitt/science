@@ -11,11 +11,12 @@ import warnings
 from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from science_model.audit import AuditFinding, LocationEvidence, PathSubject, ProjectSubject
 
-from science_tool.validate import Result, Severity
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
 from science_tool.validate.runner import RunResult, run
 
@@ -28,7 +29,7 @@ REAL_PROJECTS_CONFIG = FIXTURES / "real_projects.txt"
 VALIDATE_SH = REPO_ROOT / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
 CHECK_MODULES = CANONICAL_CHECK_MODULES
 
-# validate.sh has no stable explicit rule IDs, and Python Result.rule is section-level
+# validate.sh has no stable explicit rule IDs, and Python Result.rule_id is section-level
 # (for example, "manifest" or "graph"). Phase 1 semantic parity therefore uses the
 # diagnostic message text as the diagnostic key so message-level regressions stay visible.
 
@@ -40,17 +41,39 @@ def _extract_bash_diagnostic_items(stdout: str, project_root: Path) -> list[Diag
         if item["severity"] == "info":
             continue
         path = _normalize_result_path(Path(item["path"]) if item["path"] is not None else None, project_root)
-        items.append((item["severity"], path, item["line"], item["message"]))
+        items.append(
+            (
+                item["severity"],
+                path,
+                item["line"],
+                _normalize_project_root_in_message(item["message"], project_root),
+            )
+        )
     return _sort_diagnostic_items(items)
 
 
 def _extract_python_diagnostic_items(result: RunResult, project_root: Path) -> list[DiagnosticItem]:
     items: list[DiagnosticItem] = []
     for item in result.results:
-        if item.severity is Severity.INFO:
+        if item.severity == "info":
             continue
-        path = _normalize_result_path(item.path, project_root)
-        items.append((item.severity.value, path, item.line, item.message))
+        path = Path(item.subject.path) if isinstance(item.subject, PathSubject) else None
+        line = next(
+            (
+                evidence.line
+                for evidence in item.evidence
+                if isinstance(evidence, LocationEvidence) and evidence.line is not None
+            ),
+            None,
+        )
+        items.append(
+            (
+                item.severity,
+                _normalize_result_path(path, project_root),
+                line,
+                _normalize_project_root_in_message(item.message, project_root),
+            )
+        )
     return _sort_diagnostic_items(items)
 
 
@@ -79,6 +102,10 @@ def _normalize_result_path(path: Path | None, project_root: Path) -> str | None:
         except ValueError:
             return path.as_posix()
     return path.as_posix()
+
+
+def _normalize_project_root_in_message(message: str, project_root: Path) -> str:
+    return message.replace(str(project_root), "<project>")
 
 
 def _assert_semantic_parity(
@@ -284,18 +311,31 @@ def test_bash_diagnostic_extractor_reads_shim_json_payload(tmp_path: Path) -> No
 def test_python_diagnostic_extractor_filters_info_and_normalizes_paths(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
-    run_result = RunResult(
+    run_result = SimpleNamespace(
         results=[
-            Result(Severity.INFO, None, None, "advisory chatter", "demo.info", None),
-            Result(Severity.WARN, project_root / "doc" / "a.md", 7, "doc/a.md missing section", "demo.warn", None),
-            Result(Severity.ERROR, Path("tasks/active.md"), None, "task t001 missing field", "demo.error", None),
+            AuditFinding(
+                rule_id="demo.info",
+                subject=ProjectSubject(),
+                severity="info",
+                message="advisory chatter",
+            ),
+            AuditFinding(
+                rule_id="demo.warn",
+                subject=PathSubject(path="doc/a.md"),
+                severity="warn",
+                message="doc/a.md missing section",
+                evidence=[LocationEvidence(path="doc/a.md", line=7)],
+            ),
+            AuditFinding(
+                rule_id="demo.error",
+                subject=PathSubject(path="tasks/active.md"),
+                severity="error",
+                message="task t001 missing field",
+            ),
         ],
-        errors=1,
-        warnings=1,
-        infos=1,
     )
 
-    assert _extract_python_diagnostic_items(run_result, project_root) == [
+    assert _extract_python_diagnostic_items(run_result, project_root) == [  # type: ignore[arg-type]
         ("error", "tasks/active.md", None, "task t001 missing field"),
         ("warn", "doc/a.md", 7, "doc/a.md missing section"),
     ]
@@ -304,23 +344,18 @@ def test_python_diagnostic_extractor_filters_info_and_normalizes_paths(tmp_path:
 def test_python_diagnostic_extractor_uses_message_as_diagnostic_key_not_result_rule(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
-    run_result = RunResult(
+    run_result = SimpleNamespace(
         results=[
-            Result(
-                Severity.ERROR,
-                Path("manifest.yaml"),
-                None,
-                "manifest.yaml: missing required field: project_id",
-                "manifest",
-                None,
+            AuditFinding(
+                rule_id="manifest.check",
+                subject=PathSubject(path="manifest.yaml"),
+                severity="error",
+                message="manifest.yaml: missing required field: project_id",
             ),
         ],
-        errors=1,
-        warnings=0,
-        infos=0,
     )
 
-    assert _extract_python_diagnostic_items(run_result, project_root) == [
+    assert _extract_python_diagnostic_items(run_result, project_root) == [  # type: ignore[arg-type]
         ("error", "manifest.yaml", None, "manifest.yaml: missing required field: project_id"),
     ]
 

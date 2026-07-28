@@ -48,13 +48,13 @@ def test_warning_token_in_doc_markdown_emits_exact_warn_message(tmp_path: Path) 
 
     results = list(check_unresolved_markers(_ctx(tmp_path)))
 
-    assert [(result.severity, result.path, result.line, result.message, result.rule) for result in results] == [
+    assert [(result.severity, result.path, result.line, result.message, result.rule_id) for result in results] == [
         (
             Severity.WARN,
             None,
             None,
             "1 [UNVERIFIED] marker(s) found in documents; examples: doc/note.md:1",
-            "unresolved_markers",
+            "unresolved-markers.check",
         )
     ]
 
@@ -130,6 +130,10 @@ def test_warn_tokens_are_output_sorted_alphabetically(tmp_path: Path) -> None:
         "1 [MISSING_CITATION] marker(s) found in documents; examples: doc/note.md:2",
         "2 [UNVERIFIED] marker(s) found in documents; examples: doc/note.md:1, doc/note.md:3",
     ]
+    assert [result.qualifiers["key"] for result in results] == [
+        ["token", "MISSING_CITATION"],
+        ["token", "UNVERIFIED"],
+    ]
 
 
 def test_warning_marker_examples_are_capped(tmp_path: Path) -> None:
@@ -148,21 +152,24 @@ def test_warning_marker_examples_are_capped(tmp_path: Path) -> None:
 
 
 def test_registration_includes_unresolved_markers_between_papers_and_gap_analysis() -> None:
-    clear_checks_for_tests()
-
     import science_tool.validate.checks.gap_analysis as gap_analysis
     import science_tool.validate.checks.papers as papers
     import science_tool.validate.checks.unresolved_markers as unresolved_markers
 
-    importlib.reload(papers)
-    importlib.reload(unresolved_markers)
-    importlib.reload(gap_analysis)
+    original_entries = list(CANONICAL_CHECKS)
+    try:
+        clear_checks_for_tests()
+        importlib.reload(papers)
+        importlib.reload(unresolved_markers)
+        importlib.reload(gap_analysis)
 
-    assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-3:]] == [
-        ("paper summaries...", 7),
-        ("for unresolved markers...", 8),
-        ("research gap analysis...", 9),
-    ]
+        assert [(entry.section, entry.order) for entry in CANONICAL_CHECKS[-3:]] == [
+            ("papers", 7),
+            ("unresolved markers", 8),
+            ("gap analysis", 9),
+        ]
+    finally:
+        CANONICAL_CHECKS[:] = original_entries
 
 
 def test_lifted_filter_can_drop_all_hits(tmp_path: Path, monkeypatch) -> None:

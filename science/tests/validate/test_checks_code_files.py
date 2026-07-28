@@ -31,7 +31,7 @@ def _ctx(root: Path, *, profile: str = "research", extra: str = "") -> ValidateC
 def _by_rule(results: list[Result]) -> dict[str, list[Result]]:
     out: dict[str, list[Result]] = {}
     for r in results:
-        out.setdefault(r.rule or "", []).append(r)
+        out.setdefault(r.rule_id or "", []).append(r)
     return out
 
 
@@ -60,7 +60,7 @@ def test_blockless_file_is_a_ghost(tmp_path: Path) -> None:
     by_rule = _by_rule(list(check_code_files(ctx)))
     assert len(by_rule["code.ghost"]) == 1
     ghost = by_rule["code.ghost"][0]
-    assert ghost.severity is Severity.WARN
+    assert ghost.severity == Severity.WARN.value
     assert ghost.path == Path("code/x.py")
 
 
@@ -119,7 +119,7 @@ def test_unreadable_file_is_reported_not_crashing(tmp_path: Path, monkeypatch) -
 
     by_rule = _by_rule(list(check_code_files(ctx)))
     assert len(by_rule["code.unreadable"]) == 1
-    assert by_rule["code.unreadable"][0].severity is Severity.WARN
+    assert by_rule["code.unreadable"][0].severity == Severity.WARN.value
     assert "code/x.py" in by_rule["code.unreadable"][0].message
     assert "code.ghost" not in by_rule  # the unreadable file did not also become a ghost
 
@@ -223,7 +223,7 @@ def test_orphaned_executable_is_flagged(tmp_path: Path) -> None:
     _commit_all(tmp_path)
     by_rule = _by_rule(list(check_code_files(ctx)))
     assert len(by_rule["code.orphaned-executable"]) == 1
-    assert by_rule["code.orphaned-executable"][0].severity is Severity.WARN
+    assert by_rule["code.orphaned-executable"][0].severity == Severity.WARN.value
 
 
 def test_workflow_referenced_executable_is_not_orphan(tmp_path: Path) -> None:

@@ -67,11 +67,11 @@ def test_a_registered_check_fires_through_the_runner(tmp_path: Path) -> None:
                             "status": "superseded", "superseded_by": "interpretation:i2"})
     _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation"})
 
-    findings = [r for r in _results(tmp_path) if r.rule == "interpretation.unbacked-inverse"]
+    findings = [r for r in _results(tmp_path) if r.rule_id == "interpretation.unbacked-inverse"]
 
     assert len(findings) == 1
-    assert findings[0].severity is Severity.WARN
-    assert findings[0].path == tmp_path / "entities/interpretations/i1.md"
+    assert findings[0].severity == Severity.WARN.value
+    assert findings[0].subject.path == "entities/interpretations/i1.md"
 
 
 def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
@@ -83,4 +83,4 @@ def test_a_BACKED_inverse_is_silent(tmp_path: Path) -> None:
     _write(tmp_path, "i2", {"id": "interpretation:i2", "kind": "interpretation",
                             "relations": [_supersedes("interpretation:i1")]})
 
-    assert [r for r in _results(tmp_path) if r.rule.endswith(".unbacked-inverse")] == []
+    assert [r for r in _results(tmp_path) if r.rule_id.endswith(".unbacked-inverse")] == []

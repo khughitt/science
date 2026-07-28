@@ -44,7 +44,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def _messages(results: Iterable[Result], severity: Severity | None = None) -> list[str]:
-    return [result.message for result in results if severity is None or result.severity is severity]
+    return [result.message for result in results if severity is None or result.severity == severity.value]
 
 
 def test_passing_local_related_refs_emit_exact_info(tmp_path: Path) -> None:
@@ -67,6 +67,23 @@ def test_broken_related_ref_warns_with_basename_only(tmp_path: Path) -> None:
     results = list(check_cross_references(_ctx(tmp_path)))
 
     assert _messages(results, Severity.WARN) == ["Broken reference in a.md: related ID 'missing:ref' not found"]
+
+
+def test_duplicate_broken_related_ref_emits_one_semantic_finding(
+    tmp_path: Path,
+) -> None:
+    from science_tool.validate.checks.cross_references import check_cross_references
+
+    _write(
+        tmp_path / "entities" / "reports" / "a.md",
+        "---\nid: report:a\nrelated: [missing:ref, missing:ref]\n---\n",
+    )
+
+    results = list(check_cross_references(_ctx(tmp_path)))
+
+    assert _messages(results, Severity.WARN) == [
+        "Broken reference in a.md: related ID 'missing:ref' not found"
+    ]
 
 
 def test_inline_and_block_related_parsing_ignores_templates(tmp_path: Path) -> None:
@@ -94,10 +111,18 @@ def test_task_ids_resolve_refs_but_retired_aggregate_ids_do_not(tmp_path: Path) 
     _write(tmp_path / "knowledge" / "sources" / "demo" / "entities.yaml", "entities:\n  - canonical_id: entity:one\n")
     _write(tmp_path / "knowledge" / "sources" / "demo" / "terms.yaml", "terms:\n  - id: term:one\n")
 
-    assert _messages(check_cross_references(_ctx(tmp_path)), Severity.WARN) == [
+    results = list(check_cross_references(_ctx(tmp_path)))
+    assert _messages(results, Severity.WARN) == [
         "Broken reference in a.md: related ID 'entity:one' not found",
         "Broken reference in a.md: related ID 'term:one' not found",
     ]
+    assert len(
+        {
+            tuple(result.qualifiers["key"])
+            for result in results
+            if isinstance(result, Result)
+        }
+    ) == 2
 
 
 def test_unknown_namespace_errors_and_known_cross_project_ref_is_ignored(tmp_path: Path) -> None:
@@ -154,15 +179,15 @@ def test_loader_registry_includes_cross_references_after_id_prefixes_at_order_20
         ordered = [(entry.section, entry.order, entry.fn.__module__) for entry in CANONICAL_CHECKS]
 
         id_prefixes_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "per-kind id-prefix conformance..."
+            index for index, entry in enumerate(ordered) if entry[0] == "id prefixes"
         )
         cross_references_index = next(
-            index for index, entry in enumerate(ordered) if entry[0] == "frontmatter cross-references..."
+            index for index, entry in enumerate(ordered) if entry[0] == "cross references"
         )
 
         assert cross_references_index == id_prefixes_index + 1
         assert ordered[cross_references_index] == (
-            "frontmatter cross-references...",
+            "cross references",
             20,
             "science_tool.validate.checks.cross_references",
         )

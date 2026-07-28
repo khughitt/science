@@ -125,7 +125,7 @@ def _results(root: Path) -> list[Result]:
 def _assert_schedule_warning(results: list[Result]) -> Result:
     assert len(results) == 1
     assert results[0].severity.value == "warn"
-    assert results[0].rule == "prereg.schedule-calibration-domain"
+    assert results[0].rule_id == "prereg.schedule-calibration-domain"
     return results[0]
 
 
@@ -226,6 +226,6 @@ def test_schedule_warning_surfaces_through_runner(project: Path) -> None:
 
     _write_prereg(project, body=_SCHEDULE)
 
-    rules = [result.rule for result in run(project, strict=False, verbose=False).results]
+    rules = [result.rule_id for result in run(project, strict=False, verbose=False).results]
 
     assert "prereg.schedule-calibration-domain" in rules

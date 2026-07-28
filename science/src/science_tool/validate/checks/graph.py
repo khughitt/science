@@ -151,6 +151,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.materialize import materialization_audit
 from science_tool.graph.store import (
     diff_graph_inputs_dataset,
@@ -161,16 +163,38 @@ from science_tool.graph.store import (
 )
 from science_tool.instruments import ValidationVerdict
 from science_tool.peers_validate import PeerIssue, validate_peers
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, message: str) -> Result:
-    return Result(severity, None, None, message, "graph", None)
+SECTION, RULES = declare_validation_rules(
+    section_id="graph",
+    section_title="graph",
+    section_order=121,
+    rule_ids=("graph.check",),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
-def _graph_validation_results(verdict: ValidationVerdict[dict[str, str]]) -> Iterator[Result]:
+def _result(
+    severity: Severity,
+    message: str,
+    *,
+    key: list[str],
+) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=None,
+        line=None,
+        message=message,
+        rule=RULES["graph.check"],
+        task=None,
+        qualifiers={"key": key},
+    )
+
+
+def _graph_validation_results(verdict: ValidationVerdict[dict[str, str]]) -> Iterator[CheckObservation]:
     for row in verdict.rows:
         # `skip` is accepted because the graph validator emits it: `causal_acyclicity`
         # reports `skip` for a project with no scic:causes edges, which is the common
@@ -180,11 +204,15 @@ def _graph_validation_results(verdict: ValidationVerdict[dict[str, str]]) -> Ite
         status = _status(row, context="graph validate", accepted={"fail", "warn", "pass", "skip"})
         check = row["check"]
         severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
-        yield _result(severity, f"graph validate: {check} — {row['details']}")
+        yield _result(
+            severity,
+            f"graph validate: {check} — {row['details']}",
+            key=["graph-validate", str(check)],
+        )
 
 
-@Check(section="knowledge graph...", order=17)
-def check_graph(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=17, producer_id="validate.graph", rules=tuple(RULES.values()))
+def check_graph(ctx: ValidateContext) -> Iterator[CheckObservation]:
     peer_issues = validate_peers(ctx.project_root)
     yield from _peer_results(ctx, peer_issues)
 
@@ -193,11 +221,16 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(
             Severity.ERROR,
             f"graph audit: could not run ({audit_verdict.code}): {audit_verdict.reason}",
+            key=["graph-audit", "unwired"],
         )
         return
     audit_rows = audit_verdict.rows
     if not audit_rows:
-        yield _result(Severity.INFO, "graph audit: all canonical references resolved")
+        yield _result(
+            Severity.INFO,
+            "graph audit: all canonical references resolved",
+            key=["graph-audit", "summary"],
+        )
     else:
         for row in audit_rows:
             if row["check"] == "identity_collision":
@@ -211,6 +244,13 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 severity,
                 f"graph audit: {row['check']} — {row['source']} {row['field']} -> {row['target']} ({row['details']})",
+                key=[
+                    "graph-audit",
+                    str(row["check"]),
+                    str(row["source"]),
+                    str(row["field"]),
+                    str(row["target"]),
+                ],
             )
 
     graph_path = ctx.project_root / "knowledge" / "graph.trig"
@@ -222,14 +262,22 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
     except Exception:  # noqa: BLE001
         verdict = validate_graph(graph_path)
         if verdict.status == "unwired":
-            yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
+            yield _result(
+                Severity.ERROR,
+                f"graph validate: could not run ({verdict.code}): {verdict.reason}",
+                key=["graph-validate", "unwired"],
+            )
             return
         yield from _graph_validation_results(verdict)
         return
 
     verdict = validate_graph_dataset(dataset)
     if verdict.status == "unwired":
-        yield _result(Severity.ERROR, f"graph validate: could not run ({verdict.code}): {verdict.reason}")
+        yield _result(
+            Severity.ERROR,
+            f"graph validate: could not run ({verdict.code}): {verdict.reason}",
+            key=["graph-validate", "unwired"],
+        )
         return
 
     yield from _graph_validation_results(verdict)
@@ -243,6 +291,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
         yield _result(
             Severity.INFO,
             f"graph diff: could not compare inputs ({diff.code}) — expected for a new graph",
+            key=["graph-diff", "unwired"],
         )
     else:
         diff_rows = diff.rows
@@ -252,22 +301,39 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 Severity.WARN,
                 f"graph has {len(diff_rows)} stale input file(s) — run /science:update-graph",
+                key=["graph-diff", "stale-summary"],
             )
             if ctx.verbose:
                 for row in diff_rows:
-                    yield _result(Severity.INFO, f"  {row['path']} ({row['reason']})")
+                    yield _result(
+                        Severity.INFO,
+                        f"  {row['path']} ({row['reason']})",
+                        key=["graph-diff", str(row["path"])],
+                    )
         else:
-            yield _result(Severity.INFO, "graph-prose sync: all inputs up to date")
+            yield _result(
+                Severity.INFO,
+                "graph-prose sync: all inputs up to date",
+                key=["graph-diff", "summary"],
+            )
 
     inquiry_result = list_inquiries_dataset(dataset)
     if inquiry_result.status == "unwired":
-        yield _result(Severity.INFO, f"inquiry checks skipped ({inquiry_result.code})")
+        yield _result(
+            Severity.INFO,
+            f"inquiry checks skipped ({inquiry_result.code})",
+            key=["inquiry", "unwired"],
+        )
         return
     inquiries = inquiry_result.rows
     if not inquiries:
         return
 
-    yield _result(Severity.INFO, f"Checking inquiries ({len(inquiries)})...")
+    yield _result(
+        Severity.INFO,
+        f"Checking inquiries ({len(inquiries)})...",
+        key=["inquiry", "summary"],
+    )
     for inquiry in inquiries:
         slug = inquiry["slug"]
         if not slug:
@@ -283,6 +349,7 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
             yield _result(
                 severity,
                 f"inquiry '{slug}': structural checks did not run ({inquiry_validation.code})",
+                key=["inquiry", str(slug), "unwired"],
             )
             continue
 
@@ -290,23 +357,40 @@ def check_graph(ctx: ValidateContext) -> Iterator[Result]:
             status = _status(row, context="inquiry validate", accepted={"fail", "warn", "pass", "skip", "info"})
             message = f"inquiry '{slug}': {row['check']} — {row['message']}"
             if status == "fail":
-                yield _result(Severity.ERROR, message)
+                yield _result(
+                    Severity.ERROR,
+                    message,
+                    key=["inquiry", str(slug), str(row["check"])],
+                )
             elif status == "warn":
-                yield _result(Severity.WARN, message)
+                yield _result(
+                    Severity.WARN,
+                    message,
+                    key=["inquiry", str(slug), str(row["check"])],
+                )
             elif ctx.verbose:
-                yield _result(Severity.INFO, message)
+                yield _result(
+                    Severity.INFO,
+                    message,
+                    key=["inquiry", str(slug), str(row["check"])],
+                )
 
 
-def _peer_results(ctx: ValidateContext, issues: list[PeerIssue]) -> Iterator[Result]:
+def _peer_results(ctx: ValidateContext, issues: list[PeerIssue]) -> Iterator[CheckObservation]:
     errors = [issue for issue in issues if issue.severity == "error"]
     if not errors:
-        yield _result(Severity.INFO, "peer check: declared peers valid")
+        yield _result(
+            Severity.INFO,
+            "peer check: declared peers valid",
+            key=["peer", "summary"],
+        )
         return
 
     for issue in issues:
         yield _result(
             Severity.ERROR,
             f"peer check failed: {issue.severity.upper()} [{issue.peer_id}] {issue.kind.value}: {issue.detail}",
+            key=["peer", issue.peer_id, issue.kind.value],
         )
 
     peer_count = _peer_count(ctx)
@@ -315,6 +399,7 @@ def _peer_results(ctx: ValidateContext, issues: list[PeerIssue]) -> Iterator[Res
     yield _result(
         Severity.ERROR,
         f"peer check failed: failed: {peer_count} peers, {warning_count} warning, {error_count} error",
+        key=["peer", "summary"],
     )
 
 

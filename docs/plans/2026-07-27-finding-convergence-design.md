@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 21. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 22. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -183,6 +183,18 @@
 > and direct in-memory ingestion before any store operation. The existing 8 MiB bounded
 > file read still caps untrusted parsing; `AuditReport` itself retains all structural and
 > total-consistency validation but has no volume policy (§8, §11).
+>
+> **Revision 22 resolves the prose-hit identity impossibility.** A rule whose subject is
+> only the document path and whose sole identity qualifier is `check` cannot preserve two
+> same-check hits in that document: the generic producer boundary must reject the second
+> row as a duplicate identity. Making line, span, scan order, or an occurrence ordinal
+> identity-bearing would only exchange the collision for unstable cases. The authorized
+> identity is therefore `(PathSubject.path, check, normalized match)`, where match
+> normalization is NFKC, whitespace collapse, and case-folding. Different normalized
+> matches remain distinct. Repeated semantically identical matches group into one finding
+> carrying all location evidence; groups over the evidence bound are summarized rather
+> than truncated. Section 9 permits this one count reduction because the grouped rows are
+> semantically indistinguishable. Every other no-count-reduction ruling remains intact.
 
 ## Motivation
 
@@ -824,7 +836,7 @@ enter findings, metrics, or totals.
 | `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. This deliberately overrides the source comment at `correspondence_drift.py:71-74` that kept the ID derived for a future kind: evidence scope is current policy, while a hypothetical no-rename convenience is not. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
 | `f"{kind}.unbacked-inverse"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
 | `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
-| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
+| `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit` with typed identity qualifiers `check` and normalized `match`; configured-non-warn INFO summaries become hidden `prose-lints.advisory` with identity qualifier `check`. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. Semantically identical WARN matches in one path group as the one §9-approved count reduction; INFO never entered `count_issues`. |
 
 **Four additional finite dispatch surfaces preserve their IDs through explicit maps.**
 They do not carry the gate/severity/acceptance policy that makes the five families above
@@ -864,9 +876,19 @@ ordered components state *which semantic instance of the predicate* this row rep
 
 The key is not a message slug and no generic helper hashes prose. Rule-specific schemas
 may replace this standard only when §6/§9 already freezes their identity fields (for
-example `check` for prose lints or `evidence_signature` for correspondence drift).
+example `check` plus normalized `match` for prose lint hits, `check` for prose
+advisories, or `evidence_signature` for correspondence drift).
 Producer duplicate-identity validation is the enforcement backstop: if two old rows
 would still collapse, that producer fails its own run before report assembly.
+
+`prose-lints.hit` uses `PathSubject` and the explicit identity qualifiers `check` and
+`match`. The stored match is normalized with NFKC, whitespace collapse, and case-folding.
+Line, span, scan/list position, and occurrence ordinal remain non-identity. Different
+normalized matches in one document therefore remain separate findings. Repeated hits
+with the same normalized match are one semantic defect and become one finding with every
+location represented as evidence. When the 100-entry evidence bound would be exceeded,
+the producer replaces the unbounded location list with a range-and-count summary; it
+never silently keeps only the first locations.
 
 The adjacent `prose_lints.numeric-verification.coverage` INFO site is **not** a
 finding-rule declaration. Its verified / unverifiable / mismatch / error values are a
@@ -1142,7 +1164,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families; ordinary rules use the required semantic `key` | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; the semantic key prevents same-rule/same-subject rows from collapsing, so every old WARN/ERROR emission still produces one finding; INFO never entered health `count_issues` |
+| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families; ordinary rules use the required semantic `key` | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` with `check` + normalized `match`; different matches remain one-to-one, while repeated semantically identical `(path, check, normalized match)` hits group with all locations as evidence. This is the sole approved WARN/ERROR count reduction because no stable identity can distinguish those duplicate rows without using forbidden position. INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; every other semantic key prevents same-rule/same-subject rows from collapsing; INFO never entered health `count_issues` |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -1186,13 +1208,18 @@ The §1 rule — at most one `ReportedFinding` per `(producer_id, finding_id)` �
 makes this checkable at the producer rather than at ingestion: a missing qualifier shows
 up as two findings colliding in one report, in the producer's own tests.
 
-**Validation-family count effect.** The §6 family rulings are count-neutral.
+**Validation-family count effect.** The §6 family rulings are count-neutral except for
+the explicit prose duplicate grouping below.
 Kind-scoped status and inverse IDs, the five annotation IDs, and
 `plan.correspondence-drift` retain their exact emitted identities. Prose lint WARN hits
-and configured-non-warn INFO summaries are renamed separately: each old emission still
-produces exactly one finding, WARN hits retain visible presentation, INFO advisories
-retain hidden presentation, and INFO never entered `count_issues`. No gate tier or
-acceptance in the surveyed 50-entry corpus names either affected ID. The one surveyed
+and configured-non-warn INFO summaries are renamed separately: different normalized
+WARN matches still produce one finding each, while semantically identical matches in the
+same path/check group into one finding with all location evidence. That grouping is the
+only approved count reduction; line, span, list position, and occurrence ordinal cannot
+provide stable identity, so preserving separate indistinguishable rows is impossible
+under the producer uniqueness invariant. WARN hits retain visible presentation, INFO
+advisories retain hidden presentation, and INFO never entered `count_issues`. No gate
+tier or acceptance in the surveyed 50-entry corpus names either affected ID. The one surveyed
 acceptance that does name a parameterized family, `paper.status-vocabulary` in
 post-acute-infection, keeps that exact ID and therefore remains excluded. A future family
 collapse that changes an accepted or gated full ID requires a new ledger row; it cannot
@@ -1546,9 +1573,11 @@ class AuditReport(TypedDict):
     aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
     `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
     problem entry rather than the first.
-26. **Count ledger** — a test asserting the §9 table: for a fixture project, each
-    producer's contribution to `totals.findings_total` matches the enumerated
-    expectation. This is what makes the count changes approved rather than absorbed.
+26. **Count ledger** — real converter fixtures assert every §9 row, including each
+    layered-claim subrow, numeric-verification metrics, accepted and unwired channels,
+    both data-audit row classes, and the prose semantic-duplicate exception. Each
+    contribution to `totals.findings_total` matches the enumerated expectation. This is
+    what makes the count changes approved rather than absorbed.
 27. **Presentation order is preserved** — rendering order matches the current
     `HEALTH_CHECKS` order for the sections that exist today, and is unaffected by renaming
     a section identifier.
@@ -1576,6 +1605,9 @@ class AuditReport(TypedDict):
     `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
     and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
     advisories map to their distinct canonical rules with their current visibility.
+    WARN-hit identity is exactly path + `check` + normalized `match`; different matches
+    stay distinct, semantically identical matches group with complete bounded evidence,
+    and line/span/list position/occurrence ordinal never enter identity.
     Every emitted validation rule satisfies the frozen dotted-kebab grammar; the current
     static mappings equal the complete §6 table across canonical checks and runner-owned
     findings, and every old nonconforming ID is absent from declarations and emissions.

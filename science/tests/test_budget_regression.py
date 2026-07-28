@@ -164,10 +164,20 @@ def test_health_json_output_file_is_complete_and_unprojected(project: Path) -> N
     written = target.read_text()
     payload = json.loads(written)
     assert _task_ids(written) == TASK_IDS
-    assert len(payload["validation"]) > 40
-    assert payload["total_issues"] > 40
-    assert "section_omitted" not in payload
-    assert "displayed_issues" not in payload
+    assert payload["schema_version"] == 2
+    assert len(payload["findings"]) > 40
+    assert payload["totals"]["findings_total"] == len(payload["findings"])
+    check_errors = [
+        item
+        for item in payload["findings"]
+        if item["finding"]["rule_id"] == "validate.check-error"
+    ]
+    assert all(
+        "duplicate" not in item["finding"]["message"].lower()
+        for item in check_errors
+    )
+    assert "section_omitted" not in written
+    assert "displayed_issues" not in written
 
 
 def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> None:
@@ -178,7 +188,7 @@ def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> 
     written = target.read_text()
     assert _task_ids(written) == TASK_IDS
     assert "finding(s) hidden" not in written
-    assert "showing " not in written
+    assert "Findings displayed:" in written
 
 
 def test_inventory_output_file_contains_every_entity(project: Path) -> None:

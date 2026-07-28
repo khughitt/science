@@ -127,7 +127,7 @@ def _write_descriptor(
 
 
 def _rules(results: list) -> list[str | None]:
-    return [result.rule for result in results]
+    return [result.rule_id for result in results]
 
 
 def test_clean_candidate_dataset_descriptor_passes_contract(tmp_path: Path) -> None:
@@ -248,7 +248,7 @@ def test_candidate_descriptor_requires_resolvable_datapackage(tmp_path: Path) ->
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.datapackage-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "datapackage file does not exist" in results[0].message
 
 
@@ -266,7 +266,7 @@ def test_candidate_descriptor_requires_qa_resource(tmp_path: Path) -> None:
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.qa-resource-missing"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "no QA resource" in results[0].message
 
 
@@ -300,7 +300,7 @@ def test_candidate_descriptor_requires_source_refs(tmp_path: Path) -> None:
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.source-refs-missing"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_pinned_overlay_requires_resolvable_source_datapackage(
@@ -324,7 +324,7 @@ def test_pinned_overlay_requires_resolvable_source_datapackage(
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.source-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
 
 
 def test_pinned_deposit_overlay_requires_source_datapackage(
@@ -372,7 +372,7 @@ def test_pinned_overlay_requires_resolvable_commons_canonical(
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.pin-unresolved"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "commons canonical could not be resolved" in results[0].message
 
 
@@ -401,7 +401,7 @@ def test_pinned_overlay_requires_matching_commons_version(
     results = list(check_dataset_promotion_contract(_ctx(tmp_path)))
 
     assert _rules(results) == ["dataset-promotion.pin-version-mismatch"]
-    assert results[0].severity is Severity.ERROR
+    assert results[0].severity == Severity.ERROR.value
     assert "pins 1.0.0 but commons canonical is 2.0.0" in results[0].message
 
 

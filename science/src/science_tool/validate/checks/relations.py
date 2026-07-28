@@ -47,27 +47,59 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.relation_audit import audit_relations
 from science_tool.graph.sources import load_project_sources
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-@Check(section="authored relations", order=28)
-def check_authored_relations(ctx: ValidateContext) -> Iterator[Result]:
+SECTION, RULES = declare_validation_rules(
+    section_id="relations",
+    section_title="relations",
+    section_order=156,
+    rule_ids=(
+        "relation.cycle",
+        "relation.external-target",
+        "relation.illegal-kind-pair",
+        "relation.membership-role",
+        "relation.self-referential",
+        "relation.unknown-object",
+        "relation.unknown-predicate",
+        "relation.unknown-subject",
+        "relation.unsupported-graph-layer",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+RELATION_RULES = {
+    "unknown-subject": RULES["relation.unknown-subject"],
+    "unknown-object": RULES["relation.unknown-object"],
+    "unknown-predicate": RULES["relation.unknown-predicate"],
+    "unsupported-graph-layer": RULES["relation.unsupported-graph-layer"],
+    "external-target": RULES["relation.external-target"],
+    "self-referential": RULES["relation.self-referential"],
+    "illegal-kind-pair": RULES["relation.illegal-kind-pair"],
+    "membership-role": RULES["relation.membership-role"],
+    "cycle": RULES["relation.cycle"],
+}
+
+
+@Check(section=SECTION, order=28, producer_id="validate.relations", rules=tuple(RULES.values()))
+def check_authored_relations(ctx: ValidateContext) -> Iterator[CheckObservation]:
     audit = audit_relations(ctx.project_root, load_project_sources(ctx.project_root))
 
     for defect in audit.defects:
-        yield Result(
-            Severity.ERROR,
-            # The file that AUTHORED the edge, off `SourceRelation.source_path` -- NOT the subject's
-            # markdown. An edge in `relations.yaml` is a line in *that* file, and its subject may
-            # have no markdown in this project at all. The message names the subject and object for
-            # the same reason: one `relations.yaml` holds many edges, so "the file" is not a locator.
-            ctx.project_root / defect.path,
-            None,
-            defect.message,
-            f"relation.{defect.code}",
-            None,
+        yield validation_observation(
+            severity=Severity.ERROR,
+            path=ctx.project_root / defect.path,
+            line=None,
+            message=defect.message,
+            rule=RELATION_RULES[defect.code],
+            task=None,
+            qualifiers={
+                "key": [defect.subject, defect.predicate, defect.object],
+            },
         )

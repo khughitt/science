@@ -24,18 +24,45 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from science_model.audit import FindingRule
+
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.member import parse_member_of
 from science_tool.validate._helpers import dataset_frontmatters
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 
-def _result(severity: Severity, path: str | None, message: str, rule: str) -> Result:
-    return Result(severity, Path(path) if path else None, None, message, rule, None)
+SECTION, RULES = declare_validation_rules(
+    section_id="reference-collections",
+    section_title="reference collections",
+    section_order=127,
+    rule_ids=(
+        "reference-collection.commons-unavailable",
+        "reference-collection.declared-unresolved",
+        "reference-collection.malformed-member",
+        "reference-collection.parent-mismatch",
+        "reference-collection.unresolved-parent",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
+
+
+def _result(severity: Severity, path: str | None, message: str, rule: FindingRule) -> CheckObservation:
+    return validation_observation(
+        severity=severity,
+        path=Path(path) if path else None,
+        line=None,
+        message=message,
+        rule=rule,
+        task=None,
+        qualifiers={"key": []},
+    )
 
 
 def _member_defect(derivation: dict[str, Any]) -> str | None:
@@ -76,8 +103,8 @@ def _commons_has_dataset(parent_id: str, cache: dict[str, bool | None]) -> bool 
     return result
 
 
-@Check(section="reference collections", order=24)
-def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=24, producer_id="validate.reference-collections", rules=tuple(RULES.values()))
+def check_reference_collections(ctx: ValidateContext) -> Iterator[CheckObservation]:
     frontmatters = dataset_frontmatters(ctx)
     local_ids = {fm["id"] for fm in frontmatters if isinstance(fm.get("id"), str) and fm["id"]}
     commons_cache: dict[str, bool | None] = {}
@@ -96,7 +123,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                 Severity.ERROR,
                 path,
                 f"{ident}: {defect}",
-                "reference-collection.malformed-member",
+                RULES["reference-collection.malformed-member"],
             )
             continue
 
@@ -111,7 +138,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                 path,
                 f"{ident}: parent_dataset {top_parent!r} disagrees with "
                 f"derivation.parent_dataset {member_of.parent_dataset!r}",
-                "reference-collection.parent-mismatch",
+                RULES["reference-collection.parent-mismatch"],
             )
 
         parent = member_of.parent_dataset
@@ -122,7 +149,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                     Severity.INFO,
                     path,
                     f"{ident}: parent collection {parent!r} is not local and the commons is not available to verify it",
-                    "reference-collection.commons-unavailable",
+                    RULES["reference-collection.commons-unavailable"],
                 )
                 continue
             if not present:
@@ -131,7 +158,7 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                     path,
                     f"{ident}: member_of parent_dataset {parent!r} does not resolve to a "
                     f"dataset entity (not in project or commons)",
-                    "reference-collection.unresolved-parent",
+                    RULES["reference-collection.unresolved-parent"],
                 )
                 continue
 
@@ -144,5 +171,5 @@ def check_reference_collections(ctx: ValidateContext) -> Iterator[Result]:
                 path,
                 f"{ident}: member key declared_unresolved against resolved "
                 f"collection {member_of.parent_dataset!r} (honoured, RCM-D2)",
-                "reference-collection.declared-unresolved",
+                RULES["reference-collection.declared-unresolved"],
             )

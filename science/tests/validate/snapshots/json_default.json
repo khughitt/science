@@ -10,7 +10,7 @@
       "path": null,
       "line": null,
       "message": "validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
-      "rule": "validate.sidecar.legacy_removed",
+      "rule": "validate.sidecar-removed",
       "task": null
     },
     {
@@ -34,7 +34,7 @@
       "path": null,
       "line": null,
       "message": "2 [UNVERIFIED] marker(s) found in documents; examples: doc/overview.md:8, entities/reports/0001-overview.md:16",
-      "rule": "unresolved_markers",
+      "rule": "unresolved-markers.check",
       "task": null
     },
     {

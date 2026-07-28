@@ -19,15 +19,15 @@ from science_model.reasoning import (
     Polarity,
 )
 
+from science_tool.validate.findings import validation_observation
+from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
-from science_tool.validate.checks import Check
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.result import Result, Severity
+from science_tool.validate.result import Severity
 
 # String values of polarity entries that are valid for sign-meaningful predicates.
-_SIGNED_POLARITY_VALUES = frozenset(
-    {Polarity.POSITIVE.value, Polarity.NEGATIVE.value, Polarity.UNSIGNED.value}
-)
+_SIGNED_POLARITY_VALUES = frozenset({Polarity.POSITIVE.value, Polarity.NEGATIVE.value, Polarity.UNSIGNED.value})
 
 # String values of predicate entries that are sign-meaningful (derived from the model).
 _SIGN_MEANINGFUL_VALUES = frozenset(p.value for p in SIGN_MEANINGFUL_PREDICATES)
@@ -35,6 +35,27 @@ _SIGN_MEANINGFUL_VALUES = frozenset(p.value for p in SIGN_MEANINGFUL_PREDICATES)
 # Allowed string values for claim_layer and identification_strength (derived from enums).
 _CLAIM_LAYER_VALUES = frozenset(v.value for v in ClaimLayer)
 _IDENTIFICATION_STRENGTH_VALUES = frozenset(v.value for v in IdentificationStrength)
+
+
+SECTION, RULES = declare_validation_rules(
+    section_id="propositions",
+    section_title="propositions",
+    section_order=150,
+    rule_ids=(
+        "proposition.claim-layer.canonical",
+        "proposition.identification.canonical",
+        "proposition.membership.duplicate",
+        "proposition.membership.frame",
+        "proposition.membership.role",
+        "proposition.membership.shape",
+        "proposition.polarity.aptitude",
+        "relation.role.cross-surface-conflict",
+        "relation.role.non-discusses",
+        "relation.role.non-membership",
+        "relation.role.unresolved-frame",
+    ),
+    severities=frozenset({"error", "warn", "info"}),
+)
 
 
 def _propositions(ctx: ValidateContext) -> list[tuple[Path, dict]]:
@@ -47,8 +68,13 @@ def _propositions(ctx: ValidateContext) -> list[tuple[Path, dict]]:
     return result
 
 
-@Check(section="propositions", order=10)
-def check_polarity_predicate_aptitude(ctx: ValidateContext) -> Iterator[Result]:
+@Check(
+    section=SECTION,
+    order=10,
+    producer_id="validate.propositions.polarity-predicate-aptitude",
+    rules=tuple(RULES.values()),
+)
+def check_polarity_predicate_aptitude(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Corpus-level enforcement of the sign rule (design §2.2).
 
     For each proposition with a ``predicate`` field set:
@@ -69,36 +95,31 @@ def check_polarity_predicate_aptitude(ctx: ValidateContext) -> Iterator[Result]:
         if predicate_str in _SIGN_MEANINGFUL_VALUES:
             # Sign-meaningful: polarity must be positive, negative, or unsigned.
             if polarity_str not in _SIGNED_POLARITY_VALUES:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: predicate '{predicate_str}' is sign-meaningful but "
-                        f"polarity is {polarity_str!r} — must be one of "
-                        f"{sorted(_SIGNED_POLARITY_VALUES)}"
-                    ),
-                    rule="proposition.polarity.aptitude",
+                    message=f"{path.name}: predicate '{predicate_str}' is sign-meaningful but polarity is {polarity_str!r} — must be one of {sorted(_SIGNED_POLARITY_VALUES)}",
+                    rule=RULES["proposition.polarity.aptitude"],
                     task=None,
+                    qualifiers={"key": []},
                 )
         else:
             # Sign-less: polarity must be not_applicable.
             if polarity_str != Polarity.NOT_APPLICABLE.value:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: predicate '{predicate_str}' is sign-less but "
-                        f"polarity is {polarity_str!r} — must be 'not_applicable'"
-                    ),
-                    rule="proposition.polarity.aptitude",
+                    message=f"{path.name}: predicate '{predicate_str}' is sign-less but polarity is {polarity_str!r} — must be 'not_applicable'",
+                    rule=RULES["proposition.polarity.aptitude"],
                     task=None,
+                    qualifiers={"key": []},
                 )
 
 
-@Check(section="propositions", order=20)
-def check_canonical_enum_binding(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=20, producer_id="validate.propositions.canonical-enum-binding", rules=())
+def check_canonical_enum_binding(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Reject non-canonical claim_layer / identification_strength values (anti-drift).
 
     Allowed values are derived from the ``ClaimLayer`` and ``IdentificationStrength``
@@ -110,38 +131,33 @@ def check_canonical_enum_binding(ctx: ValidateContext) -> Iterator[Result]:
         if claim_layer is not None:
             claim_layer_str = str(claim_layer)
             if claim_layer_str not in _CLAIM_LAYER_VALUES:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: claim_layer '{claim_layer_str}' is not a canonical "
-                        f"ClaimLayer value — must be one of {sorted(_CLAIM_LAYER_VALUES)}"
-                    ),
-                    rule="proposition.claim_layer.canonical",
+                    message=f"{path.name}: claim_layer '{claim_layer_str}' is not a canonical ClaimLayer value — must be one of {sorted(_CLAIM_LAYER_VALUES)}",
+                    rule=RULES["proposition.claim-layer.canonical"],
                     task=None,
+                    qualifiers={"key": []},
                 )
 
         identification_strength = fm.get("identification_strength")
         if identification_strength is not None:
             id_str = str(identification_strength)
             if id_str not in _IDENTIFICATION_STRENGTH_VALUES:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: identification_strength '{id_str}' is not a canonical "
-                        f"IdentificationStrength value — must be one of "
-                        f"{sorted(_IDENTIFICATION_STRENGTH_VALUES)}"
-                    ),
-                    rule="proposition.identification.canonical",
+                    message=f"{path.name}: identification_strength '{id_str}' is not a canonical IdentificationStrength value — must be one of {sorted(_IDENTIFICATION_STRENGTH_VALUES)}",
+                    rule=RULES["proposition.identification.canonical"],
                     task=None,
+                    qualifiers={"key": []},
                 )
 
 
-@Check(section="propositions", order=30)
-def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=30, producer_id="validate.propositions.discusses-membership", rules=())
+def check_discusses_membership(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Structural QA for `discusses` membership entries (spec §5 rules 0, 1, 3, 4).
 
     Rule 2's "frame must be a bundle kind" is enforced at graph-build time
@@ -152,17 +168,21 @@ def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
         if raw_discusses is None:
             continue
         if not isinstance(raw_discusses, list):
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=path,
                 line=None,
                 message=f"{path.name}: discusses must be a list of strings or {{frame, role}} objects",
-                rule="proposition.membership.shape",
+                rule=RULES["proposition.membership.shape"],
                 task=None,
+                qualifiers={"key": []},
             )
             continue
         discusses = raw_discusses
         roles_by_frame: dict[str, set[str]] = {}
+        missing_frame_reported = False
+        invalid_roles_reported: set[str] = set()
+        invalid_shapes_reported: set[str] = set()
         for entry in discusses:
             if isinstance(entry, str):
                 frame, role = entry, "core"  # bare string => core
@@ -170,52 +190,58 @@ def check_discusses_membership(ctx: ValidateContext) -> Iterator[Result]:
                 frame = entry.get("frame")
                 role = entry.get("role", "core")
                 if not frame:
-                    yield Result(
-                        severity=Severity.ERROR,
-                        path=path,
-                        line=None,
-                        message=f"{path.name}: discusses entry missing required 'frame'",
-                        rule="proposition.membership.frame",
-                        task=None,
-                    )
+                    if not missing_frame_reported:
+                        missing_frame_reported = True
+                        yield validation_observation(
+                            severity=Severity.ERROR,
+                            path=path,
+                            line=None,
+                            message=f"{path.name}: discusses entry missing required 'frame'",
+                            rule=RULES["proposition.membership.frame"],
+                            task=None,
+                            qualifiers={"key": ["required-field", "frame"]},
+                        )
                     continue
                 if str(role) not in MEMBERSHIP_ROLE_VALUES:
-                    yield Result(
+                    role_key = str(role)
+                    if role_key not in invalid_roles_reported:
+                        invalid_roles_reported.add(role_key)
+                        yield validation_observation(
+                            severity=Severity.ERROR,
+                            path=path,
+                            line=None,
+                            message=f"{path.name}: discusses role '{role}' is not a canonical MembershipRole — must be one of {sorted(MEMBERSHIP_ROLE_VALUES)}",
+                            rule=RULES["proposition.membership.role"],
+                            task=None,
+                            qualifiers={"key": ["role", role_key]},
+                        )
+                    continue
+            else:
+                shape_key = type(entry).__name__
+                if shape_key not in invalid_shapes_reported:
+                    invalid_shapes_reported.add(shape_key)
+                    yield validation_observation(
                         severity=Severity.ERROR,
                         path=path,
                         line=None,
-                        message=(
-                            f"{path.name}: discusses role '{role}' is not a canonical "
-                            f"MembershipRole — must be one of {sorted(MEMBERSHIP_ROLE_VALUES)}"
-                        ),
-                        rule="proposition.membership.role",
+                        message=f"{path.name}: discusses entry must be a string or a {{frame, role}} object",
+                        rule=RULES["proposition.membership.shape"],
                         task=None,
+                        qualifiers={"key": ["entry-type", shape_key]},
                     )
-                    continue
-            else:
-                yield Result(
-                    severity=Severity.ERROR,
-                    path=path,
-                    line=None,
-                    message=f"{path.name}: discusses entry must be a string or a {{frame, role}} object",
-                    rule="proposition.membership.shape",
-                    task=None,
-                )
                 continue
             roles_by_frame.setdefault(str(frame), set()).add(str(role))
 
         for frame, roles in sorted(roles_by_frame.items()):
             if len(roles) > 1:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=path,
                     line=None,
-                    message=(
-                        f"{path.name}: frame '{frame}' is listed with conflicting membership "
-                        f"roles {sorted(roles)} — a proposition has exactly one role per bundle"
-                    ),
-                    rule="proposition.membership.duplicate",
+                    message=f"{path.name}: frame '{frame}' is listed with conflicting membership roles {sorted(roles)} — a proposition has exactly one role per bundle",
+                    rule=RULES["proposition.membership.duplicate"],
                     task=None,
+                    qualifiers={"key": ["frame", frame]},
                 )
 
 
@@ -238,8 +264,8 @@ def _is_cito_discusses(predicate: str) -> bool:
     return predicate == _CITO_DISCUSSES_CURIE or predicate == _CITO_DISCUSSES_IRI
 
 
-@Check(section="propositions", order=40)
-def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Result]:
+@Check(section=SECTION, order=40, producer_id="validate.propositions.relations-store-membership-roles", rules=())
+def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[CheckObservation]:
     """Validate authored `role` fields in relations.yaml (design §4, three rules).
 
     Rule 1: role set on a non-cito:discusses predicate → error.
@@ -282,17 +308,21 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
 
         # Rule 1: role is only meaningful on cito:discusses.
         if not _is_cito_discusses(relation.predicate):
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=Path(relation.source_path),
                 line=None,
-                message=(
-                    f"relations.yaml: role '{relation.role.value}' set on "
-                    f"'{relation.predicate}' relation ({relation.subject} → {relation.object}); "
-                    "role is only valid on cito:discusses membership edges (design §4)"
-                ),
-                rule="relation.role.non-discusses",
+                message=f"relations.yaml: role '{relation.role.value}' set on '{relation.predicate}' relation ({relation.subject} → {relation.object}); role is only valid on cito:discusses membership edges (design §4)",
+                rule=RULES["relation.role.non-discusses"],
                 task=None,
+                qualifiers={
+                    "key": [
+                        relation.subject,
+                        relation.predicate,
+                        relation.object,
+                        relation.role.value,
+                    ]
+                },
             )
             continue
 
@@ -303,19 +333,20 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
         object_is_live_bundle = object_prefix in _LIVE_BUNDLE_PREFIXES
 
         if not subject_is_proposition or not object_is_live_bundle:
-            yield Result(
+            yield validation_observation(
                 severity=Severity.ERROR,
                 path=Path(relation.source_path),
                 line=None,
-                message=(
-                    f"relations.yaml: role '{relation.role.value}' set on "
-                    f"{relation.subject} cito:discusses {relation.object}, "
-                    "but this is not a proposition→live-bundle membership edge "
-                    "(subject must be a proposition and object a hypothesis/mechanism); "
-                    "membership roles are only valid on membership edges (design §4)"
-                ),
-                rule="relation.role.non-membership",
+                message=f"relations.yaml: role '{relation.role.value}' set on {relation.subject} cito:discusses {relation.object}, but this is not a proposition→live-bundle membership edge (subject must be a proposition and object a hypothesis/mechanism); membership roles are only valid on membership edges (design §4)",
+                rule=RULES["relation.role.non-membership"],
                 task=None,
+                qualifiers={
+                    "key": [
+                        relation.subject,
+                        relation.object,
+                        relation.role.value,
+                    ]
+                },
             )
             continue
 
@@ -368,17 +399,16 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
                 # the same condition), surface this as an error rather than silently
                 # skipping — a silent skip here would hide cross-surface conflicts for any
                 # author using an alias or mis-typed ref.
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=Path(entity.file_path),
                     line=None,
-                    message=(
-                        f"{entity.canonical_id}: discusses frame ref '{frame_ref}' cannot be "
-                        "resolved to a known entity; cannot check cross-surface role conflict "
-                        "(design §4 rule 3)"
-                    ),
-                    rule="relation.role.unresolved-frame",
+                    message=f"{entity.canonical_id}: discusses frame ref '{frame_ref}' cannot be resolved to a known entity; cannot check cross-surface role conflict (design §4 rule 3)",
+                    rule=RULES["relation.role.unresolved-frame"],
                     task=None,
+                    qualifiers={
+                        "key": [entity.canonical_id, "frame", frame_ref]
+                    },
                 )
                 continue
             pair = (entity.canonical_id, frame_cid)
@@ -386,15 +416,12 @@ def check_relations_store_membership_roles(ctx: ValidateContext) -> Iterator[Res
                 continue
             relations_role = canonical_relation_roles[pair]
             if role.value != relations_role:
-                yield Result(
+                yield validation_observation(
                     severity=Severity.ERROR,
                     path=Path(entity.file_path),
                     line=None,
-                    message=(
-                        f"{entity.canonical_id}: conflicting membership roles for frame "
-                        f"'{frame_cid}' — frontmatter says '{role.value}' but "
-                        f"relations.yaml says '{relations_role}' (design §4 rule 3)"
-                    ),
-                    rule="relation.role.cross-surface-conflict",
+                    message=f"{entity.canonical_id}: conflicting membership roles for frame '{frame_cid}' — frontmatter says '{role.value}' but relations.yaml says '{relations_role}' (design §4 rule 3)",
+                    rule=RULES["relation.role.cross-surface-conflict"],
                     task=None,
+                    qualifiers={"key": [entity.canonical_id, "frame", frame_cid]},
                 )
