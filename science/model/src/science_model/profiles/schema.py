@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from science_model.identity import CurationScope, EntityClass
 
 EntityFilenameStrategy = Literal["numeric", "citekey", "singleton", "slug", "verbatim", "id-local"]
+
+
+# Fields the toolkit rules, which an externally loaded manifest may not author. A project cannot
+# install a packaged type mixin, so it cannot arm schema closure for itself.
+_TOOLKIT_RESERVED_KIND_FIELDS = frozenset({"schema_closed"})
 
 
 class KindCategory(StrEnum):
@@ -110,3 +116,30 @@ class ProfileManifest(BaseModel):
     relation_kinds: list[RelationKind]
     strictness: Literal["core", "curated", "typed-extension"]
     core_structured_sources: list[CoreStructuredSource] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_toolkit_reserved_fields(cls, data: Any) -> Any:
+        """Refuse toolkit-ruled kind fields authored by an EXTERNAL manifest.
+
+        Both external entry points (`load_profile_manifest` and the tool's
+        `_validate_manifest_shape`) reach us through `model_validate` on a mapping parsed from
+        YAML, so their entity_kinds entries arrive as `Mapping`. The packaged profiles construct
+        `EntityKind` instances directly, so theirs do not -- which is exactly what lets one rule
+        here serve both loaders without touching the 53 shipped declarations.
+        """
+        if not isinstance(data, Mapping):
+            return data
+        for entry in data.get("entity_kinds") or ():
+            if not isinstance(entry, Mapping):
+                continue  # a constructed EntityKind: packaged, not external
+            reserved = _TOOLKIT_RESERVED_KIND_FIELDS & set(entry)
+            if reserved:
+                name = entry.get("name", "<unnamed>")
+                msg = (
+                    f"entity_kinds[{name!r}] may not author {sorted(reserved)}: these are ruled by "
+                    "the toolkit. A project cannot install a packaged type mixin, so it cannot arm "
+                    "schema closure for its own kinds."
+                )
+                raise ValueError(msg)
+        return data
