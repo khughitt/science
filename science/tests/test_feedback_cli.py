@@ -754,7 +754,7 @@ class TestFeedbackConcern:
             env=env,
         )
         assert result.exit_code == 0, result.output
-        assert load_entry(tmp_path / "fb-2026-06-28-001.yaml").concern == "methodology:statistics"
+        assert load_entry(tmp_path, "fb-2026-06-28-001").concern == "methodology:statistics"
 
     def test_fb_concerns_constant_matches_lib(self):
         # Fail-loud guard against vocab drift between the CLI's click.Choice tuple

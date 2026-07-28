@@ -98,7 +98,7 @@ def feedback_add(
         merge_path = fb_dir / f"{merge_into}.yaml"
         if not merge_path.exists():
             raise click.ClickException(f"Feedback entry not found: {merge_into}")
-        dup = load_entry(merge_path)
+        dup = load_entry(fb_dir, merge_into)
     else:
         dup = find_duplicate(fb_dir, target=target, summary=summary, concern=concern)
 
@@ -554,7 +554,7 @@ def feedback_show(entry_id: str) -> None:
     path = fb_dir / f"{entry_id}.yaml"
     if not path.exists():
         raise click.ClickException(f"Feedback entry not found: {entry_id}")
-    entry = load_entry(path)
+    entry = load_entry(fb_dir, entry_id)
     import yaml
 
     click.echo(yaml.dump(entry.model_dump(mode="json"), default_flow_style=False, sort_keys=False))

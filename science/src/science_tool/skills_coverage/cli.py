@@ -19,10 +19,11 @@ from science_tool.skills_coverage.scan import (
     scan_portfolio,
     write_report_atomically,
 )
-from science_tool.feedback import load_all_entries
+from science_tool.feedback import FeedbackStoreError, load_all_entries
 from science_tool.feedback_cli import resolve_feedback_dir
 from science_tool.skills_coverage.curate import (
     CurateConflictError,
+    CurateDispositionError,
     CurateSelectionError,
     CurateStatusError,
     apply_plan,
@@ -59,7 +60,15 @@ def coverage_command(output: Path | None, project: str | None) -> None:
 
 
 @click.command(name="curate")
-@click.option("--apply", "apply_", is_flag=True, help="File feedback for the plan (default: report only, no writes).")
+@click.option(
+    "--apply",
+    "apply_",
+    is_flag=True,
+    help=(
+        "File feedback for the plan in ~/.config/science/feedback "
+        "(or $SCIENCE_FEEDBACK_DIR). Default: report only, no writes."
+    ),
+)
 @click.option("--term", "terms", multiple=True, help="With --apply, file only these term(s). Repeatable.")
 @click.option("--project", "project", default=None, help="Restrict the scan to one registered project.")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text")
@@ -96,8 +105,20 @@ def curate_command(apply_: bool, terms: tuple[str, ...], project: str | None, fm
         try:
             plan = apply_plan(plan, feedback_dir, today=date.today().isoformat(),
                               selected_terms=set(terms) or None)
-        except CurateSelectionError as exc:
+        except (CurateDispositionError, CurateSelectionError) as exc:
             raise click.ClickException(str(exc)) from exc
+        except (
+            FeedbackStoreError,
+            OSError,
+            UnicodeError,
+            ValidationError,
+            yaml.YAMLError,
+        ) as exc:
+            raise click.ClickException(
+                f"could not apply feedback plan in {feedback_dir}: {exc}. "
+                "Earlier rows may already have been committed; "
+                "inspect the feedback store before retrying."
+            ) from exc
 
     text = serialize_curate_plan(plan, fmt)
     if output is not None:

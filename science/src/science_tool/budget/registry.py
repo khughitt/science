@@ -526,6 +526,7 @@ DEFERRED.update(
             "one output member per skill, source reference, coverage report member, or lint finding", "1b"
         )
         for path in (
+            "skills curate",
             "skills coverage",
             "skills sources check",
             "skills sources list",

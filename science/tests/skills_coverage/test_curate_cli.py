@@ -116,7 +116,7 @@ def test_output_writes_full_payload_not_stdout(tmp_path: Path, monkeypatch) -> N
 
 def test_apply_with_output_is_rejected(tmp_path: Path, monkeypatch) -> None:
     # --output is report-only; combined with --apply it must error BEFORE any write,
-    # so no feedback is committed and no file is created (apply stays atomic).
+    # so this invalid option combination commits no feedback and creates no output file.
     fb, _ = _setup(tmp_path, monkeypatch)
     out = tmp_path / "plan.json"
     result = CliRunner().invoke(skills_group, ["curate", "--apply", "--output", str(out)])
@@ -124,6 +124,123 @@ def test_apply_with_output_is_rejected(tmp_path: Path, monkeypatch) -> None:
     assert "cannot be combined with --apply" in result.output
     assert not out.exists()
     assert not fb.exists() or load_all_entries(fb) == []  # apply never ran
+
+
+def test_apply_missing_feedback_file_reports_possible_prior_commits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from science_tool.feedback import FeedbackEntry, save_entry
+    from science_tool.skills_coverage import cli as cli_module
+    from science_tool.skills_coverage.curate import build_curate_plan
+
+    fb, term = _setup(tmp_path, monkeypatch)
+    entry_id = "fb-2026-07-28-900"
+    entry_path = fb / f"{entry_id}.yaml"
+    save_entry(
+        fb,
+        FeedbackEntry(
+            id=entry_id,
+            target=f"skill-coverage:{term}",
+            summary="s",
+            concern="tooling",
+            category="gap",
+        ),
+    )
+
+    def build_then_remove(*args, **kwargs):
+        plan = build_curate_plan(*args, **kwargs)
+        entry_path.unlink()
+        return plan
+
+    monkeypatch.setattr(cli_module, "build_curate_plan", build_then_remove)
+
+    result = CliRunner().invoke(skills_group, ["curate", "--apply"])
+
+    assert result.exit_code != 0
+    assert "could not apply feedback plan" in result.output
+    assert "earlier rows may already have been committed" in result.output.lower()
+    assert "inspect the feedback store before retrying" in result.output.lower()
+    assert "Traceback" not in result.output
+
+
+def test_apply_malformed_feedback_file_reports_possible_prior_commits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from science_tool.feedback import FeedbackEntry, save_entry
+    from science_tool.skills_coverage import cli as cli_module
+    from science_tool.skills_coverage.curate import build_curate_plan
+
+    fb, term = _setup(tmp_path, monkeypatch)
+    entry_id = "fb-2026-07-28-900"
+    entry_path = fb / f"{entry_id}.yaml"
+    save_entry(
+        fb,
+        FeedbackEntry(
+            id=entry_id,
+            target=f"skill-coverage:{term}",
+            summary="s",
+            concern="tooling",
+            category="gap",
+        ),
+    )
+
+    def build_then_corrupt(*args, **kwargs):
+        plan = build_curate_plan(*args, **kwargs)
+        entry_path.write_text("not: [valid", encoding="utf-8")
+        return plan
+
+    monkeypatch.setattr(cli_module, "build_curate_plan", build_then_corrupt)
+
+    result = CliRunner().invoke(skills_group, ["curate", "--apply"])
+
+    assert result.exit_code != 0
+    assert "could not apply feedback plan" in result.output
+    assert "earlier rows may already have been committed" in result.output.lower()
+    assert "inspect the feedback store before retrying" in result.output.lower()
+    assert "Traceback" not in result.output
+
+
+def test_apply_unwritable_feedback_file_reports_possible_prior_commits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from science_tool.feedback import FeedbackEntry, save_entry
+    from science_tool.skills_coverage import cli as cli_module
+    from science_tool.skills_coverage.curate import build_curate_plan
+
+    fb, term = _setup(tmp_path, monkeypatch)
+    entry_id = "fb-2026-07-28-900"
+    entry_path = fb / f"{entry_id}.yaml"
+    save_entry(
+        fb,
+        FeedbackEntry(
+            id=entry_id,
+            target=f"skill-coverage:{term}",
+            summary="s",
+            concern="tooling",
+            category="gap",
+        ),
+    )
+
+    def build_then_make_read_only(*args, **kwargs):
+        plan = build_curate_plan(*args, **kwargs)
+        entry_path.chmod(0o400)
+        return plan
+
+    monkeypatch.setattr(cli_module, "build_curate_plan", build_then_make_read_only)
+
+    try:
+        result = CliRunner().invoke(skills_group, ["curate", "--apply"])
+    finally:
+        entry_path.chmod(0o600)
+
+    assert result.exit_code != 0
+    assert "could not apply feedback plan" in result.output
+    assert "earlier rows may already have been committed" in result.output.lower()
+    assert "inspect the feedback store before retrying" in result.output.lower()
+    assert "Traceback" not in result.output
 
 
 def test_bad_status_reports_click_error(tmp_path: Path, monkeypatch) -> None:

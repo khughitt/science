@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 122,
-    "deferred": 100,
+    "deferred": 101,
 }
 
 
@@ -156,6 +156,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     row per stored audit case, while `findings ingest` can emit untrusted validation
     text that grows with the input report. The live partition is therefore
     69/122/100 = 291.
+
+    Skill-coverage curation then adds one deferred leaf. `skills curate` emits one
+    row per uncovered candidate and can include growable occurrence evidence and
+    skipped-project context, taking the live partition to 69/122/101 = 292.
     """
     actual = {
         "budgeted": len(BUDGETS),

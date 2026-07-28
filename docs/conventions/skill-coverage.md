@@ -60,11 +60,13 @@ science skills curate --format json --output plan.json   # report-only; not with
 
 Each accepted gap becomes a feedback entry with `target: skill-coverage:<term>`,
 `category: gap`, `concern: tooling`, `project: science`. A term already carrying
-an **open** entry records a recurrence instead of a duplicate; a term whose only
-matches are resolved (`wontfix`/`addressed`/`deferred`) is reported but not
-re-filed. More than one open entry for a term is a hard error — merge them first.
-Only `uncovered` gaps are filed; `covered-not-loaded` and `unmapped` appear in the
-report's context counts as project-side follow-ups.
+an **open**, matching `concern: tooling` entry records a recurrence instead of a
+duplicate; a term whose matching `concern: tooling` entries are all resolved
+(`wontfix`/`addressed`/`deferred`) is reported but not re-filed. More than one
+matching open `concern: tooling` entry for a term is a hard error — merge them
+first. Entries under other concerns are ignored for recurrence, skip, and
+conflict decisions. Only `uncovered` gaps are filed; `covered-not-loaded` and
+`unmapped` appear in the report's context counts as project-side follow-ups.
 
 `--output` is **report-only** — it cannot be combined with `--apply`. This keeps a
 committed feedback write from ever being followed by a failing report-write (which a

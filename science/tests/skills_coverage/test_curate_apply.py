@@ -140,6 +140,23 @@ def test_unknown_selected_term_raises(tmp_path: Path) -> None:
         apply_plan(plan, tmp_path, today="2026-07-28", selected_terms={"data-product:zzz"})
 
 
+def test_unknown_disposition_raises_before_any_write(tmp_path: Path) -> None:
+    plan = build_curate_plan(
+        [_cand("data-product:a"), _cand("data-product:b")],
+        [],
+        _CTX,
+        _SCOPE,
+    )
+    plan.rows[1].disposition = "unexpected"
+
+    with pytest.raises(ValueError, match="unknown disposition"):
+        apply_plan(plan, tmp_path, today="2026-07-28")
+
+    assert plan.mode == "report"
+    assert all(row.applied is None for row in plan.rows)
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_skip_row_writes_nothing(tmp_path: Path) -> None:
     resolved = FeedbackEntry(
         id="fb-2026-07-28-600",

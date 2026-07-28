@@ -25,6 +25,7 @@ CONCERN = "tooling"
 CATEGORY = "gap"
 PROJECT = "science"
 RESOLVED_STATUSES = ("addressed", "deferred", "wontfix")
+VALID_DISPOSITIONS = ("new", "recur", "skip", "skip-addressed-conflict")
 
 
 def target_for(term: str) -> str:
@@ -62,6 +63,20 @@ class CurateSelectionError(Exception):
     def __init__(self, unknown: list[str]) -> None:
         self.unknown = unknown
         super().__init__(f"--term names no candidate in the current plan: {', '.join(unknown)}")
+
+
+class CurateDispositionError(ValueError):
+    """A curate plan row has an unknown disposition."""
+
+    def __init__(self, offenders: list[tuple[str, str]]) -> None:
+        self.offenders = offenders
+        detail = ", ".join(
+            f"{term}={disposition!r}" for term, disposition in offenders
+        )
+        super().__init__(
+            f"unknown disposition in curate plan ({detail}); expected one of "
+            f"{', '.join(VALID_DISPOSITIONS)}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +251,14 @@ def apply_plan(
     today: str,
     selected_terms: set[str] | None = None,
 ) -> CuratePlan:
+    invalid_dispositions = sorted(
+        (row.term, row.disposition)
+        for row in plan.rows
+        if row.disposition not in VALID_DISPOSITIONS
+    )
+    if invalid_dispositions:
+        raise CurateDispositionError(invalid_dispositions)
+
     if selected_terms is not None:
         unknown = sorted(selected_terms - {row.term for row in plan.rows})
         if unknown:
@@ -250,7 +273,7 @@ def apply_plan(
             row.applied = False
             continue
         if row.disposition == "recur":
-            entry = load_entry(feedback_dir / f"{_open_id(row)}.yaml")
+            entry = load_entry(feedback_dir, _open_id(row))
             record_occurrence(
                 entry,
                 date=today,
@@ -264,7 +287,7 @@ def apply_plan(
                 "id": entry.id,
                 "recurrence_after": entry.recurrence,
             }
-        else:
+        elif row.disposition == "new":
             entry = FeedbackEntry(
                 id=next_feedback_id(feedback_dir, today),
                 created=today,
@@ -281,6 +304,8 @@ def apply_plan(
                 "id": entry.id,
                 "recurrence_after": entry.recurrence,
             }
+        else:
+            raise CurateDispositionError([(row.term, row.disposition)])
         row.applied = True
     return plan
 
