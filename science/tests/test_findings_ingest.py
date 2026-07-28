@@ -26,6 +26,9 @@ from science_tool.findings.storage import CASES_DIRNAME, MAX_CASE_BYTES, load_ca
 from science_tool.graph.errors import EntityIdentityCollisionError
 
 
+EXPECTED_MAX_REPORT_NESTING = 100
+
+
 class Q(BaseModel):
     model_config = ConfigDict(extra="forbid")
     field: str = ""
@@ -221,6 +224,24 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
         },
     )
     return AuditReport(**{**base, **overrides})
+
+
+def _nested_list(depth: int) -> object:
+    value: object = 0
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def _report_with_metric_nesting(depth: int) -> dict:
+    report = _report(
+        metrics={
+            "dataset_anomalies": {
+                "nested": _nested_list(depth),
+            }
+        }
+    )
+    return report.model_dump(mode="json")
 
 
 def _provenance(report: AuditReport) -> IngestionProvenance:
@@ -1479,7 +1500,29 @@ def test_load_report_wraps_a_deep_nesting_parse_error(tmp_path):
     path = tmp_path / "report.json"
     path.write_text(("[" * 10000) + "0" + ("]" * 10000), encoding="utf-8")
 
-    with pytest.raises(IngestError, match="could not parse"):
+    with pytest.raises(IngestError, match="could not parse.*excessive nesting"):
+        load_report(tmp_path, path)
+
+
+def test_load_report_accepts_the_maximum_json_nesting(tmp_path):
+    path = tmp_path / "report.json"
+    # root object + metrics object + producer object consume three levels.
+    path.write_text(
+        json.dumps(_report_with_metric_nesting(EXPECTED_MAX_REPORT_NESTING - 3)),
+        encoding="utf-8",
+    )
+
+    assert load_report(tmp_path, path).schema_version == 2
+
+
+def test_load_report_refuses_one_level_beyond_maximum_json_nesting(tmp_path):
+    path = tmp_path / "report.json"
+    path.write_text(
+        json.dumps(_report_with_metric_nesting(EXPECTED_MAX_REPORT_NESTING - 2)),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(IngestError, match="could not parse.*excessive nesting"):
         load_report(tmp_path, path)
 
 

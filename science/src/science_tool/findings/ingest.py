@@ -55,6 +55,7 @@ from science_tool.findings.storage import (
 )
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_REPORT_NESTING = 100
 SUPPORTED_FINGERPRINT_VERSIONS = frozenset({1})
 
 
@@ -126,6 +127,26 @@ class IngestionContext(BaseModel):
         return value
 
 
+def _require_bounded_json_nesting(value: object, path: Path) -> None:
+    stack: list[tuple[object, int]] = [(value, 0)]
+    while stack:
+        current, parent_depth = stack.pop()
+        if isinstance(current, dict):
+            children = current.values()
+        elif isinstance(current, list):
+            children = current
+        else:
+            continue
+
+        depth = parent_depth + 1
+        if depth > MAX_REPORT_NESTING:
+            raise IngestError(
+                f"could not parse {path}: excessive nesting exceeds "
+                f"{MAX_REPORT_NESTING}"
+            )
+        stack.extend((child, depth) for child in children)
+
+
 def load_report(project_root: Path, path: Path) -> AuditReport:
     """Read the actor's one gated report path.
 
@@ -143,10 +164,14 @@ def load_report(project_root: Path, path: Path) -> AuditReport:
         raise IngestError(f"could not read {path}: {exc}") from exc
     try:
         raw = json.loads(text)
-    except (ValueError, RecursionError) as exc:
+    except RecursionError as exc:
+        raise IngestError(f"could not parse {path}: excessive nesting") from exc
+    except ValueError as exc:
         # JSONDecodeError is a ValueError. The broader base also covers CPython's
-        # bounded-integer refusal; excessive nesting raises RecursionError.
+        # bounded-integer refusal. Decoder nesting behavior varies by Python version;
+        # the explicit post-decode check below enforces the portable boundary.
         raise IngestError(f"could not parse {path}: {exc}") from exc
+    _require_bounded_json_nesting(raw, path)
     if not isinstance(raw, dict):
         raise IngestError(f"{path} is not a JSON object")
     if raw.get("schema_version") != REPORT_SCHEMA_VERSION:
