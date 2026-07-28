@@ -195,6 +195,51 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
 
 
+def test_graph_validate_skip_status_is_info_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A `skip` row must not abort the section.
+
+    `causal_acyclicity` emits `skip` whenever a project has no scic:causes edges
+    (graph/store/validation.py). Rejecting it here raised ValueError out of
+    check_graph, so every later graph check stopped running and the whole section
+    was reported as one `validate.check-error`.
+    """
+    from science_tool.validate.checks import graph
+
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    graph_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(
+        graph,
+        "validate_graph_dataset",
+        lambda _dataset: ValidationVerdict.passed(
+            [
+                {
+                    "check": "causal_acyclicity",
+                    "status": "skip",
+                    "details": "no scic:causes edges in the project — nothing to check for cycles",
+                },
+                {"check": "parseable", "status": "pass", "details": "ok"},
+            ]
+        ),
+    )
+    monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
+    monkeypatch.setattr(graph, "list_inquiries_dataset", lambda _dataset: InstrumentResult[dict].empty())
+
+    results = list(graph.check_graph(_ctx(tmp_path)))
+
+    assert (
+        "graph validate: causal_acyclicity — no scic:causes edges in the project — nothing to check for cycles"
+        in _messages(results, Severity.INFO)
+    )
+    assert _messages(results, Severity.ERROR) == []
+    # The rows after the skip still ran.
+    assert "graph validate: parseable — ok" in _messages(results, Severity.INFO)
+
+
 def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch) -> None:
     from science_tool.instruments import ValidationVerdict
     from science_tool.validate.checks import graph

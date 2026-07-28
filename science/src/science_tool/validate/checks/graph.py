@@ -172,7 +172,12 @@ def _result(severity: Severity, message: str) -> Result:
 
 def _graph_validation_results(verdict: ValidationVerdict[dict[str, str]]) -> Iterator[Result]:
     for row in verdict.rows:
-        status = _status(row, context="graph validate", accepted={"fail", "warn", "pass"})
+        # `skip` is accepted because the graph validator emits it: `causal_acyclicity`
+        # reports `skip` for a project with no scic:causes edges, which is the common
+        # case, not a defect. Omitting it here raised ValueError and aborted the WHOLE
+        # graph section — peers, audit, diff and inquiry validation all stopped running —
+        # for any such project. `inquiry validate` below already accepted it.
+        status = _status(row, context="graph validate", accepted={"fail", "warn", "pass", "skip"})
         check = row["check"]
         severity = Severity.ERROR if status == "fail" else Severity.WARN if status == "warn" else Severity.INFO
         yield _result(severity, f"graph validate: {check} — {row['details']}")
