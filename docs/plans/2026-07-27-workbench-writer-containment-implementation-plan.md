@@ -1289,3 +1289,33 @@ Expected: both lines show a non-empty title and `unowned=[]`.
 - **`entities.render_entity_text` itself.** It is the general typed-entity renderer with callers far beyond the workbench. This plan routes the workbench's two create paths around it rather than changing its contract for everyone.
 - **The `legacy_relation_label` / `legacy_patch` / `legacy_edge_id` triple.** They are in `PROPOSITION_OWNED_KEYS` and stay there; deleting them is piece 3's corpus migration.
 - **`entities.write_entity_file`'s own full dump.** Task 3 routes the workbench around it; other callers are untouched and out of scope.
+
+## Follow-up work this branch surfaced but did not do
+
+Found by the final whole-branch review, each with a reproduction. Recorded here
+because the branch is mergeable without them and each needs its own design pass.
+
+- **`render_update`'s stale-owned-key hole — the highest-value follow-up.**
+  `render_update` writes an owned key only `if key in generated`, and
+  `render_entity_text` uses `exclude_none=True`, so **clearing** an owned key
+  leaves the old value on disk. Reproduced: change a row's predicate
+  `affects` → `binds` and the writer persists `predicate: binds` alongside a
+  stale `polarity: positive` — a combination `PropositionEntity` then refuses to
+  load. `certify_persisted` is base-only and structurally cannot see it. The
+  behaviour is identical to the `_render_workbench_entity_update` it replaced,
+  so this branch is not a regression, but `entity_frontmatter` is now the single
+  source of truth and that makes the hole worth closing. The obvious one-line
+  fix (`final.pop(key, None)`) is **not** safe as-is: it would also delete
+  `legacy_relation_label` / `legacy_patch` / `legacy_edge_id` and `discusses`
+  whenever a row omits them.
+- **Propositions still reach disk through the uncontained writer.**
+  [`annotation/promote.py:283`](../../science/src/science_tool/annotation/promote.py)
+  and [`annotation/synthesize.py:430`](../../science/src/science_tool/annotation/synthesize.py)
+  mint propositions via `entities.write_entity_file`'s full dump. They set a
+  non-empty `title`, so they add nothing to the 769 — but "the workbench no
+  longer emits skeletons" is not "propositions no longer get skeletons." Piece 3.
+- **`compile_workbench`'s destination computation** skips the
+  `local_part_conforms` and root-escape checks the apply path applies in
+  `_validated_entity_target_path`. Pre-existing, and now partly mitigated by
+  base 2.0's `id` pattern running inside `certify_persisted`. Worth a note in
+  piece 2 rather than a fix here.
