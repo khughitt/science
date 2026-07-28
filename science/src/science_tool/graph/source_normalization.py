@@ -33,8 +33,17 @@ def normalize_structured_row(row: Mapping[str, Any]) -> dict[str, Any]:
     own backfills stay explicit and separately testable downstream of this.
     """
     normalized: dict[str, Any] = {}
+    authored_keys_by_destination: dict[str, str] = {}
     for key, value in row.items():
         if key in STRUCTURED_DROP_KEYS:
             continue
-        normalized[STRUCTURED_KEY_MAPPING.get(key, key)] = value
+        destination = STRUCTURED_KEY_MAPPING.get(key, key)
+        if destination in authored_keys_by_destination:
+            colliding_keys = sorted((authored_keys_by_destination[destination], key))
+            raise ValueError(
+                f"structured row authored keys {colliding_keys[0]!r} and "
+                f"{colliding_keys[1]!r} both normalize to {destination!r}"
+            )
+        authored_keys_by_destination[destination] = key
+        normalized[destination] = value
     return normalized

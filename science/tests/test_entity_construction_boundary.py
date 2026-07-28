@@ -54,6 +54,48 @@ def test_the_declared_key_mapping_is_applied() -> None:
     assert "source_path" not in normalized
 
 
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"canonical_id": "finding:0001-x", "id": "shadow"},
+        {"id": "shadow", "canonical_id": "finding:0001-x"},
+        {"canonical_id": "finding:0001-x", "id": "finding:0001-x"},
+        {"id": "finding:0001-x", "canonical_id": "finding:0001-x"},
+    ],
+)
+def test_canonical_id_and_id_collision_is_refused_for_any_order_or_value(
+    row: dict[str, Any],
+) -> None:
+    from science_tool.graph.source_normalization import normalize_structured_row
+
+    with pytest.raises(
+        ValueError,
+        match="authored keys 'canonical_id' and 'id' both normalize to 'id'",
+    ):
+        normalize_structured_row(row)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"source_path": "authored.yaml", "file_path": "shadow.yaml"},
+        {"file_path": "shadow.yaml", "source_path": "authored.yaml"},
+        {"source_path": "same.yaml", "file_path": "same.yaml"},
+        {"file_path": "same.yaml", "source_path": "same.yaml"},
+    ],
+)
+def test_source_path_and_file_path_collision_is_refused_for_any_order_or_value(
+    row: dict[str, Any],
+) -> None:
+    from science_tool.graph.source_normalization import normalize_structured_row
+
+    with pytest.raises(
+        ValueError,
+        match="authored keys 'file_path' and 'source_path' both normalize to 'file_path'",
+    ):
+        normalize_structured_row(row)
+
+
 def test_kind_is_the_only_declared_DROP() -> None:
     # `kind` is authoritative from the manifest and deliberately ignored on the row, so it is a
     # legitimately dropped key rather than a shadow field. A drop that is not DECLARED is
@@ -109,6 +151,18 @@ def test_an_authored_shadow_key_SURVIVES_the_whole_load_path(tmp_path: Path) -> 
     sources = load_project_sources(tmp_path)
     entity = next(e for e in sources.entities if e.canonical_id == "widget:0001-x")
     assert (entity.model_extra or {}).get("shadow_key") == "v"
+
+
+def test_an_alias_collision_is_refused_through_the_whole_load_path(tmp_path: Path) -> None:
+    _write_structured_project(
+        tmp_path,
+        [{"canonical_id": "widget:0001-x", "id": "widget:shadow", "title": "W"}],
+    )
+    with pytest.raises(
+        ValueError,
+        match="authored keys 'canonical_id' and 'id' both normalize to 'id'",
+    ):
+        load_project_sources(tmp_path)
 
 
 def _write_closed_kind_project(root: Path, rows: list[dict]) -> None:
