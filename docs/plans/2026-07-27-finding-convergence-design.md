@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 16. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 17. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -138,6 +138,18 @@
 > `rule_kind_segment(kind) = kind.replace("_", "-")` and fail registry construction if
 > two active kind names map to one segment (§6). Existing `paper.*` and `hypothesis.*`
 > identities are unchanged, so the live acceptance and certified gate tier remain exact.
+>
+> **Revision 17 closes the wired-caveat report seam.** `InstrumentResult` deliberately
+> permits `ok` / `empty` results to carry `code` / `reason` caveats, and
+> `dataset_anomalies` exercises that state today, but revision 2's `AuditReport` had no
+> place to retain it. Schema v2 now includes `caveats: list[ProducerCaveat]`; caveats are
+> neither findings nor unwired failures, never affect totals, remain uncapped in
+> projection, and are rendered even on an otherwise clean report (§6, §11). This revision
+> also removes an invalid `remediation="producer"` from the illustrative cached-field
+> rule; actual producer remediation requires the registered handler §6 already enforces.
+> The exhaustive rule-ID table also includes the runner-owned
+> `validate.sidecar.legacy_removed` → `validate.sidecar-removed` mapping that revision
+> 15's `validate/checks/` pass could not see.
 
 ## Motivation
 
@@ -668,7 +680,7 @@ FindingRule(
     identifier_namespaces=set(),
     qualifier_schema=DatasetFieldQualifier,
     identity_qualifiers=("field",),
-    remediation="producer",
+    remediation="none",
     # presentation metadata — so renderers stop hardcoding sections and order
     title="Cached dataset field drifted from source",
     section="datasets",
@@ -746,6 +758,11 @@ enforces:
 including `{}` when that schema permits an empty object. Producers with no schema and
 unwired producers are absent. `meta.producers_run` and `unwired` separately state which
 producers were attempted and which could not run.
+
+An `ok` / `empty` producer with non-empty `code` or `reason` contributes one
+`ProducerCaveat` to `AuditReport.caveats`. Caveats preserve partial-input and
+intentional-empty explanations without pretending the producer was unwired. They do not
+enter findings, metrics, or totals.
 
 - **`severities` is a permitted set, not a single default.** Existing rules legitimately
   vary by context.
@@ -835,6 +852,7 @@ set:
 | `tasks` | `tasks.check` | none |
 | `tooling` | `tooling.check` | none |
 | `unresolved_markers` | `unresolved-markers.check` | none |
+| `validate.sidecar.legacy_removed` | `validate.sidecar-removed` | none |
 
 The nearby `prose_lints.*` spellings are governed by the semantic split above, and
 `prose_lints.numeric-verification.coverage` becomes metrics rather than a rule. These are
@@ -1045,7 +1063,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 29 static rule mappings and the INFO-only `papers` removal; every old WARN/ERROR emission still produces one finding, and INFO never entered health `count_issues`, so the changes are count-neutral |
+| `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; every old WARN/ERROR emission still produces one finding, and INFO never entered health `count_issues`, so the changes are count-neutral |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -1282,6 +1300,11 @@ class AcceptedFinding(TypedDict):
     acceptance_key: str              # §10 — the accepting entry's frozen key
     reason: str                      # the acceptance's own recorded reason
 
+class ProducerCaveat(TypedDict):
+    producer_id: str
+    code: str | None
+    reason: str | None                # at least one of code/reason is nonblank
+
 class AuditReport(TypedDict):
     schema_version: int              # 2
     fingerprint_version: int         # 1
@@ -1290,6 +1313,7 @@ class AuditReport(TypedDict):
     findings: list[ReportedFinding]  # unsuppressed, ordered (below)
     accepted: list[AcceptedFinding]
     metrics: dict[str, ProducerMetrics]   # keyed by producer_id, validated per §6
+    caveats: list[ProducerCaveat]     # wired ok/empty code/reason; never a finding
     unwired: list[UnwiredProducer]   # {producer_id, code, reason}
     totals: ReportTotals
     meta: ReportMeta                 # timings, duration, producers_run
@@ -1308,6 +1332,11 @@ class AuditReport(TypedDict):
   status and findings; it never re-runs a producer or reads mutable context state.
   Unwired producers are omitted from `metrics` and skip schema validation. A wired
   producer with no declared schema may emit no metrics and is likewise omitted.
+- **Wired caveats survive.** A wired result with `code` or `reason` contributes one
+  `ProducerCaveat`. The report validator requires its producer in
+  `meta.producers_run`, rejects duplicate producer caveats, and requires at least one
+  nonblank field. Projection never caps caveats. A caveat is rendered as a note and does
+  not prevent a true zero from being called clean; unwired still does.
 - **`totals`** carries `findings_by_severity`, `findings_total`, `accepted_total`, and
   `unwired_total`. `accepted` and `unwired` are **not** in `findings_total`, preserving
   today's exclusions. `total_issues` is replaced by `totals.findings_total`; §9
@@ -1345,7 +1374,8 @@ class AuditReport(TypedDict):
    another toolkit-owned family field fails.
 5. **Renderer clean-refusal** — a non-empty unwired channel forbids "Project is clean",
    asserted on rendered output, not on a boolean. The invariant lives in the layer being
-   rewritten, and this is the guard-in-one-reader failure shape.
+   rewritten, and this is the guard-in-one-reader failure shape. A wired caveat is
+   rendered but does not forbid a true-zero clean result.
 6. **Persisted hashes are frozen** — golden-vector tests pin fingerprint canonical
    encoding plus the exact occurrence-key and review-id domain prefixes, field order,
    NUL separators, UTF-8 encoding, and 64-hex SHA-256 output against independent
@@ -1383,7 +1413,9 @@ class AuditReport(TypedDict):
     schema fails; a wired producer with no schema and non-empty metrics fails; an unwired
     result with non-empty metrics fails; and an unwired producer with a required metrics
     schema succeeds with empty metrics, skips schema validation, and is absent from
-    `report.metrics`.
+    `report.metrics`. A wired `code` / `reason` round-trips through one
+    `ProducerCaveat`; a duplicate caveat, a caveat for an unlisted producer, or a caveat
+    with neither field fails.
 16. **Evidence is typed, frozen, and bounded** — a `LocationEvidence` path that is
     absolute, traverses `..`, or resolves through a symlink is refused; `line` and `span`
     together are refused; a `span` with `end_line < start_line`, with equal lines and
@@ -1459,8 +1491,9 @@ class AuditReport(TypedDict):
     and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
     advisories map to their distinct canonical rules with their current visibility.
     Every emitted validation rule satisfies the frozen dotted-kebab grammar; the current
-    static mappings equal the complete §6 table, and every old nonconforming ID is absent
-    from declarations and emissions. All non-policy INFO sites emit
+    static mappings equal the complete §6 table across canonical checks and runner-owned
+    findings, and every old nonconforming ID is absent from declarations and emissions.
+    All non-policy INFO sites emit
     `ValidationNotice`, not an `AuditFinding`; the check executes once and its notice and
     producer result derive from the same frozen observation batch.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
