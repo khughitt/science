@@ -82,7 +82,9 @@ clean worktree, reverted without being committed, and followed by another clean-
     ``test_an_AUTHORED_bookkeeping_key_is_still_refused[content-prose]``;
     ``test_an_AUTHORED_bookkeeping_key_is_still_refused[evidence_refs-value1]``.
     The guard names ``sources.py:1276``. Bypassing ``build`` removes both validation and enrichment,
-    so the five additional structured-load controls fail during direct Pydantic projection.
+    so five additional structured-load controls fail during direct Pydantic projection. The two
+    ``VALIDATION_SEES`` / normalized-destinations spy tests fail because the validator call is
+    absent, not because projection rejects their rows.
 
 5d. Change ``STRUCTURED_DROP_KEYS`` to ``frozenset({"kind", "title"})``.
     Target: ``test_kind_is_the_only_declared_DROP``.

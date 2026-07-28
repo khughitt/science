@@ -69,8 +69,12 @@ class EntityKind(BaseModel):
     structured_source_root_key: str | None = None
 
     @model_serializer(mode="wrap")
-    def _omit_unset_toolkit_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+    def _omit_unset_toolkit_fields(self, handler: SerializerFunctionWrapHandler):
         """Do not turn an internal default into externally authored manifest input.
+
+        The return annotation is intentionally omitted: Pydantic treats an annotated ``dict`` as
+        this model's serialization schema and would collapse every declared field to an arbitrary
+        object. The cast below preserves type clarity without changing that schema contract.
 
         Explicit declarations remain visible. A dumped packaged profile is therefore not an
         external manifest: once trusted objects become raw mappings, accepting their reserved
