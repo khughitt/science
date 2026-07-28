@@ -275,6 +275,36 @@ def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
         _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
 
 
+def test_update_certifies_a_preserved_field_containing_a_dashes_line(tmp_path) -> None:
+    # Finding 2 (final review): `certify_persisted` re-parsed frontmatter with a bare
+    # `text.split("---\n", 2)`, which matches `---\n` ANYWHERE in the file -- including inside a
+    # preserved authored field's own content -- unlike `read_existing_target`'s
+    # `split_frontmatter`, which requires the fence to open and close its own line. An authored
+    # `description` containing its own `---` rule made certification cut the frontmatter short and
+    # raise a raw `yaml.scanner.ScannerError` on a record `read_existing_target` had already
+    # admitted as valid.
+    from science_model.frontmatter import split_frontmatter
+    import yaml
+
+    from science_tool.dag.workbench_apply import _entity_edit
+
+    entity = _proposition_for_row(_row())
+    first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 27))
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter, body = first.final_text.split("---\n", 2)[1:]
+    authored_description = "Some prose.\n---\nMore prose after a rule.\n"
+    edited = yaml.safe_load(frontmatter) | {"description": authored_description}
+    first.path.write_text(
+        "---\n" + yaml.safe_dump(edited, sort_keys=False, allow_unicode=True) + "---\n" + body,
+        encoding="utf-8",
+    )
+
+    second = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 28))
+
+    reloaded, _body = split_frontmatter(second.final_text)
+    assert reloaded["description"] == authored_description
+
+
 def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch) -> None:
     # The second create path, exercised through its real entry point. Task 3 routes it through the
     # shared renderer; without certification INSIDE render_create, a compile-path regression could

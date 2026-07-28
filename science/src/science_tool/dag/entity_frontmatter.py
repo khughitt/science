@@ -1,8 +1,13 @@
-"""Which frontmatter keys the workbench owns, and how it renders them.
+"""Which frontmatter keys the workbench writers own, and how they render them.
 
-Shared by the two writers -- `workbench.compile_workbench` (create) and
-`workbench_apply._entity_edit` (create + update). It lives in its own module because
-`workbench_apply` imports `workbench`, so neither can host code the other needs.
+Governs the workbench writers specifically -- `workbench.compile_workbench` (create) and
+`workbench_apply._entity_edit` (create + update). It does NOT govern every path that mints a
+proposition: `annotation/promote.py` and `annotation/synthesize.py` still write propositions
+through `entities.write_entity_file`, the uncontained full-model dump this module exists to
+replace on the workbench path; migrating those is out of scope here.
+
+It lives in its own module because `workbench_apply` imports `workbench`, so neither can host
+code the other needs.
 
 The owned sets are POSITIVE allowlists. `render_entity_text` full-dumps the model
 (`exclude_defaults=False`), which is what wrote `datapackage: ''` and `accessions: []` onto 391
@@ -90,20 +95,26 @@ class PersistedShapeError(ValueError):
     """A write was refused because its result would not satisfy the durable base shape."""
 
 
-def certify_persisted(entity: WorkbenchEntity, text: str, *, path: Path | None = None) -> None:
+def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
     """Refuse to render or plan a write whose result would fail the durable base shape.
 
     On create this catches a writer regression; on update it catches a record that predates
     containment -- deliberately a REJECTION, not a backfill (design §5.4): a workbench update must
     not silently migrate a record the author did not ask to touch.
+
+    Parses `text` with `split_frontmatter` -- the same parser `read_existing_target` uses for
+    admission -- rather than a bare `split("---\\n", 2)`, so the two halves of "admit, then
+    certify" agree on what frontmatter is. This still validates the ROUND-TRIPPED mapping (parsing
+    the rendered text back), not the in-memory `dict` that was dumped: that is what catches an
+    unquoted date the YAML dumper emitted as a bare scalar, which reloads as a `datetime.date`
+    rather than the string the schema requires.
     """
-    frontmatter = yaml.safe_load(text.split("---\n", 2)[1]) or {}
+    frontmatter, _body = split_frontmatter(text)
     try:
         EntityValidator().validate_persisted_base_shape(frontmatter)
     except EntityValidationError as exc:
-        where = f"{path}: " if path is not None else ""
         raise PersistedShapeError(
-            f"{where}{entity.id} would not satisfy the durable base shape and was NOT written\n"
+            f"{entity.id} would not satisfy the durable base shape and was NOT written\n"
             f"  {exc}\n"
             f"  If this record predates writer containment, repair it directly; the workbench "
             f"will not backfill it."

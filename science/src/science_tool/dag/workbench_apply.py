@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from science_tool.dag.entity_frontmatter import (
     MalformedTargetError,
+    PersistedShapeError,
     WorkbenchEntity,
     read_existing_target,
     render_create,
@@ -330,10 +331,13 @@ def build_workbench_apply_plan(
     compile_result, canonical_text = _compile_in_scratch(root, input_text, as_of=today)
 
     edits: list[PlannedWorkbenchEdit] = []
-    for entity in compile_result.propositions:
-        edits.append(_entity_edit(root, entity, as_of=today))
-    for entity in compile_result.evidence_lines:
-        edits.append(_entity_edit(root, entity, as_of=today))
+    try:
+        for entity in compile_result.propositions:
+            edits.append(_entity_edit(root, entity, as_of=today))
+        for entity in compile_result.evidence_lines:
+            edits.append(_entity_edit(root, entity, as_of=today))
+    except PersistedShapeError as exc:
+        raise WorkbenchApplyError(str(exc)) from exc
     edits.append(_workbench_edit(resolved_input, input_text, canonical_text))
 
     return WorkbenchApplyPlan(

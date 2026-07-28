@@ -500,6 +500,34 @@ def test_build_workbench_apply_plan_rejects_wrong_prefix_proposition_row_id(tmp_
     assert not (tmp_path / "entities").exists()
 
 
+def test_apply_workbench_wraps_persisted_shape_error_from_renderer(tmp_path: Path) -> None:
+    # Finding 1 (final review): `PersistedShapeError`, raised inside `render_update` for a
+    # pre-existing record that predates writer containment (e.g. a `title: ''` legacy record),
+    # must reach the real apply entry point as a `WorkbenchApplyError` -- `cli.py` catches only
+    # `WorkbenchApplyError`, so an unwrapped `PersistedShapeError` would surface as a raw
+    # traceback. The message must survive verbatim: it carries the "repair it directly" guidance.
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    prop_path.write_text(
+        prop_path.read_text(encoding="utf-8").replace("title: a affects b", "title: ''"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(WorkbenchApplyError) as exc:
+        apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
+
+    message = str(exc.value)
+    assert "proposition:a-affects-b" in message
+    assert "durable base shape" in message
+    assert "will not backfill it" in message
+    assert prop_path.read_text(encoding="utf-8").count("title: ''") == 1, "a refused update wrote anyway"
+
+
 def test_apply_workbench_rejects_input_hash_drift(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
