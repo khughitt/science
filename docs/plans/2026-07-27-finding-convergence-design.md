@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 12. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 13. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -101,6 +101,11 @@
 > a finding because it reports that configured policy demoted detected lint issues; it
 > uses `ProjectSubject`, keys identity on `check`, and records the changing `count` only
 > on the occurrence. Plan 2 also removes `_result`'s unused default rule string (§6).
+>
+> **Revision 13 corrects the Plan 2 baseline.** `archive_lag` was retired by
+> `4162196f` on 2026-07-26, before this design's grounding commit, and the tree explicitly
+> tests that health omits it. It is therefore removed from the migration ledger and from
+> R3's examples rather than reintroduced as a producer (§Grounding, §9, §Out of scope).
 
 ## Motivation
 
@@ -155,11 +160,11 @@ Spec 1 generalizes that distinction to the whole surface rather than inventing o
 > absorbed silently.
 
 R3 exists because R1 as stated in revision 1 contradicted the tree: `count_issues`
-currently derives issues from coverage metrics and from archive lag (§Grounding).
+currently derives issues from coverage metrics (§Grounding).
 
 ## Grounding findings that shape the design
 
-Verified against the source tree at `bbff18fd`; revisions 8–12 change this design only.
+Verified against the source tree at `bbff18fd`; revisions 8–13 change this design only.
 
 - **`InstrumentResult` is already generic.** `class InstrumentResult(BaseModel, Generic[RowT])`
   (`instruments.py:73`), so `InstrumentResult[AuditFinding]` is the unchanged status-and-row
@@ -181,11 +186,18 @@ Verified against the source tree at `bbff18fd`; revisions 8–12 change this des
 
 - **`count_issues` is not a row count, and it derives issues from measurements.**
   Its own docstring (`graph/health_count.py:126`) says so: *"``managed_artifacts`` uses
-  ``counts_as_issue``, coverage gaps are derived from metrics, and non-zero archive lag
-  contributes one issue."* Concretely, `_count_layered_claim_issues` adds `issues += 1`
+  ``counts_as_issue``, coverage gaps are derived from metrics, and nested finding sections
+  have their own issue rules."* Concretely, `_count_layered_claim_issues` adds `issues += 1`
   for each of `proposition_claim_layer_coverage` and
   `causal_leaning_identification_coverage` whose `denominator > 0 and numerator <
-  denominator`, and the total adds `(1 if lag_total else 0)`.
+  denominator`.
+
+- **`archive_lag` is not a Plan 2 producer.** Commit `4162196f` retired the tasks archive
+  command and archive-lag health surface on 2026-07-26, before the `bbff18fd` grounding
+  stamp. `test_build_health_report_omits_archive_lag` and
+  `test_health_checks_package.py`'s absent-module assertion preserve that removal. Plan 2
+  must not reconstruct a retired diagnostic merely because an earlier design revision
+  mistakenly listed it.
 
 - **Two producers emit rows that count as zero, and it is an omission.**
   `legacy_task_type` and `invalid_entity_aspects` appear in `count_issues`'s
@@ -919,7 +931,6 @@ intentional observable difference.
 | `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; INFO never entered `count_issues`, so neither rename changes counts |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
-| `archive_lag` | `1 if total else 0` | `tasks.archive-lag`, `ProjectSubject`, emitted **iff** total > 0 | `done_in_active`, `retired_in_active`, `missing_completed` retained as metrics | net count unchanged (1 ↔ 1); the measurement is no longer the issue |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
 | `layered_claims.rival_model_packets_…` | `len()` | `layered-claim.rival-model-gap` | — | — |
 | `layered_claims.*_coverage` (×2) | `+1` each when incomplete | `layered-claim.coverage-incomplete`, `ProjectSubject`, qualifier = which coverage | both coverage metrics retained | net count unchanged; the metric stops being the issue |
@@ -978,7 +989,7 @@ unchanged into producer metrics and produce no `AuditFinding`.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
-class. Two are net-neutral reclassifications (`archive_lag`, layered-claim coverage).
+class. Layered-claim coverage is a net-neutral reclassification.
 **No entry reduces counts.** Everything else preserves observable counts exactly.
 
 ### 10. Acceptance migration
@@ -1332,10 +1343,10 @@ class AuditReport(TypedDict):
 - **Converting measurements themselves into findings.** A coverage fraction, a lag count,
   or a corpus tally stays a metric; making the shared type carry measurements would make
   it broad enough to mean nothing. This does **not** exclude the enumerated
-  policy-violation findings of R3 — `layered-claim.coverage-incomplete` and
-  `tasks.archive-lag` are findings *about* a measurement crossing a policy threshold, and
-  the measurement is retained alongside. §9 is the exhaustive list; no producer may add
-  another without a ledger row.
+  policy-violation findings of R3 — `layered-claim.coverage-incomplete` is a finding
+  *about* a measurement crossing a policy threshold, and the measurement is retained
+  alongside. §9 is the exhaustive list; no producer may add another without a ledger
+  row.
 - Retiring `doc/curations/` ledgers. The curation sweep's narrative output is a Spec 2
   question; Spec 1 only removes the reason it needs prose carry-over parsing.
 
