@@ -55,15 +55,16 @@ def test_pinned_project_strict_schema_kinds_is_mixin_names(tmp_path: Path) -> No
     assert load_project_sources(tmp_path / "p").strict_schema_kinds == PROJECT_MIXIN_NAMES
 
 
-def test_structured_source_drops_unknown_reference_key() -> None:
-    # The extra-preserving-path invariant: structured sources cannot carry a stray
-    # reference-named key into model_extra (extra="ignore"), so the diagnostic can
-    # never misfire on them. StructuredEntitySource requires canonical_id and has no
-    # `kind` field; both `kind` and `method` here are unknown keys and are dropped.
+def test_structured_source_PRESERVES_an_unknown_reference_key() -> None:
+    # Inverted deliberately (schema-closure mechanism, Task 4). The contract is `extra="allow"`
+    # so unknown keys survive to be REFUSED by the composed schema on a closed kind -- and, on an
+    # open kind, to be REPORTED by the undeclared_key audit. The previous assertion pinned the
+    # silence, not the correctness: a `method:` key on a kind that does not declare it is exactly
+    # what the diagnostic is for, and it was unreportable only because the row was stripped first.
     record = StructuredEntitySource.model_validate(
         {"canonical_id": "workflow:w", "title": "W", "kind": "workflow", "method": "phantom"}
     )
-    assert not (record.model_extra or {})
+    assert record.model_extra == {"kind": "workflow", "method": "phantom"}
 
 
 def test_integration_unpinned_workflow_method_warns_not_fails(tmp_path: Path) -> None:

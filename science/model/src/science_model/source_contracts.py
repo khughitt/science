@@ -63,12 +63,17 @@ class StructuredEntitySource(BaseModel):
     under knowledge/sources/<profile>/, e.g. generated limit-relation /
     morphism-edge rows, or `finding` rows from an audit). The `kind` is
     authoritative from the manifest and ignored on the row; other unrecognized
-    fields are ignored. Reference and freshness fields (`evidence_refs`,
+    fields are preserved for downstream entity-schema validation. Reference and freshness fields (`evidence_refs`,
     `description`, `created`, `updated`) ARE preserved so dependency edges
     (e.g. finding bears_on via evidence_refs) and freshness propagation survive.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    # extra="allow", deliberately. Unknown keys must survive the source-contract parse so the
+    # composed entity schema can refuse them; dropping here would put the loss UPSTREAM of the
+    # check, making the check one that can only ever pass. `forbid` is wrong for the opposite
+    # reason: every existing row carries `kind`, which the loader legitimately ignores, so it
+    # would reject the whole corpus for a key that is fine.
+    model_config = ConfigDict(extra="allow")
 
     canonical_id: str
     title: str = ""

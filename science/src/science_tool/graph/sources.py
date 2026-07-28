@@ -77,6 +77,7 @@ from science_tool.graph.identity_table import (
     classify_owner_scope,
 )
 from science_tool.graph.source_records import MarkdownSourceDocument
+from science_tool.graph.source_normalization import normalize_structured_row
 from science_tool.graph.skill_loads import SkillLoadRecord, collect_skill_loads, load_skill_aliases
 from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.bib import BibAdapter
@@ -1215,28 +1216,28 @@ def _load_structured_source_records(
         )
         schema = registry.resolve(kind_name)
         for record in records:
-            raw: dict[str, Any] = {
-                "id": record.canonical_id,
-                "canonical_id": record.canonical_id,
-                "kind": kind_name,
-                "type": kind_name,
-                "title": record.title or record.canonical_id,
-                "profile": record.profile or local_profile,
-                "file_path": record.source_path or default_path,
-                "related": list(record.related),
-                "source_refs": list(record.source_refs),
-                "evidence_refs": list(record.evidence_refs),
-                "aliases": list(record.aliases),
-                "ontology_terms": list(record.ontology_terms),
-            }
+            raw = normalize_structured_row(record.model_dump(exclude_unset=True))
+            # Loader BACKFILLS -- policy, not source content, and deliberately after normalization
+            # so the schema sees them as the loader's contribution rather than the author's.
+            raw["kind"] = kind_name
+            raw["type"] = kind_name
+            raw.setdefault("canonical_id", record.canonical_id)
+            raw.setdefault("title", record.title or record.canonical_id)
+            raw.setdefault("profile", record.profile or local_profile)
+            raw.setdefault("file_path", default_path)
+            raw.setdefault("related", list(record.related))
+            raw.setdefault("source_refs", list(record.source_refs))
+            raw.setdefault("evidence_refs", list(record.evidence_refs))
+            raw.setdefault("aliases", list(record.aliases))
+            raw.setdefault("ontology_terms", list(record.ontology_terms))
             if record.domain is not None:
-                raw["domain"] = record.domain
+                raw.setdefault("domain", record.domain)
             if record.description is not None:
-                raw["description"] = record.description
+                raw.setdefault("description", record.description)
             if record.created is not None:
-                raw["created"] = record.created
+                raw.setdefault("created", record.created)
             if record.updated is not None:
-                raw["updated"] = record.updated
+                raw.setdefault("updated", record.updated)
             authored_aliases = _enrich_raw(
                 raw,
                 kind=kind_name,
