@@ -21,7 +21,7 @@ the old and new producer shapes.
 independent of `science_tool`.
 
 **Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md),
-revision 20 (`2f9e5eef`). Section references below are to that document.
+revision 21 (`cc6c21c5`). Section references below are to that document.
 
 ## Global Constraints
 
@@ -36,6 +36,9 @@ revision 20 (`2f9e5eef`). Section references below are to that document.
   `InstrumentResult`, tuples, row lists, mappings, or the old `HealthReport`.
 - **One public health schema only:** `AuditReport` schema version 2. Do not retain a
   compatibility serializer or a `--legacy` output option.
+- **Health output is not volume-capped.** The 5,000-observation ceiling is an ingestion
+  policy applied to `findings + accepted` at both file-load and direct-ingestion
+  boundaries; it is not an `AuditReport` model constraint.
 - **Composition, not inheritance:** `FindingProducerResult` contains
   `InstrumentResult[AuditFinding]` plus `ProducerMetrics`; `InstrumentResult` itself is
   unchanged.
@@ -93,8 +96,9 @@ revision 20 (`2f9e5eef`). Section references below are to that document.
 ## Design-test accountability
 
 Plan 1 already owns design tests 2–3 and 6–23 at the model/storage/ingestion layer; this
-plan keeps those suites green and adds the runtime integration half of tests 4 and 15.
-Plan 2 directly lands:
+plan keeps those suites green, relocates test 21's count ceiling from the shared model to
+the ingestion boundary without weakening it, and adds the runtime integration half of
+tests 4 and 15. Plan 2 directly lands:
 
 | Design test | Plan step |
 |---|---|
@@ -102,6 +106,7 @@ Plan 2 directly lands:
 | 4 project selects instances, not policy | Task 1 step 4; Task 4 family tests |
 | 5 renderer clean refusal | Task 4 steps 1 and 8 |
 | 15 producer metrics | Task 1 step 1; Task 4 prose/health/data paths |
+| 21 ingestion-only volume ceiling | Task 3 steps 3–4 |
 | 24 Plan 2 wildcard half | Task 3 steps 1–2 |
 | 26 count ledger | Task 4 step 11 |
 | 27 presentation order | Task 3 step 3; Task 4 steps 6 and 8 |
@@ -431,6 +436,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_tool.findings.producers import FindingProducer, FindingRegistry, build_registry
+from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import registry_for_project
 
 
@@ -439,9 +445,15 @@ def registered_producers() -> tuple[FindingProducer, ...]:
     return ()
 
 
-def build_project_registry(project_root: Path) -> FindingRegistry:
-    active = frozenset(registry_for_project(project_root).registered_kinds())
+def build_registry_for_entity_registry(
+    entity_registry: EntityRegistry,
+) -> FindingRegistry:
+    active = frozenset(entity_registry.registered_kinds())
     return build_registry(list(registered_producers()), active_kinds=active)
+
+
+def build_project_registry(project_root: Path) -> FindingRegistry:
+    return build_registry_for_entity_registry(registry_for_project(project_root))
 ```
 
 Change `findings.cli._registry` to accept the strict source load's registry and delegate:
@@ -456,15 +468,12 @@ Pass `sources.registry` from the same strict load that constructs
 `IngestionContext`. Retain the phase-boundary ratchet in
 `test_findings_producer_namespaces.py`: the catalog is still empty in this task.
 
-Also expose
-`build_registry_for_entity_registry(entity_registry: EntityRegistry) -> FindingRegistry`
-and implement both entry points through it. Health already has
-`ProjectSources.registry` whenever any selected check needs sources; pass that same
-object instead of resolving profiles/catalogs a second time. A health selection that
-needs no sources may call `registry_for_project(project_root)`. In trusted ingestion,
-change `_load_ingestion_context` to return both `IngestionContext` and the strict
-`ProjectSources.registry`, then build the finding registry from that exact object before
-calling `ingest_report`. This is the §6 same-context requirement, not a caching
+Health already has `ProjectSources.registry` whenever any selected check needs sources;
+pass that same object instead of resolving profiles/catalogs a second time. A health
+selection that needs no sources may call `registry_for_project(project_root)`. In trusted
+ingestion, change `_load_ingestion_context` to return both `IngestionContext` and the
+strict `ProjectSources.registry`, then build the finding registry from that exact object
+before calling `ingest_report`. This is the §6 same-context requirement, not a caching
 optimization.
 
 - [ ] **Step 6: Run scoped tests**
@@ -843,6 +852,8 @@ git commit -m "feat(validate): add finding conversion primitives"
 - Modify: `science/model/src/science_model/audit/report.py`
 - Modify: `science/model/src/science_model/audit/__init__.py`
 - Modify: `science/model/tests/test_audit_report.py`
+- Modify: `science/src/science_tool/findings/ingest.py`
+- Modify: `science/tests/test_findings_ingest.py`
 - Create: `science/src/science_tool/findings/reporting.py`
 - Modify: `science/src/science_tool/validate/acceptance.py`
 - Create: `science/tests/test_findings_reporting.py`
@@ -856,6 +867,7 @@ git commit -m "feat(validate): add finding conversion primitives"
     (remaining_reported, accepted)`
   - `build_audit_report(...) -> AuditReport`
   - `ProducerCaveat`
+  - `MAX_INGESTED_REPORT_FINDINGS = 5000`, enforced only by trusted ingestion
 - The partition operates only on findings already labeled with producer `validate`;
   non-validation findings never enter it.
 
@@ -922,6 +934,11 @@ def test_pre_migration_key_refuses_message_matchers_that_can_never_match(
 Implement the frozen key using `canonical_json`:
 
 ```python
+import hashlib
+
+from science_model.audit.fingerprint import canonical_json
+
+
 def _pre_migration_key_fields(entry: dict[str, Any]) -> dict[str, object]:
     rule = entry.get("rule")
     if not isinstance(rule, str):
@@ -968,6 +985,10 @@ Cover the Plan 2 scope with concrete fixtures and these assertions:
 | absent | `warn` | yes |
 | absent | `error` | yes |
 
+For both absent-severity rows, omit `message_contains`, use a message with arbitrary
+text, and assert the finding enters `accepted`: this directly proves the absent field is
+a matching wildcard, not merely that its key encoding omits one field.
+
 In the same test module, create one identical finding under producer
 `dataset-anomalies` and assert it is never offered to the matcher. Retain the existing
 `filter_accepted_warnings` test over legacy `Result` in this preparatory task and assert
@@ -1011,6 +1032,25 @@ producer results, then assert all four contracts directly:
 In `model/tests/test_audit_report.py`, add exact tests that one wired caveat round-trips,
 while duplicate producer caveats, a caveat whose producer is absent from
 `meta.producers_run`, and a caveat with neither a nonblank code nor reason fail.
+
+Move the observation ceiling out of the model in the same task:
+
+1. remove `MAX_REPORT_FINDINGS` from `science_model.audit.report` and its package export;
+2. remove `max_length` from `AuditReport.findings` / `accepted` and remove the combined
+   count validator from `AuditReport`;
+3. add `MAX_INGESTED_REPORT_FINDINGS = 5000` in `findings/ingest.py`;
+4. add one helper that rejects
+   `len(report.findings) + len(report.accepted) > MAX_INGESTED_REPORT_FINDINGS`;
+5. call it after `load_report` validates the bounded actor-authored JSON and at the
+   beginning of `_snapshot_report`, before serialization or any store creation; and
+6. move the old model ceiling test to `test_findings_ingest.py`, covering both file load
+   and direct `ingest_report`. Add a model test proving a structurally valid report over
+   5,000 observations is constructible, so a future field constraint cannot silently
+   re-cap `science health`.
+
+The existing `MAX_REPORT_BYTES` checks remain unchanged. The byte limit protects parsing
+and direct snapshots at ingestion; the count limit protects occurrence expansion there.
+Neither applies while trusted health assembles or renders its in-process result.
 
 Add frozen `ProducerCaveat(producer_id, code, reason)` to `audit/report.py`, with a model
 validator requiring at least one trimmed nonblank `code` / `reason`. Add
@@ -1108,6 +1148,7 @@ Run:
 cd science
 uv run --frozen pytest \
   tests/test_findings_reporting.py \
+  tests/test_findings_ingest.py \
   tests/test_acceptance_authority.py \
   tests/test_health_acceptance_parity.py -q
 ```
@@ -1125,11 +1166,13 @@ Commit:
 
 ```bash
 git add science/src/science_tool/findings/reporting.py \
+  science/src/science_tool/findings/ingest.py \
   science/src/science_tool/validate/acceptance.py \
   science/model/src/science_model/audit/report.py \
   science/model/src/science_model/audit/__init__.py \
   science/model/tests/test_audit_report.py \
   science/tests/test_findings_reporting.py \
+  science/tests/test_findings_ingest.py \
   science/tests/test_acceptance_authority.py \
   science/tests/test_health_acceptance_parity.py
 git commit -m "feat(findings): assemble audit reports"
@@ -1140,9 +1183,17 @@ git commit -m "feat(findings): assemble audit reports"
 ### Task 4: Atomic convergence of validation, health, and data audit
 
 > **Atomicity rule for this task:** This is one reviewer unit and one commit. Do not
-> commit after a namespace conversion, and do not make an intermediate suite green by
-> accepting both shapes. The registered catalog, real producer return types, health
+> land a namespace conversion separately, and do not make an intermediate suite green
+> by accepting both shapes. The registered catalog, real producer return types, health
 > schema, renderer, count semantics, and namespace guard switch together.
+>
+> **Recovery commits are allowed during execution.** Record the exact Task 3 commit
+> before Step 1 and make clearly named `wip:` commits after coherent mechanical
+> sub-stages when useful. They may be red and are local recovery/bisect points, not
+> review units. At Step 14, verify that base hash, squash every Task 4 WIP commit with
+> `git reset --soft <verified-task-3-commit>`, inspect the complete staged diff, rerun
+> Steps 12–13 on the squashed state, and create the one final Task 4 commit. Never
+> publish or merge the WIP sequence.
 
 **Files:**
 - Modify: every Python module under
@@ -1229,6 +1280,12 @@ class Result:
     task: str | None
     qualifiers: Mapping[str, object]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.rule, FindingRule):
+            raise TypeError(
+                f"Result.rule must be FindingRule, got {type(self.rule).__name__}"
+            )
+
     @property
     def rule_id(self) -> str:
         return self.rule.id
@@ -1252,7 +1309,9 @@ There is no `rule=None`, no default rule string, and no default qualifiers mappi
 Every emission must state its identity inputs explicitly; for an ordinary predicate
 with only one possible row per subject that is `qualifiers={"key": []}`. Focused
 raw-check tests read `result.rule.id`; gates, telemetry, acceptance, projection, and
-renderers receive the validated `AuditFinding` and read `finding.rule_id`.
+renderers receive the validated `AuditFinding` and read `finding.rule_id`. Add a focused
+test constructing `Result(..., rule="literal")` through an `Any`-typed value and assert
+the runtime guard raises; the AST guard in Step 4 is complementary, not its substitute.
 
 - [ ] **Step 3: Make `Check` the registered wrapper**
 
@@ -1570,6 +1629,13 @@ The conversion ledger is exhaustive:
 test must assert emitted rule IDs equal the twelve declared IDs. Each producer returns
 the composed model directly; `_drain_instrument_results` is deleted, not rewritten.
 
+Relabeling the validation checks under report producer `validate` cannot collapse two
+old rows: registry construction gives every rule ID exactly one declaring validation
+module, and that module's producer boundary rejects duplicate finding identity; the
+required semantic `key` distinguishes repeated rows of one ordinary rule. The aggregate
+`validate` result is validated again after relabeling, so a violation of any premise
+fails before report assembly rather than reducing the count.
+
 - [ ] **Step 7: Rewrite health assembly to `AuditReport`**
 
 `build_health_report` requires actor claims:
@@ -1846,6 +1912,12 @@ uv run --frozen pyright
 Expected: both PASS.
 
 - [ ] **Step 14: Commit the atomic cutover**
+
+If Task 4 WIP commits exist, first inspect the recorded Task 3 base with `git show`, then
+soft-reset to that exact commit. `--soft` is required: it removes only the temporary
+commit boundaries and preserves the complete Task 4 index/worktree. Confirm
+`git diff --cached --stat` still names every intended Task 4 file, rerun Steps 12–13,
+and only then create the final commit:
 
 ```bash
 git add science/src/science_tool science/tests \
