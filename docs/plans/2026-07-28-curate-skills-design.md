@@ -77,21 +77,34 @@ a term absent from the current plan is a hard error (never a silent no-op).
 derived from `uncovered` terms only) plus the `covered_not_loaded` /
 `unmapped` occurrence counts for the context line.
 
-**Correlation → filing plan.** For each candidate, the CLI builds the canonical
-target `skill-coverage:<term>` and correlates it against the current feedback
-store via `list_entries(feedback_dir, status=None, target="skill-coverage:*")`,
-matching on **normalized target + concern** (the same key `find_duplicate`
-uses). Each candidate resolves to exactly one plan row:
+**Correlation → filing plan.** For each candidate the CLI builds the canonical
+target `skill-coverage:<term>` and finds every store entry whose target is
+equivalent. **Matching normalizes first, then filters** — it loads *all* entries
+(`load_all_entries`, every status) and compares `normalize_target(e.target)`
+against `normalize_target("skill-coverage:<term>")`, rather than a raw
+`fnmatch("skill-coverage:*")` namespace glob. Raw `fnmatch` is case-sensitive on
+POSIX while `normalize_target` lowercases the prefix, so a variant spelled
+`Skill-Coverage:…` would be excluded before normalization and a duplicate would
+be filed. Concern is fixed at `tooling` for every row this command writes, so the
+match key is normalized-target alone.
+
+The matched set is partitioned by status, and disposition follows a fixed
+precedence:
 
 | Row | Condition | `--apply` action |
 |---|---|---|
-| **NEW** | no `skill-coverage:<term>` entry exists | `save_entry` a fresh `FeedbackEntry` under a `next_feedback_id` |
-| **RECUR** | an **open** entry exists | `record_occurrence` on it (recurrence = `len(occurrences)` bumps), refreshing the evidence snapshot |
-| **SKIP (resolved)** | a `wontfix` / `addressed` / `deferred` entry exists | **no write**; the row is still printed so a gap you previously declined that is now recurring stays visible |
+| **CONFLICT (fail-early)** | more than one **open** matching entry exists | **abort** the run with an error naming the duplicate ids; the store must be merged first (explicit over defensive) |
+| **RECUR** | exactly one **open** entry exists | `record_occurrence` on it (recurrence = `len(occurrences)` bumps), refreshing the evidence snapshot |
+| **SKIP (resolved)** | no open entry, but ≥1 `wontfix`/`addressed`/`deferred` entry exists | **no write**; the row is still printed with the *current* scan evidence so a declined gap that is now widespread stays visible |
+| **NEW** | no matching entry in any status | `save_entry` a fresh `FeedbackEntry` under a `next_feedback_id` |
 
-`addressed` with a still-`uncovered` term is a latent contradiction (an authored
-skill should make the term covered, so it should not reappear as a candidate) —
-the CLI flags such rows distinctly in the plan rather than silently skipping.
+Precedence is open → resolved → none: an open entry always wins (RECUR), so an
+open+resolved pair is unambiguous. Two or more *open* entries for one normalized
+target is a store anomaly the command refuses to guess about — it fails early
+rather than picking one. A SKIP row whose only resolved match is `addressed`
+(the term should have become covered once a skill was authored, yet it is still
+`uncovered`) is tagged as a distinct `skip-addressed-conflict` sub-disposition in
+the plan, so the anomaly is surfaced, not hidden.
 
 **Report-only default.** With no `--apply` the CLI prints the plan and writes
 nothing — the `report-only` tier exactly as `science wander`'s CLI behaves. The
@@ -99,11 +112,19 @@ report is deterministic and ordered (by score desc, then term) so it is
 snapshot-testable.
 
 **Output shape.** A plan object: `scope`, `rows[]` (each
-`{term, disposition: new|recur|skip|conflict, score, likely_archetype,
-n_plans, n_projects, existing_id?, existing_status?}`), and
-`context: {covered_not_loaded, unmapped, skipped_projects}`. Text to stdout by
-default; `--output PATH` writes JSON atomically (reusing
-`write_report_atomically`).
+`{term, disposition: new|recur|skip|skip-addressed-conflict, score,
+likely_archetype, n_plans, n_projects, existing_id?, existing_status?}`), and
+`context: {covered_not_loaded, unmapped, skipped_projects}`. A `conflict`
+(>1 open match) is not a row — it aborts the run with a nonzero exit before any
+plan is emitted.
+
+Following `docs/conventions/cli-behavior.md`, the CLI takes **`--format
+text|json`** (default `text` for terminal review; `json` is machine-readable
+JSON only on stdout, which the Layer-2 command consumes). `--output PATH` carries
+the **complete selected-format** representation, written atomically (reusing
+`write_report_atomically`) — it is not a JSON-only escape hatch. The context
+counts (`covered_not_loaded`, `unmapped`) are structural fields in the JSON
+payload, never presentation-only strings, so the wrapper reads them directly.
 
 ### Feedback record mapping
 
@@ -111,11 +132,12 @@ Every field is verified present on `FeedbackEntry` / `feedback add`:
 
 | Field | Value |
 |---|---|
-| `target` | `skill-coverage:<term>` — stable namespace; reliable target-dedup and `feedback list --target 'skill-coverage:*'` |
+| `target` | `skill-coverage:<term>` — stable namespace; reliable normalized-target dedup and `feedback list --target 'skill-coverage:*'` |
+| `project` | **`science`** — set explicitly, never blank. A skill-corpus gap is owned by the toolkit (where the remediation lands), so `feedback list --project science` surfaces the corpus backlog. Portfolio breadth lives in the evidence, not the owner field. |
 | `category` | `gap` |
 | `concern` | `tooling` (the skill corpus is tooling) |
 | `summary` | `skill corpus lacks coverage for <term> (<N> plans / <M> projects)` |
-| `detail` | evidence triples (`project / plan_ref / dataset_ref`), `score`, `likely_archetype`, and a candidate **subject-folder** hint for the eventual author |
+| `detail` | evidence triples (`project / plan_ref / dataset_ref`), `score`, and `likely_archetype` — the two authoring hints that are actually present on `Candidate`. **No subject-folder hint**: it is not derivable from the builder's inputs (`Candidate` carries only scope/archetype/score/evidence), so v1 does not fabricate one. A deterministic catalog→subject resolver is a clean later addition. |
 | `status` | rides existing triage: `open → addressed` (skill authored) `\| wontfix` (not worth one) `\| deferred` |
 
 `recurrence` is **derived** (`len(occurrences)`) — never written directly. A
@@ -127,8 +149,9 @@ The agent-facing wrapper that adds judgment and the human gate:
 
 1. Run `science skills curate` (report-only) and read the plan.
 2. Present the ranked gaps to the human, each with the proposed
-   archetype / subject-folder / summary, and the RECUR / SKIP status against
-   existing feedback.
+   `likely_archetype` and summary, and the RECUR / SKIP status against existing
+   feedback. (Subject-folder placement is an authoring-time human judgment, not a
+   field this command produces.)
 3. Echo the `covered-not-loaded` / `unmapped` context counts — **no filing**;
    name them as project-side follow-ups only.
 4. The human accepts a subset. The command runs `science skills curate --apply`
@@ -158,8 +181,11 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
 
 - **No skill files authored.** The command's only side effect is feedback.
 - **`uncovered` only** is filed; the other two occurrence states are context.
-- **No auto-reopen** of a `wontfix` gap in v1; the rising occurrence count is
-  the signal, surfaced in the report.
+- **No auto-reopen** of a resolved (`wontfix`/`addressed`/`deferred`) gap in v1,
+  and no write to it at all. The signal that a declined gap is now widespread is
+  the **current scan evidence** (`n_plans` / `n_projects` / `score`) printed on
+  its SKIP row — not a feedback-recurrence bump, which a no-write disposition
+  cannot produce.
 - **No new store, no belief writes.** Records are feedback entries only.
 
 ## Testing
@@ -167,16 +193,29 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
 1. **Plan determinism** — a fixture portfolio yields a stable, ordered plan.
 2. **Target-dedup → RECUR** — a second run over the same gap produces a RECUR
    row, not a second NEW.
-3. **Resolved-entry → SKIP-but-report** — a `wontfix` `skill-coverage:<term>`
-   entry suppresses filing but still appears in the plan.
-4. **`--apply` idempotency** — applying twice records an occurrence
+3. **Normalized-target dedup** — an existing entry spelled
+   `Skill-Coverage:data-product:x` (case/prefix variant) matches the candidate
+   `skill-coverage:data-product:x` and yields RECUR, not a NEW duplicate. Guards
+   finding 1 (normalize before filtering).
+4. **Multiple open matches → fail-early** — two open entries for one normalized
+   target abort the run with a nonzero exit naming both ids; no plan is emitted
+   and nothing is written. Guards finding 2.
+5. **Resolved-entry → SKIP-but-report** — a `wontfix` `skill-coverage:<term>`
+   entry suppresses filing but still appears in the plan, carrying the current
+   scan `n_plans`/`n_projects` (not a mutated recurrence). Guards findings 2, 5.
+6. **`--apply` idempotency** — applying twice records an occurrence
    (recurrence `2`), never a duplicate entry.
-5. **Report-only default** — a run without `--apply` writes nothing to the
+7. **Report-only default** — a run without `--apply` writes nothing to the
    feedback dir (assert against an injected `SCIENCE_FEEDBACK_DIR`).
-6. **Uncovered-only filing** — `covered-not-loaded` / `unmapped` occurrences
+8. **Uncovered-only filing** — `covered-not-loaded` / `unmapped` occurrences
    never produce feedback rows; they appear only in the context counts.
-7. **`addressed`-conflict flag** — an `addressed` entry whose term is still
-   `uncovered` is flagged as a conflict row, not a silent skip.
+9. **`addressed`-still-uncovered** — an `addressed` entry whose term is still
+   `uncovered` yields a `skip-addressed-conflict` row, not a silent skip.
+10. **`project` is `science`, never blank** — filed entries carry
+    `project: "science"`; asserted on the persisted entry. Guards finding 4.
+11. **`--format json` is machine-readable** — `--format json` emits parseable
+    JSON on stdout with the context counts as structural fields; `--output`
+    carries the complete selected-format payload. Guards finding 6.
 
 ## Code layout
 
@@ -186,8 +225,12 @@ emits `skills/generated/science-curate-skills/SKILL.md` and
   command; register on `skills_group` in `skills_lint/cli.py`.
 - Reuse: `science_model.skill_coverage` (candidate/report types),
   `science_tool.skills_coverage.scan.scan_portfolio`,
-  `science_tool.feedback` (`FeedbackEntry`, `list_entries`, `find_duplicate`,
-  `record_occurrence`, `save_entry`, `next_feedback_id`).
+  `science_tool.feedback` (`FeedbackEntry`, `load_all_entries`,
+  `normalize_target`, `record_occurrence`, `save_entry`, `next_feedback_id`).
+  Correlation loads **all** entries and matches on `normalize_target` directly —
+  not `list_entries`' raw-`fnmatch` namespace filter (finding 1) — and does not
+  use `find_duplicate` (open-only + summary-gated, which would miss resolved
+  matches and split same-target entries by summary; finding 2).
 - `commands/curate-skills.md` — the agent command; regenerate agent assets.
 - `docs/conventions/skill-coverage.md` — extend with a `curate` section.
 
