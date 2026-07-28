@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 15. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 16. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -130,6 +130,14 @@
 > `ValidationObservationBatch` makes findings, metrics, and notices products of one pass;
 > its producer projection still returns exactly `FindingProducerResult`, so the uniform
 > channel is not widened.
+>
+> **Revision 16 closes the active-kind grammar collision.** The canonical entity
+> registry contains underscore-bearing trusted kinds such as `canonical_parameter` and
+> `parameter_binding`; interpolating those names verbatim produces rule IDs §3 rejects.
+> Kind-derived validation families now use
+> `rule_kind_segment(kind) = kind.replace("_", "-")` and fail registry construction if
+> two active kind names map to one segment (§6). Existing `paper.*` and `hypothesis.*`
+> identities are unchanged, so the live acceptance and certified gate tier remain exact.
 
 ## Motivation
 
@@ -762,9 +770,9 @@ producers were attempted and which could not run.
 
 | Current family | Plan 2 rule identity | Existing policy preserved |
 |---|---|---|
-| `f"{kind}.status-vocabulary"` | **Keep the full kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind`. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; `gates.py` continues naming certified full IDs; the live `paper.status-vocabulary` acceptance continues matching. |
+| `f"{kind}.status-vocabulary"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; `gates.py` continues naming certified full IDs; the live `paper.status-vocabulary` acceptance continues matching. |
 | `f"{kind}.correspondence-drift"` | Replace the expression with the fixed declared rule `plan.correspondence-drift`. The producer is explicitly plan-only today; supporting another kind remains a design change. This deliberately overrides the source comment at `correspondence_drift.py:71-74` that kept the ID derived for a future kind: evidence scope is current policy, while a hypothetical no-rename convenience is not. | `EVIDENCE_SCOPED_RULES` remains exactly `{"plan.correspondence-drift"}` and evidence-signature acceptance keeps its identity. |
-| `f"{kind}.unbacked-inverse"` | **Keep the full kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind`. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
+| `f"{kind}.unbacked-inverse"` | **Keep a kind-scoped ID.** Derive one concrete rule per active trusted `EntityKind` using the canonical `rule_kind_segment(kind)` below. | Each rule permits exactly the canonical value of `severity_for_kind(kind)`; the `hypothesis.unbacked-inverse` gate entry remains literal and advances with `_CERTIFIED_KINDS`. |
 | `f"annotations.{issue.kind}"` | Keep five concrete IDs derived from `annotation.verify.ISSUE_KINDS`: `broken`, `degraded`, `fuzzy`, `source-missing`, and `parse-error`. | Existing IDs and severities remain unchanged; adding an issue kind without a declaration fails the emitted-set equality guard. |
 | `f"prose_lints.{check}"` | Split by emission semantics: WARN `_hit_result` rows become visible `prose-lints.hit`; configured-non-warn INFO summaries become hidden `prose-lints.advisory`. Both require `check` as a typed identity qualifier. The fixed INFO config site remains the distinct visible rule `prose-lints.config`. | No gate tier or surveyed acceptance names any affected ID. WARN hits remain visible; INFO advisories remain hidden; config notices remain visible. INFO never entered `count_issues`, so the split is count-neutral. |
 
@@ -868,6 +876,22 @@ kind descriptor through the existing profile/adapter boundary, but it cannot aut
 override finding-rule policy. After the active kinds are expanded, the resulting
 `FindingRegistry` is immutable. Trusted ingestion and report construction use registries
 derived from that same source context; report content can never mint a kind or rule.
+
+`rule_kind_segment` is a frozen wire mapping, not a display slug:
+
+```python
+def rule_kind_segment(kind: str) -> str:
+    return kind.replace("_", "-")
+```
+
+The original kind remains the input to `severity_for_kind` and the active-registry
+membership check. Only the rule-ID segment is mapped. Registry derivation groups active
+kinds by this segment and fails before registration when the mapping is not injective
+(for example, simultaneous `parameter_binding` and `parameter-binding`). It never picks
+one by order. Kinds already in kebab case are unchanged; therefore
+`paper.status-vocabulary`, `hypothesis.status-vocabulary`,
+`hypothesis.unbacked-inverse`, and their acceptance/gate policy remain exact. No surveyed
+acceptance names an underscore-bearing family ID.
 
 The derived registry **fails early** on:
 
@@ -1426,10 +1450,11 @@ class AuditReport(TypedDict):
     the declared-rule set, asserted as equality rather than as a subset, which is the
     assertion shape that let `dataset_access_invalid` drift.
 31. **Parameterized validation families are complete and policy-preserving** — declared
-    status/inverse rule IDs equal the deterministic expansion over the project's active
-    canonical kinds; every emitted family ID is declared, and every emission site's kind
-    is a member of that same active-kind registry. Sparse fixture emissions need only be
-    a subset of declarations. Annotation rule IDs equal `ISSUE_KINDS`;
+    status/inverse rule IDs equal the deterministic `rule_kind_segment` expansion over
+    the project's active canonical kinds; an active-kind segment collision fails before
+    registration; every emitted family ID is declared, and every emission site's
+    original kind is a member of that same active-kind registry. Sparse fixture
+    emissions need only be a subset of declarations. Annotation rule IDs equal `ISSUE_KINDS`;
     `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
     and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
     advisories map to their distinct canonical rules with their current visibility.
