@@ -106,4 +106,4 @@ def test_code_file_is_operational_and_resolves_to_subclass() -> None:
 
     r = EntityRegistry.with_core_types()
     assert r.kind_class("code-file") == EntityClass.OPERATIONAL
-    assert r.resolve("code-file") is CodeFileEntity
+    assert r.resolve_class("code-file") is CodeFileEntity

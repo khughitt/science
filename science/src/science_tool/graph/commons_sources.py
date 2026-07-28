@@ -29,6 +29,7 @@ from science_tool.commons.geneset import GenesetCollectionError, parse_geneset_r
 from science_tool.commons.geneset_resources import geneset_resource_frontmatter, read_member_rows
 from science_tool.commons.overlay import OverlayAdapter, OverlayRecord, validate_overlay_pin
 from science_tool.commons.query import CommonsQuery
+from science_tool.entity_profiles import ProjectSchema
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.identity_arbitration import (
     AttachmentContribution,
@@ -50,6 +51,11 @@ _COMMONS_ADAPTER = "commons-merged"
 
 _COMMONS_TYPES = frozenset({"dataset", "paper", "topic", "theme"})
 _TYPE_TO_DIR = {"dataset": "datasets", "paper": "papers", "topic": "topics", "theme": "themes"}
+# Commons assembles `scope`/`profile` and rewrites `file_path`; `summary` is DERIVED from the
+# record's `description` and is likewise not the author's key.
+_COMMONS_INJECTED_KEYS: frozenset[str] = frozenset(
+    {"canonical_id", "type", "file_path", "evidence_refs", "scope", "summary"}
+)
 _OVERLAY_ONLY_FIELDS = (
     "relevance",
     "hypothesis_links",
@@ -88,6 +94,7 @@ def collect_commons_contributions(
     project_relations: list[SourceRelation],
     project_bindings: list[BindingSource],
     registry: EntityRegistry,
+    project_schema: ProjectSchema | None,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
 ) -> CommonsClosure:
@@ -102,6 +109,7 @@ def collect_commons_contributions(
         project_root=project_root,
         project_slug=project_slug,
         registry=registry,
+        project_schema=project_schema,
         active_kinds=active_kinds,
         ontology_catalogs=ontology_catalogs,
     )
@@ -119,12 +127,14 @@ class _CommonsClosureCollector:
         project_root: Path,
         project_slug: str,
         registry: EntityRegistry,
+        project_schema: ProjectSchema | None,
         active_kinds: frozenset[str],
         ontology_catalogs: list[OntologyCatalog],
     ) -> None:
         self._project_root = project_root
         self._project_slug = project_slug
         self._registry = registry
+        self._project_schema = project_schema
         self._active_kinds = active_kinds
         self._ontology_catalogs = ontology_catalogs
 
@@ -184,6 +194,7 @@ class _CommonsClosureCollector:
             candidate = _materialize_commons_candidate(
                 record,
                 registry=self._registry,
+                project_schema=self._project_schema,
                 project_slug=self._project_slug,
                 active_kinds=self._active_kinds,
                 ontology_catalogs=self._ontology_catalogs,
@@ -371,6 +382,7 @@ def _materialize_commons_candidate(
     record: CommonsEntityRecord,
     *,
     registry: EntityRegistry,
+    project_schema: ProjectSchema | None,
     project_slug: str,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
@@ -392,7 +404,6 @@ def _materialize_commons_candidate(
             cause=ValueError("missing kind"),
         )
     kind = _normalize_kind(raw_kind)
-    schema = registry.resolve(kind)
     raw: dict[str, object] = dict(fm)
     raw["kind"] = kind
     raw["canonical_id"] = fm["id"]
@@ -402,7 +413,7 @@ def _materialize_commons_candidate(
     # admits (D3.3), an eaten key becomes a kept one -- and `materialize._add_entity` reads
     # `getattr(entity, "summary", "")` into `schema:description`, so every commons topic would have
     # started emitting a triple it has never had. The drop was load-bearing and nobody knew.
-    if "description" in fm and "summary" not in fm and "summary" in schema.model_fields:
+    if "description" in fm and "summary" not in fm and registry.declares_field(kind, "summary"):
         raw["summary"] = fm["description"]
     if kind == "paper" and "journal" in fm and not raw.get("venue"):
         raw["venue"] = fm["journal"]
@@ -412,15 +423,24 @@ def _materialize_commons_candidate(
     for overlay_only in _OVERLAY_ONLY_FIELDS:
         raw.pop(overlay_only, None)
     raw.pop("schema_profile", None)
-    _enrich_raw(
+    def _enrich(candidate_raw: dict[str, object]) -> frozenset[str]:
+        return _enrich_raw(
+            candidate_raw,
+            kind=kind,
+            project_slug=project_slug,
+            local_profile="shared",
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
+
+    return registry.build(
+        kind,
         raw,
-        kind=kind,
-        project_slug=project_slug,
-        local_profile="shared",
-        active_kinds=active_kinds,
-        ontology_catalogs=ontology_catalogs,
+        project_schema=project_schema,
+        path=str(record.body_path),
+        injected=_COMMONS_INJECTED_KEYS - frozenset(fm),
+        enrich=_enrich,
     )
-    return schema.model_validate(raw)
 
 
 def _commons_source_ref_path(type_name: str, slug: str) -> str:

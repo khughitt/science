@@ -15,7 +15,75 @@ import pytest
 import yaml
 
 from science_model.source_contracts import StructuredEntitySource
-from science_tool.graph.sources import load_project_sources
+from science_tool.entity_profiles import ProjectSchema, load_project_schema_if_pinned
+from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.sources import load_project_sources, registry_for_project
+
+
+def _armed_registry(tmp_path: Path) -> tuple[EntityRegistry, ProjectSchema]:
+    """A registry plus a project schema that is actually ARMED.
+
+    The assert is the point. `load_project_schema_if_pinned` returns None for an unpinned
+    project, `validate_against_schema` returns on its first line when handed None, and every
+    refusal test in this file would then pass by never validating anything. A fixture that fails
+    silently open is worse than no fixture.
+    """
+    root = tmp_path / "armed"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        "name: demo\nentity_schema_version: 2\n", encoding="utf-8"
+    )
+    project_schema = load_project_schema_if_pinned(root)
+    assert project_schema is not None, "fixture is not pinned; the refusal tests would be vacuous"
+    return registry_for_project(root), project_schema
+
+
+def _valid_hypothesis_mapping() -> dict[str, Any]:
+    """A hypothesis mapping that passes `unevaluatedProperties: false` under base 2.0 + mixin 1.0.
+
+    Not invented: this is the record `tests/test_undeclared_key_diagnostic.py:33-40` writes and
+    loads through `load_project_sources` on a project pinned to `entity_schema_version: 2`, in a
+    test asserting `hypothesis` is in `strict_schema_kinds` -- i.e. a record already proven to
+    survive the closed path. `mixin-hypothesis-1.0.json` requires exactly `id`, `kind`, `status`;
+    the rest are base-2.0-admitted and present because the proven fixture carries them.
+    """
+    return {
+        "id": "hypothesis:h1",
+        "kind": "hypothesis",
+        "title": "H1",
+        "status": "active",
+        "related": [],
+        "source_refs": [],
+        "created": "2026-03-12",
+        "updated": "2026-03-12",
+    }
+
+
+def _valid_concept_mapping() -> dict[str, Any]:
+    """The same, for the OPEN kind. `concept` has no mixin, so only base 2.0 applies."""
+    return {
+        "id": "concept:c1",
+        "kind": "concept",
+        "title": "C1",
+        "status": "active",
+        "related": [],
+        "source_refs": [],
+        "created": "2026-03-12",
+        "updated": "2026-03-12",
+    }
+
+
+def _enrich_projection_fields(raw: dict[str, Any]) -> frozenset[str]:
+    """Supply model bookkeeping only after composed validation has accepted the authored view."""
+    raw.update(
+        {
+            "project": "demo",
+            "ontology_terms": [],
+            "content_preview": "",
+            "file_path": "entities/test.md",
+        }
+    )
+    return frozenset()
 
 
 def test_an_unknown_key_SURVIVES_the_source_contract() -> None:
@@ -200,10 +268,6 @@ def _valid_hypothesis_row() -> dict[str, Any]:
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="composed validation on the structured path arrives in Task 5",
-)
 def test_a_CLOSED_kind_refuses_a_shadow_key_through_the_whole_structured_path(
     tmp_path: Path,
 ) -> None:
@@ -216,3 +280,139 @@ def test_the_same_closed_row_WITHOUT_the_shadow_key_loads(tmp_path: Path) -> Non
     _write_closed_kind_project(tmp_path, [_valid_hypothesis_row()])
     sources = load_project_sources(tmp_path)
     assert any(e.canonical_id == _valid_hypothesis_row()["canonical_id"] for e in sources.entities)
+
+
+def test_an_unauthored_optional_field_is_absent_from_what_VALIDATION_SEES(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # The defaults-promotion failure. Asserting `entity.evidence_refs == []` on the loaded entity
+    # would be INERT: `_enrich_raw` does `raw.setdefault("evidence_refs", [])` on every record, so
+    # that assertion holds whether the value was authored, promoted from the source-model default,
+    # or injected by enrichment. The claim is about the mapping VALIDATION is shown, upstream of
+    # enrichment -- so spy on that.
+    import science_tool.graph.entity_registry as reg_mod
+
+    # Record the AUTHORED VIEW -- `raw` minus `injected` -- because that is the mapping the
+    # validator ranges over. Spying on `raw` alone would assert the wrong thing now that
+    # bookkeeping is subtracted inside the validator rather than absent from `raw`.
+    seen: list[dict] = []
+    real = reg_mod.validate_against_schema
+
+    def _spy(raw, **kw):
+        seen.append({k: v for k, v in raw.items() if k not in kw["injected"]})
+        return real(raw, **kw)
+
+    monkeypatch.setattr(reg_mod, "validate_against_schema", _spy)
+    _write_structured_project(tmp_path, [{"canonical_id": "widget:0002-y", "title": "W2"}])
+    load_project_sources(tmp_path)
+
+    row = next(m for m in seen if m.get("id") == "widget:0002-y")
+    assert "evidence_refs" not in row, "an unauthored field reached validation as an authored one"
+    assert row["title"] == "W2"  # the authored ones DO arrive -- not a vacuously empty mapping
+
+
+def test_structured_validation_sees_normalized_authored_destinations(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import science_tool.graph.entity_registry as reg_mod
+
+    seen: list[dict] = []
+    real = reg_mod.validate_against_schema
+
+    def _spy(raw, **kw):
+        seen.append({k: v for k, v in raw.items() if k not in kw["injected"]})
+        return real(raw, **kw)
+
+    monkeypatch.setattr(reg_mod, "validate_against_schema", _spy)
+    _write_structured_project(
+        tmp_path,
+        [
+            {
+                "canonical_id": "widget:0003-z",
+                "title": "W3",
+                "source_path": "authored/widget.yaml",
+                "evidence_refs": ["paper:p1"],
+                "content": "authored prose",
+            }
+        ],
+    )
+    load_project_sources(tmp_path)
+
+    row = next(m for m in seen if m.get("id") == "widget:0003-z")
+    assert row["id"] == "widget:0003-z"
+    assert "canonical_id" not in row
+    assert row["file_path"] == "authored/widget.yaml"
+    assert row["evidence_refs"] == ["paper:p1"]
+    assert row["content"] == "authored prose"
+
+
+def test_the_loaders_OWN_bookkeeping_keys_do_not_refuse_the_row(tmp_path: Path) -> None:
+    # The control above passes only if `type`, `canonical_id`, `file_path` and the backfilled
+    # `evidence_refs` are hidden from the composed schema -- each is refused by the hypothesis
+    # profile, and the structured loader adds all four to every row.
+    from science_tool.graph.sources import _STRUCTURED_INJECTED_KEYS
+
+    assert {"type", "canonical_id", "file_path", "evidence_refs"} <= _STRUCTURED_INJECTED_KEYS
+    assert not {"id", "kind", "title"} & _STRUCTURED_INJECTED_KEYS, (
+        "id/kind/title are REQUIRED by the composed schema; hiding them refuses every record"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("content", "prose"), ("evidence_refs", ["paper:p1"])],
+)
+def test_an_AUTHORED_bookkeeping_key_is_still_refused(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    # These names are bookkeeping in some paths, but a structured-row author who writes either
+    # authored it. The composed hypothesis schema must see and refuse it.
+    _write_closed_kind_project(tmp_path, [{**_valid_hypothesis_row(), field: value}])
+    with pytest.raises(ValueError, match="does not satisfy its schema"):
+        load_project_sources(tmp_path)
+
+
+def test_build_validates_a_closed_kind_before_projecting(tmp_path) -> None:
+    # The load-bearing order. `hypothesis` is the one closed kind on this branch, so it is what
+    # can demonstrate refusal at all.
+    #
+    # `ValueError`, not EntityValidationError: `validate_against_schema` CATCHES the model-layer
+    # EntityValidationError and re-raises a ValueError carrying the path and the pinned
+    # generation (sources.py:1431, moved in Step 3). Asserting the inner type would fail.
+    registry, project_schema = _armed_registry(tmp_path)
+    with pytest.raises(ValueError, match="does not satisfy its schema"):
+        registry.build(
+            "hypothesis",
+            {**_valid_hypothesis_mapping(), "shadow_key": "v"},
+            project_schema=project_schema,
+            path="entities/hypotheses/0001-x.md",
+            injected=frozenset(),
+        )
+
+
+def test_build_admits_a_valid_closed_kind(tmp_path) -> None:
+    registry, project_schema = _armed_registry(tmp_path)
+    entity = registry.build(
+        "hypothesis",
+        _valid_hypothesis_mapping(),
+        project_schema=project_schema,
+        path="entities/hypotheses/0001-x.md",
+        injected=frozenset(),  # the mapping is entirely authored -- nothing to hide
+        enrich=_enrich_projection_fields,
+    )
+    assert entity.kind == "hypothesis"
+
+
+def test_build_does_not_validate_an_OPEN_kind(tmp_path) -> None:
+    # Open kinds keep loading exactly as before -- this branch closes nothing. A shadow key on an
+    # open kind is preserved, not refused; that is the `extra="allow"` projection doing its job.
+    registry, project_schema = _armed_registry(tmp_path)
+    entity = registry.build(
+        "concept",
+        {**_valid_concept_mapping(), "shadow_key": "v"},
+        project_schema=project_schema,
+        path="entities/concepts/0001-x.md",
+        injected=frozenset(),
+        enrich=_enrich_projection_fields,
+    )
+    assert entity.kind == "concept"

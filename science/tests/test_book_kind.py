@@ -29,7 +29,7 @@ def test_book_kind_class_is_operational():
 
 def test_book_resolves_to_book_entity():
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("book") is BookEntity
+    assert registry.resolve_class("book") is BookEntity
 
 
 def test_book_path_policy_and_status():

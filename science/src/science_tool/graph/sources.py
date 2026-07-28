@@ -44,13 +44,12 @@ from science_model.source_contracts import (
 from science_model.source_ref import SourceRef
 from science_model.autonomous_runs import AutonomousRunRecord
 
-from science_model.entity_schema import PROJECT_MIXIN_NAMES, EntityValidationError
+from science_model.entity_schema import PROJECT_MIXIN_NAMES
 from science_model.entity_schema.merge import MergePolicy, read_merge_policy
 from science_model.entity_schema.profile import ProfileParseError, default_profile_for_kind
 
 from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.commons.aliases import load_manual_aliases
-from science_tool.datasets.capability_shape import gen3_shape_issue
 from science_tool.entity_profiles import (
     ARMED_SCHEMA_GENERATIONS,
     ProjectSchema,
@@ -61,7 +60,11 @@ from science_tool.project_config import (
     validated_entity_schema_version,
 )
 from science_tool.graph.autonomous_runs import load_run_records
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
+from science_tool.graph.entity_registry import (
+    EntityKindNotRegisteredError,
+    EntityProjectionError,
+    EntityRegistry,
+)
 from science_tool.graph.errors import ContributionConflictError, EntityIdentityCollisionError
 from science_tool.graph.identity_arbitration import (
     ArbitrationCode,
@@ -114,6 +117,16 @@ _ENUM_FIELDS: dict[str, type[StrEnum]] = {
 
 _SAFE_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 _PROJECT_CONFIG_CACHE: dict[tuple[str, int], dict[str, object]] = {}
+
+# Keys these loaders ASSEMBLE rather than read from the author. Only the ones the composed schema
+# refuses need listing -- `profile`, `aliases`, `ontology_terms`, `related` and `source_refs` are
+# admitted (measured), so hiding them would only widen the blind spot. `id`, `kind` and `title`
+# are NOT here on purpose: they are policy values for real schema fields, and the schema requires
+# all three, so hiding them would refuse every record for a missing key the loader had supplied.
+_STRUCTURED_INJECTED_KEYS: frozenset[str] = frozenset(
+    {"canonical_id", "type", "file_path", "evidence_refs"}
+)
+_LEGACY_INJECTED_KEYS: frozenset[str] = _STRUCTURED_INJECTED_KEYS
 
 
 class KnowledgeProfiles(BaseModel):
@@ -401,59 +414,50 @@ def validate_canonical_markdown_record(
 
     kind = _normalize_kind(raw_kind)
     candidate["kind"] = kind
-    try:
-        schema = context.registry.resolve(kind)
-    except EntityKindNotRegisteredError:
-        return CanonicalMarkdownValidation(
+
+    def _enrich(candidate_raw: dict[str, Any]) -> frozenset[str]:
+        return _enrich_raw(
+            candidate_raw,
             kind=kind,
-            rejection=CanonicalMarkdownRejection.UNKNOWN_KIND,
+            project_slug=context.project_slug,
+            local_profile=context.local_profile,
+            active_kinds=context.active_kinds,
+            ontology_catalogs=context.ontology_catalogs,
         )
 
     try:
-        _validate_against_schema(
+        entity = context.registry.build(
+            kind,
             candidate,
-            kind=kind,
-            path=path,
             project_schema=context.project_schema,
+            path=path,
+            injected=MarkdownAdapter.INJECTED_KEYS,
+            enrich=_enrich,
         )
-        _validate_dataset_gen3(
-            candidate,
+    except EntityKindNotRegisteredError:
+        return CanonicalMarkdownValidation(
+            kind=kind, rejection=CanonicalMarkdownRejection.UNKNOWN_KIND
+        )
+    except EntityProjectionError as exc:
+        # No authored_aliases: verified that this branch reads only `schema` and `error`.
+        # There is no entity to carry them on.
+        return CanonicalMarkdownValidation(
             kind=kind,
-            path=path,
-            project_schema=context.project_schema,
+            schema=exc.schema,
+            rejection=CanonicalMarkdownRejection.ENTITY_SCHEMA,
+            error=exc.error,
         )
     except ValueError as exc:
         return CanonicalMarkdownValidation(
             kind=kind,
-            schema=schema,
             rejection=CanonicalMarkdownRejection.PROJECT_SCHEMA,
             error=exc,
         )
-
-    authored_aliases = _enrich_raw(
-        candidate,
-        kind=kind,
-        project_slug=context.project_slug,
-        local_profile=context.local_profile,
-        active_kinds=context.active_kinds,
-        ontology_catalogs=context.ontology_catalogs,
-    )
-    try:
-        entity = schema.model_validate(candidate)
-    except ValidationError as exc:
-        return CanonicalMarkdownValidation(
-            kind=kind,
-            schema=schema,
-            authored_aliases=authored_aliases,
-            rejection=CanonicalMarkdownRejection.ENTITY_SCHEMA,
-            error=exc,
-        )
-    entity._authored_aliases = authored_aliases
     return CanonicalMarkdownValidation(
         kind=kind,
-        schema=schema,
+        schema=type(entity),
         entity=entity,
-        authored_aliases=authored_aliases,
+        authored_aliases=entity._authored_aliases,
     )
 
 
@@ -690,6 +694,7 @@ def load_project_sources(
         *_load_legacy_records(
             project_root,
             registry=registry,
+            project_schema=project_schema,
             local_profile=local_profile,
             project_slug=project_slug,
             active_kinds=active_kinds,
@@ -699,6 +704,7 @@ def load_project_sources(
         *_load_structured_source_records(
             project_root,
             registry=registry,
+            project_schema=project_schema,
             local_profile=local_profile,
             local_profile_manifest=local_profile_manifest,
             project_slug=project_slug,
@@ -758,6 +764,7 @@ def load_project_sources(
             project_relations=relations,
             project_bindings=bindings,
             registry=registry,
+            project_schema=project_schema,
             active_kinds=active_kinds,
             ontology_catalogs=ontology_catalogs,
         )
@@ -1078,6 +1085,7 @@ def _load_legacy_records(
     project_root: Path,
     *,
     registry: EntityRegistry,
+    project_schema: ProjectSchema | None,
     local_profile: str,
     project_slug: str,
     active_kinds: frozenset[str],
@@ -1096,6 +1104,7 @@ def _load_legacy_records(
         cache=typed_record_cache,
     )
     for record in model_records:
+        authored = frozenset(record.model_dump(exclude_unset=True))
         raw: dict[str, Any] = {
             "id": record.canonical_id,
             "canonical_id": record.canonical_id,
@@ -1109,17 +1118,24 @@ def _load_legacy_records(
             "source_refs": list(record.source_refs),
             "aliases": list(record.aliases),
         }
-        authored_aliases = _enrich_raw(
+        def _enrich(candidate_raw: dict[str, Any]) -> frozenset[str]:
+            return _enrich_raw(
+                candidate_raw,
+                kind="model",
+                project_slug=project_slug,
+                local_profile=local_profile,
+                active_kinds=active_kinds,
+                ontology_catalogs=ontology_catalogs,
+            )
+
+        entity = registry.build(
+            "model",
             raw,
-            kind="model",
-            project_slug=project_slug,
-            local_profile=local_profile,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
+            project_schema=project_schema,
+            path=record.source_path,
+            injected=_LEGACY_INJECTED_KEYS - authored,
+            enrich=_enrich,
         )
-        schema = registry.resolve("model")
-        entity = schema.model_validate(raw)
-        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-model", path=record.source_path)))
 
     parameter_records = _load_typed_records(
@@ -1131,6 +1147,7 @@ def _load_legacy_records(
         cache=typed_record_cache,
     )
     for record in parameter_records:
+        authored = frozenset(record.model_dump(exclude_unset=True))
         raw = {
             "id": record.canonical_id,
             "canonical_id": record.canonical_id,
@@ -1146,20 +1163,24 @@ def _load_legacy_records(
             "ontology_terms": list(record.ontology_terms),
             "aliases": list(record.aliases),
         }
-        # canonical_parameter is registered as a profile kind by LOCAL_PROFILE,
-        # which is always included in profile_manifests above.
-        schema: type[Entity] = registry.resolve("canonical_parameter")
+        def _enrich(candidate_raw: dict[str, Any]) -> frozenset[str]:
+            return _enrich_raw(
+                candidate_raw,
+                kind="canonical_parameter",
+                project_slug=project_slug,
+                local_profile=local_profile,
+                active_kinds=active_kinds,
+                ontology_catalogs=ontology_catalogs,
+            )
 
-        authored_aliases = _enrich_raw(
+        entity = registry.build(
+            "canonical_parameter",
             raw,
-            kind="canonical_parameter",
-            project_slug=project_slug,
-            local_profile=local_profile,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
+            project_schema=project_schema,
+            path=record.source_path,
+            injected=_LEGACY_INJECTED_KEYS - authored,
+            enrich=_enrich,
         )
-        entity = schema.model_validate(raw)
-        entity._authored_aliases = authored_aliases
         out.append((entity, SourceRef(adapter_name="legacy-parameter", path=record.source_path)))
 
     return out
@@ -1169,6 +1190,7 @@ def _load_structured_source_records(
     project_root: Path,
     *,
     registry: EntityRegistry,
+    project_schema: ProjectSchema | None,
     local_profile: str,
     local_profile_manifest: ProfileManifest | None,
     project_slug: str,
@@ -1214,9 +1236,10 @@ def _load_structured_source_records(
             model=StructuredEntitySource,
             cache=typed_record_cache,
         )
-        schema = registry.resolve(kind_name)
         for record in records:
-            raw = normalize_structured_row(record.model_dump(exclude_unset=True))
+            authored_row = record.model_dump(exclude_unset=True)
+            raw = normalize_structured_row(authored_row)
+            authored = frozenset(raw)
             # Loader BACKFILLS -- policy, not source content, and deliberately after normalization
             # so the schema sees them as the loader's contribution rather than the author's.
             raw["kind"] = kind_name
@@ -1238,16 +1261,26 @@ def _load_structured_source_records(
                 raw.setdefault("created", record.created)
             if record.updated is not None:
                 raw.setdefault("updated", record.updated)
-            authored_aliases = _enrich_raw(
+            def _enrich(
+                candidate_raw: dict[str, Any], _kind: str = kind_name
+            ) -> frozenset[str]:
+                return _enrich_raw(
+                    candidate_raw,
+                    kind=_kind,
+                    project_slug=project_slug,
+                    local_profile=local_profile,
+                    active_kinds=active_kinds,
+                    ontology_catalogs=ontology_catalogs,
+                )
+
+            entity = registry.build(
+                kind_name,
                 raw,
-                kind=kind_name,
-                project_slug=project_slug,
-                local_profile=local_profile,
-                active_kinds=active_kinds,
-                ontology_catalogs=ontology_catalogs,
+                project_schema=project_schema,
+                path=record.source_path or default_path,
+                injected=_STRUCTURED_INJECTED_KEYS - authored,
+                enrich=_enrich,
             )
-            entity = schema.model_validate(raw)
-            entity._authored_aliases = authored_aliases
             out.append((entity, SourceRef(adapter_name="structured-source", path=record.source_path or default_path)))
     return out
 
@@ -1397,69 +1430,6 @@ def _load_typed_records(
     if cache is not None:
         cache[cache_key] = records
     return records
-
-
-def _validate_against_schema(
-    raw: dict[str, Any],
-    *,
-    kind: str,
-    path: str,
-    project_schema: ProjectSchema | None,
-) -> None:
-    """D3.1/D3.2 — the composed JSON Schema is checked BEFORE the projection is built.
-
-    `project_schema` is None unless the project DECLARED `entity_schema_version: 2`, so an unmigrated
-    project is untouched: it keeps today's behaviour, and its hypotheses keep the verdict in `status`.
-    Nothing here infers the version from the files (see `ProjectConfig.entity_schema_version`).
-
-    The profile is the project-COMPOSED one, never the package default: mm30's `identification` and
-    evolution's `source_stated_evidence` are declared by project EXTENSIONS, so against the package
-    default they are unknown keys and `unevaluatedProperties: false` would reject the files of the two
-    projects that did nothing wrong.
-
-    This is the half that makes `Entity`'s `extra="allow"` safe. The schema refuses what it does not
-    know; the projection preserves what the schema admitted. Apart, each is a defect -- preservation
-    without validation is just `extra="allow"` over an unvalidated corpus.
-
-    `PROJECT_MIXIN_NAMES` is the migration slice list, and enforcement is gated on it rather than on a
-    second frozenset of the same names. It also gates schema STRICTNESS in the validator, so a kind
-    enforced here but absent there would be checked against a profile that admits anything: a green
-    check over an unchecked record. Two hand-maintained copies of one list is how that happens.
-    """
-    if project_schema is None or kind not in PROJECT_MIXIN_NAMES:
-        return
-    authored = {key: value for key, value in raw.items() if key not in MarkdownAdapter.INJECTED_KEYS}
-    try:
-        project_schema.validator.validate_as(authored, project_schema.profile_for(kind))
-    except EntityValidationError as exc:
-        raise ValueError(
-            f"{path}: {kind} frontmatter does not satisfy its schema "
-            f"(project is pinned to entity_schema_version: {project_schema._generation})\n  {exc}"
-        ) from exc
-
-
-def _validate_dataset_gen3(
-    raw: dict[str, Any],
-    *,
-    kind: str,
-    path: str,
-    project_schema: ProjectSchema | None,
-) -> None:
-    """Task 6 -- a SEPARATE, generation-gated hook for `dataset`'s capability SHAPE.
-
-    Dataset is a COMMONS kind and stays out of `PROJECT_MIXIN_NAMES`, so project datasets are loose
-    records the load path never validates as full dataset/3.0 documents (they carry no
-    `origin`/`tier`/`version`/`datapackage`). The ONLY gen-3 obligation on a project dataset is a
-    well-formed `provided_capabilities` shape; validate exactly that via the canonical parser, not
-    the full commons profile.
-    """
-    if project_schema is None or project_schema._generation != 3 or kind != "dataset":
-        return
-    if gen3_shape_issue(raw.get("provided_capabilities")) == "malformed":
-        raise ValueError(
-            f"{path}: dataset provided_capabilities is not a valid gen-3 "
-            f"{{data_product, qualifiers}} shape (project is pinned to entity_schema_version: 3)"
-        )
 
 
 def _read_project_config(project_root: Path) -> dict[str, object]:

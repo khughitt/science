@@ -86,6 +86,7 @@ def _closure(project_root: Path, *, project_entities: list[Entity] | None = None
         project_relations=[],
         project_bindings=[],
         registry=EntityRegistry.with_core_types(),
+        project_schema=None,
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],
     )
@@ -262,6 +263,7 @@ def _translate(frontmatter: dict[str, object]) -> Entity:
     return _materialize_commons_candidate(
         _record(frontmatter),  # type: ignore[arg-type]
         registry=EntityRegistry.with_core_types(),
+        project_schema=None,
         project_slug="demo",
         active_kinds=frozenset({"dataset", "paper", "theme", "topic"}),
         ontology_catalogs=[],

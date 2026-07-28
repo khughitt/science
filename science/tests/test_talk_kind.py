@@ -29,7 +29,7 @@ def test_talk_kind_class_is_operational():
 
 def test_talk_resolves_to_talk_entity():
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("talk") is TalkEntity
+    assert registry.resolve_class("talk") is TalkEntity
 
 
 def test_talk_path_policy_and_status():

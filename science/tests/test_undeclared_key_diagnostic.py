@@ -98,7 +98,7 @@ _BASE = {
 
 
 def _entity(kind: str, **extra) -> Entity:
-    cls = EntityRegistry.with_core_types().resolve(kind)
+    cls = EntityRegistry.with_core_types().resolve_class(kind)
     raw = {"id": f"{kind}:x", "canonical_id": f"{kind}:x", "kind": kind, "title": "X", **_BASE, **extra}
     return cls.model_validate(raw)
 

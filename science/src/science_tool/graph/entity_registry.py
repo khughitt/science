@@ -12,6 +12,9 @@ needs-review state.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
 from science_model.entities import (
     BookEntity,
     ChainAuditEntity,
@@ -40,6 +43,16 @@ from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.schema import KindCategory
 from science_model.propositions import PropositionEntity
 
+from science_tool.graph.entity_schema_validation import (
+    validate_against_schema,
+    validate_dataset_gen3,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from science_tool.entity_profiles import ProjectSchema
+
 
 class EntityKindAlreadyRegisteredError(ValueError):
     """Raised when a kind is registered twice."""
@@ -50,7 +63,22 @@ class EntityKindShadowError(ValueError):
 
 
 class EntityKindNotRegisteredError(KeyError):
-    """Raised when resolve() is called with an unregistered kind."""
+    """Raised when resolve_class() is called with an unregistered kind."""
+
+
+class EntityProjectionError(ValueError):
+    """A mapping that resolved and passed its composed schema, then failed the model projection.
+
+    Carries the resolved class because the Markdown reader formats its rejection from it. Without
+    this, the only way for a caller to obtain the class would be `resolve_class` -- reopening the
+    exact hole `build` exists to close, in the one branch nobody reads.
+    """
+
+    def __init__(self, kind: str, schema: type[Entity], error: ValidationError) -> None:
+        super().__init__(f"{kind}: entity projection failed")
+        self.kind = kind
+        self.schema = schema
+        self.error = error
 
 
 # The only per-kind fact that cannot be data: the bound Pydantic class. Kinds
@@ -186,7 +214,7 @@ class EntityRegistry:
         self._kind_class[kind] = entity_class
         self._curation_scope_declared[kind] = curation_scope
 
-    def resolve(self, kind: str) -> type[Entity]:
+    def resolve_class(self, kind: str) -> type[Entity]:
         if kind in self._core:
             return self._core[kind]
         if kind in self._profile:
@@ -196,6 +224,87 @@ class EntityRegistry:
         if kind in self._extensions:
             return self._extensions[kind]
         raise EntityKindNotRegisteredError(f"no schema registered for kind {kind!r}")
+
+    def declares_field(self, kind: str, field: str) -> bool:
+        """Does this kind's model DECLARE `field`? A field question, not a class handout.
+
+        Commons normalization needs exactly this and nothing more: `commons_sources.py:405` maps
+        `description` -> `summary` only for kinds that actually declare `summary`, because on a
+        `topic` (which does not) the key used to be silently eaten at `model_validate`, and with
+        the projection now preserving what it admits, an eaten key becomes a kept one --
+        `materialize._add_entity` reads `getattr(entity, "summary", "")` into
+        `schema:description`, so every commons topic would start emitting a triple it has never
+        had. That drop is load-bearing, and it has to happen BEFORE construction.
+
+        Answering the question directly is what keeps `build` the only way to obtain a class. The
+        alternative -- handing the class back so the caller can read `model_fields` -- is
+        `resolve_class` by another name, and Task 6's guard would be green over a reopened hole.
+        """
+        return field in self.resolve_class(kind).model_fields
+
+    def build(
+        self,
+        kind: str,
+        raw: dict[str, Any],
+        *,
+        project_schema: "ProjectSchema | None",
+        path: str,
+        injected: frozenset[str],
+        enrich: "Callable[[dict[str, Any]], frozenset[str]] | None" = None,
+    ) -> Entity:
+        """Validate a raw mapping against its composed profile, THEN project it onto the model.
+
+        Resolution and construction are ONE operation on purpose. Handing out `type[Entity]` is
+        the hole: an adapter that can get the class can construct an entity without validating.
+        Merging them means a new adapter cannot skip the check, because obtaining the class is no
+        longer how you build an entity. `resolve_class` stays public for callers that genuinely
+        need the TYPE, and Task 6 guards the construction surface rather than the import surface
+        -- because twelve modules in this package legitimately reference `Entity` for annotations
+        and isinstance checks, and only the five that RESOLVE-then-construct are the hole.
+
+        The ORDER is this method's contract, and why `enrich` is a parameter rather than the
+        caller's business: enrichment injects eighteen keys the author never wrote, and a
+        composed schema shown those keys under `unevaluatedProperties: false` would refuse
+        records that did nothing wrong. Validate authored -> enrich -> project. Every adapter
+        gets that order by construction instead of re-deriving it.
+
+        `injected` is the same argument one layer down, and it is REQUIRED because there is no
+        safe default. Enrichment is not the only bookkeeping: every adapter also assembles keys
+        of its own before `build` is reached, and each assembles a DIFFERENT set. The moved
+        validator used to subtract `MarkdownAdapter.INJECTED_KEYS` universally, which is one
+        adapter's contract applied to all of them -- wrong in both directions, measured against
+        the composed hypothesis schema:
+          - the structured loader backfills `type`, and `type` is REFUSED. Every closed
+            structured record would fail for a key no author wrote. So would `canonical_id`,
+            `file_path`, and an unconditionally-backfilled `evidence_refs`.
+          - `content` is stripped for everyone, so an AUTHORED `content` on a structured record
+            was silently removed and the record accepted -- the fail-silent this programme exists
+            to abolish, sitting inside the check meant to abolish it.
+
+        A caller passes the keys IT contributed and the author did not. The subtraction happens
+        at the call site because that is the only place both are known; hiding a key the author
+        actually wrote is the failure mode, and it is why this is not a per-adapter constant.
+
+        Raises EntityKindNotRegisteredError (unknown kind), ValueError (composed-schema refusal),
+        or EntityProjectionError (projection refusal) -- three distinct failures, kept distinct so
+        the Markdown adapter can keep classifying them into its three rejection codes.
+        """
+        schema = self.resolve_class(kind)
+        validate_against_schema(
+            raw,
+            kind=kind,
+            path=path,
+            project_schema=project_schema,
+            injected=injected,
+        )
+        validate_dataset_gen3(raw, kind=kind, path=path, project_schema=project_schema)
+        authored_aliases = enrich(raw) if enrich is not None else frozenset()
+        try:
+            entity = schema.model_validate(raw)
+        except ValidationError as exc:
+            raise EntityProjectionError(kind, schema, exc) from exc
+        entity._authored_aliases = authored_aliases
+        return entity
 
     def is_core_kind(self, kind: str) -> bool:
         return kind in self._core

@@ -213,19 +213,19 @@ def test_registered_kinds_returns_all_registered_sorted() -> None:
 
 def test_with_core_types_registers_all_core_kinds() -> None:
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("task") is TaskEntity
-    assert registry.resolve("dataset") is DatasetEntity
-    assert registry.resolve("workflow-run").__name__ == "WorkflowRunEntity"
-    assert registry.resolve("research-package").__name__ == "ResearchPackageEntity"
-    assert registry.resolve("paper") is PaperEntity
+    assert registry.resolve_class("task") is TaskEntity
+    assert registry.resolve_class("dataset") is DatasetEntity
+    assert registry.resolve_class("workflow-run").__name__ == "WorkflowRunEntity"
+    assert registry.resolve_class("research-package").__name__ == "ResearchPackageEntity"
+    assert registry.resolve_class("paper") is PaperEntity
 
 
 def test_generic_kinds_default_to_project_entity() -> None:
     """Kinds without a dedicated typed entity (concept, topic, question...) are registered
     against ProjectEntity so generic tooling still works."""
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("concept") is ProjectEntity
-    assert registry.resolve("topic") is ProjectEntity
+    assert registry.resolve_class("concept") is ProjectEntity
+    assert registry.resolve_class("topic") is ProjectEntity
 
 
 def test_hypothesis_resolves_to_its_typed_entity() -> None:
@@ -237,19 +237,19 @@ def test_hypothesis_resolves_to_its_typed_entity() -> None:
     from science_model.entities import HypothesisEntity
 
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("hypothesis") is HypothesisEntity
+    assert registry.resolve_class("hypothesis") is HypothesisEntity
 
 
 def test_curation_sweep_kind_registered() -> None:
     """fb-2026-05-01-007: curation-sweep ledgers must resolve so health/inventory
     don't emit skip-noise on every run."""
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("curation-sweep") is ProjectEntity
+    assert registry.resolve_class("curation-sweep") is ProjectEntity
 
 
 def test_pre_registration_kind_registered_as_operational() -> None:
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("pre-registration") is ProjectEntity
+    assert registry.resolve_class("pre-registration") is ProjectEntity
     assert registry.kind_class("pre-registration") == EntityClass.OPERATIONAL
 
 
@@ -260,19 +260,19 @@ def test_inquiry_kind_is_epistemic() -> None:
 
 def test_research_question_kind_registered() -> None:
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("research-question") is ProjectEntity
+    assert registry.resolve_class("research-question") is ProjectEntity
     assert registry.kind_class("research-question") == EntityClass.EPISTEMIC
 
 
 def test_mechanism_kind_resolves_to_typed_entity() -> None:
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("mechanism") is MechanismEntity
+    assert registry.resolve_class("mechanism") is MechanismEntity
 
 
 def test_unknown_kind_raises() -> None:
     registry = EntityRegistry.with_core_types()
     with pytest.raises(EntityKindNotRegisteredError, match="frobnicator"):
-        registry.resolve("frobnicator")
+        registry.resolve_class("frobnicator")
 
 
 def test_duplicate_core_registration_is_hard_error() -> None:
@@ -306,13 +306,13 @@ def test_extension_cannot_shadow_core() -> None:
 def test_profile_kind_registration_resolves() -> None:
     registry = EntityRegistry.with_core_types()
     registry.register_profile_kind("model", ProjectEntity, owner="local")
-    assert registry.resolve("model") is ProjectEntity
+    assert registry.resolve_class("model") is ProjectEntity
 
 
 def test_declared_catalog_kind_resolves_to_domain_entity() -> None:
     registry = EntityRegistry.with_core_types()
     registry.register_catalog_kind("gene", DomainEntity, owner="biology")
-    assert registry.resolve("gene") is DomainEntity
+    assert registry.resolve_class("gene") is DomainEntity
 
 
 def test_duplicate_catalog_kind_registration_is_allowed_when_schema_matches() -> None:
@@ -320,7 +320,7 @@ def test_duplicate_catalog_kind_registration_is_allowed_when_schema_matches() ->
     registry.register_catalog_kind("electric_field", DomainEntity, owner="physics")
     registry.register_catalog_kind("electric_field", DomainEntity, owner="units")
 
-    assert registry.resolve("electric_field") is DomainEntity
+    assert registry.resolve_class("electric_field") is DomainEntity
 
 
 def test_extension_cannot_shadow_catalog_kind() -> None:
@@ -336,13 +336,13 @@ def test_resolve_round_trip_extension() -> None:
 
     registry = EntityRegistry.with_core_types()
     registry.register_extension_kind("natural-system:model", CustomModelEntity)
-    assert registry.resolve("natural-system:model") is CustomModelEntity
+    assert registry.resolve_class("natural-system:model") is CustomModelEntity
 
 
 def test_evidence_line_kind_resolves_to_typed_entity() -> None:
     """evidence-line must be registered as a typed EPISTEMIC entity in the core registry."""
     registry = EntityRegistry.with_core_types()
-    assert registry.resolve("evidence-line") is EvidenceLineEntity
+    assert registry.resolve_class("evidence-line") is EvidenceLineEntity
     assert registry.kind_class("evidence-line") == EntityClass.EPISTEMIC
 
 
@@ -363,7 +363,7 @@ def test_core_registry_resolves_patch_definition() -> None:
 
     registry = EntityRegistry.with_core_types()
 
-    assert registry.resolve("patch-definition") is PatchDefinitionEntity
+    assert registry.resolve_class("patch-definition") is PatchDefinitionEntity
     assert registry.kind_class("patch-definition") is EntityClass.EPISTEMIC
 
 

@@ -23,7 +23,7 @@ class _NaturalSystemModel(ProjectEntity):
 def test_extension_kind_registration_round_trip() -> None:
     r = EntityRegistry.with_core_types()
     r.register_extension_kind("natural-system:model", _NaturalSystemModel)
-    resolved = r.resolve("natural-system:model")
+    resolved = r.resolve_class("natural-system:model")
     assert resolved is _NaturalSystemModel
 
 
@@ -47,14 +47,14 @@ def test_unknown_kind_without_registration_fails_fast() -> None:
     """Project kinds that are neither core nor registered as extensions fail fast."""
     r = EntityRegistry.with_core_types()
     with pytest.raises(EntityKindNotRegisteredError, match="unregistered-kind:x"):
-        r.resolve("unregistered-kind:x")
+        r.resolve_class("unregistered-kind:x")
 
 
 def test_extension_entity_validates_through_registered_schema() -> None:
     """Pydantic validates an extension-registered class's fields at load time."""
     r = EntityRegistry.with_core_types()
     r.register_extension_kind("natural-system:model", _NaturalSystemModel)
-    cls = r.resolve("natural-system:model")
+    cls = r.resolve_class("natural-system:model")
     instance = cls.model_validate(
         {
             "id": "natural-system:model:example",
