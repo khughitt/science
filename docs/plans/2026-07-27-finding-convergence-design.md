@@ -675,11 +675,14 @@ independent `--attest-ingestion-ref`, `--attest-generated-at`, and one-or-more r
 `--attest-producer-id` values. Direct callers supply frozen `IngestionProvenance` and
 `IngestionContext` values. The report's ref, timestamp spelling, and complete producer
 set must match provenance exactly before the case store is opened; only attested values
-feed occurrence content and idempotency keys. The context is constructed from the same
-default strict `load_project_sources()` result used by graph materialization—never from
-a second Markdown/task scan and never from report content. A present `science.yaml`
-whose root is not a mapping is a graph-load error and therefore a clean refusal before
-any case write.
+feed occurrence content and idempotency keys. The context is constructed through the
+same complete adapter collection and final identity arbitration as graph
+materialization—never from a second Markdown/task scan and never from report content.
+Ingestion deliberately keeps `load_project_sources()`'s default
+`strict_identity=True`, so an identity conflict refuses the write; materialization uses
+`strict_identity=False` to carry the same detected conflicts into its audit gate rather
+than raising during collection. A present `science.yaml` whose root is not a mapping is
+a graph-load error and therefore a clean refusal before any case write.
 
 Ingestion additionally enforces:
 
@@ -692,10 +695,13 @@ Ingestion additionally enforces:
   normalized, free of `..`, and resolve inside the project root. Absolute paths are
   refused.
 - **Symlink refusal.** Any path resolving through a symlink is refused, including the
-  report path itself. Subject/evidence path judgment holds each parent descriptor opened
-  with `O_DIRECTORY | O_NOFOLLOW` and judges the leaf with descriptor-relative
-  `lstat`; only a genuinely absent leaf is accepted. The returned pathname is display
-  data and is never reopened by that judgment.
+  report path itself. The project root is made absolute lexically, with `..` refused,
+  then captured by opening every component from a held `/` descriptor with
+  `O_DIRECTORY | O_NOFOLLOW`; there is no `resolve()`-then-reopen gap. Subject/evidence
+  path judgment continues from that root descriptor, holds each parent descriptor, and
+  judges the leaf with descriptor-relative `lstat`; only a genuinely absent leaf is
+  accepted. The returned pathname is display data and is never reopened by that
+  judgment.
 - **Serialized application under a project-scoped lock.** Ingestion takes an exclusive
   lock on the project's case directory for its duration; concurrent ingestions queue
   rather than interleave.

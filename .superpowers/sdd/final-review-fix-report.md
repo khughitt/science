@@ -175,3 +175,100 @@ non-operational case-store leaves. Both received RED tests and fixes in
 `04373c70`; the nested final review is clean.
 
 Open concerns: none. Full suites remain for the top-level agent, per the brief.
+
+## Follow-up root-capture review
+
+The follow-up review identified one Important filesystem race and one Minor
+documentation mismatch.
+
+### Root cause and implementation
+
+`_walk_dirs_with_root()` previously called `Path.resolve()` and then reopened
+the resulting absolute pathname. `O_NOFOLLOW` on that reopen guarded only the
+basename, so a different real directory could replace the final root or an
+intermediate ancestor between the two traversals.
+
+The root is now made absolute lexically without filesystem resolution. A raw
+`..` segment is refused rather than collapsed. `_open_project_root()` opens the
+trusted `/` descriptor, then opens every project-root component once through
+the held parent descriptor with `O_DIRECTORY | O_NOFOLLOW`. The descriptor open
+is the capture point; later final-root or ancestor renames cannot redirect the
+remaining walk. `mkdir_inside()` returns the lexical root captured by that same
+walk rather than resolving the pathname afterwards.
+
+The design now states that ingestion and materialization share complete adapter
+collection and final arbitration semantics, while accurately distinguishing
+their modes: ingestion uses default `strict_identity=True`; materialization uses
+`strict_identity=False` so detected conflicts reach its audit gate.
+
+### Follow-up RED evidence
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_paths.py::test_project_root_is_captured_before_replacement_by_another_real_directory tests/test_findings_paths.py::test_project_root_walk_stays_anchored_when_an_intermediate_ancestor_is_swapped -q
+```
+
+Result: exit 1, 2 failures. Both calls silently judged the replacement tree
+instead of raising on the symlink in the original tree.
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_paths.py::test_project_root_parent_traversal_is_refused_not_lexically_collapsed -q
+```
+
+Result: exit 1, 1 failure. The first lexical-root implementation collapsed
+`..` and created the requested directory instead of refusing the ambiguous
+root spelling.
+
+### Follow-up GREEN verification
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_paths.py::test_project_root_is_captured_before_replacement_by_another_real_directory tests/test_findings_paths.py::test_project_root_walk_stays_anchored_when_an_intermediate_ancestor_is_swapped -q
+```
+
+Result: exit 0, 2 tests passed.
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_paths.py::test_project_root_parent_traversal_is_refused_not_lexically_collapsed -q
+```
+
+Result: exit 0, 1 test passed.
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_paths.py -q
+```
+
+Result: exit 0, 44 tests passed.
+
+```text
+cd science
+uv run --frozen pytest tests/test_findings_ingest.py tests/test_findings_storage.py tests/test_findings_cli.py tests/test_findings_isolation.py tests/test_findings_paths.py -q
+```
+
+Result: exit 0, 168 tests passed; only six pre-existing rdflib deprecation
+warnings.
+
+```text
+cd science
+uv run --frozen ruff check
+```
+
+Result: `All checks passed!`
+
+```text
+cd science
+uv run --frozen pyright
+```
+
+Result: `0 errors, 0 warnings, 0 informations`.
+
+```text
+git diff --check
+```
+
+Result: exit 0, no output.
+
+Follow-up concerns: none. No full suite was run.

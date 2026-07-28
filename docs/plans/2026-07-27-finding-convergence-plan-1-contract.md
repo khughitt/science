@@ -4181,23 +4181,65 @@ def _segments(rel_path: str) -> list[str]:
     return parts
 
 
-def _resolved_root(project_root: Path) -> Path:
-    """`project_root.resolve()`, inside this module's error channel.
-
-    `resolve()` is not a pure string operation: it calls `readlink` and `getcwd`, so a
-    symlink cycle, a permission failure, or a deleted working directory raises
-    `OSError` or `RuntimeError`. Left bare, those escape every `except PathSafetyError`
-    a caller writes -- and `storage.py`/`ingest.py` catch exactly that to build their
-    own errors. A refusal nobody can catch is not a refusal.
-    """
+def _absolute_project_root(project_root: Path) -> Path:
+    """Return a normalized absolute spelling without touching the filesystem."""
+    spelling = os.fspath(project_root)
+    if "\0" in spelling:
+        raise PathSafetyError("project root must be NUL-free")
+    if ".." in project_root.parts:
+        raise PathSafetyError(
+            f"project root contains a `..` segment: {project_root}"
+        )
     try:
-        return project_root.resolve()
-    except (OSError, RuntimeError) as exc:
+        root = project_root if project_root.is_absolute() else Path.cwd() / project_root
+    except OSError as exc:
         raise PathSafetyError(f"could not resolve project root {project_root}: {exc}") from exc
+    if root.anchor != os.sep:
+        raise PathSafetyError(
+            f"project root must have the single POSIX root anchor {os.sep!r}: {root}"
+        )
+    return root
 
 
-def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
-    """Open the directory one component at a time and return ITS descriptor.
+def _open_project_root(project_root: Path) -> tuple[Path, int]:
+    """Capture the absolute lexical root through one descriptor-anchored walk."""
+    root = _absolute_project_root(project_root)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        parent_fd = os.open(os.sep, flags)
+    except OSError as exc:
+        raise PathSafetyError(f"could not open the filesystem root: {exc}") from exc
+
+    walked = Path(os.sep)
+    try:
+        for segment in root.parts[1:]:
+            walked = walked / segment
+            try:
+                child_fd = os.open(
+                    _leaf_name(segment),
+                    flags,
+                    dir_fd=parent_fd,
+                )
+            except OSError as exc:
+                raise PathSafetyError(
+                    f"project root {root} has a missing, inaccessible, symlink, or "
+                    f"non-directory component at {walked}: {exc}"
+                ) from exc
+            os.close(parent_fd)
+            parent_fd = child_fd
+    except BaseException:
+        os.close(parent_fd)
+        raise
+    return root, parent_fd
+
+
+def _walk_dirs_with_root(
+    project_root: Path,
+    segments: list[str],
+    *,
+    create: bool,
+) -> tuple[Path, int]:
+    """Capture once, then return the lexical root and walked directory descriptor.
 
     Raises `FileNotFoundError` when a component is genuinely absent and
     `PathSafetyError` when one is a link or not a directory. Callers MUST tell these
@@ -4207,14 +4249,8 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     `FileNotFoundError`: "the project does not exist" must never be reachable through
     the same branch as "the project has no cases yet".
     """
-    root = _resolved_root(project_root)
+    root, parent_fd = _open_project_root(project_root)
     walked = root
-    try:
-        parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-    except OSError as exc:
-        raise PathSafetyError(
-            f"project root {root} is not an accessible directory: {exc}"
-        ) from exc
     try:
         for segment in segments:
             walked = walked / segment
@@ -4244,7 +4280,17 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     except BaseException:
         os.close(parent_fd)
         raise
-    return parent_fd
+    return root, parent_fd
+
+
+def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
+    """Open the directory one component at a time and return its descriptor."""
+    _root, descriptor = _walk_dirs_with_root(
+        project_root,
+        segments,
+        create=create,
+    )
+    return descriptor
 
 
 @contextmanager
@@ -4288,8 +4334,9 @@ def open_dir_inside_if_present(
 def mkdir_inside(project_root: Path, rel_dir: str) -> Path:
     """Create every component of `rel_dir`, never traversing or creating a link."""
     segments = _dir_segments(rel_dir)
-    os.close(_walk_dirs(project_root, segments, create=True))
-    return _resolved_root(project_root).joinpath(*segments)
+    root, descriptor = _walk_dirs_with_root(project_root, segments, create=True)
+    os.close(descriptor)
+    return root.joinpath(*segments)
 
 
 def resolve_inside(project_root: Path, rel_path: str) -> Path:
@@ -4323,21 +4370,21 @@ def project_relative(project_root: Path, path: Path) -> str:
     `path` is NOT resolved: resolving would follow the very links this refuses, and a
     symlinked report would silently be read as its target.
 
-    Both spellings of the root are accepted because the caller may name the project
-    with an unresolved prefix (`/tmp/...` where `/tmp` is a link) while the walk
-    starts from the resolved one. Which spelling matched changes nothing -- the
-    authoritative refusal is the component walk.
     """
+    root = _absolute_project_root(project_root)
     candidate = path if path.is_absolute() else (project_root / path)
     if ".." in candidate.parts:
         raise PathSafetyError(f"path contains a `..` segment: {path}")
-    normalized = Path(os.path.normpath(candidate))
-    for base in (_resolved_root(project_root), Path(os.path.normpath(project_root))):
-        try:
-            return normalized.relative_to(base).as_posix()
-        except ValueError:
-            continue
-    raise PathSafetyError(f"{path} is outside the project root {project_root}")
+    try:
+        normalized = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    except OSError as exc:
+        raise PathSafetyError(f"could not make {path} absolute: {exc}") from exc
+    try:
+        return normalized.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise PathSafetyError(
+            f"{path} is outside the project root {project_root}"
+        ) from exc
 
 
 def exists_at(dir_fd: int, name: str) -> bool:
@@ -6085,11 +6132,11 @@ The organising idea is that **a validated pathname is not a validated file**. Th
 
 | Primitive | Guarantee |
 |---|---|
+| `_open_project_root` | makes the root absolute lexically, refuses `..`, then captures every component from a held `/` descriptor with `O_DIRECTORY \| O_NOFOLLOW`; there is no filesystem `resolve()` followed by a pathname reopen |
 | `_walk_dirs` | opens each component `O_DIRECTORY \| O_NOFOLLOW` relative to its parent's descriptor; distinguishes genuine absence (`FileNotFoundError`) from a link, non-directory, or unreachable project root (`PathSafetyError`) |
 | `open_dir_inside` | holds that descriptor open for the whole operation |
 | `open_dir_inside_if_present` | **one** walk answers presence *and* access; `None` only for genuine absence |
 | `mkdir_inside` | creates one component at a time, so it **stops at a link having created nothing beyond it** |
-| `_resolved_root` | `project_root.resolve()` inside this module's error channel — it calls `readlink`/`getcwd`, so a bare `OSError` would escape every `except PathSafetyError` a caller writes |
 | `_leaf_name` | every `*_at` argument is one entry — no separators, no `.`/`..`, non-empty |
 | `exists_at` | `lstat` through the descriptor, so a **dangling link counts as present**; leaf-validated like the rest, because `has()` is what decides whether a write happens |
 | `read_regular_file_at` | `O_NOFOLLOW \| O_NONBLOCK` + `S_ISREG` + `fstat` of *that* descriptor; wraps invalid UTF-8 |

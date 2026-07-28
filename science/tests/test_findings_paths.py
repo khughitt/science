@@ -118,7 +118,7 @@ def test_resolve_inside_refuses_leaf_links_even_when_the_target_is_outside_or_ab
         resolve_inside(tmp_path, "doc/leaf.md")
 
 
-def test_resolve_inside_does_not_re_resolve_a_swapped_project_root(
+def test_resolve_inside_refuses_a_project_root_replaced_by_a_symlink_during_capture(
     tmp_path,
     monkeypatch,
 ):
@@ -131,22 +131,27 @@ def test_resolve_inside_does_not_re_resolve_a_swapped_project_root(
     (project / "doc" / "leaf.md").symlink_to(project / "outside.md")
     (target / "doc" / "leaf.md").write_text("replacement", encoding="utf-8")
 
-    original_resolved_root = finding_paths._resolved_root
+    real_open = finding_paths.os.open
     swapped = False
 
-    def resolve_then_swap(project_root):
+    def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
         nonlocal swapped
-        resolved = original_resolved_root(project_root)
-        if not swapped:
+        value = os.fspath(path)
+        if not swapped and (
+            value == os.fspath(project)
+            or (value == project.name and dir_fd is not None)
+        ):
             project.rename(moved_project)
             project.symlink_to(target, target_is_directory=True)
             swapped = True
-        return resolved
+        return real_open(path, flags, mode, dir_fd=dir_fd)
 
-    monkeypatch.setattr(finding_paths, "_resolved_root", resolve_then_swap)
+    monkeypatch.setattr(finding_paths.os, "open", swapping_open)
 
     with pytest.raises(PathSafetyError, match="project root"):
         resolve_inside(project, "doc/leaf.md")
+
+    assert swapped
 
 
 # --- mkdir_inside: refuse before mutating ------------------------------------------
@@ -264,6 +269,18 @@ def test_an_unresolvable_project_root_is_a_path_error_too(tmp_path, monkeypatch)
         mkdir_inside(Path("relative-root"), "doc/audits/cases")
 
 
+def test_project_root_parent_traversal_is_refused_not_lexically_collapsed(tmp_path):
+    base = tmp_path / "base"
+    project = tmp_path / "project"
+    base.mkdir()
+    project.mkdir()
+
+    with pytest.raises(PathSafetyError, match=r"\.\."):
+        mkdir_inside(base / ".." / "project", "doc/audits/cases")
+
+    assert not (project / "doc").exists()
+
+
 def test_project_root_swap_to_a_symlink_refuses_before_creating_anything(
     tmp_path, monkeypatch
 ):
@@ -273,24 +290,137 @@ def test_project_root_swap_to_a_symlink_refuses_before_creating_anything(
     project.mkdir()
     target.mkdir()
 
-    original_resolved_root = finding_paths._resolved_root
+    real_open = finding_paths.os.open
     swapped = False
 
-    def resolve_then_swap(project_root):
+    def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
         nonlocal swapped
-        resolved = original_resolved_root(project_root)
-        if not swapped:
+        value = os.fspath(path)
+        if not swapped and (
+            value == os.fspath(project)
+            or (value == project.name and dir_fd is not None)
+        ):
             project.rename(moved_project)
             project.symlink_to(target, target_is_directory=True)
             swapped = True
-        return resolved
+        return real_open(path, flags, mode, dir_fd=dir_fd)
 
-    monkeypatch.setattr(finding_paths, "_resolved_root", resolve_then_swap)
+    monkeypatch.setattr(finding_paths.os, "open", swapping_open)
 
     with pytest.raises(PathSafetyError, match="project root"):
         mkdir_inside(project, "doc/audits/cases")
 
+    assert swapped
     assert list(target.iterdir()) == [], "creation followed the swapped root symlink"
+
+
+def test_project_root_is_captured_before_replacement_by_another_real_directory(
+    tmp_path,
+    monkeypatch,
+):
+    project = tmp_path / "project"
+    moved_project = tmp_path / "moved-project"
+    replacement = tmp_path / "replacement"
+    (project / "doc").mkdir(parents=True)
+    (replacement / "doc").mkdir(parents=True)
+    (project / "doc" / "leaf.md").symlink_to(tmp_path / "outside.md")
+    (replacement / "doc" / "leaf.md").write_text("outside tree", encoding="utf-8")
+    original_inode = project.stat().st_ino
+
+    real_open = finding_paths.os.open
+    swapped = False
+
+    def swap() -> None:
+        nonlocal swapped
+        project.rename(moved_project)
+        replacement.rename(project)
+        swapped = True
+
+    def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
+        value = os.fspath(path)
+        if not swapped and value == os.fspath(project):
+            # The vulnerable resolve-then-open shape reaches this absolute reopen
+            # without a descriptor. Replace the root before that reopen.
+            swap()
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+        if not swapped and value == project.name and dir_fd is not None:
+            # A component walk captures the real directory first. Replacing its
+            # pathname afterwards must not redirect the remaining judgment.
+            descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+            assert os.fstat(descriptor).st_ino == original_inode
+            try:
+                swap()
+            except BaseException:
+                os.close(descriptor)
+                raise
+            return descriptor
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(finding_paths.os, "open", swapping_open)
+
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(project, "doc/leaf.md")
+
+    assert swapped
+    assert (project / "doc" / "leaf.md").read_text(encoding="utf-8") == "outside tree"
+
+
+def test_project_root_walk_stays_anchored_when_an_intermediate_ancestor_is_swapped(
+    tmp_path,
+    monkeypatch,
+):
+    container = tmp_path / "container"
+    ancestor = container / "owner"
+    moved_ancestor = container / "moved-owner"
+    replacement_ancestor = container / "replacement-owner"
+    project = ancestor / "project"
+    replacement_project = replacement_ancestor / "project"
+    (project / "doc").mkdir(parents=True)
+    (replacement_project / "doc").mkdir(parents=True)
+    (project / "doc" / "leaf.md").symlink_to(tmp_path / "outside.md")
+    (replacement_project / "doc" / "leaf.md").write_text(
+        "outside tree",
+        encoding="utf-8",
+    )
+    original_ancestor_inode = ancestor.stat().st_ino
+
+    real_open = finding_paths.os.open
+    swapped = False
+
+    def swap() -> None:
+        nonlocal swapped
+        ancestor.rename(moved_ancestor)
+        replacement_ancestor.rename(ancestor)
+        swapped = True
+
+    def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
+        value = os.fspath(path)
+        if not swapped and value == os.fspath(project):
+            # The vulnerable absolute reopen follows the replacement ancestor.
+            swap()
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+        if not swapped and value == ancestor.name and dir_fd is not None:
+            # The safe walk opens the ancestor through its held parent before the
+            # rename, so later components remain below the captured directory.
+            descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+            assert os.fstat(descriptor).st_ino == original_ancestor_inode
+            try:
+                swap()
+            except BaseException:
+                os.close(descriptor)
+                raise
+            return descriptor
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(finding_paths.os, "open", swapping_open)
+
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(project, "doc/leaf.md")
+
+    assert swapped
+    assert (
+        project / "doc" / "leaf.md"
+    ).read_text(encoding="utf-8") == "outside tree"
 
 
 # --- leaf names: a `*_at` argument is one entry, never a path -----------------------
