@@ -50,6 +50,8 @@ def normalize_project_path(raw: str) -> str:
     on the strength of where it happens to land rather than on what it says. `.` and
     duplicate separators are collapsed, because neither is traversal.
     """
+    if "\0" in raw:
+        raise SubjectError("path contains a NUL character")
     candidate = normalize_utf8_nfc(raw).replace("\\", "/")
     if candidate.startswith("/"):
         raise SubjectError(f"path must be project-relative, got {raw!r}")

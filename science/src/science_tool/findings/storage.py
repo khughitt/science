@@ -63,6 +63,9 @@ _BODY = (
 _CASE_SHAPED_NAME = re.compile(
     r"^[a-z0-9-]+--[0-9a-f]{64}(?:\..*)?$"
 )
+_WRITER_TEMP_NAME = re.compile(
+    r"^\.[a-z0-9-]+--[0-9a-f]{64}\.md\.[0-9a-f]{32}\.tmp$"
+)
 
 
 class CaseStorageError(ValueError):
@@ -183,19 +186,17 @@ class CaseStore:
             raise CaseStorageError(f"could not list the case store: {exc}") from exc
         cases: list[str] = []
         for name in entries:
-            # Locks and writer-owned temps begin with a dot. They are operational
-            # leaves, never cases, even when a temp embeds a case-shaped name.
-            if name.startswith("."):
+            if name == LOCK_NAME or _WRITER_TEMP_NAME.fullmatch(name):
                 continue
-            if not _CASE_SHAPED_NAME.fullmatch(name):
-                # Operator notes and other unrelated files are not audit cases.
-                continue
-            if not name.endswith(".md"):
+            if name.endswith(".md"):
+                # Every Markdown leaf claims to be a case. Reading it below enforces
+                # both the case schema and the filename/content binding.
+                cases.append(name)
+            elif _CASE_SHAPED_NAME.fullmatch(name):
                 raise CaseStorageError(
                     f"{name} is case-shaped but does not have the canonical .md "
                     "extension"
                 )
-            cases.append(name)
         return sorted(cases)
 
     def has(self, name: str) -> bool:

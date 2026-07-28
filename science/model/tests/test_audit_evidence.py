@@ -10,6 +10,11 @@ def test_location_evidence_normalizes_path_and_refuses_traversal():
         LocationEvidence(path="../outside.py")
 
 
+def test_location_evidence_refuses_nul_at_the_model_boundary():
+    with pytest.raises(ValidationError, match="NUL"):
+        LocationEvidence(path="src/a\0b.py")
+
+
 def test_location_pointer_permits_positional_segments():
     # Unlike PathSubject.pointer: evidence is not identity-bearing.
     assert LocationEvidence(path="science.yaml", pointer="health.x[3]").pointer

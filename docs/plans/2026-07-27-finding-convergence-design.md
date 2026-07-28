@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 6. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 7. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -25,6 +25,12 @@
 > matches its guarantee (§8), section ordering (§6, §11), the `dataset.anomaly.*`
 > enumeration (§9), fingerprint type constraints and filename validation (§3), and two
 > internal contradictions (§Out of scope, §Open questions).
+>
+> **Revision 7** closes final-review trust and persistence gaps: independent exact
+> ingestion attestation and graph-arbitrated entity context (§2, §8, §11),
+> append-only real genesis history (§4), aggregate case-leaf validation (§5),
+> descriptor-relative path judgment plus NUL refusal (§2, §8), and independent golden
+> vectors for every persisted hash (§Testing).
 >
 > **Revision 4** closes five narrow contract issues: the acceptance key omitted matching
 > fields the matcher actually consults (§10), `evidence` had no wire schema despite
@@ -312,8 +318,12 @@ content — an error (§8) raised far from the producer that caused it.
 FindingSubject = EntitySubject | PathSubject | IdentifierSubject | ProjectSubject
 ```
 
-- **`EntitySubject(type="entity", ref="dataset:gtex-v8")`** — a known canonical entity,
-  including tasks. Resolution is validated.
+- **`EntitySubject(type="entity", ref="dataset:gtex-v8")`** — an exact member of the
+  strict, graph-arbitrated `ProjectSources.entities` universe. This includes entities
+  contributed by storage adapters and participating commons, and excludes aliases,
+  skipped/invalid records, and identities suppressed by arbitration. Duplicate owners
+  or contribution conflicts fail the strict source load rather than collapsing into a
+  set. Tasks participate only through the graph's task adapter.
 - **`PathSubject(type="path", path=..., pointer=...)`** — files, missing expected files,
   and malformed entities that cannot supply a valid ref. Paths are normalized
   project-relative POSIX. A `pointer` may name a **stable semantic key** or logical
@@ -349,7 +359,8 @@ prose, `message`, `severity`, `evidence`, line numbers, and list positions.
 
 - strings: Unicode NFC, no case folding except where a field's own vocabulary is
   lowercase (`namespace`, `type`)
-- paths: project-relative, POSIX separators, no `.`/`..` segments, no trailing slash
+- paths: project-relative, POSIX separators, no NUL, no `.`/`..` segments, no trailing
+  slash
 - entity refs: canonical `<prefix>:<slug>` form
 - qualifiers: only rule-declared identity keys, others dropped
 - absent optional fields are omitted, never encoded as null
@@ -437,9 +448,13 @@ log, not a field anyone writes.
 | `reason` | Required free text. |
 | `task_ref` | Required on a transition to `promoted`, forbidden otherwise. |
 
-**Every record opens with a genesis transition `None → proposed`**, written by ingestion
-when the record is created. The log is therefore never empty and `status` needs no
-special case for "no transitions yet".
+**Every record opens with a genesis transition `None → proposed`**, written by trusted
+ingestion with actor `ingest` when the record is actually created. The transition is
+append-only creation history: a later arrival carrying an earlier `observed_at` is
+inserted into canonical occurrence order but never rewrites genesis. Opposite arrival
+orders therefore have the same immutable identity, canonical occurrences, and current
+severity while legitimately retaining different creation histories. The log is never
+empty and `status` needs no special case for "no transitions yet".
 
 **The transition graph is closed.** Any pair not in this table is rejected:
 
@@ -518,6 +533,13 @@ Three placement constraints, each with a verified cause:
 Cases never materialize into `graph/knowledge`, never become belief bearers, freshness
 subjects, or attention candidates — the same placement ruling, for the same reason, that
 run records were given (`graph/attention.py`).
+
+Every Markdown leaf under `doc/audits/cases/` claims to be a case and must pass case
+schema plus filename/content binding, including `notes.md` and dot-prefixed
+`.hidden.md`. The directory reader ignores only the exact `.ingest.lock` leaf and the
+exact writer-owned temp-name shape; ingestion validates the complete aggregate before
+its first write, so a renamed unrelated case cannot be hidden while a replacement is
+created.
 
 ### 6. Rules — declared beside the producer, registry derived
 
@@ -647,7 +669,16 @@ Concretely:
   acceptance is a display decision recorded in `science.yaml`, dismissal is a judgement
   recorded in the transition log.
 
-Because this is a trust boundary crossed by untrusted output, ingestion enforces:
+Because this is a trust boundary crossed by untrusted output, the command requires
+independent `--attest-ingestion-ref`, `--attest-generated-at`, and one-or-more repeatable
+`--attest-producer-id` values. Direct callers supply frozen `IngestionProvenance` and
+`IngestionContext` values. The report's ref, timestamp spelling, and complete producer
+set must match provenance exactly before the case store is opened; only attested values
+feed occurrence content and idempotency keys. The context is constructed from the same
+default strict `load_project_sources()` result used by graph materialization—never from
+a second Markdown/task scan and never from report content.
+
+Ingestion additionally enforces:
 
 - **Schema and version validation.** The report declares `schema_version` and
   `fingerprint_version`; unknown or unimplemented values are refused outright, never
@@ -658,7 +689,10 @@ Because this is a trust boundary crossed by untrusted output, ingestion enforces
   normalized, free of `..`, and resolve inside the project root. Absolute paths are
   refused.
 - **Symlink refusal.** Any path resolving through a symlink is refused, including the
-  report path itself.
+  report path itself. Subject/evidence path judgment holds each parent descriptor opened
+  with `O_DIRECTORY | O_NOFOLLOW` and judges the leaf with descriptor-relative
+  `lstat`; only a genuinely absent leaf is accepted. The returned pathname is display
+  data and is never reopened by that judgment.
 - **Serialized application under a project-scoped lock.** Ingestion takes an exclusive
   lock on the project's case directory for its duration; concurrent ingestions queue
   rather than interleave.
@@ -878,8 +912,8 @@ class AcceptedFinding(TypedDict):
 class AuditReport(TypedDict):
     schema_version: int              # 2
     fingerprint_version: int         # 1
-    ingestion_ref: str               # trusted, report-level; run ref or ingestion id
-    generated_at: str                # ISO-8601, report-level
+    ingestion_ref: str               # actor claim; must equal trusted attestation
+    generated_at: str                # actor claim; must equal trusted attestation
     findings: list[ReportedFinding]  # unsuppressed, ordered (below)
     accepted: list[AcceptedFinding]
     metrics: dict[str, ProducerMetrics]   # keyed by producer_id, validated per §6
@@ -891,10 +925,10 @@ class AuditReport(TypedDict):
 - **Findings are enveloped with their producer.** A bare `AuditFinding` cannot populate an
   occurrence's required `producer_id`, and rule ownership cannot supply it either, because
   multiple producers must be able to emit the same rule — that is the premise of
-  cross-producer dedup. `ingestion_ref` and `generated_at` are **report-level and
-  trusted**: supplied by the supervisor or the ingesting command, never by the finding.
-  Accepted findings carry the same provenance, plus the key of the entry that accepted
-  them.
+  cross-producer dedup. `ingestion_ref`, `generated_at`, and producer IDs are
+  **report-level actor claims**, not authorities: trusted ingestion compares them
+  exactly with independent attestation. Accepted findings carry the same claimed
+  provenance, plus the key of the entry that accepted them.
 - **`ProducerMetrics` is validated, not free-form** — against the metrics schema the
   producer declared at registration (§6).
 - **`totals`** carries `findings_by_severity`, `findings_total`, `accepted_total`, and
@@ -925,9 +959,11 @@ class AuditReport(TypedDict):
 5. **Renderer clean-refusal** — a non-empty unwired channel forbids "Project is clean",
    asserted on rendered output, not on a boolean. The invariant lives in the layer being
    rewritten, and this is the guard-in-one-reader failure shape.
-6. **Fingerprint v1 is frozen** — a golden-vector test pinning canonical encoding,
-   normalization, and digest for each subject variant. Changing normalization must break
-   this test. A rule declaring a float, null, or nested-object identity qualifier fails at
+6. **Persisted hashes are frozen** — golden-vector tests pin fingerprint canonical
+   encoding plus the exact occurrence-key and review-id domain prefixes, field order,
+   NUL separators, UTF-8 encoding, and 64-hex SHA-256 output against independent
+   `printf ... | sha256sum` oracles. Changing any persisted encoding must break a test.
+   A rule declaring a float, null, or nested-object identity qualifier fails at
    declaration.
 7. **Filename binds to contents** — a case whose filename slug, filename digest, or
    stored `finding_id` disagrees with the fingerprint recomputed from its immutable fields
@@ -940,16 +976,20 @@ class AuditReport(TypedDict):
    content is an error, not a retry.
 10. **Partial-failure recovery** — an ingestion interrupted after some records are written
     is fully repaired by rerunning the same report, with no duplicate occurrences.
-11. **No arrival-order dependence** — ingesting producer A then B, and B then A, yields
-    byte-identical records modulo occurrence order.
+11. **Canonical state has no arrival-order dependence; creation history does** —
+    ingesting producer A then B, and B then A, yields the same immutable identity,
+    canonical occurrence sequence, and current severity. Each record's captured genesis
+    remains the real first creation and is unchanged when an older observation arrives.
 12. **Non-identity qualifiers survive** — a qualifier outside `identity_qualifiers` is
     present on the occurrence and absent from the fingerprint.
 13. **Cross-producer dedup** — two producers reporting the same rule + subject + identity
     qualifiers upsert **one** record with two occurrences, each carrying its own
     `producer_id` from the report envelope.
-14. **Report provenance is required** — a report whose finding lacks a `producer_id`, or
-    which omits `ingestion_ref` or `generated_at`, is refused; a `producer_id` naming an
-    unregistered producer is refused; two `ReportedFinding`s sharing a
+14. **Report provenance is required and independently attested** — a report whose
+    finding lacks a `producer_id`, or which omits `ingestion_ref` or `generated_at`, is
+    refused; exact ref, timestamp, and producer-set mismatch with trusted provenance is
+    refused before writes; a `producer_id` naming an unregistered producer is refused;
+    two `ReportedFinding`s sharing a
     `(producer_id, finding_id)` in one report are refused at the producer boundary, not
     at occurrence upsert.
 15. **Producer metrics are validated** — a metrics object violating the schema the
@@ -978,9 +1018,11 @@ class AuditReport(TypedDict):
     identical tuples produce one. A review missing `lens` when
     `reviewer_kind == "agent"` fails; a review missing `model` when
     `reviewer_kind == "agent"` fails.
-21. **Ingestion hardening** — absolute path, `..` traversal, symlinked path, unknown
-    `schema_version`, unimplemented `fingerprint_version`, oversize report, and excess
-    finding count are each refused, and a *validation* failure writes nothing.
+21. **Ingestion hardening** — absolute path, NUL, `..` traversal, symlinked path
+    (including parent-swap and dangling-link cases), unknown `schema_version`,
+    unimplemented `fingerprint_version`, oversize report, excess finding count, and any
+    invalid Markdown leaf in the aggregate case store are each refused, and a
+    *validation* failure writes nothing.
 22. **Layer 1 unchanged** — a write to `doc/audits/cases/…` in an autonomous commit range
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
 23. **Graph isolation** — no finding triple appears in any named graph; cases are absent

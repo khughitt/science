@@ -62,6 +62,93 @@ def test_resolve_inside_tolerates_a_not_yet_existing_leaf(tmp_path):
     assert resolve_inside(tmp_path, "doc/audits/cases/new.md").name == "new.md"
 
 
+def test_resolve_inside_judges_the_leaf_through_the_held_parent_descriptor(
+    tmp_path,
+    monkeypatch,
+):
+    """A parent pathname swap cannot change which leaf is judged.
+
+    The directory initially named ``checked`` contains a symlink and therefore must
+    be refused.  At the first leaf ``lstat`` we move that directory aside and put a
+    different, all-regular directory under the pathname.  A pathname walk follows
+    the replacement and accepts it; a descriptor walk judges the symlink through the
+    parent descriptor it already opened.
+    """
+    checked = tmp_path / "checked"
+    replacement = tmp_path / "replacement"
+    moved = tmp_path / "moved"
+    checked.mkdir()
+    replacement.mkdir()
+    (tmp_path / "outside.md").write_text("outside", encoding="utf-8")
+    (checked / "leaf.md").symlink_to(tmp_path / "outside.md")
+    (replacement / "leaf.md").write_text("replacement", encoding="utf-8")
+
+    real_lstat = os.lstat
+    swapped = False
+
+    def swapping_lstat(path, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and os.fspath(path).endswith("leaf.md"):
+            checked.rename(moved)
+            replacement.rename(checked)
+            swapped = True
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "lstat", swapping_lstat)
+
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(tmp_path, "checked/leaf.md")
+
+    assert swapped
+
+
+@pytest.mark.parametrize("dangling", [False, True])
+def test_resolve_inside_refuses_leaf_links_even_when_the_target_is_outside_or_absent(
+    tmp_path,
+    dangling,
+):
+    parent = tmp_path / "doc"
+    parent.mkdir()
+    target = tmp_path.parent / f"{tmp_path.name}-outside.md"
+    if not dangling:
+        target.write_text("outside", encoding="utf-8")
+    (parent / "leaf.md").symlink_to(target)
+
+    with pytest.raises(PathSafetyError, match="symlink"):
+        resolve_inside(tmp_path, "doc/leaf.md")
+
+
+def test_resolve_inside_does_not_re_resolve_a_swapped_project_root(
+    tmp_path,
+    monkeypatch,
+):
+    project = tmp_path / "project"
+    moved_project = tmp_path / "moved-project"
+    target = tmp_path / "outside"
+    (project / "doc").mkdir(parents=True)
+    (target / "doc").mkdir(parents=True)
+    (project / "outside.md").write_text("outside", encoding="utf-8")
+    (project / "doc" / "leaf.md").symlink_to(project / "outside.md")
+    (target / "doc" / "leaf.md").write_text("replacement", encoding="utf-8")
+
+    original_resolved_root = finding_paths._resolved_root
+    swapped = False
+
+    def resolve_then_swap(project_root):
+        nonlocal swapped
+        resolved = original_resolved_root(project_root)
+        if not swapped:
+            project.rename(moved_project)
+            project.symlink_to(target, target_is_directory=True)
+            swapped = True
+        return resolved
+
+    monkeypatch.setattr(finding_paths, "_resolved_root", resolve_then_swap)
+
+    with pytest.raises(PathSafetyError, match="project root"):
+        resolve_inside(project, "doc/leaf.md")
+
+
 # --- mkdir_inside: refuse before mutating ------------------------------------------
 
 

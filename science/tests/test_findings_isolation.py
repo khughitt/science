@@ -26,7 +26,11 @@ from science_tool.autonomy.changes import (
     entity_kind_for_path,
 )
 from science_tool.autonomy.path_gate import evaluate
-from science_tool.findings.ingest import ingest_report
+from science_tool.findings.ingest import (
+    IngestionContext,
+    IngestionProvenance,
+    ingest_report,
+)
 from science_tool.findings.producers import (
     FindingProducer,
     FindingRegistry,
@@ -198,7 +202,19 @@ def test_ingested_case_stays_out_of_graph_attention_and_revision_inputs(
     assert [row.entity_id for row in before_candidates.rows] == ["hypothesis:h1"]
 
     report, registry = _isolation_report()
-    outcome = ingest_report(tmp_path, report, registry)
+    outcome = ingest_report(
+        tmp_path,
+        report,
+        registry,
+        provenance=IngestionProvenance(
+            ingestion_ref=report.ingestion_ref,
+            generated_at=report.generated_at,
+            producer_ids=frozenset(report.meta.producers_run),
+        ),
+        context=IngestionContext(
+            canonical_entity_ids=frozenset({"hypothesis:h1"})
+        ),
+    )
     assert outcome.records_written == 1
     record = load_cases(tmp_path)[0]
     case_path = next((tmp_path / CASES_DIRNAME).glob("*.md")).relative_to(tmp_path)

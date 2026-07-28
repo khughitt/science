@@ -27,6 +27,19 @@ def _registry():
     return build_registry([])
 
 
+def _load_ingestion_context(project_root: Path):
+    """Build the trusted entity universe through the graph's strict source boundary."""
+    from science_tool.findings.ingest import IngestionContext
+    from science_tool.graph.sources import load_project_sources
+
+    sources = load_project_sources(project_root)
+    return IngestionContext(
+        canonical_entity_ids=frozenset(
+            entity.canonical_id for entity in sources.entities
+        )
+    )
+
+
 @findings_group.command("ingest")
 @click.argument("report_path", type=click.Path(path_type=Path, exists=True))
 @click.option(
@@ -35,14 +48,55 @@ def _registry():
 @click.option(
     "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True
 )
-def ingest_command(report_path: Path, project_root: Path, output_format: str) -> None:
+@click.option(
+    "--attest-ingestion-ref",
+    required=True,
+    help="Trusted ingestion reference that the report must match exactly.",
+)
+@click.option(
+    "--attest-generated-at",
+    required=True,
+    help="Trusted generation timestamp that the report must match exactly.",
+)
+@click.option(
+    "--attest-producer-id",
+    "attest_producer_ids",
+    multiple=True,
+    required=True,
+    help="Trusted producer ID; repeat for the exact producer set.",
+)
+def ingest_command(
+    report_path: Path,
+    project_root: Path,
+    output_format: str,
+    attest_ingestion_ref: str,
+    attest_generated_at: str,
+    attest_producer_ids: tuple[str, ...],
+) -> None:
     """Validate a report and upsert its findings into `doc/audits/cases/`."""
-    from science_tool.findings.ingest import IngestError, ingest_report, load_report
+    from science_tool.findings.ingest import (
+        IngestionProvenance,
+        ingest_report,
+        load_report,
+    )
+    from science_tool.commons.errors import CommonsError
 
     try:
         report = load_report(project_root, report_path)
-        outcome = ingest_report(project_root, report, _registry())
-    except IngestError as exc:
+        provenance = IngestionProvenance(
+            ingestion_ref=attest_ingestion_ref,
+            generated_at=attest_generated_at,
+            producer_ids=frozenset(attest_producer_ids),
+        )
+        context = _load_ingestion_context(project_root)
+        outcome = ingest_report(
+            project_root,
+            report,
+            _registry(),
+            provenance=provenance,
+            context=context,
+        )
+    except (CommonsError, OSError, ValueError) as exc:
         message = f"refused: {exc}"
         emit(
             output_format=output_format,

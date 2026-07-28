@@ -16,13 +16,14 @@ from science_model.audit import (
 
 from science_tool.findings.ingest import (
     IngestError,
-    _known_canonical_entity_refs,
-    ingest_report,
+    IngestionContext,
+    IngestionProvenance,
+    ingest_report as _ingest_report,
     load_report,
 )
 from science_tool.findings.producers import FindingProducer, build_registry
 from science_tool.findings.storage import CASES_DIRNAME, MAX_CASE_BYTES, load_cases
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.errors import EntityIdentityCollisionError
 
 
 class Q(BaseModel):
@@ -222,798 +223,331 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
     return AuditReport(**{**base, **overrides})
 
 
+def _provenance(report: AuditReport) -> IngestionProvenance:
+    return IngestionProvenance(
+        ingestion_ref=report.ingestion_ref,
+        generated_at=report.generated_at,
+        producer_ids=frozenset(
+            {
+                *report.meta.producers_run,
+                *(item.producer_id for item in report.unwired),
+            }
+        ),
+    )
+
+
+def ingest_report(
+    project_root,
+    report: AuditReport,
+    registry,
+    *,
+    provenance: IngestionProvenance | None = None,
+    context: IngestionContext | None = None,
+    actor: str = "ingest",
+):
+    """Test convenience: production callers must supply both trusted inputs."""
+    return _ingest_report(
+        project_root,
+        report,
+        registry,
+        provenance=provenance or _provenance(report),
+        context=context
+        or IngestionContext(
+            canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
+        ),
+        actor=actor,
+    )
+
+
 def test_ingest_writes_a_case_with_a_genesis_transition(tmp_path):
     outcome = ingest_report(tmp_path, _report(), REGISTRY)
     assert outcome.records_written == 1
     record = load_cases(tmp_path)[0]
     assert record.status == "proposed"
     assert record.transitions[0].from_status is None
-    assert record.transitions[0].actor == "dataset_anomalies"
+    assert record.transitions[0].actor == "ingest"
     assert len(record.occurrences) == 1
 
 
-def test_entity_subject_must_name_an_exact_canonical_frontmatter_id(tmp_path):
-    outcome = ingest_report(tmp_path, _report(), REGISTRY)
-    assert outcome.records_written == 1
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(
-            tmp_path,
-            _report(
-                ingestion_ref="ing:missing",
-                findings=[
-                    ReportedFinding(
-                        producer_id="dataset_anomalies",
-                        finding=_finding(
-                            subject=EntitySubject(ref="dataset:missing")
-                        ),
-                    )
-                ],
-            ),
-            REGISTRY,
-        )
-
-
-def test_entity_subject_does_not_resolve_aliases_or_short_prefixes(tmp_path):
-    alias_path = tmp_path / "entities" / "datasets" / "canonical.md"
-    alias_path.write_text(
-        "---\nid: dataset:canonical\nkind: dataset\naliases:\n"
-        "  - dataset:alias\n---\n",
-        encoding="utf-8",
-    )
-    for ref in ("dataset:alias", "dataset:canon"):
-        with pytest.raises(IngestError, match="known canonical"):
-            ingest_report(
-                tmp_path,
-                _report(
-                    ingestion_ref=f"ing:{ref}",
-                    findings=[
-                        ReportedFinding(
-                            producer_id="dataset_anomalies",
-                            finding=_finding(subject=EntitySubject(ref=ref)),
-                        )
-                    ],
-                ),
-                REGISTRY,
-            )
-
-
-def test_entity_subject_resolution_excludes_source_markdown_sidecars(tmp_path):
-    sidecar = tmp_path / "entities" / "papers" / "x.source.md"
-    sidecar.parent.mkdir(parents=True)
-    sidecar.write_text(
-        "---\nid: paper:sidecar\nkind: paper\ntitle: Not an entity\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="paper:sidecar")
-                ),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
-    assert not (tmp_path / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_accepts_a_nested_research_package(tmp_path):
-    package = (
-        tmp_path
-        / "research"
-        / "packages"
-        / "lens"
-        / "section"
-        / "research-package.md"
-    )
-    package.parent.mkdir(parents=True)
-    package.write_text(
-        "---\n"
-        "id: research-package:deep\n"
-        "kind: research-package\n"
-        "title: Deep package\n"
-        "---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="research-package:deep")
-                ),
-            )
-        ]
-    )
-
-    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
-
-
-@pytest.mark.parametrize("link_site", ["nested-directory", "leaf"])
-def test_entity_subject_resolution_refuses_symlinked_research_packages(
-    tmp_path,
-    link_site,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    packages = project / "research" / "packages"
-    packages.mkdir(parents=True)
-    outside = tmp_path / "outside-package"
-    outside.mkdir()
-    outside_record = outside / "research-package.md"
-    outside_record.write_text(
-        "---\n"
-        "id: research-package:outside\n"
-        "kind: research-package\n"
-        "title: Outside\n"
-        "---\n",
-        encoding="utf-8",
-    )
-    if link_site == "nested-directory":
-        (packages / "lens").symlink_to(outside, target_is_directory=True)
-    else:
-        lens = packages / "lens"
-        lens.mkdir()
-        (lens / "research-package.md").symlink_to(outside_record)
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="research-package:outside")
-                ),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_accepts_a_nested_declared_entity_home_record(tmp_path):
-    record = tmp_path / "entities" / "reports" / "year" / "deep.md"
-    record.parent.mkdir(parents=True)
-    record.write_text(
-        "---\nid: report:deep\nkind: report\ntitle: Deep report\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="report:deep")),
-            )
-        ]
-    )
-
-    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
+def test_direct_ingestion_requires_both_trusted_inputs_and_defaults_actor_to_ingest():
+    parameters = inspect.signature(_ingest_report).parameters
+    assert parameters["provenance"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["provenance"].default is inspect.Parameter.empty
+    assert parameters["context"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["context"].default is inspect.Parameter.empty
+    assert parameters["actor"].default == "ingest"
 
 
 @pytest.mark.parametrize(
-    ("relative_path", "kind_line"),
+    ("field", "provenance"),
     [
-        ("entities/reports/id-only.md", ""),
-        ("research/packages/id-only.md", ""),
-        ("entities/design-notes/id-only.md", ""),
-        ("entities/reports/blank-kind.md", "kind: '   '\n"),
-    ],
-    ids=[
-        "core-home-missing",
-        "research-package-missing",
-        "local-home-missing",
-        "blank",
+        (
+            "ingestion_ref",
+            IngestionProvenance(
+                ingestion_ref="attested:other",
+                generated_at="2026-07-27T12:00:00+00:00",
+                producer_ids=frozenset({"dataset_anomalies"}),
+            ),
+        ),
+        (
+            "generated_at",
+            IngestionProvenance(
+                ingestion_ref="ing:1",
+                generated_at="2026-07-27T12:01:00+00:00",
+                producer_ids=frozenset({"dataset_anomalies"}),
+            ),
+        ),
+        (
+            "producer ids",
+            IngestionProvenance(
+                ingestion_ref="ing:1",
+                generated_at="2026-07-27T12:00:00+00:00",
+                producer_ids=frozenset({"different_producer"}),
+            ),
+        ),
     ],
 )
-def test_entity_subject_rejects_id_bearing_records_without_nonblank_kind(
+def test_report_provenance_must_exactly_match_the_trusted_attestation(
     tmp_path,
-    relative_path,
-    kind_line,
+    field,
+    provenance,
 ):
-    _seed_local_kind_profile(tmp_path)
-    record = tmp_path / relative_path
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        "---\nid: report:id-only\n"
-        f"{kind_line}"
-        "title: Has an id\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="report:id-only")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
+    with pytest.raises(IngestError, match=field):
+        _ingest_report(
+            tmp_path,
+            _report(),
+            REGISTRY,
+            provenance=provenance,
+            context=IngestionContext(
+                canonical_entity_ids=frozenset({"dataset:a"})
+            ),
+        )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
 
-def test_entity_subject_rejects_an_id_bearing_unknown_kind(tmp_path):
-    record = tmp_path / "entities" / "reports" / "unknown.md"
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        "---\nid: mystery:unknown\nkind: mystery\ntitle: Unknown\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
+def _registry_with_second_producer():
+    return build_registry(
+        [
+            FindingProducer(
                 producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="mystery:unknown")),
-            )
+                namespace="health_checks",
+                rules=(RULE,),
+                sections=(SECTION,),
+                metrics_schema=None,
+                remediators=frozenset(),
+            ),
+            FindingProducer(
+                producer_id="curation_lens",
+                namespace="health_checks",
+                rules=(),
+                sections=(),
+                metrics_schema=None,
+                remediators=frozenset(),
+            ),
         ]
     )
 
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
-    assert not (tmp_path / CASES_DIRNAME).exists()
 
-
-def test_entity_subject_rejects_a_known_kind_invalid_under_its_model(tmp_path):
-    record = tmp_path / "entities" / "reports" / "invalid.md"
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        "---\nid: report:invalid\nkind: report\n---\n",
-        encoding="utf-8",
-    )
+def test_a_registered_producer_cannot_impersonate_the_attested_producer(tmp_path):
     report = _report(
         findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="report:invalid")),
-            )
+            ReportedFinding(producer_id="curation_lens", finding=_finding())
         ]
     )
+    provenance = IngestionProvenance(
+        ingestion_ref=report.ingestion_ref,
+        generated_at=report.generated_at,
+        producer_ids=frozenset({"dataset_anomalies"}),
+    )
 
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
+    with pytest.raises(IngestError, match="producer ids"):
+        _ingest_report(
+            tmp_path,
+            report,
+            _registry_with_second_producer(),
+            provenance=provenance,
+            context=IngestionContext(
+                canonical_entity_ids=frozenset({"dataset:a"})
+            ),
+        )
     assert not (tmp_path / CASES_DIRNAME).exists()
 
 
-def test_entity_subject_rejects_a_project_schema_invalid_record(tmp_path):
-    (tmp_path / "science.yaml").write_text(
-        "name: pinned\nentity_schema_version: 2\n",
-        encoding="utf-8",
-    )
-    record = tmp_path / "entities" / "hypotheses" / "invalid.md"
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        "---\n"
-        "id: hypothesis:invalid\n"
-        "kind: hypothesis\n"
-        "title: Invalid\n"
-        "status: active\n"
-        "created: 2026-07-27\n"
-        "updated: 2026-07-27\n"
-        "related: []\n"
-        "source_refs: []\n"
-        "source_stated_evidenc: typo\n"
-        "---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="hypothesis:invalid")
-                ),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
-    assert not (tmp_path / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_uses_descriptor_loaded_project_extension_schema(
+@pytest.mark.parametrize(
+    ("report_ids", "attested_ids"),
+    [
+        (
+            ["dataset_anomalies"],
+            frozenset({"dataset_anomalies", "curation_lens"}),
+        ),
+        (
+            ["dataset_anomalies", "curation_lens"],
+            frozenset({"dataset_anomalies"}),
+        ),
+    ],
+    ids=["attestation-has-extra", "report-has-extra"],
+)
+def test_producer_attestation_set_equality_has_no_subset_fallback(
     tmp_path,
+    report_ids,
+    attested_ids,
 ):
-    (tmp_path / "science.yaml").write_text(
-        "name: pinned\n"
-        "entity_schema_version: 2\n"
-        "entity_extensions:\n"
-        "  hypothesis: [acme.note/1.0]\n",
-        encoding="utf-8",
+    report = _report(
+        meta={
+            "producers_run": report_ids,
+            "total_duration_seconds": 0.1,
+            "timings": [],
+        }
     )
-    schema = tmp_path / "schemas" / "extension-acme-note-1.0.json"
-    schema.parent.mkdir()
-    schema.write_text(
-        json.dumps(
-            {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "$id": "https://schemas.science/extension-acme-note-1.0.json",
-                "type": "object",
-                "properties": {"local_note": {"type": "string"}},
-            }
+    provenance = IngestionProvenance(
+        ingestion_ref=report.ingestion_ref,
+        generated_at=report.generated_at,
+        producer_ids=attested_ids,
+    )
+
+    with pytest.raises(IngestError, match="producer ids"):
+        _ingest_report(
+            tmp_path,
+            report,
+            _registry_with_second_producer(),
+            provenance=provenance,
+            context=IngestionContext(
+                canonical_entity_ids=frozenset({"dataset:a"})
+            ),
+        )
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
+    claimed = _report(ingestion_ref="run:genuine")
+    current_attestation = IngestionProvenance(
+        ingestion_ref="run:current",
+        generated_at=claimed.generated_at,
+        producer_ids=frozenset({"dataset_anomalies"}),
+    )
+    with pytest.raises(IngestError, match="ingestion_ref"):
+        _ingest_report(
+            tmp_path,
+            claimed,
+            REGISTRY,
+            provenance=current_attestation,
+            context=IngestionContext(
+                canonical_entity_ids=frozenset({"dataset:a"})
+            ),
+        )
+
+    genuine = _report(
+        ingestion_ref="run:genuine",
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(message="genuine observation"),
+            )
+        ],
+    )
+    outcome = _ingest_report(
+        tmp_path,
+        genuine,
+        REGISTRY,
+        provenance=_provenance(genuine),
+        context=IngestionContext(
+            canonical_entity_ids=frozenset({"dataset:a"})
         ),
+    )
+
+    assert outcome.records_written == 1
+    assert load_cases(tmp_path)[0].occurrences[0].message == "genuine observation"
+
+
+def test_report_cannot_expand_the_trusted_canonical_entity_universe(tmp_path):
+    report = _report()
+    with pytest.raises(IngestError, match="trusted canonical"):
+        _ingest_report(
+            tmp_path,
+            report,
+            REGISTRY,
+            provenance=_provenance(report),
+            context=IngestionContext(canonical_entity_ids=frozenset()),
+        )
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
+def test_graph_context_accepts_an_adapter_backed_entity(tmp_path):
+    from science_tool.findings.cli import _load_ingestion_context
+
+    papers = tmp_path / "papers"
+    papers.mkdir()
+    papers.joinpath("references.bib").write_text(
+        "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
         encoding="utf-8",
     )
-    record = tmp_path / "entities" / "hypotheses" / "invalid-extension.md"
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        "---\n"
-        "id: hypothesis:invalid-extension\n"
-        "kind: hypothesis\n"
-        "title: Invalid extension\n"
-        "status: active\n"
-        "created: 2026-07-27\n"
-        "updated: 2026-07-27\n"
-        "related: []\n"
-        "source_refs: []\n"
-        "local_note: 4\n"
-        "---\n",
-        encoding="utf-8",
-    )
+    context = _load_ingestion_context(tmp_path)
+    assert "paper:Smith2024" in context.canonical_entity_ids
     report = _report(
         findings=[
             ReportedFinding(
                 producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="hypothesis:invalid-extension")
-                ),
+                finding=_finding(subject=EntitySubject(ref="paper:Smith2024")),
             )
         ]
     )
 
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
-    assert not (tmp_path / CASES_DIRNAME).exists()
+    outcome = _ingest_report(
+        tmp_path,
+        report,
+        REGISTRY,
+        provenance=_provenance(report),
+        context=context,
+    )
+
+    assert outcome.records_written == 1
 
 
-def test_safe_entity_resolver_agrees_with_graph_loader_for_mixed_records(
-    tmp_path,
-):
-    project = tmp_path / "mixed"
-    project.mkdir()
-    _seed_local_kind_profile(project)
-    records = {
-        "entities/datasets/valid.md": (
-            "id: dataset:valid\nkind: dataset\ntitle: Valid dataset\n"
-        ),
-        "research/packages/deep/package.md": (
-            "id: research-package:valid\n"
-            "kind: research-package\n"
-            "title: Valid package\n"
-        ),
-        "entities/design-notes/valid.md": (
-            "id: design-note:valid\nkind: design-note\ntitle: Valid local\n"
-        ),
-        "entities/reports/missing-kind.md": (
-            "id: report:missing-kind\ntitle: Missing kind\n"
-        ),
-        "entities/reports/unknown-kind.md": (
-            "id: mystery:unknown\nkind: mystery\ntitle: Unknown\n"
-        ),
-        "entities/reports/invalid-model.md": (
-            "id: report:invalid-model\nkind: report\n"
-        ),
-    }
-    for relative_path, frontmatter in records.items():
-        path = project / relative_path
+def test_graph_context_refuses_duplicate_owners_before_ingestion(tmp_path):
+    from science_tool.findings.cli import _load_ingestion_context
+
+    for name in ("q1.md", "q1-duplicate.md"):
+        path = tmp_path / "entities" / "questions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"---\n{frontmatter}---\n",
+            "---\nid: question:q1\nkind: question\ntitle: Q1\n---\n",
             encoding="utf-8",
         )
 
-    safe_refs = _known_canonical_entity_refs(project)
-    graph_refs = {
-        entity.id
-        for entity in load_project_sources(
-            project,
-            include_commons=False,
-            strict_core_schema=False,
-        ).entities
-    }
-
-    assert safe_refs == graph_refs == {
-        "dataset:valid",
-        "design-note:valid",
-        "research-package:valid",
-    }
-
-
-@pytest.mark.parametrize("link_site", ["nested-directory", "leaf"])
-def test_entity_subject_resolution_refuses_symlinked_nested_entity_records(
-    tmp_path,
-    link_site,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    reports = project / "entities" / "reports"
-    reports.mkdir(parents=True)
-    outside = tmp_path / "outside-report"
-    outside.mkdir()
-    outside_record = outside / "deep.md"
-    outside_record.write_text(
-        "---\nid: report:outside\nkind: report\ntitle: Outside\n---\n",
-        encoding="utf-8",
-    )
-    if link_site == "nested-directory":
-        (reports / "year").symlink_to(outside, target_is_directory=True)
-    else:
-        year = reports / "year"
-        year.mkdir()
-        (year / "deep.md").symlink_to(outside_record)
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="report:outside")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_resolution_skips_nested_reserved_entity_directories(
-    tmp_path,
-):
-    archived = tmp_path / "entities" / "reports" / "_archive" / "old.md"
-    archived.parent.mkdir(parents=True)
-    archived.write_text(
-        "---\nid: report:archived\nkind: report\ntitle: Archived\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="report:archived")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
+    with pytest.raises(EntityIdentityCollisionError, match="question:q1"):
+        _load_ingestion_context(tmp_path)
     assert not (tmp_path / CASES_DIRNAME).exists()
 
 
-@pytest.mark.parametrize("link_site", ["entity-file", "entity-home"])
-def test_entity_subject_resolution_refuses_symlinked_entity_records(
-    tmp_path,
-    link_site,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    outside_record = outside / "outside.md"
-    outside_record.write_text(
-        "---\nid: dataset:outside\nkind: dataset\ntitle: outside\n---\n",
+def test_graph_invalid_entities_do_not_enter_the_trusted_context(tmp_path):
+    from science_tool.findings.cli import _load_ingestion_context
+
+    invalid = tmp_path / "entities" / "reports" / "invalid.md"
+    invalid.parent.mkdir(parents=True)
+    invalid.write_text(
+        "---\nid: mystery:invalid\nkind: mystery\ntitle: Invalid\n---\n",
         encoding="utf-8",
     )
+    context = _load_ingestion_context(tmp_path)
+    assert "mystery:invalid" not in context.canonical_entity_ids
+    report = _report(
+        findings=[
+            ReportedFinding(
+                producer_id="dataset_anomalies",
+                finding=_finding(subject=EntitySubject(ref="mystery:invalid")),
+            )
+        ]
+    )
 
-    if link_site == "entity-file":
-        home = project / "entities" / "datasets"
-        home.mkdir(parents=True)
-        (home / "outside.md").symlink_to(outside_record)
-    else:
-        (project / "entities").mkdir()
-        (project / "entities" / "datasets").symlink_to(
-            outside,
-            target_is_directory=True,
+    with pytest.raises(IngestError, match="trusted canonical"):
+        _ingest_report(
+            tmp_path,
+            report,
+            REGISTRY,
+            provenance=_provenance(report),
+            context=context,
         )
-
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="dataset:outside")),
-            )
-        ]
-    )
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_resolution_ignores_records_outside_declared_homes(
-    tmp_path,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    outside_home = project / "entities" / "misc"
-    outside_home.mkdir(parents=True)
-    (outside_home / "hidden.md").write_text(
-        "---\nid: dataset:hidden\nkind: dataset\ntitle: hidden\n---\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="dataset:hidden")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-@pytest.mark.parametrize(
-    "frontmatter",
-    ["- list-item\n- another\n", "scalar-value\n"],
-    ids=["list", "scalar"],
-)
-def test_non_mapping_entity_frontmatter_is_an_ingest_error_before_store_mutation(
-    tmp_path,
-    frontmatter,
-):
-    malformed = tmp_path / "entities" / "datasets" / "malformed.md"
-    malformed.write_text(f"---\n{frontmatter}---\n", encoding="utf-8")
-
-    with pytest.raises(IngestError, match="frontmatter must be a mapping"):
-        ingest_report(tmp_path, _report(), REGISTRY)
     assert not (tmp_path / CASES_DIRNAME).exists()
-
-
-def _seed_local_kind_profile(project, *, manifest_path=None):
-    (project / "science.yaml").write_text(
-        "name: local-kind-project\nknowledge_profiles:\n  local: custom\n",
-        encoding="utf-8",
-    )
-    manifest = (
-        manifest_path
-        if manifest_path is not None
-        else project / "knowledge" / "sources" / "custom" / "manifest.yaml"
-    )
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(
-        "name: custom\n"
-        "imports: [core]\n"
-        "strictness: typed-extension\n"
-        "entity_kinds:\n"
-        "  - name: design-note\n"
-        "    canonical_prefix: design-note\n"
-        "    layer: layer/local\n"
-        "    description: Local design note\n"
-        "    home: entities/design-notes\n"
-        "    strategy: numeric\n"
-        "relation_kinds: []\n",
-        encoding="utf-8",
-    )
-    return manifest
-
-
-def _local_kind_report():
-    return _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(
-                    subject=EntitySubject(ref="design-note:0001-local")
-                ),
-            )
-        ]
-    )
-
-
-def test_entity_subject_accepts_an_exact_project_declared_local_kind(tmp_path):
-    project = tmp_path / "project"
-    project.mkdir()
-    _seed_local_kind_profile(project)
-    record = project / "entities" / "design-notes" / "0001-local.md"
-    record.parent.mkdir(parents=True)
-    record.write_text(
-        "---\n"
-        "id: design-note:0001-local\n"
-        "kind: design-note\n"
-        "title: Local\n"
-        "---\n",
-        encoding="utf-8",
-    )
-
-    assert ingest_report(project, _local_kind_report(), REGISTRY).records_written == 1
-
-
-def test_entity_subject_resolution_rejects_removed_top_level_profiles(tmp_path):
-    (tmp_path / "science.yaml").write_text(
-        "name: removed-profile\nprofiles:\n  local: old-local\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(IngestError, match="removed top-level profiles"):
-        ingest_report(tmp_path, _report(), REGISTRY)
-    assert not (tmp_path / CASES_DIRNAME).exists()
-
-
-@pytest.mark.parametrize(
-    "falsy_local",
-    ["''", "null", "false", "0", "[]"],
-    ids=["empty-string", "null", "false", "zero", "empty-list"],
-)
-def test_entity_subject_resolution_uses_canonical_falsy_local_profile_default(
-    tmp_path,
-    falsy_local,
-):
-    local_manifest = (
-        tmp_path / "knowledge" / "sources" / "local" / "manifest.yaml"
-    )
-    _seed_local_kind_profile(tmp_path, manifest_path=local_manifest)
-    (tmp_path / "science.yaml").write_text(
-        "name: local-kind-project\n"
-        "knowledge_profiles:\n"
-        f"  local: {falsy_local}\n",
-        encoding="utf-8",
-    )
-    record = tmp_path / "entities" / "design-notes" / "0001-local.md"
-    record.parent.mkdir(parents=True)
-    record.write_text(
-        "---\n"
-        "id: design-note:0001-local\n"
-        "kind: design-note\n"
-        "title: Local\n"
-        "---\n",
-        encoding="utf-8",
-    )
-
-    assert ingest_report(tmp_path, _local_kind_report(), REGISTRY).records_written == 1
-
-
-def test_entity_subject_resolution_refuses_a_symlinked_local_profile_manifest(
-    tmp_path,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    outside = _seed_local_kind_profile(
-        project,
-        manifest_path=tmp_path / "outside-manifest.yaml",
-    )
-    profile_dir = project / "knowledge" / "sources" / "custom"
-    profile_dir.mkdir(parents=True)
-    (profile_dir / "manifest.yaml").symlink_to(outside)
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, _local_kind_report(), REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_resolution_refuses_a_symlinked_local_kind_home(tmp_path):
-    project = tmp_path / "project"
-    project.mkdir()
-    _seed_local_kind_profile(project)
-    outside = tmp_path / "outside-local-kind"
-    outside.mkdir()
-    (outside / "0001-local.md").write_text(
-        "---\nid: design-note:0001-local\nkind: design-note\n---\n",
-        encoding="utf-8",
-    )
-    (project / "entities").mkdir()
-    (project / "entities" / "design-notes").symlink_to(
-        outside,
-        target_is_directory=True,
-    )
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, _local_kind_report(), REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-@pytest.mark.parametrize("ledger", ["active.md", "done/2026-07.md"])
-def test_entity_subject_accepts_exact_live_task_ids(tmp_path, ledger):
-    path = tmp_path / "tasks" / ledger
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "## [t001] Review findings\n"
-        "- status: active\n"
-        "- priority: medium\n"
-        "- created: 2026-07-27\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="task:t001")),
-            )
-        ]
-    )
-
-    assert ingest_report(tmp_path, report, REGISTRY).records_written == 1
-
-
-def test_entity_subject_resolution_refuses_a_symlinked_active_task_ledger(
-    tmp_path,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    tasks = project / "tasks"
-    tasks.mkdir()
-    outside = tmp_path / "outside-active.md"
-    outside.write_text(
-        "## [t123] Outside active task\n- status: active\n",
-        encoding="utf-8",
-    )
-    (tasks / "active.md").symlink_to(outside)
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="task:t123")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-@pytest.mark.parametrize("link_site", ["done-directory", "done-leaf"])
-def test_entity_subject_resolution_refuses_symlinked_done_task_ledgers(
-    tmp_path,
-    link_site,
-):
-    project = tmp_path / "project"
-    project.mkdir()
-    tasks = project / "tasks"
-    tasks.mkdir()
-    outside = tmp_path / "outside-done"
-    outside.mkdir()
-    outside_ledger = outside / "2026-07.md"
-    outside_ledger.write_text(
-        "## [t124] Outside done task\n- status: done\n",
-        encoding="utf-8",
-    )
-    if link_site == "done-directory":
-        (tasks / "done").symlink_to(outside, target_is_directory=True)
-    else:
-        done = tasks / "done"
-        done.mkdir()
-        (done / "2026-07.md").symlink_to(outside_ledger)
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="task:t124")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="symlink"):
-        ingest_report(project, report, REGISTRY)
-    assert not (project / CASES_DIRNAME).exists()
-
-
-def test_entity_subject_rejects_archived_task_aliases(tmp_path):
-    archive = tmp_path / "tasks" / "archive.md"
-    archive.parent.mkdir(parents=True)
-    archive.write_text(
-        "## [t999] Archived alias\n- status: retired\n",
-        encoding="utf-8",
-    )
-    report = _report(
-        findings=[
-            ReportedFinding(
-                producer_id="dataset_anomalies",
-                finding=_finding(subject=EntitySubject(ref="task:t999")),
-            )
-        ]
-    )
-
-    with pytest.raises(IngestError, match="known canonical"):
-        ingest_report(tmp_path, report, REGISTRY)
-
-
-def test_ingest_exposes_no_actor_override():
-    assert "actor" not in inspect.signature(ingest_report).parameters
 
 
 def test_reingesting_an_identical_report_appends_nothing(tmp_path):
@@ -1147,15 +681,18 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
     }
 
 
-def _normalized(record) -> dict:
-    """The COMPLETE record, with history sorted so the comparison is order-insensitive
-    without being blind: any field differing anywhere still fails."""
+def _canonical_state(record) -> dict:
+    """Arrival-invariant state, deliberately excluding creation history."""
     payload = record.model_dump(mode="json")
-    payload["occurrences"] = sorted(
-        payload["occurrences"], key=lambda o: o["idempotency_key"]
-    )
-    payload["reviews"] = sorted(payload["reviews"], key=lambda r: r["review_id"])
-    return payload
+    return {
+        "finding_id": payload["finding_id"],
+        "fingerprint_version": payload["fingerprint_version"],
+        "rule_id": payload["rule_id"],
+        "subject": payload["subject"],
+        "identity_qualifiers": payload["identity_qualifiers"],
+        "occurrences": payload["occurrences"],
+        "current_severity": record.current_severity(),
+    }
 
 
 def test_no_arrival_order_dependence(tmp_path):
@@ -1181,10 +718,7 @@ def test_no_arrival_order_dependence(tmp_path):
     ingest_report(a, second, REGISTRY)
     ingest_report(b, second, REGISTRY)
     ingest_report(b, first, REGISTRY)
-    # Compare the WHOLE record. Matching only finding ids and occurrence keys would
-    # pass even if the two orders produced different statuses, transitions, severities,
-    # or messages -- which is the entire class of thing this test is about.
-    assert _normalized(load_cases(a)[0]) == _normalized(load_cases(b)[0])
+    assert _canonical_state(load_cases(a)[0]) == _canonical_state(load_cases(b)[0])
 
 
 def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path):
@@ -1230,19 +764,25 @@ def test_no_arrival_order_dependence_with_distinct_times_and_producers(tmp_path)
     )
 
     ingest_report(a, early, registry)
+    early_genesis = load_cases(a)[0].transitions[0]
     ingest_report(a, late, registry)
     ingest_report(b, late, registry)
     prior = load_cases(b)[0]
-    assert prior.transitions[0].actor == "dataset_anomalies"
+    late_genesis = prior.transitions[0]
+    assert late_genesis.actor == "ingest"
     ingest_report(b, early, registry)
 
     first = load_cases(a)[0]
     second = load_cases(b)[0]
-    assert _normalized(first) == _normalized(second)
+    assert _canonical_state(first) == _canonical_state(second)
+    assert first.transitions[0] == early_genesis
+    assert second.transitions[0] == late_genesis
     assert first.transitions[0].at.isoformat() == "2026-07-27T10:00:00+00:00"
-    assert first.transitions[0].actor == "curation_lens"
-    assert second.transitions[0].actor == "curation_lens"
+    assert second.transitions[0].at.isoformat() == "2026-07-27T14:00:00+00:00"
+    assert first.transitions[0].actor == "ingest"
+    assert second.transitions[0].actor == "ingest"
     assert first.transitions[0].reason == "detected by curation_lens"
+    assert second.transitions[0].reason == "detected by dataset_anomalies"
     assert [
         (occurrence.observed_at, occurrence.idempotency_key)
         for occurrence in first.occurrences
@@ -1352,15 +892,17 @@ def test_unicode_identity_spellings_are_arrival_order_independent(tmp_path, subj
     )
 
     ingest_report(projects[0], early, registry)
+    early_genesis = load_cases(projects[0])[0].transitions[0]
     ingest_report(projects[0], late, registry)
     ingest_report(projects[1], late, registry)
+    late_genesis = load_cases(projects[1])[0].transitions[0]
     ingest_report(projects[1], early, registry)
 
-    left_path = next((projects[0] / CASES_DIRNAME).glob("*.md"))
-    right_path = next((projects[1] / CASES_DIRNAME).glob("*.md"))
-    assert left_path.read_bytes() == right_path.read_bytes()
-
     left = load_cases(projects[0])[0]
+    right = load_cases(projects[1])[0]
+    assert _canonical_state(left) == _canonical_state(right)
+    assert left.transitions[0] == early_genesis
+    assert right.transitions[0] == late_genesis
     assert left.identity_qualifiers["field"] == "année"
     assert {
         occurrence.qualifiers["field"] for occurrence in left.occurrences
@@ -1687,7 +1229,19 @@ def test_a_validation_failure_writes_nothing(tmp_path):
 
 def _assert_forged_report_is_refused_without_mutation(tmp_path, report) -> None:
     with pytest.raises(IngestError, match="not a valid audit report"):
-        ingest_report(tmp_path, report, REGISTRY)
+        _ingest_report(
+            tmp_path,
+            report,
+            REGISTRY,
+            provenance=IngestionProvenance(
+                ingestion_ref="ing:1",
+                generated_at="2026-07-27T12:00:00+00:00",
+                producer_ids=frozenset({"dataset_anomalies"}),
+            ),
+            context=IngestionContext(
+                canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
+            ),
+        )
     assert not (tmp_path / "doc").exists()
 
 
@@ -1931,6 +1485,27 @@ def test_load_report_refuses_a_report_outside_the_project(tmp_path):
     stray.write_text("{}", encoding="utf-8")
     with pytest.raises(IngestError, match="outside the project root"):
         load_report(project, stray)
+
+
+@pytest.mark.parametrize("renamed", ["notes.md", ".hidden.md"])
+def test_ingestion_refuses_a_renamed_case_before_writing_a_replacement(
+    tmp_path,
+    renamed,
+):
+    from science_tool.findings.storage import case_path
+
+    ingest_report(tmp_path, _report(), REGISTRY)
+    record = load_cases(tmp_path)[0]
+    canonical = case_path(tmp_path, record)
+    renamed_path = canonical.with_name(renamed)
+    original = canonical.read_bytes()
+    canonical.rename(renamed_path)
+
+    with pytest.raises(IngestError):
+        ingest_report(tmp_path, _report(ingestion_ref="ing:2"), REGISTRY)
+
+    assert renamed_path.read_bytes() == original
+    assert not canonical.exists()
 
 
 def test_a_dangling_case_symlink_is_refused_rather_than_overwritten(tmp_path):

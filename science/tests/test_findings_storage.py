@@ -340,13 +340,26 @@ def test_load_cases_refuses_case_shaped_noncanonical_extensions(tmp_path, suffix
         load_cases(tmp_path)
 
 
-def test_load_cases_ignores_unrelated_notes_and_operational_files(tmp_path):
+@pytest.mark.parametrize("renamed", ["notes.md", ".hidden.md"])
+def test_load_cases_refuses_every_renamed_markdown_leaf(tmp_path, renamed):
+    record = _record()
+    path = write_case(tmp_path, record)
+    renamed_path = path.with_name(renamed)
+    original = path.read_bytes()
+    path.rename(renamed_path)
+
+    with pytest.raises(CaseStorageError):
+        load_cases(tmp_path)
+
+    assert renamed_path.read_bytes() == original
+
+
+def test_load_cases_ignores_only_exact_operational_case_leaves(tmp_path):
     record = _record()
     write_case(tmp_path, record)
     cases = tmp_path / CASES_DIRNAME
-    (cases / "notes.md").write_text("operator note", encoding="utf-8")
     (cases / ".ingest.lock").write_text("", encoding="utf-8")
-    (cases / f".{case_path(tmp_path, record).name}.deadbeef.tmp").write_text(
+    (cases / f".{case_path(tmp_path, record).name}.{'a' * 32}.tmp").write_text(
         "stale temp",
         encoding="utf-8",
     )

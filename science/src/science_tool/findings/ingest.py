@@ -19,14 +19,11 @@ import json
 import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Iterator
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from pydantic_core import PydanticSerializationError
-import yaml
-from science_model.entity_schema import filename_for, parse_component
-from science_model.ontologies import load_catalogs_for_names
 from science_model.audit import (
     REPORT_SCHEMA_VERSION,
     AuditFinding,
@@ -42,29 +39,10 @@ from science_model.audit.record import (
     canonical_occurrence_content,
     normalized_instant,
 )
-from science_model.profiles import (
-    CORE_PROFILE,
-    LOCAL_PROFILE,
-    ProfileManifest,
-    load_shared_profile,
-)
 
-from science_tool.entities import derive_local_entity_policies
-from science_tool.entity_scan import entity_directory_path_is_discoverable
-from science_tool.entity_profiles import (
-    ARMED_SCHEMA_GENERATIONS,
-    project_schema_from_documents,
-)
 from science_tool.findings.paths import (
     PathSafetyError,
-    entry_type_at,
-    exists_at,
-    list_names_at,
-    open_child_dir_at_if_present,
-    open_dir_inside,
-    open_dir_inside_if_present,
     read_inside_bounded,
-    read_regular_file_at,
     resolve_inside,
 )
 from science_tool.findings.producers import FindingRegistry, RegistryError
@@ -75,43 +53,9 @@ from science_tool.findings.storage import (
     case_store,
     serialize_case,
 )
-from science_tool.graph.markdown_discovery import (
-    DEFAULT_MARKDOWN_SCAN_ROOTS,
-    ENTITY_MARKDOWN_SCAN_ROOT,
-    is_discoverable_markdown_leaf,
-    uses_entity_directory_policy,
-)
-from science_tool.graph.sources import (
-    ActiveProfiles,
-    CanonicalMarkdownContext,
-    build_entity_registry,
-    known_kinds,
-    validate_canonical_markdown_record,
-)
-from science_tool.project_config import (
-    ProjectConfig,
-    selected_local_profile_name,
-    validated_entity_schema_version,
-)
-from science_tool.tasks import strict_task_ids_in_text
 
 MAX_REPORT_BYTES = 8 * 1024 * 1024
-MAX_SUBJECT_RECORD_BYTES = 4 * 1024 * 1024
 SUPPORTED_FINGERPRINT_VERSIONS = frozenset({1})
-
-_ENTITY_MARKDOWN_HOMES: tuple[str, ...] = tuple(
-    sorted(
-        {
-            kind.home
-            for kind in CORE_PROFILE.entity_kinds
-            if kind.home
-            and (
-                not PurePosixPath(kind.home).suffix
-                or PurePosixPath(kind.home).suffix == ".md"
-            )
-        }
-    )
-)
 
 
 class IngestError(ValueError):
@@ -124,6 +68,62 @@ class IngestOutcome(BaseModel):
     records_written: int
     occurrences_appended: int
     occurrences_skipped: int
+
+
+class IngestionProvenance(BaseModel):
+    """Supervisor-attested report provenance, independent of actor-authored JSON."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ingestion_ref: str
+    generated_at: str
+    producer_ids: frozenset[str]
+
+    @field_validator("ingestion_ref")
+    @classmethod
+    def _valid_ingestion_ref(cls, value: str) -> str:
+        if not value or "\0" in value:
+            raise ValueError("ingestion_ref must be nonempty and NUL-free")
+        return value
+
+    @field_validator("generated_at")
+    @classmethod
+    def _valid_generated_at(cls, value: str) -> str:
+        try:
+            datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"generated_at must be ISO-8601, got {value!r}: {exc}"
+            ) from exc
+        return value
+
+    @field_validator("producer_ids")
+    @classmethod
+    def _valid_producer_ids(cls, value: frozenset[str]) -> frozenset[str]:
+        if not value:
+            raise ValueError("producer_ids must contain at least one producer")
+        invalid = sorted(item for item in value if not item.strip() or "\0" in item)
+        if invalid:
+            raise ValueError(f"producer ids must be nonblank and NUL-free: {invalid!r}")
+        return value
+
+
+class IngestionContext(BaseModel):
+    """Frozen canonical entity universe supplied by the trusted graph loader."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    canonical_entity_ids: frozenset[str]
+
+    @field_validator("canonical_entity_ids")
+    @classmethod
+    def _valid_entity_ids(cls, value: frozenset[str]) -> frozenset[str]:
+        invalid = sorted(item for item in value if not item.strip() or "\0" in item)
+        if invalid:
+            raise ValueError(
+                f"canonical entity ids must be nonblank and NUL-free: {invalid!r}"
+            )
+        return value
 
 
 def load_report(project_root: Path, path: Path) -> AuditReport:
@@ -237,6 +237,8 @@ def _plan(
     project_root: Path,
     report: AuditReport,
     registry: FindingRegistry,
+    provenance: IngestionProvenance,
+    context: IngestionContext,
 ) -> list[_Planned]:
     """Validate everything and compute every identity BEFORE writing anything."""
     if report.fingerprint_version not in SUPPORTED_FINGERPRINT_VERSIONS:
@@ -245,14 +247,8 @@ def _plan(
             f"toolkit implements {sorted(SUPPORTED_FINGERPRINT_VERSIONS)}"
         )
 
-    claimed_producers = {
-        *report.meta.producers_run,
-        *(item.producer_id for item in report.unwired),
-        *report.metrics,
-        *(item.producer_id for item in report.findings),
-        *(item.producer_id for item in report.accepted),
-    }
-    unknown_producers = claimed_producers - set(registry.producers_by_id)
+    trusted_producers = {producer_id: producer_id for producer_id in provenance.producer_ids}
+    unknown_producers = set(trusted_producers) - set(registry.producers_by_id)
     if unknown_producers:
         raise IngestError(
             f"unregistered producer ids in report provenance: "
@@ -271,13 +267,11 @@ def _plan(
     ] + [
         (a.producer_id, a.finding, a.acceptance_key) for a in report.accepted
     ]
-    known_entities = (
-        _known_canonical_entity_refs(project_root)
-        if any(finding.subject.type == "entity" for _, finding, _ in channels)
-        else frozenset()
-    )
-
     for producer_id, finding, acceptance_key in channels:
+        if producer_id not in trusted_producers:
+            raise IngestError(
+                f"producer {producer_id!r} is not in the trusted provenance"
+            )
         if producer_id not in registry.producers_by_id:
             raise IngestError(f"unregistered producer {producer_id!r}")
         try:
@@ -302,11 +296,11 @@ def _plan(
                 )
         if (
             finding.subject.type == "entity"
-            and finding.subject.ref not in known_entities
+            and finding.subject.ref not in context.canonical_entity_ids
         ):
             raise IngestError(
                 f"{finding.rule_id}: entity subject {finding.subject.ref!r} is not an "
-                "exact known canonical project entity or live task id"
+                "exact member of the trusted canonical project entity universe"
             )
         _assert_paths_are_safe(project_root, finding)
 
@@ -339,7 +333,7 @@ def _plan(
                     identity_qualifiers=identity,
                 ),
                 finding=canonical_finding,
-                producer_id=producer_id,
+                producer_id=trusted_producers[producer_id],
                 acceptance_key=acceptance_key,
                 identity_qualifiers=identity,
             )
@@ -363,386 +357,6 @@ def _plan(
     return planned
 
 
-def _known_canonical_entity_refs(project_root: Path) -> frozenset[str]:
-    """Validated declared-home entity IDs plus active/done task IDs.
-
-    Every recursive read stays relative to a held directory descriptor. No pathname
-    reopen, alias, archive, or `graph.trig` participates.
-    """
-    try:
-        context, local_manifest = _canonical_markdown_context(project_root)
-        refs = _declared_entity_ids(project_root, context, local_manifest)
-        refs.update(_live_task_refs(project_root))
-    except IngestError:
-        raise
-    except (
-        PathSafetyError,
-        ValidationError,
-        OSError,
-        UnicodeError,
-        ValueError,
-        yaml.YAMLError,
-    ) as exc:
-        raise IngestError(
-            f"could not resolve canonical entity subjects from project records: {exc}"
-        ) from exc
-    return frozenset(refs)
-
-
-def _declared_entity_ids(
-    project_root: Path,
-    context: CanonicalMarkdownContext,
-    local_manifest: ProfileManifest | None,
-) -> set[str]:
-    refs: set[str] = set()
-    for home in _ENTITY_MARKDOWN_HOMES:
-        path = PurePosixPath(home)
-        _add_ids_from_home(
-            project_root,
-            refs,
-            home,
-            context=context,
-            singleton=path.suffix == ".md",
-        )
-    for home in _local_entity_homes(local_manifest):
-        _add_ids_from_home(
-            project_root,
-            refs,
-            home,
-            context=context,
-            singleton=False,
-        )
-    for scan_root in DEFAULT_MARKDOWN_SCAN_ROOTS:
-        if scan_root == ENTITY_MARKDOWN_SCAN_ROOT:
-            continue
-        _add_ids_from_tree(
-            project_root,
-            refs,
-            scan_root,
-            context=context,
-            use_entity_directory_policy=uses_entity_directory_policy(scan_root),
-        )
-    return refs
-
-
-def _add_ids_from_home(
-    project_root: Path,
-    refs: set[str],
-    home: str,
-    *,
-    context: CanonicalMarkdownContext,
-    singleton: bool,
-) -> None:
-    path = PurePosixPath(home)
-    if singleton:
-        if not is_discoverable_markdown_leaf(path.name):
-            return
-        with open_dir_inside_if_present(
-            project_root,
-            path.parent.as_posix(),
-        ) as dir_fd:
-            if dir_fd is None or not exists_at(dir_fd, path.name):
-                return
-            text = read_regular_file_at(
-                dir_fd,
-                path.name,
-                MAX_SUBJECT_RECORD_BYTES,
-            )
-            _add_frontmatter_id(refs, text, home, context)
-        return
-
-    _add_ids_from_tree(
-        project_root,
-        refs,
-        home,
-        context=context,
-        # These subroots are pieces of the default canonical ``entities`` scan,
-        # not caller-supplied custom adapter roots.
-        use_entity_directory_policy=True,
-    )
-
-
-def _add_ids_from_tree(
-    project_root: Path,
-    refs: set[str],
-    root: str,
-    *,
-    context: CanonicalMarkdownContext,
-    use_entity_directory_policy: bool,
-) -> None:
-    with open_dir_inside_if_present(project_root, root) as dir_fd:
-        if dir_fd is None:
-            return
-        _add_ids_from_tree_at(
-            dir_fd,
-            refs,
-            root,
-            context=context,
-            relative_directory_parts=(),
-            use_entity_directory_policy=use_entity_directory_policy,
-        )
-
-
-def _add_ids_from_tree_at(
-    dir_fd: int,
-    refs: set[str],
-    source_dir: str,
-    *,
-    context: CanonicalMarkdownContext,
-    relative_directory_parts: tuple[str, ...],
-    use_entity_directory_policy: bool,
-) -> None:
-    for name in list_names_at(dir_fd):
-        entry_type = entry_type_at(dir_fd, name)
-        source = f"{source_dir}/{name}"
-        if entry_type == "directory":
-            child_parts = (*relative_directory_parts, name)
-            if use_entity_directory_policy and not (
-                entity_directory_path_is_discoverable(child_parts)
-            ):
-                continue
-            with open_child_dir_at_if_present(dir_fd, name) as child_fd:
-                if child_fd is None:
-                    raise PathSafetyError(
-                        f"{source!r} disappeared during anchored traversal"
-                    )
-                _add_ids_from_tree_at(
-                    child_fd,
-                    refs,
-                    source,
-                    context=context,
-                    relative_directory_parts=child_parts,
-                    use_entity_directory_policy=use_entity_directory_policy,
-                )
-            continue
-        if entry_type != "regular" or not is_discoverable_markdown_leaf(name):
-            continue
-        text = read_regular_file_at(
-            dir_fd,
-            name,
-            MAX_SUBJECT_RECORD_BYTES,
-        )
-        _add_frontmatter_id(refs, text, source, context)
-
-
-def _project_config_data(project_root: Path) -> dict[str, object]:
-    with open_dir_inside(project_root, "") as root_fd:
-        if not exists_at(root_fd, "science.yaml"):
-            return {}
-        text = read_regular_file_at(
-            root_fd,
-            "science.yaml",
-            MAX_SUBJECT_RECORD_BYTES,
-        )
-    loaded = yaml.safe_load(text)
-    if not isinstance(loaded, dict):
-        raise IngestError("science.yaml must be a mapping")
-    if not all(isinstance(key, str) for key in loaded):
-        raise IngestError("science.yaml keys must be strings")
-    return loaded
-
-
-def _local_profile_manifest(
-    project_root: Path,
-    profile_name: str,
-) -> ProfileManifest | None:
-    manifest_parent = f"knowledge/sources/{profile_name}"
-    with open_dir_inside_if_present(project_root, manifest_parent) as dir_fd:
-        if dir_fd is None or not exists_at(dir_fd, "manifest.yaml"):
-            return None
-        text = read_regular_file_at(
-            dir_fd,
-            "manifest.yaml",
-            MAX_SUBJECT_RECORD_BYTES,
-        )
-    loaded = yaml.safe_load(text)
-    if not isinstance(loaded, dict):
-        raise IngestError(
-            f"{manifest_parent}/manifest.yaml: profile manifest must be a mapping"
-        )
-    return ProfileManifest.model_validate(loaded)
-
-
-def _local_entity_homes(
-    manifest: ProfileManifest | None,
-) -> tuple[str, ...]:
-    if manifest is None:
-        return ()
-    policies, _warnings = derive_local_entity_policies(manifest)
-    return tuple(sorted(policy.root.as_posix() for policy in policies.values()))
-
-
-def _canonical_markdown_context(
-    project_root: Path,
-) -> tuple[CanonicalMarkdownContext, ProfileManifest | None]:
-    config = _project_config_data(project_root)
-    local_profile = selected_local_profile_name(config)
-    local_manifest = _local_profile_manifest(project_root, local_profile)
-
-    raw_ontologies = config.get("ontologies") or []
-    ontology_names = (
-        [str(name) for name in raw_ontologies]
-        if isinstance(raw_ontologies, list)
-        else []
-    )
-    ontology_catalogs = load_catalogs_for_names(ontology_names)
-
-    profile_manifests = [LOCAL_PROFILE]
-    shared = load_shared_profile()
-    if shared is not None:
-        profile_manifests.append(shared)
-    resolved = ActiveProfiles(
-        profile_manifests=profile_manifests,
-        local_profile_manifest=local_manifest,
-        ontology_catalogs=ontology_catalogs,
-        local_profile=local_profile,
-        local_manifest_rel=(
-            f"knowledge/sources/{local_profile}/manifest.yaml"
-        ),
-    )
-    registry, _graduated_kind_skips = build_entity_registry(resolved)
-    active_profiles = list(profile_manifests)
-    if local_manifest is not None:
-        active_profiles.append(local_manifest)
-
-    generation = validated_entity_schema_version(config)
-    project_schema = _descriptor_project_schema(
-        project_root,
-        config,
-        generation=generation,
-    )
-    return (
-        CanonicalMarkdownContext(
-            project_slug=project_root.name,
-            local_profile=local_profile,
-            active_kinds=known_kinds(
-                extra_profiles=active_profiles,
-                ontology_catalogs=ontology_catalogs,
-            ),
-            ontology_catalogs=ontology_catalogs,
-            registry=registry,
-            project_schema=project_schema,
-        ),
-        local_manifest,
-    )
-
-
-def _descriptor_project_schema(
-    project_root: Path,
-    raw_config: dict[str, object],
-    *,
-    generation: int | None,
-):
-    if generation not in ARMED_SCHEMA_GENERATIONS:
-        return None
-    config = ProjectConfig.model_validate(raw_config)
-    documents: dict[str, dict[str, object]] = {}
-    filenames = {
-        filename_for(parse_component(component))
-        for components in config.entity_extensions.values()
-        for component in components
-    }
-    if filenames:
-        with open_dir_inside_if_present(project_root, "schemas") as schemas_fd:
-            if schemas_fd is not None:
-                for filename in sorted(filenames):
-                    if not exists_at(schemas_fd, filename):
-                        continue
-                    text = read_regular_file_at(
-                        schemas_fd,
-                        filename,
-                        MAX_SUBJECT_RECORD_BYTES,
-                    )
-                    loaded = json.loads(text)
-                    if not isinstance(loaded, dict):
-                        raise IngestError(
-                            f"schemas/{filename}: JSON schema must be an object"
-                        )
-                    documents[filename] = loaded
-    return project_schema_from_documents(
-        extensions=config.entity_extensions,
-        schema_documents=documents,
-        generation=generation,
-    )
-
-
-def _add_frontmatter_id(
-    refs: set[str],
-    text: str,
-    source: str,
-    context: CanonicalMarkdownContext,
-) -> None:
-    frontmatter = _entity_frontmatter(text, source)
-    raw = dict(frontmatter)
-    raw["content"] = ""
-    raw["file_path"] = source
-    if "canonical_id" not in raw and "id" in raw:
-        raw["canonical_id"] = raw["id"]
-    validation = validate_canonical_markdown_record(
-        raw,
-        path=source,
-        context=context,
-    )
-    if validation.entity is not None:
-        refs.add(validation.entity.id)
-
-
-def _entity_frontmatter(text: str, source: str) -> dict[str, object]:
-    """Parse raw frontmatter without hiding a list/scalar behind an empty mapping."""
-    if text.startswith("---\r\n"):
-        newline = "\r\n"
-    elif text.startswith("---\n"):
-        newline = "\n"
-    else:
-        return {}
-    after_opening = text[len("---" + newline) :]
-    closing = f"{newline}---{newline}"
-    closing_index = after_opening.find(closing)
-    if closing_index == -1:
-        return {}
-    loaded = yaml.safe_load(after_opening[:closing_index])
-    if loaded is None:
-        return {}
-    if not isinstance(loaded, dict):
-        raise IngestError(
-            f"{source}: entity frontmatter must be a mapping, got "
-            f"{type(loaded).__name__}"
-        )
-    if not all(isinstance(key, str) for key in loaded):
-        raise IngestError(f"{source}: entity frontmatter keys must be strings")
-    return loaded
-
-
-def _live_task_refs(project_root: Path) -> set[str]:
-    refs: set[str] = set()
-    with open_dir_inside_if_present(project_root, "tasks") as tasks_fd:
-        if tasks_fd is None:
-            return refs
-        if exists_at(tasks_fd, "active.md"):
-            text = read_regular_file_at(
-                tasks_fd,
-                "active.md",
-                MAX_SUBJECT_RECORD_BYTES,
-            )
-            refs.update(f"task:{task_id}" for task_id in strict_task_ids_in_text(text))
-        with open_child_dir_at_if_present(tasks_fd, "done") as done_fd:
-            if done_fd is None:
-                return refs
-            for name in list_names_at(done_fd):
-                if not name.endswith(".md"):
-                    continue
-                text = read_regular_file_at(
-                    done_fd,
-                    name,
-                    MAX_SUBJECT_RECORD_BYTES,
-                )
-                refs.update(
-                    f"task:{task_id}"
-                    for task_id in strict_task_ids_in_text(text)
-                )
-    return refs
-
-
 def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:
     """Every path the finding names must resolve inside the project without a link.
 
@@ -762,19 +376,47 @@ def _assert_paths_are_safe(project_root: Path, finding: AuditFinding) -> None:
             raise IngestError(f"{finding.rule_id}: {exc}") from exc
 
 
+def _assert_attested_provenance(
+    report: AuditReport,
+    provenance: IngestionProvenance,
+) -> None:
+    report_producer_ids = frozenset(
+        {
+            *report.meta.producers_run,
+            *(item.producer_id for item in report.unwired),
+        }
+    )
+    if report.ingestion_ref != provenance.ingestion_ref:
+        raise IngestError(
+            "report ingestion_ref does not exactly match the trusted attestation"
+        )
+    if report.generated_at != provenance.generated_at:
+        raise IngestError(
+            "report generated_at does not exactly match the trusted attestation"
+        )
+    if report_producer_ids != provenance.producer_ids:
+        raise IngestError(
+            "report producer ids do not exactly match the trusted attestation: "
+            f"report={sorted(report_producer_ids)}, "
+            f"trusted={sorted(provenance.producer_ids)}"
+        )
+
+
 def _new_record(
     item: _Planned,
     report: AuditReport,
+    provenance: IngestionProvenance,
     observed_at: datetime,
+    actor: str,
 ) -> AuditFindingRecord:
     occurrence = Occurrence(
         idempotency_key=occurrence_key(
             producer_id=item.producer_id,
-            ingestion_ref=report.ingestion_ref,
+            ingestion_ref=provenance.ingestion_ref,
             finding_id=item.finding_id,
         ),
         producer_id=item.producer_id,
-        ingestion_ref=report.ingestion_ref,
+        ingestion_ref=provenance.ingestion_ref,
         observed_at=observed_at,
         severity=item.finding.severity,
         message=item.finding.message,
@@ -790,7 +432,7 @@ def _new_record(
         identity_qualifiers=item.identity_qualifiers,
         occurrences=(occurrence,),
         transitions=(
-            _genesis_transition(occurrence),
+            _genesis_transition(occurrence, actor),
         ),
         status="proposed",
     )
@@ -803,11 +445,11 @@ def _occurrence_order(occurrence: Occurrence) -> tuple[str, str]:
     )
 
 
-def _genesis_transition(occurrence: Occurrence) -> Transition:
+def _genesis_transition(occurrence: Occurrence, actor: str) -> Transition:
     return Transition(
         from_status=None,
         to_status="proposed",
-        actor=occurrence.producer_id,
+        actor=actor,
         at=occurrence.observed_at,
         reason=f"detected by {occurrence.producer_id}",
     )
@@ -822,10 +464,6 @@ def _with_canonical_occurrences(
         {
             **template.model_dump(mode="python"),
             "occurrences": ordered,
-            "transitions": (
-                _genesis_transition(ordered[0]),
-                *template.transitions[1:],
-            ),
         }
     )
 
@@ -846,12 +484,13 @@ def _classify_writes(
     for probe in probes:
         grouped.setdefault(case_filename(probe), []).append(probe)
 
+    existing_by_name = {name: store.read(name) for name in store.names()}
     writes: list[AuditFindingRecord] = []
     written = appended = skipped = 0
     for name in sorted(grouped):
         incoming_probes = grouped[name]
         incoming = tuple(probe.occurrences[0] for probe in incoming_probes)
-        existing = store.read(name) if store.has(name) else None
+        existing = existing_by_name.get(name)
 
         if existing is None:
             writes.append(
@@ -898,14 +537,23 @@ def ingest_report(
     project_root: Path,
     report: AuditReport,
     registry: FindingRegistry,
+    *,
+    provenance: IngestionProvenance,
+    context: IngestionContext,
+    actor: str = "ingest",
 ) -> IngestOutcome:
     report = _snapshot_report(report)
-    planned = _plan(project_root, report, registry)
-    observed_at = datetime.fromisoformat(report.generated_at)
+    _assert_attested_provenance(report, provenance)
+    if not actor.strip() or "\0" in actor:
+        raise IngestError("ingestion actor must be nonblank and NUL-free")
+    planned = _plan(project_root, report, registry, provenance, context)
+    observed_at = datetime.fromisoformat(provenance.generated_at)
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
 
-    probes = [_new_record(item, report, observed_at) for item in planned]
+    probes = [
+        _new_record(item, report, provenance, observed_at, actor) for item in planned
+    ]
     with _locked_store(project_root) as store:
         writes, written, appended, skipped = _classify_writes(
             store,

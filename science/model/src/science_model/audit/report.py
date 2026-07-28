@@ -5,8 +5,9 @@ occurrence's required `producer_id`, and rule ownership cannot supply it either 
 several producers must be able to emit one rule, which is the premise of
 cross-producer dedup.
 
-`ingestion_ref` and `generated_at` are report-level and TRUSTED: supplied by the
-supervisor or the ingesting command, never by a finding.
+`ingestion_ref`, `generated_at`, and producer IDs are report-level actor claims.
+Trusted ingestion compares them exactly with independent supervisor attestation
+before any occurrence or idempotency key is constructed.
 """
 
 from __future__ import annotations
@@ -197,12 +198,12 @@ class AuditReport(BaseModel):
 
     schema_version: Literal[2]
     fingerprint_version: Literal[1]
-    #: `HashComponent`: this becomes the `ingestion_ref` of every occurrence written.
+    #: Actor-claimed `HashComponent`. Trusted ingestion writes the independently
+    #: attested equal value, never this field on its own authority.
     ingestion_ref: HashComponent = Field(min_length=1)
-    #: ISO-8601, and validated as such HERE. Ingestion turns this into the
-    #: `observed_at` of every occurrence it writes; a bare `min_length=1` would push a
-    #: raw `ValueError` from `datetime.fromisoformat` out of the write path, where it
-    #: is neither an `IngestError` nor a validation failure the caller can report.
+    #: Actor-claimed ISO-8601 timestamp, validated here for report shape. Trusted
+    #: ingestion requires exact equality with supervisor attestation and turns the
+    #: attested value into `observed_at`.
     generated_at: str = Field(min_length=1)
     findings: ReportedArray = Field(max_length=MAX_REPORT_FINDINGS)
     accepted: AcceptedArray = Field(

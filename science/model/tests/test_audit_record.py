@@ -195,6 +195,17 @@ def test_occurrence_key_is_stable_and_distinguishes_producers():
     assert a != occurrence_key(producer_id="p2", ingestion_ref="r1", finding_id=FID)
 
 
+def test_occurrence_key_matches_the_independent_persisted_golden():
+    # Oracle:
+    # printf 'science.occurrence.v1\n%s\0%s\0%s' \
+    #   'dataset_anomalies' 'run:résumé-β' '<64 a characters>' | sha256sum
+    assert occurrence_key(
+        producer_id="dataset_anomalies",
+        ingestion_ref="run:résumé-β",
+        finding_id=FID,
+    ) == "c89b7da3f53191cb6c108935d8fcd9d460e7401ab8498ef52aed09a2ebe8d2b4"
+
+
 def test_review_id_includes_lens_so_two_lenses_do_not_collide():
     grounding = review_id(
         reviewer_kind="agent",
@@ -218,6 +229,20 @@ def test_review_id_includes_lens_so_two_lenses_do_not_collide():
         run_ref="run:x",
         finding_id=FID,
     )
+
+
+def test_review_id_matches_the_independent_persisted_golden():
+    # Oracle:
+    # printf 'science.review.v1\n%s\0%s\0%s\0%s\0%s' \
+    #   'agent' 'curation-sweep' 'grounding-β' 'run:résumé' \
+    #   '<64 a characters>' | sha256sum
+    assert review_id(
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens="grounding-β",
+        run_ref="run:résumé",
+        finding_id=FID,
+    ) == "dbe4266d101b03b1f75d9a64cf7c9856079ff19e892f1a669630081e85dc17db"
 
 
 def test_a_nul_cannot_shift_the_boundary_between_occurrence_fields():

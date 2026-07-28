@@ -111,8 +111,13 @@ def _resolved_root(project_root: Path) -> Path:
         raise PathSafetyError(f"could not resolve project root {project_root}: {exc}") from exc
 
 
-def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
-    """Open the directory one component at a time and return ITS descriptor.
+def _walk_dirs_with_root(
+    project_root: Path,
+    segments: list[str],
+    *,
+    create: bool,
+) -> tuple[Path, int]:
+    """Resolve once, then return the captured root and walked directory descriptor.
 
     Raises `FileNotFoundError` when a component is genuinely absent and
     `PathSafetyError` when one is a link or not a directory. Callers MUST tell these
@@ -159,7 +164,17 @@ def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
     except BaseException:
         os.close(parent_fd)
         raise
-    return parent_fd
+    return root, parent_fd
+
+
+def _walk_dirs(project_root: Path, segments: list[str], *, create: bool) -> int:
+    """Open the directory one component at a time and return its descriptor."""
+    _root, descriptor = _walk_dirs_with_root(
+        project_root,
+        segments,
+        create=create,
+    )
+    return descriptor
 
 
 @contextmanager
@@ -215,16 +230,34 @@ def resolve_inside(project_root: Path, rel_path: str) -> Path:
     name for a subsequent read or write: that is precisely the check/use gap the
     directory descriptors above exist to close. The leaf need not exist.
     """
-    root = _resolved_root(project_root)
-    current = root
-    for segment in _segments(rel_path):
-        current = current / segment
-        if current.is_symlink():
-            raise PathSafetyError(
-                f"{current} is a symlink; every component of {rel_path!r} must be a "
-                "real entry inside the project"
-            )
-    return current
+    segments = _segments(rel_path)
+    try:
+        root, parent_fd = _walk_dirs_with_root(
+            project_root,
+            segments[:-1],
+            create=False,
+        )
+    except FileNotFoundError as exc:
+        raise PathSafetyError(
+            f"a parent of {rel_path!r} does not exist inside the project"
+        ) from exc
+    try:
+        leaf = _leaf_name(segments[-1])
+        try:
+            leaf_stat = os.lstat(leaf, dir_fd=parent_fd)
+        except FileNotFoundError:
+            pass  # a genuinely absent leaf is safe to name
+        except OSError as exc:
+            raise PathSafetyError(f"could not inspect {rel_path!r}: {exc}") from exc
+        else:
+            if stat.S_ISLNK(leaf_stat.st_mode):
+                raise PathSafetyError(
+                    f"{root.joinpath(*segments)} is a symlink; every component of "
+                    f"{rel_path!r} must be a real entry inside the project"
+                )
+    finally:
+        os.close(parent_fd)
+    return root.joinpath(*segments)
 
 
 def project_relative(project_root: Path, path: Path) -> str:

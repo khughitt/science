@@ -61,6 +61,11 @@ def test_normalize_project_path_is_idempotent():
     assert normalize_project_path(once) == once
 
 
+def test_path_subject_refuses_nul_at_the_model_boundary():
+    with pytest.raises(ValidationError, match="NUL"):
+        PathSubject(path="doc/a\0b.md")
+
+
 def test_identity_subject_strings_are_stored_in_nfc():
     assert PathSubject(path="doc/cafe\u0301.md", pointer="field.cafe\u0301") == PathSubject(
         path="doc/café.md",

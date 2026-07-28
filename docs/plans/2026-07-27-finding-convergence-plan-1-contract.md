@@ -8,7 +8,20 @@
 
 **Tech Stack:** Python 3.12+, Pydantic v2, Click, pytest. `science-model` has no dependency on `science_tool`; the dependency runs one way only.
 
-**Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md), revision 6. Section references below (§1, §3, …) are to that document.
+**Design:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md), revision 7. Section references below (§1, §3, …) are to that document.
+
+> **Final-review amendment (authoritative over earlier task scaffolding):**
+> trusted ingestion takes required frozen `IngestionProvenance` and
+> `IngestionContext` inputs; report ref/time/producer claims must match attestation
+> exactly; the CLI requires explicit `--attest-*` options and constructs the canonical
+> entity universe from default strict `load_project_sources().entities`. Genesis is
+> append-only real creation history with actor `ingest`, while only canonical
+> occurrences/current severity are arrival-invariant. Every Markdown leaf in the case
+> store is validated except the exact lock/writer-temp leaves. Path judgment is a
+> descriptor-relative parent walk plus leaf `lstat`, accepts only a genuinely absent
+> leaf, and rejects NUL at the model boundary. Occurrence/review persisted hashes have
+> independent literal golden vectors. Any older code listing below that omits one of
+> these inputs or properties is superseded by this amendment and must not be implemented.
 
 ## Global Constraints
 
@@ -20,6 +33,12 @@
 - **Digests are 64 lowercase hex characters.** The acceptance key alone is truncated to 32 (§10).
 - **Schema validation of qualifiers and metrics is `strict=True`.** These are typed wire contracts, and the validated model is discarded — the input mapping is what gets stored and fingerprinted. Lax validation does not check a value, it replaces it somewhere the caller never looks: `{"count": "1"}` passes an `int` field, reports `1`, and leaves `"1"` on disk, so `1` and `"1"` become two identities for one finding.
 - **No string that reaches an occurrence or review hash may contain a NUL.** `\0` is the field separator of those two frozen encodings, so a NUL inside a component makes them ambiguous. `HashComponent` (Task 4) applies the refusal on both the wire form and the stored form.
+- **Persisted occurrence/review hash vectors are independent literals.** Tests pin the
+  exact domain prefix, component order, NUL separators, UTF-8 bytes, SHA-256, and
+  64-lowercase-hex output against documented `printf ... | sha256sum` commands; they
+  never compute their expected value with production helpers.
+- **Project paths reject NUL at the model boundary.** Filesystem judgment then opens
+  parents by descriptor and judges the leaf once; a returned `Path` is display-only.
 - **All new Pydantic models set `model_config = ConfigDict(extra="forbid", frozen=True)`** unless a task says otherwise. `Entity` uses `extra="ignore"`, which is why a hand-written `phase:` could never reach the graph; audit records must not repeat that.
 - **Conventional commits.** No AI-attribution trailer or footer on any commit.
 - **No "legacy" or "compatibility" shims**, and no `Unified` prefix on any component name.
@@ -1736,6 +1755,16 @@ def test_occurrence_key_is_stable_and_distinguishes_producers():
     assert a != occurrence_key(producer_id="p2", ingestion_ref="r1", finding_id=FID)
 
 
+def test_occurrence_key_matches_independent_golden():
+    # printf 'science.occurrence.v1\n%s\0%s\0%s' \
+    #   dataset_anomalies run:résumé-β '<64 a characters>' | sha256sum
+    assert occurrence_key(
+        producer_id="dataset_anomalies",
+        ingestion_ref="run:résumé-β",
+        finding_id=FID,
+    ) == "c89b7da3f53191cb6c108935d8fcd9d460e7401ab8498ef52aed09a2ebe8d2b4"
+
+
 def test_review_id_includes_lens_so_two_lenses_do_not_collide():
     grounding = review_id(
         reviewer_kind="agent", reviewer_ref="curation-sweep", lens="grounding",
@@ -1750,6 +1779,18 @@ def test_review_id_includes_lens_so_two_lenses_do_not_collide():
         reviewer_kind="agent", reviewer_ref="curation-sweep", lens="grounding",
         run_ref="run:x", finding_id=FID,
     )
+
+
+def test_review_id_matches_independent_golden():
+    # printf 'science.review.v1\n%s\0%s\0%s\0%s\0%s' \
+    #   agent curation-sweep grounding-β run:résumé '<64 a characters>' | sha256sum
+    assert review_id(
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens="grounding-β",
+        run_ref="run:résumé",
+        finding_id=FID,
+    ) == "dbe4266d101b03b1f75d9a64cf7c9856079ff19e892f1a669630081e85dc17db"
 
 
 def test_a_nul_cannot_shift_the_boundary_between_occurrence_fields():
@@ -2713,8 +2754,8 @@ occurrence's required `producer_id`, and rule ownership cannot supply it either 
 several producers must be able to emit one rule, which is the premise of
 cross-producer dedup.
 
-`ingestion_ref` and `generated_at` are report-level and TRUSTED: supplied by the
-supervisor or the ingesting command, never by a finding.
+`ingestion_ref`, `generated_at`, and producer IDs are report-level actor claims.
+Trusted ingestion compares them exactly with independent supervisor attestation.
 """
 
 from __future__ import annotations
@@ -2791,12 +2832,10 @@ class AuditReport(BaseModel):
 
     schema_version: Literal[2]
     fingerprint_version: int
-    #: `HashComponent`: this becomes the `ingestion_ref` of every occurrence written.
+    #: Actor claim only; ingestion writes the independently attested equal value.
     ingestion_ref: HashComponent = Field(min_length=1)
-    #: ISO-8601, and validated as such HERE. Ingestion turns this into the
-    #: `observed_at` of every occurrence it writes; a bare `min_length=1` would push a
-    #: raw `ValueError` from `datetime.fromisoformat` out of the write path, where it
-    #: is neither an `IngestError` nor a validation failure the caller can report.
+    #: ISO-8601 actor claim. Ingestion validates exact equality and writes the
+    #: independently attested value as `observed_at`.
     generated_at: str = Field(min_length=1)
     findings: list[ReportedFinding] = Field(max_length=MAX_REPORT_FINDINGS)
     accepted: list[AcceptedFinding] = Field(
@@ -3336,7 +3375,7 @@ git commit -m "feat(findings): derive the frozen rule registry from producer dec
 - Produces (paths): `PathSafetyError` and `PathExistsError`; the walk — `open_dir_inside(project_root, rel_dir, *, create=False)` and `open_dir_inside_if_present(project_root, rel_dir)` (context managers yielding a `dir_fd` / `dir_fd | None`), `mkdir_inside(project_root, rel_dir) -> Path`; the anchored operations, every one guarded by `_leaf_name` — `exists_at(dir_fd, name) -> bool`, `read_regular_file_at(dir_fd, name, max_bytes) -> str`, `create_regular_file_at(dir_fd, name) -> int`, `open_lock_at(dir_fd, name) -> int`, `unlink_at(dir_fd, name)`, `replace_at(dir_fd, source, target)`; and the two name helpers — `project_relative(project_root, path) -> str`, `resolve_inside(project_root, rel_path) -> Path` (**check-only**), plus the convenience `read_inside_bounded(project_root, path, max_bytes) -> str`.
 - Produces (storage): `CASES_DIRNAME`, `LOCK_NAME`, `MAX_CASE_BYTES`, `CaseStore`, `case_store(project_root, *, create)`, `optional_case_store(project_root)`, `case_path(...)`, `case_filename(...)`, `write_case(project_root, record)`, `load_case(project_root, path)`, `load_cases(project_root)`, `CaseStorageError`.
 
-**The organising idea: a validated pathname is not a validated file.** Walking the components of a path and then calling `open()` on that string resolves every component a *second* time, and whatever was swapped in between is what gets opened. So the walk returns a **directory descriptor**, and every read, write, listing, lock, and rename runs through it with `dir_fd=`. `resolve_inside` survives only as a *check-only* primitive for judging the paths an incoming report names; it must never supply a name for a subsequent operation.
+**The organising idea: a validated pathname is not a validated file.** Walking the components of a path and then calling `open()` on that string resolves every component a *second* time, and whatever was swapped in between is what gets opened. So the walk returns a **directory descriptor**, and every read, write, listing, lock, and rename runs through it with `dir_fd=`. `resolve_inside` is also descriptor-based: it captures the root once, opens each parent `O_DIRECTORY | O_NOFOLLOW`, and judges the leaf once with descriptor-relative `lstat`. It survives only as a *check-only* primitive; its returned pathname is display data and must never supply a name for a subsequent operation.
 
 Six failures this shape prevents, each reproduced before being written down:
 
@@ -3346,6 +3385,10 @@ Six failures this shape prevents, each reproduced before being written down:
 4. **A `*_at` name that is a path.** `openat` resolves relative to the descriptor, so `"../outside.txt"` escapes the anchor entirely. `_leaf_name` guards every anchored operation.
 5. **`O_TRUNC` through a hard link.** `O_NOFOLLOW` is silent about hard links: a planted `.ingest.lock` or predictable temp name that is a second link to a real file gets that file emptied. Temp files are `O_EXCL`; the lock is opened **without** `O_TRUNC`, `fstat`ed, and required to have `st_nlink == 1` so ingestion never serializes on an inode someone else chose.
 6. **Blocking and non-file objects.** A FIFO under a report or case name makes a plain `O_RDONLY` hang forever. Reads use `O_NONBLOCK` then require `S_ISREG`.
+7. **Pathname-swap judgment.** Repeated `Path.is_symlink()` calls re-resolve parents.
+   The descriptor walk refuses parent/root swaps, all leaf symlinks (including
+   dangling/outside targets), and missing parents; only a genuinely absent leaf is
+   accepted. `normalize_project_path` rejects NUL before any filesystem call.
 
 `load_case` and `load_report` take the **project root**, not just a path: given a bare path they would have to open it directly, which is exactly what following a link looks like.
 
@@ -4257,16 +4300,21 @@ def resolve_inside(project_root: Path, rel_path: str) -> Path:
     name for a subsequent read or write: that is precisely the check/use gap the
     directory descriptors above exist to close. The leaf need not exist.
     """
-    root = _resolved_root(project_root)
-    current = root
-    for segment in _segments(rel_path):
-        current = current / segment
-        if current.is_symlink():
-            raise PathSafetyError(
-                f"{current} is a symlink; every component of {rel_path!r} must be a "
-                "real entry inside the project"
-            )
-    return current
+    segments = _segments(rel_path)
+    root, parent_fd = _walk_dirs_with_root(
+        project_root, segments[:-1], create=False
+    )
+    try:
+        try:
+            leaf_stat = os.lstat(segments[-1], dir_fd=parent_fd)
+        except FileNotFoundError:
+            pass  # only a genuinely absent leaf is accepted
+        else:
+            if stat.S_ISLNK(leaf_stat.st_mode):
+                raise PathSafetyError(f"{rel_path!r} names a symlink")
+    finally:
+        os.close(parent_fd)
+    return root.joinpath(*segments)  # display-only; never reopened by this judgment
 
 
 def project_relative(project_root: Path, path: Path) -> str:
@@ -4602,7 +4650,17 @@ class CaseStore:
             entries = os.listdir(self._dir_fd)
         except OSError as exc:
             raise CaseStorageError(f"could not list the case store: {exc}") from exc
-        return sorted(n for n in entries if n.endswith(".md"))
+        cases = []
+        for name in entries:
+            if name == LOCK_NAME or _WRITER_TEMP_NAME.fullmatch(name):
+                continue
+            if name.endswith(".md"):
+                cases.append(name)  # every Markdown leaf claims to be a case
+            elif _CASE_SHAPED_NAME.fullmatch(name):
+                raise CaseStorageError(
+                    f"{name} does not have the canonical .md extension"
+                )
+        return sorted(cases)
 
     def has(self, name: str) -> bool:
         """Through the anchored primitive, like every other operation here.
@@ -4627,7 +4685,7 @@ class CaseStore:
 
     def write(self, record: AuditFindingRecord) -> str:
         name = case_filename(record)
-        temp = f".{name}.tmp"
+        temp = f".{name}.{secrets.token_hex(16)}.tmp"
         payload = {
             "doc_kind": DOC_KIND,
             **record.model_dump(mode="json", exclude_none=True),
@@ -4650,23 +4708,8 @@ class CaseStore:
         return name
 
     def _create_temp(self, temp: str) -> int:
-        """Create the temp file `O_EXCL`, clearing one stale entry if needed.
-
-        `O_EXCL` means a leftover from a crashed run makes the first attempt fail.
-        Removing that NAME is safe -- `unlink` never follows a link and never
-        truncates, so a planted hard link loses this name and keeps its other one --
-        and the retry still refuses to reuse an entry it did not create itself.
-
-        The catch is `PathExistsError`, NOT `PathSafetyError`: "something is already
-        there" is the one condition deleting a name can fix. Catching the base class
-        would answer a symlinked or unreachable directory by unlinking and trying
-        again, which is a retry loop over a safety failure.
-        """
-        try:
-            return create_regular_file_at(self._dir_fd, temp)
-        except PathExistsError:
-            unlink_at(self._dir_fd, temp)
-            return create_regular_file_at(self._dir_fd, temp)
+        """Create one writer-owned unpredictable temp; never unlink another's name."""
+        return create_regular_file_at(self._dir_fd, temp)
 
     def lock(self) -> int:
         """The caller owns the returned descriptor and must close it."""
@@ -4799,9 +4842,18 @@ git commit -m "feat(findings): hardened path handling and case storage bound to 
 
 **Interfaces:**
 - Consumes: Tasks 6–9.
-- Produces: `ingest_report(project_root, report, registry, *, actor="ingest") -> IngestOutcome`, `IngestOutcome` (`records_written`, `occurrences_appended`, `occurrences_skipped`), `IngestError`, `MAX_REPORT_BYTES = 8 * 1024 * 1024`, `load_report(project_root, path) -> AuditReport`.
+- Produces: frozen `IngestionProvenance(ingestion_ref, generated_at, producer_ids)` and `IngestionContext(canonical_entity_ids)`; `ingest_report(project_root, report, registry, *, provenance, context, actor="ingest") -> IngestOutcome`; `IngestOutcome` (`records_written`, `occurrences_appended`, `occurrences_skipped`), `IngestError`, `MAX_REPORT_BYTES = 8 * 1024 * 1024`, `load_report(project_root, path) -> AuditReport`.
 
 Not a multi-file transaction, and it does not claim to be: full prevalidation, then atomic per-record writes under a project-scoped lock, with **idempotent retry** as the documented recovery from partial I/O failure (§8).
+
+Provenance has no report-derived default. Ingestion snapshots the report, compares
+the exact ref, timestamp spelling, and complete
+`meta.producers_run ∪ unwired.producer_id` set with the trusted provenance, and then
+uses only trusted ref/time values for occurrences and keys. Entity membership comes
+only from the supplied frozen context; ingestion performs no Markdown/task scan.
+Before classifying incoming targets under the lock it reads every name returned by
+`CaseStore.names()`, so a renamed or malformed aggregate case is a zero-write failure.
+Canonical occurrence sorting never mutates the append-only genesis transition.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4821,7 +4873,13 @@ from science_model.audit import (
     ReportedFinding,
 )
 
-from science_tool.findings.ingest import IngestError, ingest_report, load_report
+from science_tool.findings.ingest import (
+    IngestError,
+    IngestionContext,
+    IngestionProvenance,
+    ingest_report as _ingest_report,
+    load_report,
+)
 from science_tool.findings.producers import FindingProducer, build_registry
 from science_tool.findings.storage import load_cases
 
@@ -4882,6 +4940,28 @@ def _report(findings=None, accepted=None, **overrides) -> AuditReport:
               "timings": []},
     )
     return AuditReport(**{**base, **overrides})
+
+
+def ingest_report(project_root, report, registry):
+    """Test harness: production still receives both trusted values explicitly."""
+    return _ingest_report(
+        project_root,
+        report,
+        registry,
+        provenance=IngestionProvenance(
+            ingestion_ref=report.ingestion_ref,
+            generated_at=report.generated_at,
+            producer_ids=frozenset(
+                {
+                    *report.meta.producers_run,
+                    *(item.producer_id for item in report.unwired),
+                }
+            ),
+        ),
+        context=IngestionContext(
+            canonical_entity_ids=frozenset({"dataset:a", "dataset:b"})
+        ),
+    )
 
 
 def test_ingest_writes_a_case_with_a_genesis_transition(tmp_path):
@@ -4964,15 +5044,20 @@ def test_two_producers_upsert_one_record_with_two_occurrences(tmp_path):
     }
 
 
-def _normalized(record) -> dict:
-    """The COMPLETE record, with history sorted so the comparison is order-insensitive
-    without being blind: any field differing anywhere still fails."""
+def _canonical_state(record) -> dict:
+    """Arrival-invariant state; creation history is intentionally excluded."""
     payload = record.model_dump(mode="json")
-    payload["occurrences"] = sorted(
-        payload["occurrences"], key=lambda o: o["idempotency_key"]
-    )
-    payload["reviews"] = sorted(payload["reviews"], key=lambda r: r["review_id"])
-    return payload
+    return {
+        key: payload[key]
+        for key in (
+            "finding_id",
+            "fingerprint_version",
+            "rule_id",
+            "subject",
+            "identity_qualifiers",
+            "occurrences",
+        )
+    } | {"current_severity": record.current_severity()}
 
 
 def test_no_arrival_order_dependence(tmp_path):
@@ -4992,10 +5077,9 @@ def test_no_arrival_order_dependence(tmp_path):
     ingest_report(a, second, REGISTRY)
     ingest_report(b, second, REGISTRY)
     ingest_report(b, first, REGISTRY)
-    # Compare the WHOLE record. Matching only finding ids and occurrence keys would
-    # pass even if the two orders produced different statuses, transitions, severities,
-    # or messages -- which is the entire class of thing this test is about.
-    assert _normalized(load_cases(a)[0]) == _normalized(load_cases(b)[0])
+    assert _canonical_state(load_cases(a)[0]) == _canonical_state(load_cases(b)[0])
+    # A distinct-time variant must additionally capture each genesis before the second
+    # arrival and prove it is unchanged afterward; real creation history may differ.
 
 
 def test_non_identity_qualifiers_survive_on_the_occurrence(tmp_path):
@@ -5325,6 +5409,12 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.findings.
 
 - [ ] **Step 3: Write minimal implementation**
 
+The listing below is scaffolding for the original task sequence. Apply the
+final-review amendment and interface above when implementing it: provenance/context
+are required, strict graph context replaces all local entity discovery, aggregate
+cases are preloaded before writes, and canonical occurrence sorting preserves
+transitions byte-for-byte.
+
 ```python
 # science/src/science_tool/findings/ingest.py
 """Trusted ingestion: the write boundary (design §8).
@@ -5576,10 +5666,14 @@ def ingest_report(
     report: AuditReport,
     registry: FindingRegistry,
     *,
+    provenance: IngestionProvenance,
+    context: IngestionContext,
     actor: str = "ingest",
 ) -> IngestOutcome:
-    planned = _plan(project_root, report, registry)
-    observed_at = datetime.fromisoformat(report.generated_at)
+    report = _snapshot_report(report)
+    _assert_attested_provenance(report, provenance)
+    planned = _plan(project_root, report, registry, provenance, context)
+    observed_at = datetime.fromisoformat(provenance.generated_at)
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=UTC)
 
@@ -5589,11 +5683,11 @@ def ingest_report(
             occurrence = Occurrence(
                 idempotency_key=occurrence_key(
                     producer_id=item.producer_id,
-                    ingestion_ref=report.ingestion_ref,
+                    ingestion_ref=provenance.ingestion_ref,
                     finding_id=item.finding_id,
                 ),
                 producer_id=item.producer_id,
-                ingestion_ref=report.ingestion_ref,
+                ingestion_ref=provenance.ingestion_ref,
                 observed_at=observed_at,
                 severity=item.finding.severity,
                 message=item.finding.message,
@@ -5687,9 +5781,17 @@ git commit -m "feat(findings): trusted ingestion with idempotent retry as the re
 
 **Interfaces:**
 - Consumes: Tasks 8–10.
-- Produces: `findings_group` with `ingest` and `list` subcommands.
+- Produces: `findings_group` with `ingest` and `list` subcommands. `ingest` requires
+  `--attest-ingestion-ref`, `--attest-generated-at`, and repeatable one-or-more
+  `--attest-producer-id` options.
 
 `science health` gains **no** persist flag. Ingestion is a separate explicit command; a diagnostic run never writes cases as a side effect (§8).
+
+The trusted CLI constructs `IngestionContext` from
+`frozenset(entity.canonical_id for entity in load_project_sources(project_root).entities)`
+using the loader's default strict schema, identity-arbitration, adapter, and commons
+behavior. Arbitration, commons, and attestation failures are clean exit-2 refusals
+before case writes.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5714,7 +5816,8 @@ def _report_json() -> dict:
         "unwired": [],
         "totals": {"findings_total": 0, "findings_by_severity": {},
                    "accepted_total": 0, "unwired_total": 0},
-        "meta": {"producers_run": [], "total_duration_seconds": 0.0, "timings": []},
+        "meta": {"producers_run": ["dataset_anomalies"],
+                 "total_duration_seconds": 0.0, "timings": []},
     }
 
 
@@ -5723,7 +5826,10 @@ def test_ingest_reports_what_it_did(tmp_path):
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
     result = CliRunner().invoke(
         findings_group,
-        ["ingest", str(report), "--project-root", str(tmp_path), "--format", "json"],
+        ["ingest", str(report), "--project-root", str(tmp_path), "--format", "json",
+         "--attest-ingestion-ref", "ing:1",
+         "--attest-generated-at", "2026-07-27T12:00:00+00:00",
+         "--attest-producer-id", "dataset_anomalies"],
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -5734,7 +5840,11 @@ def test_ingest_exits_nonzero_on_a_refused_report(tmp_path):
     report = tmp_path / "report.json"
     report.write_text(json.dumps({"schema_version": 99}), encoding="utf-8")
     result = CliRunner().invoke(
-        findings_group, ["ingest", str(report), "--project-root", str(tmp_path)]
+        findings_group,
+        ["ingest", str(report), "--project-root", str(tmp_path),
+         "--attest-ingestion-ref", "ing:1",
+         "--attest-generated-at", "2026-07-27T12:00:00+00:00",
+         "--attest-producer-id", "dataset_anomalies"],
     )
     assert result.exit_code == 2
     assert "schema_version" in result.output
@@ -5826,7 +5936,19 @@ def _registry():
     "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table",
     show_default=True,
 )
-def ingest_command(report_path: Path, project_root: Path, output_format: str) -> None:
+@click.option("--attest-ingestion-ref", required=True)
+@click.option("--attest-generated-at", required=True)
+@click.option(
+    "--attest-producer-id", "attest_producer_ids", multiple=True, required=True
+)
+def ingest_command(
+    report_path: Path,
+    project_root: Path,
+    output_format: str,
+    attest_ingestion_ref: str,
+    attest_generated_at: str,
+    attest_producer_ids: tuple[str, ...],
+) -> None:
     """Validate a report and upsert its findings into `doc/audits/cases/`.
 
     Exit codes: 0 ingested, 2 refused. Nothing is written on a validation failure.
@@ -5835,7 +5957,24 @@ def ingest_command(report_path: Path, project_root: Path, output_format: str) ->
 
     try:
         report = load_report(project_root, report_path)
-        outcome = ingest_report(project_root, report, _registry())
+        provenance = IngestionProvenance(
+            ingestion_ref=attest_ingestion_ref,
+            generated_at=attest_generated_at,
+            producer_ids=frozenset(attest_producer_ids),
+        )
+        sources = load_project_sources(project_root)  # default strict graph boundary
+        context = IngestionContext(
+            canonical_entity_ids=frozenset(
+                entity.canonical_id for entity in sources.entities
+            )
+        )
+        outcome = ingest_report(
+            project_root,
+            report,
+            _registry(),
+            provenance=provenance,
+            context=context,
+        )
     except IngestError as exc:
         message = f"refused: {exc}"
         emit(
