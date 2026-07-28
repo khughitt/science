@@ -198,7 +198,8 @@ def test_occurrence_key_is_stable_and_distinguishes_producers():
 def test_occurrence_key_matches_the_independent_persisted_golden():
     # Oracle:
     # printf 'science.occurrence.v1\n%s\0%s\0%s' \
-    #   'dataset_anomalies' 'run:résumé-β' '<64 a characters>' | sha256sum
+    #   'dataset_anomalies' 'run:résumé-β' \
+    #   'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' | sha256sum
     assert occurrence_key(
         producer_id="dataset_anomalies",
         ingestion_ref="run:résumé-β",
@@ -235,7 +236,7 @@ def test_review_id_matches_the_independent_persisted_golden():
     # Oracle:
     # printf 'science.review.v1\n%s\0%s\0%s\0%s\0%s' \
     #   'agent' 'curation-sweep' 'grounding-β' 'run:résumé' \
-    #   '<64 a characters>' | sha256sum
+    #   'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' | sha256sum
     assert review_id(
         reviewer_kind="agent",
         reviewer_ref="curation-sweep",

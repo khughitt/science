@@ -1472,7 +1472,13 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
 
     data: dict[str, object] = {}
     if yaml_path.is_file():
-        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        loaded = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        if loaded is not None:
+            if not isinstance(loaded, dict):
+                raise ValueError(
+                    f"{yaml_path}: project configuration must be a mapping"
+                )
+            data = loaded
 
     # The pin, VALIDATED here through the one narrow authority the write path also uses -- key AND
     # value, WITHOUT the rest of `ProjectConfig` (which requires `name`, a tightening not this arc's).

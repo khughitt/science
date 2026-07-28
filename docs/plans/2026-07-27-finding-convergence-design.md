@@ -537,9 +537,10 @@ run records were given (`graph/attention.py`).
 Every Markdown leaf under `doc/audits/cases/` claims to be a case and must pass case
 schema plus filename/content binding, including `notes.md` and dot-prefixed
 `.hidden.md`. The directory reader ignores only the exact `.ingest.lock` leaf and the
-exact writer-owned temp-name shape; ingestion validates the complete aggregate before
-its first write, so a renamed unrelated case cannot be hidden while a replacement is
-created.
+exact writer-owned temp-name shape; every other non-Markdown leaf is refused as
+unrecognized rather than silently skipped. Ingestion validates the complete aggregate
+before its first write, so a renamed unrelated case cannot be hidden while a replacement
+is created.
 
 ### 6. Rules — declared beside the producer, registry derived
 
@@ -676,7 +677,9 @@ independent `--attest-ingestion-ref`, `--attest-generated-at`, and one-or-more r
 set must match provenance exactly before the case store is opened; only attested values
 feed occurrence content and idempotency keys. The context is constructed from the same
 default strict `load_project_sources()` result used by graph materialization—never from
-a second Markdown/task scan and never from report content.
+a second Markdown/task scan and never from report content. A present `science.yaml`
+whose root is not a mapping is a graph-load error and therefore a clean refusal before
+any case write.
 
 Ingestion additionally enforces:
 

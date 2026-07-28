@@ -418,6 +418,42 @@ def test_producer_attestation_set_equality_has_no_subset_fallback(
     assert not (tmp_path / CASES_DIRNAME).exists()
 
 
+def test_unwired_producers_are_part_of_the_exact_attested_set(tmp_path):
+    from science_model.audit import UnwiredProducer
+
+    report = _report(
+        findings=[],
+        unwired=[
+            UnwiredProducer(
+                producer_id="curation_lens",
+                code="not-wired",
+                reason="disabled",
+            )
+        ],
+        totals={
+            "findings_total": 0,
+            "findings_by_severity": {},
+            "accepted_total": 0,
+            "unwired_total": 1,
+        },
+    )
+    provenance = IngestionProvenance(
+        ingestion_ref=report.ingestion_ref,
+        generated_at=report.generated_at,
+        producer_ids=frozenset({"dataset_anomalies"}),
+    )
+
+    with pytest.raises(IngestError, match="producer ids"):
+        _ingest_report(
+            tmp_path,
+            report,
+            _registry_with_second_producer(),
+            provenance=provenance,
+            context=IngestionContext(canonical_entity_ids=frozenset()),
+        )
+    assert not (tmp_path / CASES_DIRNAME).exists()
+
+
 def test_an_actor_cannot_preempt_a_future_genuine_ingestion_ref(tmp_path):
     claimed = _report(ingestion_ref="run:genuine")
     current_attestation = IngestionProvenance(

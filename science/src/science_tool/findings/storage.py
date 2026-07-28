@@ -60,9 +60,6 @@ _BODY = (
     "affects belief or attention. See "
     "docs/plans/2026-07-27-finding-convergence-design.md -->\n"
 )
-_CASE_SHAPED_NAME = re.compile(
-    r"^[a-z0-9-]+--[0-9a-f]{64}(?:\..*)?$"
-)
 _WRITER_TEMP_NAME = re.compile(
     r"^\.[a-z0-9-]+--[0-9a-f]{64}\.md\.[0-9a-f]{32}\.tmp$"
 )
@@ -188,15 +185,14 @@ class CaseStore:
         for name in entries:
             if name == LOCK_NAME or _WRITER_TEMP_NAME.fullmatch(name):
                 continue
-            if name.endswith(".md"):
-                # Every Markdown leaf claims to be a case. Reading it below enforces
-                # both the case schema and the filename/content binding.
-                cases.append(name)
-            elif _CASE_SHAPED_NAME.fullmatch(name):
+            if not name.endswith(".md"):
                 raise CaseStorageError(
-                    f"{name} is case-shaped but does not have the canonical .md "
-                    "extension"
+                    f"{name} is not a recognized operational leaf and does not have "
+                    "the canonical .md extension"
                 )
+            # Every Markdown leaf claims to be a case. Reading it below enforces both
+            # the case schema and the filename/content binding.
+            cases.append(name)
         return sorted(cases)
 
     def has(self, name: str) -> bool:

@@ -367,6 +367,16 @@ def test_load_cases_ignores_only_exact_operational_case_leaves(tmp_path):
     assert load_cases(tmp_path) == [record]
 
 
+@pytest.mark.parametrize("name", ["notes.txt", "backup", ".hidden"])
+def test_load_cases_refuses_every_non_operational_leaf(tmp_path, name):
+    cases = tmp_path / CASES_DIRNAME
+    cases.mkdir(parents=True)
+    (cases / name).write_text("not operational", encoding="utf-8")
+
+    with pytest.raises(CaseStorageError, match="recognized operational"):
+        load_cases(tmp_path)
+
+
 def test_load_cases_on_a_project_with_no_cases_returns_empty(tmp_path):
     assert load_cases(tmp_path) == []
 

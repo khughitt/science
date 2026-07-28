@@ -181,6 +181,92 @@ def test_ingest_cli_refuses_graph_identity_collisions_before_case_writes(
     assert not (tmp_path / "doc" / "audits" / "cases").exists()
 
 
+def test_ingest_cli_wraps_malformed_graph_configuration_as_a_refusal(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    (tmp_path / "science.yaml").write_text(
+        "name: [unterminated\n",
+        encoding="utf-8",
+    )
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(_report_json()), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        [
+            "ingest",
+            str(report),
+            "--project-root",
+            str(tmp_path),
+            *_attestation_args(),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "refused:" in result.output
+    assert not (tmp_path / "doc" / "audits" / "cases").exists()
+
+
+@pytest.mark.parametrize("configuration", ["- not-a-mapping\n", "42\n"])
+def test_ingest_cli_refuses_non_mapping_graph_configuration(
+    tmp_path,
+    monkeypatch,
+    configuration,
+):
+    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    (tmp_path / "science.yaml").write_text(configuration, encoding="utf-8")
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(_report_json()), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        [
+            "ingest",
+            str(report),
+            "--project-root",
+            str(tmp_path),
+            *_attestation_args(),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "mapping" in result.output
+    assert not (tmp_path / "doc" / "audits" / "cases").exists()
+
+
+def test_ingest_cli_wraps_commons_context_failures_as_zero_write_refusals(
+    tmp_path,
+    monkeypatch,
+):
+    from science_tool.commons.errors import CommonsError
+
+    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+
+    def fail_context(_project_root):
+        raise CommonsError("commons identity context unavailable")
+
+    monkeypatch.setattr(findings_cli, "_load_ingestion_context", fail_context)
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(_report_json()), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        [
+            "ingest",
+            str(report),
+            "--project-root",
+            str(tmp_path),
+            *_attestation_args(),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "commons identity context unavailable" in result.output
+    assert not (tmp_path / "doc" / "audits" / "cases").exists()
+
+
 def test_list_on_a_project_with_no_cases_is_empty_and_exits_zero(tmp_path):
     result = CliRunner().invoke(
         findings_group, ["list", "--project-root", str(tmp_path), "--format", "json"]

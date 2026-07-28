@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 from science_model.audit import CASE_STATUSES
 
 from science_tool.output import OUTPUT_FORMATS, emit
@@ -96,7 +97,7 @@ def ingest_command(
             provenance=provenance,
             context=context,
         )
-    except (CommonsError, OSError, ValueError) as exc:
+    except (CommonsError, OSError, ValueError, yaml.YAMLError) as exc:
         message = f"refused: {exc}"
         emit(
             output_format=output_format,
