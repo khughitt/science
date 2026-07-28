@@ -2101,11 +2101,48 @@ cd science && uv run --frozen pyright
 # 0 errors, 0 warnings, 0 informations
 ```
 
-The exact Task 4 scoped regression command recorded in the Task 5 report
-passed 1,176 tests. The public health JSON report is schema version 2 with
-fingerprint version 1. Its totals use `totals.findings_total`, which equals
-the number of `findings` rows; the temporary CLI fixtures also confirmed the
-separate `accepted`, `metrics`, `caveats`, and `unwired` channels.
+The exact Task 4 scoped regression command also passed 1,176 tests:
+
+```bash
+cd science
+env SCIENCE_TEST_TMPDIR=/tmp/task5-science-temp \
+  PYTHONPYCACHEPREFIX=/tmp/task5-pycache \
+  UV_CACHE_DIR=/tmp/task5-uv \
+uv run --frozen pytest --basetemp=/tmp/task5-pytest-scoped \
+  tests/test_findings_execution.py \
+  tests/test_findings_registry.py \
+  tests/test_findings_reporting.py \
+  tests/test_findings_producer_namespaces.py \
+  tests/test_finding_convergence.py \
+  tests/test_findings_ingest.py \
+  tests/test_health.py \
+  tests/test_health_acceptance_parity.py \
+  tests/test_health_checks_base.py \
+  tests/test_health_checks_package.py \
+  tests/test_health_cli_budget.py \
+  tests/test_health_managed_artifacts.py \
+  tests/test_health_preconditions.py \
+  tests/test_health_projection.py \
+  tests/test_health_projection_caps.py \
+  tests/test_health_schema_invalid.py \
+  tests/test_correspondence_drift_health_integration.py \
+  tests/test_data_audit.py \
+  tests/test_data_audit_cli.py \
+  tests/test_data_audit_scope.py \
+  tests/test_data_audit_symlink.py \
+  tests/test_acceptance_authority.py \
+  tests/validate -q
+# 1176 passed
+```
+
+The public health JSON report is schema version 2 with fingerprint version 1.
+The temporary runtime fixtures proved `findings`, the equality of
+`totals.findings_total` and the finding-row count, a list-valued
+`caveats` channel, the absence of `total_issues` and `unwired_checks`,
+and unwired text output that does not call the project clean. The model,
+focused tests, and user guide establish the separate `accepted`,
+`metrics`, and `unwired` report channels; those channels were not
+separately asserted by the JSON fixture.
 
 The approved count increases are `legacy_task_type` and
 `invalid_entity_aspects`: both now produce findings that count. Retired
