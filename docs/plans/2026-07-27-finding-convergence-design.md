@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 13. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 14. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -106,6 +106,18 @@
 > `4162196f` on 2026-07-26, before this design's grounding commit, and the tree explicitly
 > tests that health omits it. It is therefore removed from the migration ledger and from
 > R3's examples rather than reintroduced as a producer (§Grounding, §9, §Out of scope).
+>
+> **Revision 14 closes the static validation-ID grammar seam.** Two live validation
+> findings use underscores and therefore cannot be declared under §3's frozen
+> dotted-kebab rule grammar:
+> `evidence.empirical.requires_dataset_usage` and
+> `proposition.claim_layer.canonical`. Plan 2 renames them to
+> `evidence.empirical.requires-dataset-usage` and
+> `proposition.claim-layer.canonical`, respectively (§6, §9). Neither ID appears in a
+> gate tier or in the 50-entry surveyed acceptance corpus, so the change is count- and
+> suppression-neutral for the verified projects. Unknown external corpora remain covered
+> by Plan 3's fail-loud migration contract rather than by an undeclared compatibility
+> alias.
 
 ## Motivation
 
@@ -767,6 +779,21 @@ Plan 2 also deletes `_result`'s default `rule="prose_lints"` argument. Every cur
 site supplies a rule explicitly; retaining an unused default would preserve exactly the
 undeclared-string construction path this registry removes.
 
+**Static validation IDs must also satisfy the frozen grammar.** Most current IDs already
+do. Two finding IDs do not, and Plan 2 applies these exact one-time renames:
+
+| Current ID | Declared Plan 2 ID | Gate / surveyed acceptance effect |
+|---|---|---|
+| `evidence.empirical.requires_dataset_usage` | `evidence.empirical.requires-dataset-usage` | none |
+| `proposition.claim_layer.canonical` | `proposition.claim-layer.canonical` | none |
+
+The nearby `prose_lints.*` spellings are governed by the semantic split above, and
+`prose_lints.numeric-verification.coverage` becomes metrics rather than a rule. These are
+the complete nonconforming rule spellings in the current validation finding stream.
+Plan 2 adds an emitted-ID grammar guard; it must not normalize arbitrary strings or retain
+aliases. A future invalid ID is a producer declaration failure, not a reason to widen the
+wire grammar.
+
 The per-kind rules are derived when the project-scoped registry is built from the same
 trusted active entity-kind registry used by graph loading. The **family declaration** —
 suffix, section, presentation metadata, subject contract, and the call to
@@ -928,7 +955,7 @@ intentional observable difference.
 | `schema_invalid` | `len(rows)` | `entity.schema-invalid`, `PathSubject` (a malformed entity cannot supply a valid ref) | — | — |
 | `managed_artifacts` | rows where `counts_as_issue` | `managed-artifact.*` for flagged rows only, `IdentifierSubject(namespace="managed-artifact")` | inventory of unflagged rows | split: the flag becomes the finding/metric boundary |
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
-| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; INFO never entered `count_issues`, so neither rename changes counts |
+| `validation` | `len(rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families | — | WARN lint hits become `prose-lints.hit` + `check`; INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; the two static underscore IDs use §6's exact kebab renames; every old emission still produces one row, and INFO never entered `count_issues`, so the changes are count-neutral |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
 | `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
@@ -986,6 +1013,12 @@ be absorbed as registry population.
 
 The numeric-verification coverage row is not part of that rename: its four counts move
 unchanged into producer metrics and produce no `AuditFinding`.
+
+The two static validation-ID renames are also count-neutral. Neither old ID is named by a
+gate tier or by any of the 50 surveyed acceptance entries. Plan 2 therefore changes no
+verified suppression or exit-code behavior. It deliberately does not add aliases:
+repositories outside the surveyed corpus are handled by Plan 3's stale/ambiguous
+reporting before configuration is rewritten.
 
 **Net count effect.** Two entries are net-new count increases (`legacy_task_type`,
 `invalid_entity_aspects`), both approved above as omissions rather than a third exclusion
@@ -1330,6 +1363,9 @@ class AuditReport(TypedDict):
     `plan.correspondence-drift`, its evidence scope, the three hypothesis gate entries,
     and each `severity_for_kind` result remain exact; prose lint WARN hits and INFO
     advisories map to their distinct canonical rules with their current visibility.
+    Every emitted validation rule satisfies the frozen dotted-kebab grammar; the only
+    current static renames are the two exact §6 mappings, and the old underscore IDs are
+    absent from declarations and emissions.
 32. **Plan 2 acceptance scope matches health today** — only producer `validate` is
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
