@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 8. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 9. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -40,6 +40,14 @@
 > a mutable `HealthContext` metrics side channel was rejected because it would make the
 > producer contract implicit. This revision also corrects the §11 pseudocode to use the
 > revision-6 name `AuditFinding`.
+>
+> **Revision 9 fixes the Plan 2 / Plan 3 acceptance boundary.** Plan 2 must preserve
+> today's accepted-warning exclusion while changing the public report schema, so it
+> implements matching for the current entry shape plus the frozen pre-migration
+> acceptance key (§10). Plan 3 still owns the migration command and fingerprint-keyed
+> configuration. In the Plan 3 landing, health stops matching the old shape rather than
+> retaining two permanent readers; old entries remain readable only by the explicit
+> migration command.
 >
 > **Revision 4** closes five narrow contract issues: the acceptance key omitted matching
 > fields the matcher actually consults (§10), `evidence` had no wire schema despite
@@ -845,6 +853,24 @@ class. Two are net-neutral reclassifications (`archive_lag`, layered-claim cover
 Acceptance is re-keyed from `message_contains` prose onto fingerprints. Spec 1 ships
 `science findings migrate-acceptances`, **dry-run by default**, with `--apply`.
 
+**Implementation is deliberately split across Plans 2 and 3.** Plan 2 cannot defer every
+line of this section: the new §11 report has only `findings` and `accepted` channels, and
+moving today's accepted warnings into `findings` would silently change totals. Therefore:
+
+- **Plan 2** applies the current `entry_suppresses` semantics to the raw finding stream,
+  computes the frozen **pre-migration** acceptance key defined below, and emits matching
+  observations through §11's `accepted` channel. It does not write `science.yaml`, accept
+  the replacement entry shape, or ship `migrate-acceptances`.
+- **Plan 3** ships the dry-run/apply migration, switches health to the replacement
+  fingerprint entry shape, and removes Plan 2's pre-migration matcher from the health
+  path in that same landing. The migration command remains the sole reader of the old
+  shape because reading the input one is explicitly its job.
+
+There is no steady state with dual health matchers and no compatibility layer retained
+after migration. Before Plan 3, health accepts the current shape. After Plan 3, health
+fails loud on the current shape and instructs the operator to run the migration command;
+the command can still classify and rewrite it under the four-outcome contract below.
+
 **Correctness conditions:**
 
 - **Match against the raw, unsuppressed finding stream.** Matching against a
@@ -1088,10 +1114,11 @@ class AuditReport(TypedDict):
     is denied by the existing path gate, with no edit to `autonomy/policy.py`.
 23. **Graph isolation** — no finding triple appears in any named graph; cases are absent
     from attention candidates; ingesting cases does not stale the revision manifest.
-24. **Acceptance-key wildcards** — an entry with absent `severity` and one with a
-    non-string `severity` produce the same key and are reported as duplicates; an entry
-    with absent `message_contains` keys as a wildcard and matches; an entry whose
-    `message_contains` is present but malformed is reported `stale` and aborts.
+24. **Acceptance-key wildcards** — Plan 2 pins that an entry with absent `severity` and
+    one with non-string `severity` produce the same pre-migration key, that absent
+    `message_contains` keys as a wildcard and matches, and that malformed
+    `message_contains` does not match. Plan 3 additionally proves the equal keys are
+    reported as duplicates and the malformed entry is reported `stale` and aborts.
 25. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
     accepted warning does not suppress a later error at the same fingerprint); the
     unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
