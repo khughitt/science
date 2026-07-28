@@ -1,6 +1,6 @@
 # Finding Convergence — Design
 
-> **Status:** revision 19. **Plan 1 (the contract) is implemented**; Plan 2 (the
+> **Status:** revision 20. **Plan 1 (the contract) is implemented**; Plan 2 (the
 > atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
 > three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
@@ -168,6 +168,11 @@
 > special identity (`prose-lints.*`, correspondence evidence signature, and other
 > explicitly enumerated schemas) keep their specific keys rather than acquiring a
 > redundant generic one.
+>
+> **Revision 20 makes the pre-migration key fail on every dead text matcher.**
+> `_text_matches` rejects both a non-string/non-list `message_contains` and a list
+> containing any non-string member. The frozen key now rejects both shapes instead of
+> filtering invalid list members into a key for an entry that cannot suppress (§10).
 
 ## Motivation
 
@@ -1318,7 +1323,7 @@ identically:
 | `severity` | **Omitted when the entry's `severity` is absent *or* not a string** — `_severity_matches` returns `True` for anything non-string, so both are wildcards and behave identically. Otherwise the normalized value (`warning`→`warn`). |
 | `path` | Omitted when absent or non-string (wildcard, per `isinstance` guard); otherwise as-is. |
 | `task` | Same rule as `path`. |
-| `message_contains` | **Omitted when absent or `None`** — `_text_matches` returns `True` for `None`. When a `str`, a one-element list; when a list, the string members in **original order**. |
+| `message_contains` | **Omitted when absent or `None`** — `_text_matches` returns `True` for `None`. When a `str`, a one-element list; when a list whose every member is a string, those members in **original order**. A list containing any non-string is unrepresentable because `_text_matches` returns `False`. |
 
 Per §3, an omitted field is omitted rather than encoded as null, so wildcard and
 non-wildcard entries cannot collide.
@@ -1326,9 +1331,10 @@ non-wildcard entries cannot collide.
 **The two wildcard asymmetries are deliberate, and one of them blocks migration.**
 `_severity_matches` treats a malformed `severity` as a wildcard, so it is representable
 and migratable. `_text_matches` returns **`False`** for a `message_contains` that is
-present but neither a string nor a list of strings — such an entry matches nothing by
-construction, lands in the `stale` outcome, and aborts the migration (§10) rather than
-acquiring a sentinel representation. Fail-loud on an entry that was already dead.
+present but neither a string nor a list containing only strings — such an entry matches
+nothing by construction, lands in the `stale` outcome, and aborts the migration (§10)
+rather than acquiring a sentinel representation. Fail-loud on an entry that was already
+dead.
 
 Collapsing "absent severity" and "malformed severity" onto one key is intentional: they
 are the same acceptance, so §10's duplicate-`(finding_id, severity_scope)` rejection will
@@ -1511,9 +1517,10 @@ class AuditReport(TypedDict):
     from attention candidates; ingesting cases does not stale the revision manifest.
 24. **Acceptance-key wildcards** — Plan 2 pins that an entry with absent `severity` and
     one with non-string `severity` produce the same pre-migration key, that absent
-    `message_contains` keys as a wildcard and matches, and that malformed
-    `message_contains` does not match. Plan 3 additionally proves the equal keys are
-    reported as duplicates and the malformed entry is reported `stale` and aborts.
+    `message_contains` keys as a wildcard and matches, and that both a non-list
+    malformed value and a list containing a non-string fail key construction and do not
+    match. Plan 3 additionally proves the equal keys are reported as duplicates and
+    each malformed entry is reported `stale` and aborts.
 25. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
     accepted warning does not suppress a later error at the same fingerprint); the
     unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
