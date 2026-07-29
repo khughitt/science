@@ -668,11 +668,14 @@ Apply the inverse edit — `for kind in ()` back to `for kind in ("theme", "repo
 
 Expected: 13 passed. Confirm by inspection that the only diff versus the pre-mutation state is nil — the mutation must leave no residue.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
+
+Step 8 modified `test_checks_papers_gap_analysis.py`; stage it here. Left unstaged it would be swept up by Task 3's `git add -A science/` and land in the wrong commit.
 
 ```bash
 git add science/src/science_tool/validate/checks/papers.py \
-        science/tests/validate/test_checks_papers_background_reviews.py
+        science/tests/validate/test_checks_papers_background_reviews.py \
+        science/tests/validate/test_checks_papers_gap_analysis.py
 git commit -m "feat(validate): promote the reviews-are-not-evidence guardrail to a canonical check"
 ```
 
@@ -686,8 +689,10 @@ git commit -m "feat(validate): promote the reviews-are-not-evidence guardrail to
 - Modify: `science/src/science_tool/project_artifacts/registry.yaml`, `cli.py`
 - Modify: `science/src/science_tool/budget/registry.py`
 - Modify: `science/tests/validate/test_context.py:24-26`
+- Modify (test migration, Step 9): `science/tests/validate/test_runner.py`, `test_parity_corpus.py`, `test_parity_with_sidecar.py`, `test_legacy_precedence.py`, `test_checks_dataset_metadata.py`, `test_checks_aggregation_support.py`, `test_checks_benchmark_metadata.py`, `test_checks_dataset_capabilities.py`; `science/tests/test_registry_loader.py`, `science/tests/test_validate_sh_section_8.py`
 - Delete: `science/src/science_tool/project_artifacts/port_validate_sidecar.py`, `science/tests/test_cli_artifacts_port_validate_sidecar.py`
 - Test: `science/tests/validate/test_sidecar_retirement.py`
+- **Not** in this task: `science/tests/test_command_docs.py` — it pins documentation strings, and moves with the documentation in Task 4.
 
 **Interfaces:**
 - Consumes: `RUNTIME_SECTION`, `RuntimeEmptyQualifiers`, `FindingProducer` from `runtime.py`.
@@ -901,6 +906,22 @@ _SIDECAR_RETIREMENT_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting
 
 Remove `hook` from the `runner` import and `__all__` in `science/src/science_tool/validate/__init__.py`. Remove the `enable_python_sidecar=False,` argument from the `run(...)` call in `science/src/science_tool/graph/health_checks/validate.py`.
 
+**This changes graph-health behaviour, deliberately.** In today's `runner.py:135`, `legacy_sidecar_exists = sidecar_enabled and legacy_sidecar_path.exists()` — so the flag named for the *Python* sidecar also suppresses the *legacy* `validate.sidecar-removed` hard error. The graph health check is the only caller passing `False`, so it is currently the one surface that silently tolerates a `validate.local.sh`. Once the flag is gone, that hard error becomes unconditional and graph health reports it like every other surface.
+
+That is the correct outcome and not a scope creep: the legacy hard error is a file-existence check that executes nothing, so no control-plane concern ever justified suppressing it. Note the shape of the bug — one flag quietly gating two unrelated behaviours is exactly the coupling this task removes.
+
+Delta check: none of `~/d/health/meta`, `~/d/cancer/mechanisms/evolution`, `~/d/protein-landscape`, or in-repo `meta/` carries a `validate.local.sh`, so the observable baseline delta is zero. Confirm before relying on it:
+
+```bash
+for d in ~/d/health/meta ~/d/cancer/mechanisms/evolution ~/d/protein-landscape \
+         ~/d/science/.worktrees/sidecar-retirement/meta; do
+  printf '%s: ' "$d"
+  test -e "$d/validate.local.sh" && echo PRESENT || echo absent
+done
+```
+
+Expected: `absent` four times. A `PRESENT` means Task 6's parity run will show a new `validate.sidecar-removed` row for that project and the comparator's `NEW_PREFIXES` must be widened to admit it.
+
 - [ ] **Step 6: Delete the stale context fields**
 
 In `context.py`, delete the `papers_dir`, `provenance_dir`, and `themes_dir` declarations and their `from_project_root` assignments. Delete the matching assertions at `science/tests/validate/test_context.py:24-26`. A field whose sole consumer is a test pinning it to a wrong value is how the drift stayed invisible.
@@ -932,32 +953,57 @@ In `project_artifacts/registry.yaml`, replace the `validate.sh` artifact's `exte
 
 - [ ] **Step 9: Migrate the obsolete test surface**
 
-Nine existing test modules reference the removed API and will fail to import or fail outright. This is not optional cleanup — it is part of the change.
+Eight existing test modules reference the removed API and will fail to import or fail outright. This is not optional cleanup — it is part of the change. (`tests/test_command_docs.py` also carries stale sidecar expectations, but they are assertions *about documentation* — they are migrated in Task 4 alongside the prose they pin.)
 
 | file | what to do |
 |---|---|
 | `tests/validate/test_runner.py` | drop hook-registration and `_dispatch_hooks` tests; keep runner behaviour tests |
-| `tests/validate/test_parity_with_sidecar.py` | **delete** — it exists only to compare sidecar-on against sidecar-off |
 | `tests/validate/test_parity_corpus.py` | drop the `SCIENCE_VALIDATE_DISABLE_SIDECAR` monkeypatching; the canonical path is now the only path |
 | `tests/validate/test_legacy_precedence.py` | keep `validate.local.sh` precedence coverage; drop anything asserting Python-sidecar precedence |
 | `tests/validate/test_checks_dataset_metadata.py` | drop `enable_python_sidecar=` from its `run(...)` calls |
 | `tests/validate/test_checks_aggregation_support.py` | same |
 | `tests/validate/test_checks_benchmark_metadata.py` | same |
 | `tests/validate/test_checks_dataset_capabilities.py` | same |
-| `tests/test_command_docs.py` | drop the `SCIENCE_VALIDATE_DISABLE_SIDECAR` documentation assertion |
+| `tests/test_registry_loader.py` | migrate the packaged-registry protocol assertion — see below |
 
-Then update the managed-artifact test, which currently asserts the protocol this task replaces:
+**`tests/validate/test_parity_with_sidecar.py` is retained, not deleted.** Read it before touching it. Despite the module name, all six of its test functions cover the *retained* `validate.local.sh` behaviour — the `validate.sidecar-removed` hard error and the guarantee that the shell sidecar is never executed. None of them compare Python-sidecar-on against Python-sidecar-off. Keep the module and its name (it matches the retained rule id), and remove only what assumes the deleted environment variable:
 
-`tests/test_validate_sh_section_8.py:104-109` — `test_registry_extension_protocol_uses_python_sidecar` asserts `protocol["kind"] == "python_sidecar"`. Rename it to `test_registry_extension_protocol_is_none` and assert `protocol["kind"] == "none"`. Leave every version/hash assertion in that file untouched — Step 8 changes no bytes.
+- Delete `test_cli_validate_hard_errors_despite_ambient_disable_sidecar_env_for_parity_harness`. Its entire premise is that `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` in the ambient environment must not suppress the hard error; with the variable gone there is nothing left to assert.
+- In `_cli_validate_env()`, drop the `"SCIENCE_VALIDATE_DISABLE_SIDECAR": None` entry. Leave `SCIENCE_VALIDATE_SKIP_DOTENV`, `SCIENCE_TOOL`, and `SCIENCE_TOOL_PATH` alone — `test_cli_validate_does_not_execute_legacy_sidecar_environment_checks` still depends on them.
+
+Five test functions remain, all green.
+
+Then update the two managed-artifact tests that assert the protocol Step 8 replaces:
+
+**`tests/test_registry_loader.py:55`** — `test_packaged_validate_sh_uses_python_sidecar_extension_protocol` asserts `validate_artifacts[0].extension_protocol.kind.value == "python_sidecar"` against the packaged registry. Rename to `test_packaged_validate_sh_declares_no_extension_protocol` and assert `== "none"`. Leave `test_direct_execute_rejects_merged_sidecar_protocol` (~line 42, `match="merged_sidecar.*direct_execute"`) untouched — it builds its own inline fixture and exercises `ExtensionKind.MERGED_SIDECAR`, which remains a valid schema value.
+
+**`tests/test_validate_sh_section_8.py:104-118`** — `test_registry_extension_protocol_uses_python_sidecar` asserts far more than the kind: `protocol["sidecar_path"] == "validate_local.py"`, `"import" in protocol["contract"].lower()`, `"@hook" in protocol["contract"]`, and each of `pre_validation`, `extra_checks`, `post_validation` appearing in the contract. Changing only the kind still leaves five failing assertions against keys the `none` protocol does not carry. Replace the whole function body:
+
+```python
+def test_registry_extension_protocol_is_none() -> None:
+    data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
+    validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
+    protocol = validate["extension_protocol"]
+
+    assert protocol["kind"] == "none"
+    assert "never executes project-authored code" in protocol["rationale"]
+    assert "sidecar_path" not in protocol
+    assert "contract" not in protocol
+```
+
+Leave the rest of that module untouched. Its `version`, `current_hash`, and changelog assertions — including the `2026.05.20.1` entry naming `validate_local.py` and the `2026.05.21.1` Phase 3 entry — are historical records of what shipped when, not claims about the current protocol. Step 8 changes no bytes, so the hash and version assertions still hold.
 
 - [ ] **Step 10: Confirm nothing still references the removed API**
 
 ```bash
 ( cd ~/d/science/.worktrees/sidecar-retirement/science && \
-  rg -n 'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
+  rg -n --glob '!tests/test_command_docs.py' \
+     'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
 ```
 
 Expected: no output.
+
+`tests/test_command_docs.py` is excluded deliberately. Its `SCIENCE_VALIDATE_DISABLE_SIDECAR` occurrences are assertions that the string appears in `docs/conventions/validate.md`, which this task does not edit — so the module is still green here and goes red only when Task 4 rewrites that document. Drop the `--glob` exclusion from this command once Task 4 lands and re-run it as part of Task 4 Step 6.
 
 - [ ] **Step 11: Run the affected tests**
 
@@ -967,18 +1013,20 @@ Expected: no output.
     tests/validate/test_runner.py \
     tests/validate/test_context.py \
     tests/validate/test_parity_corpus.py \
+    tests/validate/test_parity_with_sidecar.py \
     tests/validate/test_legacy_precedence.py \
     tests/validate/test_checks_dataset_metadata.py \
     tests/validate/test_checks_aggregation_support.py \
     tests/validate/test_checks_benchmark_metadata.py \
     tests/validate/test_checks_dataset_capabilities.py \
-    tests/test_command_docs.py \
     tests/test_validate_sh_section_8.py \
+    tests/test_registry_loader.py \
     tests/test_budget_regression.py \
-    tests/test_registry_schema.py -v )
+    tests/test_registry_schema.py \
+    tests/test_command_docs.py -v )
 ```
 
-Expected: all pass, including `test_run_has_no_sidecar_parameter`.
+Expected: all pass, including `test_run_has_no_sidecar_parameter` and the five retained tests in `test_parity_with_sidecar.py`. `test_command_docs.py` is run here as a *guard* — it must still be green, because Task 3 touches no documentation. If it fails, this task has edited docs it should not have.
 
 - [ ] **Step 12: Lint, typecheck, commit**
 
@@ -995,22 +1043,66 @@ Note the subshell: `git add -A science/` must run from the repo root, not from i
 ### Task 4: Documentation and regenerated mirrors
 
 **Files:**
-- Modify: `docs/conventions/validate.md`, `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`, `docs/migration/managed-artifacts-template.md`
+- Modify: `README.md`, `docs/conventions/validate.md`, `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`, `docs/migration/managed-artifacts-template.md`
+- Modify: `science/tests/test_command_docs.py`
 - Regenerate: `skills/generated/…`
+
+`test_command_docs.py` migrates here, not in Task 3. Its sidecar assertions are pins on documentation prose; they go red the moment this task edits that prose, and they stay green through Task 3. Updating the prose and its pin in one commit is what keeps both tasks independently green.
 
 - [ ] **Step 1: Update `docs/conventions/validate.md`**
 
 Remove the Python-sidecar discovery contract and the `SCIENCE_VALIDATE_DISABLE_SIDECAR` row from the environment-variable table. State that `science validate` never executes project code, and that a `validate_local.py` present in a project produces a `validate.python-sidecar-removed` error.
 
-- [ ] **Step 2: Retarget the porting guide**
+Keep documenting `validate.sh` as the managed shim that delegates to `science validate` — that is unchanged and still pinned by `test_command_docs.py`.
+
+- [ ] **Step 2: Update the root `README.md`**
+
+`README.md:78` currently reads:
+
+> Validation also supports Python sidecar hooks for project-specific checks.
+
+Replace it with a statement that `science validate` runs only toolkit-defined checks and never executes project-authored code.
+
+- [ ] **Step 3: Retarget the porting guide**
 
 Rewrite `docs/migration/2026-05-19-validate-local-sh-porting-guide.md` from "port your shell sidecar to Python" to "sidecars are retired." It must answer: where a reusable policy check goes (a toolkit check — open a design conversation), and where a genuinely project-specific check goes (a project-owned command the project runs itself, with nothing enforcing it).
 
-- [ ] **Step 3: Fix `docs/migration/managed-artifacts-template.md`**
+- [ ] **Step 4: Fix `docs/migration/managed-artifacts-template.md`**
 
 Not historical, and still instructs projects to migrate logic *into* a sidecar (~line 157) and references `validate.local.sh` (~line 262). Leaving it is an active instruction to recreate what this work removes.
 
-- [ ] **Step 4: Regenerate committed mirrors**
+- [ ] **Step 5: Migrate `science/tests/test_command_docs.py`**
+
+`test_validate_cli_reference_documents_shim_contract` (~line 1001) pins four now-stale expectations. Read the whole function before editing — several neighbouring strings in `expected_reference_strings` cover the synopsis, flags, exit codes, severity model, and JSON schema, and all of those stay.
+
+Remove from `expected_reference_strings`:
+
+```python
+        "SCIENCE_VALIDATE_DISABLE_SIDECAR=1",
+        "For `science validate`, disables both Python sidecar discovery and deprecated legacy `validate.local.sh` discovery.",
+        "`validate_local.py` is imported by default when it exists in the project root.",
+        "Because `validate.sh` delegates to `science validate`, this environment variable affects validation reached through the shim as well.",
+```
+
+Keep `"## Environment Variables"`, `"NO_COLOR"`, `"## Discovery"`, and the `validate.sh`-is-the-shim line — those sections survive, only their sidecar rows go.
+
+Then replace the two README assertions (~lines 1038-1039):
+
+```python
+    assert "Python sidecar hooks" in readme
+    assert "experimental Python sidecars" not in readme
+```
+
+with a positive pin on the Step 2 replacement text plus a negative guard, e.g.:
+
+```python
+    assert "never executes project-authored code" in readme
+    assert "sidecar" not in readme.lower()
+```
+
+Whatever wording Step 2 lands on, the assertion must quote it exactly.
+
+- [ ] **Step 6: Regenerate committed mirrors**
 
 Never hand-edit files under `skills/generated/`.
 
@@ -1021,20 +1113,49 @@ git -C ~/d/science/.worktrees/sidecar-retirement diff --stat skills/generated/
 
 The command is `science agents generate` — `science skills` has only `coverage`, `curate`, `lint`, and `sources`, none of which regenerate the mirror.
 
-- [ ] **Step 5: Confirm no stale instructions remain**
+- [ ] **Step 7: Confirm no stale instructions remain**
 
 ```bash
 cd ~/d/science/.worktrees/sidecar-retirement
-rg -n --glob '!docs/plans/**' --glob '!**/historical/**' \
-   'validate_local|SCIENCE_VALIDATE_DISABLE_SIDECAR|@hook' docs/ templates/ skills/
+rg -n --glob '!docs/plans/**' --glob '!**/historical/**' --glob '!docs/audits/**' \
+   'validate_local|SCIENCE_VALIDATE_DISABLE_SIDECAR|@hook|[Pp]ython sidecar' \
+   README.md docs/ templates/ skills/
 ```
+
+`README.md` is scanned explicitly — it is not under `docs/` and was the source of the sidecar claim fixed in Step 2.
+
+Three exclusions, each for a different reason:
+- `docs/plans/**` — design and implementation records, including this plan. They describe the change; they do not instruct.
+- `**/historical/**` — e.g. `docs/plans/historical/2026-05-29-external-datapackage-resources-implementation.md`, a completed plan preserved as-is.
+- `docs/audits/**` — audit records (`plans-cleanup/reviews.jsonl`, `project-plans-cleanup/meta/*.md` and its `reviews.jsonl`). These are dated observations of what the tree contained at audit time. Rewriting them would falsify the record. They are history, not instruction; do not edit them.
 
 Expected: only retirement-context mentions in the porting guide. No instruction to create a sidecar.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Re-run the Task 3 API scan without its exclusion**
+
+Task 3 Step 10 had to exempt `tests/test_command_docs.py`. Step 5 removed the reason for that exemption, so the scan must now come back clean unqualified:
 
 ```bash
-git add docs/ skills/
+( cd ~/d/science/.worktrees/sidecar-retirement/science && \
+  rg -n 'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
+```
+
+Expected: no output.
+
+- [ ] **Step 9: Run the documentation tests**
+
+```bash
+( cd ~/d/science/.worktrees/sidecar-retirement/science && \
+  uv run --frozen pytest tests/test_command_docs.py -v )
+```
+
+Expected: all pass. This is the step where the Step 1/2/5 edits are proved consistent with each other — the assertions quote the prose, so a mismatch here means the prose and the pin disagree.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement
+git add README.md docs/ skills/ science/tests/test_command_docs.py
 git commit -m "docs(validate): retarget sidecar documentation to retirement"
 ```
 
@@ -1210,9 +1331,13 @@ def rows(p: Path):
     return json.loads(p.read_text())["results"]
 
 def ident(rs):
-    # Compare COMPLETE result dicts. Reducing to (rule, path, message) would mask
-    # changes to severity, line, task, qualifiers, and duplicate structure —
-    # exactly the fields the frozen finding contract makes load-bearing.
+    # Compare COMPLETE public result dicts. `_legacy_result_projection` in
+    # validate/cli.py emits exactly six keys — severity, path, line, message,
+    # rule, task — so this detects severity, line, task, message, and duplicate
+    # changes. It does NOT see qualifiers beyond `task`, nor evidence beyond the
+    # first LocationEvidence line; those are not projected into public JSON.
+    # Qualifier-level parity for the two new rules is covered by their unit
+    # tests in Tasks 2 and 3, not here.
     return sorted(
         json.dumps(r, sort_keys=True)
         for r in rs
