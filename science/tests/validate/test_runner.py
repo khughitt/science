@@ -12,7 +12,6 @@ from science_tool.instruments import InstrumentResult
 from science_tool.validate.checks import CANONICAL_CHECKS
 from science_tool.validate.checks.accepted_validation import RULE_INVALID_ENTRY
 from science_tool.validate.checks.manifest import RULES as MANIFEST_RULES
-from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Result, Severity
 from science_tool.validate.runner import run
 
@@ -95,7 +94,6 @@ def test_runner_returns_only_audit_findings_and_validated_results(
         _project(tmp_path),
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     assert result.registry.producers_by_id
     assert result.producer_results
@@ -110,7 +108,6 @@ def test_runner_keeps_numeric_coverage_in_metrics(tmp_path: Path) -> None:
         _project(tmp_path),
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     metrics = result.producer_results["validate.prose-lints"].metrics
     assert metrics.model_dump(mode="json") == {
@@ -140,7 +137,6 @@ def test_runner_exception_uses_declared_runtime_rule(
         _project(tmp_path),
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     crashes = [item for item in result.results if item.rule_id == "validate.check-error"]
     assert len(crashes) == 1
@@ -167,7 +163,6 @@ def test_runner_fails_early_on_wrong_observation_shape(
             _project(tmp_path),
             strict=False,
             verbose=False,
-            enable_python_sidecar=False,
         )
 
 
@@ -196,7 +191,6 @@ def test_runner_fails_early_on_duplicate_finding_identity(
             _project(tmp_path),
             strict=False,
             verbose=False,
-            enable_python_sidecar=False,
         )
 
 
@@ -296,7 +290,6 @@ def test_execute_validation_projects_one_fixed_run_result_without_a_second_strea
         _project(tmp_path),
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     monkeypatch.setattr(validate_runner, "run", lambda *_args, **_kwargs: expected)
 
@@ -308,42 +301,36 @@ def test_execute_validation_projects_one_fixed_run_result_without_a_second_strea
     ]
 
 
+def test_graph_health_reports_the_legacy_sidecar(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    (project / "validate.local.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    execution = validate_health.execute_validation(project)
+
+    rows = [
+        finding
+        for finding in execution.producer_result.instrument.rows
+        if finding.rule_id == "validate.sidecar-removed"
+    ]
+    assert len(rows) == 1
+    assert rows[0].severity == "error"
+
+
+def test_graph_health_is_clean_without_a_legacy_sidecar(tmp_path: Path) -> None:
+    execution = validate_health.execute_validation(_project(tmp_path))
+
+    assert not [
+        finding
+        for finding in execution.producer_result.instrument.rows
+        if finding.rule_id == "validate.sidecar-removed"
+    ]
+
+
 def test_runner_uses_global_project_registry(tmp_path: Path) -> None:
     result = run(
         _project(tmp_path),
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     expected = build_project_registry(tmp_path)
     assert result.registry.rules_by_id == expected.rules_by_id
-
-
-def test_sidecar_hook_rejects_nonpolicy_info_findings(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import science_tool.validate.runner as runner
-
-    result = Result(
-        severity=Severity.INFO,
-        path=None,
-        line=None,
-        message="ordinary progress",
-        rule=MANIFEST_RULES["manifest.check"],
-        task=None,
-        qualifiers={"key": ["progress"]},
-    )
-    monkeypatch.setitem(
-        runner._HOOKS,
-        "pre_validation",
-        [lambda _ctx: (result,)],
-    )
-    ctx = ValidateContext.from_project_root(
-        _project(tmp_path),
-        strict=False,
-        verbose=False,
-    )
-
-    with pytest.raises(TypeError, match="informational observations must use"):
-        runner._dispatch_hooks("pre_validation", ctx)

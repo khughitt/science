@@ -28,9 +28,6 @@ class ValidateContext:
     project_root: Path
     doc_dir: Path
     specs_dir: Path
-    papers_dir: Path
-    provenance_dir: Path | None
-    themes_dir: Path | None
     manifest: dict[str, Any]
     strict: bool
     verbose: bool
@@ -67,9 +64,6 @@ class ValidateContext:
             project_root=root,
             doc_dir=doc_dir,
             specs_dir=paths.specs_dir,
-            papers_dir=doc_dir / "papers",
-            provenance_dir=doc_dir / "provenance",
-            themes_dir=doc_dir / "themes",
             manifest=manifest_data,
             strict=strict,
             verbose=verbose,

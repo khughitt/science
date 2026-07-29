@@ -3,7 +3,7 @@ from __future__ import annotations
 from science_tool.validate.checks import Check
 from science_tool.validate.context import ValidateContext, ValidateContextError
 from science_tool.validate.result import Result, Severity
-from science_tool.validate.runner import RunResult, hook, run
+from science_tool.validate.runner import RunResult, run
 
 __all__ = [
     "Check",
@@ -12,6 +12,5 @@ __all__ = [
     "Severity",
     "ValidateContext",
     "ValidateContextError",
-    "hook",
     "run",
 ]

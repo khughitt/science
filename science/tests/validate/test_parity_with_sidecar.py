@@ -238,24 +238,6 @@ def test_cli_validate_does_not_execute_legacy_sidecar_environment_checks(
     assert "tool path leaked into sidecar" not in messages
 
 
-def test_cli_validate_hard_errors_despite_ambient_disable_sidecar_env_for_parity_harness(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project = _synthetic_project(tmp_path / "sources", severity="warn")
-    monkeypatch.setenv("SCIENCE_VALIDATE_DISABLE_SIDECAR", "1")
-
-    payload = _run_cli_validate(project)
-
-    assert _phase3_legacy_removed_items(payload) == [("error", None, None, _REMOVED_MESSAGE)]
-    assert (
-        "warn",
-        None,
-        None,
-        "synthetic warn from validate.local.sh",
-    ) not in _extract_cli_diagnostic_items(payload, project)
-
-
 def test_legacy_removed_filter_uses_raw_cli_rule_not_message(tmp_path: Path) -> None:
     message = _REMOVED_MESSAGE
     payload = {
@@ -298,7 +280,6 @@ def _run_cli_validate(project_root: Path) -> dict[str, Any]:
 def _cli_validate_env() -> dict[str, str | None]:
     return {
         "PATH": os.pathsep.join(["/bin", "/usr/sbin", "/sbin"]),
-        "SCIENCE_VALIDATE_DISABLE_SIDECAR": None,
         "SCIENCE_VALIDATE_SKIP_DOTENV": "1",
         "SCIENCE_TOOL": None,
         "SCIENCE_TOOL_PATH": None,
