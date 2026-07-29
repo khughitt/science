@@ -11,6 +11,7 @@ from science_tool.validate.checks.papers import (
     RULE_EVIDENCE_TIER,
     RULE_SOURCE_TYPING,
     _background_review_observations,
+    check_papers,
 )
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.observations import ValidationNotice
@@ -192,6 +193,6 @@ def test_check_is_not_gated_on_include_all(project: Path) -> None:
     ctx = ValidateContext.from_project_root(
         project, strict=False, verbose=False, include_all_checks=False
     )
-    issues = [o for o in _background_review_observations(ctx) if isinstance(o, Result)]
+    issues = [o for o in check_papers(ctx) if isinstance(o, Result)]
 
-    assert len(issues) == 1
+    assert [issue.rule for issue in issues] == [RULE_EVIDENCE_REF]
