@@ -287,6 +287,53 @@ change is kind-agnostic: it alters the load path for `hypothesis` and `concept`
 too, and belongs in its own branch with its own certification, not inside one
 kind's slice.
 
+## Step 6 — Derived-Behaviour Diff
+
+**Intended-change allowlist: empty.** Closure is an admission gate; it is not
+supposed to move a single derived output. Anything that moved would block the
+slice.
+
+Measured by making the real arming edit in the worktree, running the four
+loadable method-carrying projects, reverting, and comparing — not by
+monkeypatching. Six modules bind `PROJECT_MIXIN_NAMES` by value at import, so a
+patched simulation can certify nothing while looking green.
+
+| project | graph.trig | composite.trig | validate findings |
+|---|---|---|---|
+| mm30 | identical (20,220,294 B) | identical (22,657,244 B) | 0e/60w → 0e/60w, +0 −0 |
+| protein-landscape | identical (1,672,234 B) | n/a | pre-existing crash, both runs |
+| seq-feats | identical (962,473 B) | n/a | 383e/557w → 383e/557w, +0 −0 |
+| cbioportal | identical (2,321,140 B) | identical (4,695,787 B) | 21e/100w → 21e/100w, +0 −0 |
+
+Findings were compared **one by one** on
+`(severity, rule, path, line, message)`, never by summary count: a substitution
+that preserved the totals would read as "no change".
+
+### The control that makes the table mean something
+
+A byte-identical graph is exactly what a slice that armed *nothing* would also
+produce. So the arming was tested directly, in both directions, with one record
+carrying an undeclared `shadow_key` dropped into seq-feats:
+
+- **armed** → `entities/methods/_zz-arming-control.md: method frontmatter does
+  not satisfy its schema … 'shadow_key' was unexpected`, build refused;
+- **unarmed** (same file, arming stashed) → build succeeds and materializes.
+
+The corpus is therefore clean *and* the check is live. Without the second half,
+the first is unfalsifiable.
+
+### Pre-existing conditions, all reproduced identically before and after
+
+- **cbioportal cannot build**: `tasks/active.md predates the storage split`. The
+  same blocker `~/d/health/processes/post-acute-infection` carries, so **two** of
+  the five method-carrying projects are graph-blocked for a reason unrelated to
+  this slice. Their 8 methods are certified at the schema boundary only.
+- **protein-landscape's `science validate` crashes** in that project's own
+  `validate_local.py:66`, which constructs `Result(...)` without the required
+  `qualifiers` argument — a project-side hook that has fallen behind the toolkit
+  signature. Its graph diff is clean, which is the substantive evidence for that
+  project; its finding-level diff could not be taken.
+
 ## What This Slice Does Not Close
 
 - `hypothesis`'s realignment to the `promoted_from` ownership ruling. Its mixin
