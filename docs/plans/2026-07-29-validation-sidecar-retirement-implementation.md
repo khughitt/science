@@ -36,9 +36,8 @@ Both must hold before Task 1. Neither is optional.
 - [ ] **P2: This branch is rebased onto post–Plan 3 `main`.**
 
 ```bash
-cd ~/d/science/.worktrees/sidecar-retirement
-git fetch origin && git rebase origin/main
-cd science && uv run --frozen pytest tests/validate -q
+git -C ~/d/science/.worktrees/sidecar-retirement fetch origin && git -C ~/d/science/.worktrees/sidecar-retirement rebase origin/main
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest tests/validate -q )
 ```
 
 Expected: rebase clean, validate tests green.
@@ -81,12 +80,16 @@ Design §5.1: the four projects sit in three different states, and their install
 
 - [ ] **Step 1: Build the pinned baseline environment**
 
+`uv venv` creates **no `bin/pip`** — install through `uv pip install --python`.
+
 ```bash
+set -e
 mkdir -p ~/scratch/sidecar-baselines
-cd ~/d/science && git rev-parse origin/main > ~/scratch/sidecar-baselines/BASELINE_SHA
+git -C ~/d/science rev-parse origin/main > ~/scratch/sidecar-baselines/BASELINE_SHA
 uv venv ~/scratch/sidecar-baselines/venv
-~/scratch/sidecar-baselines/venv/bin/pip install \
+uv pip install --python ~/scratch/sidecar-baselines/venv/bin/python \
   "science @ git+https://github.com/khughitt/science.git@$(cat ~/scratch/sidecar-baselines/BASELINE_SHA)#subdirectory=science"
+test -x ~/scratch/sidecar-baselines/venv/bin/science || { echo "FAIL: science not installed"; exit 1; }
 ```
 
 - [ ] **Step 2: Record the pre-existing crashes**
@@ -107,9 +110,11 @@ Expected: all four end with `TypeError: Result.__init__() missing 1 required pos
 This is the one baseline in which a sidecar actually executes, and it is informational — not the parity target.
 
 ```bash
-cd ~/d/health/meta
-.venv/bin/science validate --format json > ~/scratch/sidecar-baselines/health-meta-own-rev.json
-test $? -eq 0 || { echo "FAIL: expected exit 0"; exit 1; }
+( cd ~/d/health/meta && .venv/bin/science validate --all --strict --format json \
+    --output ~/scratch/sidecar-baselines/health-meta-own-rev.json )
+status=$?
+test "$status" -le 1 || { echo "FAIL: validator crashed, exit $status"; exit 1; }
+test -s ~/scratch/sidecar-baselines/health-meta-own-rev.json || { echo "FAIL: empty"; exit 1; }
 ```
 
 Expected: exit 0, `summary.warnings == 153`, `summary.infos == 0`, and **zero** guardrail rows — `doc/papers/` holds only an `archive/` subdirectory.
@@ -118,24 +123,29 @@ Expected: exit 0, `summary.warnings == 153`, `summary.infos == 0`, and **zero** 
 
 The sidecar-disabling env var still exists at this point. This is the last moment it can be used.
 
+Use `--output`, not stdout JSON. Normal JSON output is **budget-capped** — health/meta's baseline showed 40 rows rendered and 113 omitted — so a stdout capture cannot support finding-by-finding parity. `--output PATH` writes "the complete, unbudgeted validation report."
+
+Names are explicit: `~/d/science/meta` and `~/d/health/meta` both basename to `meta`.
+
 ```bash
 BIN=~/scratch/sidecar-baselines/venv/bin/science
-set -e
-for p in ~/d/cancer/mechanisms/evolution ~/d/protein-landscape ~/d/science/meta ~/d/health/meta; do
-  name=$(basename "$p")
-  ( cd "$p" && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$BIN" validate --all --strict --format json ) \
-    > ~/scratch/sidecar-baselines/"$name"-canonical.json
-  echo "$name captured"
+OUT=~/scratch/sidecar-baselines
+declare -A ROOTS=(
+  [evolution]=~/d/cancer/mechanisms/evolution
+  [protein-landscape]=~/d/protein-landscape
+  [science-meta]=~/d/science/meta
+  [health-meta]=~/d/health/meta
+)
+for name in "${!ROOTS[@]}"; do
+  ( cd "${ROOTS[$name]}" && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$BIN" validate \
+      --all --strict --format json --output "$OUT/$name-canonical.json" )
+  status=$?
+  # Canonical baselines carry pre-existing findings; 0 and 1 are both acceptable
+  # here, but a crash (2+) is not.
+  if [ "$status" -gt 1 ]; then echo "FAIL $name: validator exited $status"; exit 1; fi
+  test -s "$OUT/$name-canonical.json" || { echo "FAIL $name: empty report"; exit 1; }
+  echo "$name captured (exit $status)"
 done
-```
-
-`~/d/science/meta` and `~/d/health/meta` both basename to `meta` — capture them to distinct names:
-
-```bash
-mv ~/scratch/sidecar-baselines/meta-canonical.json ~/scratch/sidecar-baselines/health-meta-canonical.json
-BIN=~/scratch/sidecar-baselines/venv/bin/science
-( cd ~/d/science/meta && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$BIN" validate --all --strict --format json ) \
-  > ~/scratch/sidecar-baselines/science-meta-canonical.json
 ```
 
 - [ ] **Step 5: Verify all five files parse, and fail loudly if any is missing**
@@ -359,7 +369,7 @@ def test_provenance_for_active_paper_is_silent(project: Path) -> None:
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v )
 ```
 
 Expected: FAIL — `ImportError: cannot import name 'RULE_EVIDENCE_REF'`.
@@ -572,7 +582,7 @@ Annotate every generator `Iterator[CheckObservation]`, never `Iterator[object]` 
 - [ ] **Step 6: Run the tests**
 
 ```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v )
 ```
 
 Expected: 11 passed.
@@ -604,44 +614,59 @@ def test_check_is_not_gated_on_include_all(project: Path) -> None:
     assert len(issues) == 1
 ```
 
-- [ ] **Step 8: Run, lint, typecheck**
+- [ ] **Step 8: Update the existing `check_papers` consumer test**
+
+`tests/validate/test_checks_papers_gap_analysis.py:64` does `results = list(check_papers(_ctx(tmp_path)))` and asserts on that list. Step 5 makes `check_papers` yield an additional notice, so that assertion changes. Update it to filter to the observation it actually cares about rather than pinning the total count.
+
+- [ ] **Step 9: Run, lint, typecheck**
 
 ```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
-cd science && uv run ruff check && uv run pyright
+( cd ~/d/science/.worktrees/sidecar-retirement/science && \
+  uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py \
+                         tests/validate/test_checks_papers_gap_analysis.py \
+                         tests/validate/test_checks_papers_datasets.py -v && \
+  uv run ruff check && uv run pyright )
 ```
 
-Expected: 13 passed; ruff and pyright clean. If `test_check_runs_in_every_profile` fails, `check_papers` or the `papers` section has been added to `_COMMIT_EXCLUDED_SECTIONS` / `_COMMIT_EXCLUDED_FUNCTIONS` in `runner.py` — remove it.
+Expected: 13 new tests pass, the two existing papers modules stay green, ruff and pyright clean. If `test_check_runs_in_every_profile` fails, `check_papers` or the `papers` section has been added to `_COMMIT_EXCLUDED_SECTIONS` / `_COMMIT_EXCLUDED_FUNCTIONS` in `runner.py` — remove it.
 
-- [ ] **Step 9: Prove the check can fail — mutate, confirm red, restore**
+- [ ] **Step 10: Prove the check can fail — mutate via the patch tool**
 
 §5.2 says the live corpus is compliant, so these fixtures are the only falsification available. Verify they are load-bearing.
 
-```bash
-cd science
-cp src/science_tool/validate/checks/papers.py /tmp/papers.py.bak
-python3 - <<'PY'
-from pathlib import Path
-p = Path("src/science_tool/validate/checks/papers.py")
-p.write_text(p.read_text().replace(
-    'for kind in ("theme", "report", "hypothesis")',
-    'for kind in ()',
-))
-PY
-uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q
+Use the editing tool (`apply_patch` / `Edit`) for both the mutation and the revert — never `cp`/`sed`/`python -c` rewriting of a tracked file. In `papers.py`, change:
+
+```python
+        for kind in ("theme", "report", "hypothesis")
 ```
 
-Expected: **FAILURES** in `test_background_paper_in_evidence_refs_warns`, `test_unindented_list_items_are_parsed`, `test_hyphenated_and_dotted_paper_ids`, `test_duplicate_citation_dedupes_file_wide`, `test_check_is_not_gated_on_include_all`. If any of those still pass, the fixture is not exercising the citation-root walk.
+to:
 
-- [ ] **Step 10: Restore and confirm green**
-
-```bash
-cd science && cp /tmp/papers.py.bak src/science_tool/validate/checks/papers.py && rm /tmp/papers.py.bak
-uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q
-git diff --quiet src/science_tool/validate/checks/papers.py || echo "RESTORE FAILED"
+```python
+        for kind in ()
 ```
 
-Expected: 13 passed; no `RESTORE FAILED`.
+Then run:
+
+```bash
+( cd ~/d/science/.worktrees/sidecar-retirement/science && \
+  uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q )
+```
+
+Expected: **FAILURES** in `test_background_paper_in_evidence_refs_warns`, `test_unindented_list_items_are_parsed`, `test_hyphenated_and_dotted_paper_ids`, `test_duplicate_citation_dedupes_file_wide`, `test_check_is_not_gated_on_include_all`. If any still passes, that fixture is not exercising the citation-root walk.
+
+- [ ] **Step 11: Revert via the patch tool and confirm green**
+
+Apply the inverse edit — `for kind in ()` back to `for kind in ("theme", "report", "hypothesis")` — then:
+
+```bash
+( cd ~/d/science/.worktrees/sidecar-retirement && \
+  git diff --quiet science/src/science_tool/validate/checks/papers.py \
+    && echo "REVERT MATCHES HEAD (expected only if already committed)" ; \
+  cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q )
+```
+
+Expected: 13 passed. Confirm by inspection that the only diff versus the pre-mutation state is nil — the mutation must leave no residue.
 
 - [ ] **Step 11: Commit**
 
@@ -750,12 +775,38 @@ def test_hook_api_is_gone() -> None:
 
 def test_run_has_no_sidecar_parameter() -> None:
     assert "enable_python_sidecar" not in inspect.signature(run).parameters
+
+
+def test_cli_emits_valid_json_with_one_retirement_rule(tmp_path: Path) -> None:
+    """Design §5.3.1 is about CLI JSON, not run() — the crash was a CLI traceback."""
+    import json
+
+    from click.testing import CliRunner
+
+    from science_tool.validate.cli import validate_cmd
+
+    root = _project(tmp_path)
+    (root / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
+    report = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        validate_cmd,
+        ["--project-root", str(root), "--format", "json", "--output", str(report)],
+    )
+
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "Traceback" not in result.output
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    rules = [r.get("rule") for r in payload["results"]]
+    assert rules.count(RULE_PYTHON_SIDECAR_REMOVED.id) == 1
 ```
+
+`--output` writes the complete, unbudgeted report; plain stdout JSON is budget-capped and would make the count unreliable.
 
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cd science && uv run --frozen pytest tests/validate/test_sidecar_retirement.py -v
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest tests/validate/test_sidecar_retirement.py -v )
 ```
 
 Expected: FAIL — `ImportError: cannot import name 'RULE_PYTHON_SIDECAR_REMOVED'`.
@@ -879,26 +930,65 @@ In `project_artifacts/registry.yaml`, replace the `validate.sh` artifact's `exte
 
 **Do not touch `version`, `current_hash`, `previous_hashes`, or `migrations`.** The `validate.sh` body does not change, so `current_hash` is unchanged, and the registry's `_no_duplicate_hash` validator rejects a `current_hash` that also appears in `previous_hashes`. The registry versions artifact *bytes* and has no vocabulary for a metadata-only revision; introducing one is out of scope.
 
-- [ ] **Step 9: Run the affected tests**
+- [ ] **Step 9: Migrate the obsolete test surface**
+
+Nine existing test modules reference the removed API and will fail to import or fail outright. This is not optional cleanup — it is part of the change.
+
+| file | what to do |
+|---|---|
+| `tests/validate/test_runner.py` | drop hook-registration and `_dispatch_hooks` tests; keep runner behaviour tests |
+| `tests/validate/test_parity_with_sidecar.py` | **delete** — it exists only to compare sidecar-on against sidecar-off |
+| `tests/validate/test_parity_corpus.py` | drop the `SCIENCE_VALIDATE_DISABLE_SIDECAR` monkeypatching; the canonical path is now the only path |
+| `tests/validate/test_legacy_precedence.py` | keep `validate.local.sh` precedence coverage; drop anything asserting Python-sidecar precedence |
+| `tests/validate/test_checks_dataset_metadata.py` | drop `enable_python_sidecar=` from its `run(...)` calls |
+| `tests/validate/test_checks_aggregation_support.py` | same |
+| `tests/validate/test_checks_benchmark_metadata.py` | same |
+| `tests/validate/test_checks_dataset_capabilities.py` | same |
+| `tests/test_command_docs.py` | drop the `SCIENCE_VALIDATE_DISABLE_SIDECAR` documentation assertion |
+
+Then update the managed-artifact test, which currently asserts the protocol this task replaces:
+
+`tests/test_validate_sh_section_8.py:104-109` — `test_registry_extension_protocol_uses_python_sidecar` asserts `protocol["kind"] == "python_sidecar"`. Rename it to `test_registry_extension_protocol_is_none` and assert `protocol["kind"] == "none"`. Leave every version/hash assertion in that file untouched — Step 8 changes no bytes.
+
+- [ ] **Step 10: Confirm nothing still references the removed API**
 
 ```bash
-cd science && uv run --frozen pytest \
-  tests/validate/test_sidecar_retirement.py \
-  tests/validate/test_context.py \
-  tests/test_validate_sh_section_8.py \
-  tests/test_budget_regression.py \
-  tests/test_registry_schema.py -v
+( cd ~/d/science/.worktrees/sidecar-retirement/science && \
+  rg -n 'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
+```
+
+Expected: no output.
+
+- [ ] **Step 11: Run the affected tests**
+
+```bash
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest \
+    tests/validate/test_sidecar_retirement.py \
+    tests/validate/test_runner.py \
+    tests/validate/test_context.py \
+    tests/validate/test_parity_corpus.py \
+    tests/validate/test_legacy_precedence.py \
+    tests/validate/test_checks_dataset_metadata.py \
+    tests/validate/test_checks_aggregation_support.py \
+    tests/validate/test_checks_benchmark_metadata.py \
+    tests/validate/test_checks_dataset_capabilities.py \
+    tests/test_command_docs.py \
+    tests/test_validate_sh_section_8.py \
+    tests/test_budget_regression.py \
+    tests/test_registry_schema.py -v )
 ```
 
 Expected: all pass, including `test_run_has_no_sidecar_parameter`.
 
-- [ ] **Step 10: Lint, typecheck, commit**
+- [ ] **Step 12: Lint, typecheck, commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
-git add -A science/
-git commit -m "feat(validate)!: retire the project Python validation sidecar"
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run ruff check && uv run pyright )
+cd ~/d/science/.worktrees/sidecar-retirement && git add -A science/ && \
+  git commit -m "feat(validate)!: retire the project Python validation sidecar"
 ```
+
+Note the subshell: `git add -A science/` must run from the repo root, not from inside `science/`.
 
 ---
 
@@ -925,8 +1015,8 @@ Not historical, and still instructs projects to migrate logic *into* a sidecar (
 Never hand-edit files under `skills/generated/`.
 
 ```bash
-cd science && uv run --frozen science agents generate
-git diff --stat ../skills/generated/
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen science agents generate )
+git -C ~/d/science/.worktrees/sidecar-retirement diff --stat skills/generated/
 ```
 
 The command is `science agents generate` — `science skills` has only `coverage`, `curate`, `lint`, and `sources`, none of which regenerate the mirror.
@@ -989,11 +1079,12 @@ It is no longer part of `science validate`; nothing enforces that it runs.
 The directory argument is required — `__main__.main` returns 2 on `len(argv) != 2`.
 
 ```bash
-cd ~/d/science/.worktrees/sidecar-retirement/meta && uv run python -m t034_validator evidence/
-echo "exit=$?"
+( cd ~/d/science/.worktrees/sidecar-retirement/meta && uv run python -m t034_validator evidence/ )
+status=$?
+test "$status" -eq 0 || { echo "FAIL: t034 exited $status"; exit 1; }
 ```
 
-Expected: a `t034: N payload(s), 0 error(s), 0 load error(s)` summary and `exit=0`.
+Expected: a `t034: N payload(s), 0 error(s), 0 load error(s)` summary and no `FAIL` line.
 
 - [ ] **Step 4: Verify meta validates cleanly**
 
@@ -1001,7 +1092,7 @@ Expected: a `t034: N payload(s), 0 error(s), 0 load error(s)` summary and `exit=
 cd ~/d/science/.worktrees/sidecar-retirement/meta
 uv run --frozen science validate --all --strict --format json > /tmp/meta-after.json
 status=$?
-echo "validator exit=$status"
+test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
 python3 - <<'PY'
 import json
 d = json.load(open("/tmp/meta-after.json"))
@@ -1013,7 +1104,7 @@ print("OK")
 PY
 ```
 
-Expected: `validator exit=0`, `OK`. Capture the status immediately — never `| head` before reading `$?`, which reports the pipe's last command.
+Expected: no `FAIL` line and `OK`. Capture the status immediately — never `| head` before reading `$?`, which reports the pipe's last command, so a failing validator would read as success.
 
 - [ ] **Step 5: Commit**
 
@@ -1032,7 +1123,7 @@ git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly
 - [ ] **Step 1: Full toolkit suite**
 
 ```bash
-cd science && uv run --frozen pytest
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest )
 ```
 
 Run with a 600000 ms tool timeout. Expected: all pass.
@@ -1040,32 +1131,66 @@ Run with a 600000 ms tool timeout. Expected: all pass.
 - [ ] **Step 2: Model suite and opt-in markers**
 
 ```bash
-cd science/model && uv run --frozen pytest
-cd science && uv run --frozen pytest -m snapshot
-cd science && uv run --frozen pytest -m real_projects
+( cd ~/d/science/.worktrees/sidecar-retirement/science/model && uv run --frozen pytest )
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest -m snapshot )
+( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest -m real_projects )
 ```
 
 - [ ] **Step 3: Build the after-toolkit environment and capture after-states**
 
 Task 1 never produced these; they must be created here.
 
+**No `set -e` here.** The three unmigrated external consumers still carry `validate_local.py`, so the new rule emits an ERROR and the CLI exits 1 (`cli.py` `ctx.exit(1)`). That exit is the *expected* result, not a failure — `set -e` would abort on the first project. Science/meta migrated in Task 5, so it must exit 0 with zero retirement findings.
+
 ```bash
-set -e
 uv venv ~/scratch/sidecar-baselines/after-venv
-~/scratch/sidecar-baselines/after-venv/bin/pip install -e ~/d/science/.worktrees/sidecar-retirement/science
+uv pip install --python ~/scratch/sidecar-baselines/after-venv/bin/python \
+  -e ~/d/science/.worktrees/sidecar-retirement/science
 BIN=~/scratch/sidecar-baselines/after-venv/bin/science
+OUT=~/scratch/sidecar-baselines
 declare -A ROOTS=(
   [evolution]=~/d/cancer/mechanisms/evolution
   [protein-landscape]=~/d/protein-landscape
   [science-meta]=~/d/science/.worktrees/sidecar-retirement/meta
   [health-meta]=~/d/health/meta
 )
+declare -A EXPECT=( [evolution]=1 [protein-landscape]=1 [health-meta]=1 [science-meta]=0 )
+fail=0
 for name in "${!ROOTS[@]}"; do
-  ( cd "${ROOTS[$name]}" && "$BIN" validate --all --strict --format json ) \
-    > ~/scratch/sidecar-baselines/"$name"-after.json
-  echo "$name captured"
+  ( cd "${ROOTS[$name]}" && "$BIN" validate --all --strict --format json \
+      --output "$OUT/$name-after.json" )
+  status=$?
+  if [ "$status" -ne "${EXPECT[$name]}" ]; then
+    echo "FAIL $name: exit $status, expected ${EXPECT[$name]}"; fail=1
+  fi
+  test -s "$OUT/$name-after.json" || { echo "FAIL $name: empty report"; fail=1; }
 done
+test "$fail" -eq 0 || { echo "after-state capture failed"; exit 1; }
 ```
+
+- [ ] **Step 3b: Assert the retirement finding count per project**
+
+```bash
+python3 - <<'PY'
+import json, sys
+from pathlib import Path
+base = Path.home() / "scratch/sidecar-baselines"
+RULE = "validate.python-sidecar-removed"
+expect = {"evolution": 1, "protein-landscape": 1, "health-meta": 1, "science-meta": 0}
+bad = []
+for name, n in expect.items():
+    p = base / f"{name}-after.json"
+    if not p.exists():
+        sys.exit(f"FAIL missing {p}")
+    got = [r for r in json.loads(p.read_text())["results"] if r.get("rule") == RULE]
+    print(f"{name}: {len(got)} retirement finding(s), expected {n}")
+    if len(got) != n:
+        bad.append(name)
+sys.exit(f"FAIL {bad}" if bad else 0)
+PY
+```
+
+Expected: the three unmigrated consumers report exactly 1; science-meta reports 0.
 
 - [ ] **Step 4: Diff finding-by-finding, failing on any missing file**
 
@@ -1085,8 +1210,11 @@ def rows(p: Path):
     return json.loads(p.read_text())["results"]
 
 def ident(rs):
+    # Compare COMPLETE result dicts. Reducing to (rule, path, message) would mask
+    # changes to severity, line, task, qualifiers, and duplicate structure —
+    # exactly the fields the frozen finding contract makes load-bearing.
     return sorted(
-        (r.get("rule"), r.get("path"), r.get("message"))
+        json.dumps(r, sort_keys=True)
         for r in rs
         if not str(r.get("rule") or "").startswith(NEW_PREFIXES)
     )
@@ -1181,8 +1309,11 @@ Expected: remote SHA matches local `main`. Record it — Tasks 8–10 pin to it.
 
 - [ ] **Step 1: Work in an isolated worktree**
 
+The repository root is `~/d/health/meta`, **not** `~/d/health` — the latter is not a Git repository at all.
+
 ```bash
-cd ~/d/health && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
+cd ~/d/health/meta && git rev-parse --show-toplevel   # confirm before proceeding
+git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
 cd .worktrees/sidecar-retirement && git branch --show-current
 ```
 
@@ -1200,7 +1331,7 @@ Expected: the `source = { git = ... #<sha> }` line shows the Task 7 SHA.
 - [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
 
 ```bash
-git rm meta/validate_local.py 2>/dev/null || git rm validate_local.py
+git rm validate_local.py
 ```
 
 Record in `AGENTS.md` that the reviews-are-not-evidence guardrail is now a toolkit check the project no longer owns.
@@ -1210,7 +1341,7 @@ Record in `AGENTS.md` that the reviews-are-not-evidence guardrail is now a toolk
 ```bash
 uv run --frozen science validate --all --strict --format json > /tmp/hm-after.json
 status=$?
-echo "validator exit=$status"
+test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
 python3 - <<'PY'
 import json
 d = json.load(open("/tmp/hm-after.json"))
@@ -1222,18 +1353,18 @@ print("OK")
 PY
 ```
 
-Expected: `validator exit=0`, `OK`. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
+Expected: no `FAIL` line and `OK`. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
 
 - [ ] **Step 5: Commit atomically, merge, clean up**
 
 ```bash
 git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
-cd ~/d/health && git branch --show-current   # verify before merging
+cd ~/d/health/meta && git branch --show-current   # must print the working branch; stop if not
 git merge --no-ff sidecar-retirement
 git worktree remove .worktrees/sidecar-retirement
 ```
 
-This repo has **no GitHub remote** — commit and merge only, never push.
+This repo has **no GitHub remote** — commit and merge only, never push. It is also Dropbox-synced, so its primary checkout floats; verify the branch before merging.
 
 ---
 
@@ -1245,9 +1376,12 @@ Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50d
 
 - [ ] **Step 1: Isolated worktree**
 
+The repository root is `~/d/cancer/mechanisms/evolution`, **not** `~/d/cancer` — the latter is not a Git repository.
+
 ```bash
-cd ~/d/cancer && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
-cd .worktrees/sidecar-retirement/mechanisms/evolution
+cd ~/d/cancer/mechanisms/evolution && git rev-parse --show-toplevel   # confirm
+git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
+cd .worktrees/sidecar-retirement && git branch --show-current
 ```
 
 - [ ] **Step 2: Relock to the Task 7 SHA**
@@ -1268,7 +1402,7 @@ git rm validate_local.py
 ```bash
 uv run --frozen science validate --all --strict --format json > /tmp/evo-after.json
 status=$?
-echo "validator exit=$status"
+test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
 python3 - <<'PY'
 import json
 d = json.load(open("/tmp/evo-after.json"))
@@ -1280,7 +1414,7 @@ print("OK")
 PY
 ```
 
-Expected: `validator exit=0`, `OK`, no traceback. This is the Task 1 Step 2 reproduction now resolved.
+Expected: no `FAIL` line, `OK`, no traceback. This is the Task 1 Step 2 reproduction now resolved.
 
 - [ ] **Step 5: Confirm the notice out-of-band**
 
@@ -1294,7 +1428,7 @@ Expected: a match — all 15 papers are active, so a notice and zero warnings.
 
 ```bash
 git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
-cd ~/d/cancer && git branch --show-current   # Dropbox-synced; verify before merging
+cd ~/d/cancer/mechanisms/evolution && git branch --show-current   # Dropbox-synced; verify
 git merge --no-ff sidecar-retirement
 git worktree remove .worktrees/sidecar-retirement
 ```
@@ -1336,7 +1470,8 @@ uv run --frozen python code/scripts/check_expensive_artifacts.py
 
 ```bash
 uv run --frozen python code/scripts/check_expensive_artifacts.py
-echo "checker exit=$?"
+status=$?
+test "$status" -eq 0 || { echo "FAIL: artifact checker exited $status"; exit 1; }
 ```
 
 - [ ] **Step 5: Verify validation**
@@ -1344,14 +1479,14 @@ echo "checker exit=$?"
 ```bash
 uv run --frozen science validate --all --strict --format json > /tmp/pl-after.json
 status=$?
-echo "validator exit=$status"
+test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
 python3 -c "
 import json; d=json.load(open('/tmp/pl-after.json')); print(d['summary'])
 assert 'validate.python-sidecar-removed' not in {r.get('rule') for r in d['results']}
 print('OK')"
 ```
 
-Expected: `validator exit=0`, `OK`, no traceback — the crash in the method-slice inventory is resolved.
+Expected: no `FAIL` line, `OK`, no traceback — the crash in the method-slice inventory is resolved.
 
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
@@ -1370,12 +1505,14 @@ Design §5.3 coverage:
 
 | § | Requirement | Task |
 |---|---|---|
-| 5.3.1 | exactly one `validate.python-sidecar-removed`, valid JSON | 3 |
+| 5.3.1 | exactly one `validate.python-sidecar-removed`; **valid CLI JSON, no traceback** | 3 (`test_cli_emits_valid_json_with_one_retirement_rule`) |
 | 5.3.2 | never imported or executed (`sys.modules` + sentinel) | 3 |
 | 5.3.3 | project-authored `FindingRule` cannot enter the registry | pre-existing; Task 6 full suite |
 | 5.3.4 | the two sidecar rules are distinct | 3 |
 | 5.3.5 | three rules fire; both typing conditions yield two findings | 2 |
 | 5.3.6 | check present in `full` and `commit` profiles, not `--all`-gated | 2 |
 | 5.3.7 | the check can fail — mutate, confirm red, restore green | 2, steps 9–10 |
+
+**On §5.3.1:** the unit tests call `run()` directly, which never exercises the CLI layer where the original crash surfaced as a traceback. The `CliRunner` test is what actually covers the requirement; the `run()` tests cover the finding itself.
 
 **On §5.3.7:** §5.2 means the real corpus cannot falsify this check — it is compliant. Task 2's fixtures are the only falsification available, which is why steps 9 and 10 are executable steps rather than a closing remark.

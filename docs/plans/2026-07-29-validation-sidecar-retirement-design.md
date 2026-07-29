@@ -330,12 +330,20 @@ sidecar deletion and documentation repair still land as one commit.
 
 ### 4.3 Consumer documentation
 
-Each affected project's `AGENTS.md` records the change. For science/meta this is
-a **repair, not an addition**: its current documentation states that t034
-validation is invoked through `validate_local.py`, which will be false. Protein-
-landscape documents its artifact-checker command. Health/meta and evolution
-record that the guardrail is now a toolkit check and that the project no longer
-owns it.
+Each affected project records the change where it actually documents the check.
+
+For science/meta this is a **repair, not an addition** — but not in `AGENTS.md`,
+which carries no t034 or `validate_local` reference at all. The stale claims live
+in `meta/evidence/README.md` ("`validate.sh` runs `python -m t034_validator
+evidence/` via `validate.local.sh`" — wrong on both counts),
+`meta/evidence/t034-causal-graph-contract.md`,
+`meta/entities/questions/0010-causal-graph-construction-pipeline.md`, and the
+`meta/src/t034_validator/__main__.py` docstring. `meta/tasks/done/2026-06.md`
+also mentions it and is left alone: a completed task record is history.
+
+Protein-landscape documents its existing `code/scripts/check_expensive_artifacts.py`
+command. Health/meta and evolution record in `AGENTS.md` that the guardrail is now
+a toolkit check the project no longer owns.
 
 Whether the t034 or artifact checks later earn promotion to canonical checks is a
 separate question, out of scope here.
