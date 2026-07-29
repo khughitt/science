@@ -202,10 +202,30 @@ the record at load, with no warning stage at all.** So a mixin may declare
 vocabulary only once its kind joins `_CERTIFIED_KINDS`.
 
 `mixin-hypothesis-2.0` is the certified case, not a counterexample. `mixin-concept-1.0`
-enum-locked an *uncertified* vocabulary; it is latent rather than live only because all
-329 concepts are `active`, and it is recorded as debt in the method slice's inventory.
-The `method` corpus made the same choice immediately visible: one real record carries
-`status: proposed`.
+enum-locked an *uncertified* vocabulary; it was latent rather than live only because all
+329 concepts are `active`. The `method` corpus made the same choice immediately visible:
+one real record carries `status: proposed`.
+
+**That debt is now closed.** `mixin-concept-1.1` drops the enum and changes nothing else,
+and both generation rows move together. Two things about the shape of that fix generalize
+to any mixin correction:
+
+- **The old version stays on disk.** `GATE 2` is deliberately not biconditional, so a
+  historical version armed by no row is legitimate — four already sit there
+  (`dataset-1.0`, `paper-1.0`, `theme-1.0`, `topic-1.0`). Do not delete the superseded
+  file; a consumer pinned to an older toolkit revision has its own copy either way, and
+  the retained file is what makes the version number mean something.
+- **"Only X changed" is a test, not a `$comment`.**
+  `test_1_1_differs_from_1_0_in_STATUS_ALONE` compares the two packaged files
+  property-by-property, excluding `$id` and `$comment` because those are *required* to
+  differ — comparing them would make the test unfailable in the wrong direction. A bump
+  that quietly carried a second change is otherwise indistinguishable from an honest one
+  by its version number alone.
+
+Note what the bump is *not*: a relaxation of what the corpus may say. All 329 records were
+already `active` and none changes meaning. What changes is where the vocabulary is
+enforced — validate's WARN rather than a load-time refusal — and the derived profile
+string in `graph.trig`, which moves from `concept/1.0` to `concept/1.1`.
 
 There is a third, independent reason. `status_vocabulary.py` deliberately keeps no
 per-kind table because "the two would drift" — and a JSON enum in a mixin is exactly that

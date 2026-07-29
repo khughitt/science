@@ -30,7 +30,7 @@ import pytest
 from science_tool.graph.entity_registry import EntityRegistry
 
 _BASE = "science-entity-base-2.0.json"
-_MIXIN = "mixin-concept-1.0.json"
+_MIXIN = "mixin-concept-1.1.json"
 
 
 def _composed_properties() -> dict[str, object]:

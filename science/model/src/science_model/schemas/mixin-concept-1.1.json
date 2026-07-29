@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-concept-1.1.json",
+  "title": "science entity concept mixin",
+  "$comment": "Supersedes mixin-concept-1.0, which is retained on disk as a historical version armed by no generation row (test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file is deliberately not biconditional). The ONLY change is `status`: 1.0 enum-locked it before `concept` was certified. Everything else is byte-for-byte 1.0, including the field set frozen by docs/plans/2026-07-28-schema-closure-concept-slice-inventory.md over 329 authored records in mm30 (285), health (37) and natural-systems (7).",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^concept:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity, so this stops `id: dataset:foo` passing on a concept while deliberately not inventing a slug pattern. All 329 ids happen to satisfy `^concept:[a-z0-9][a-z0-9-]{1,63}$` today -- measured, not assumed -- and that is still not a reason to pin it here: the ruling is about the ids nobody has written yet. health_checks/identity_policy.py:207 already reports kebab-case violations for this kind as a finding."
+    },
+    "kind": {"const": "concept"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum. 1.0 declared `enum: [active, deprecated]` from the descriptor (profiles/core.py:426), which was the concept slice applying a rule the method slice had not yet stated: a mixin may not enum-lock `status` before its kind joins _CERTIFIED_KINDS (validate/kind_severity.py:24). `concept` is not in it, so `concept.status-vocabulary` is a WARN by policy, and status_vocabulary.py rules that an uncertified instrument may not fail anyone's build -- a schema enum fails it HARDER than a validate ERROR, refusing the record at load with no warning stage. Independently, status_vocabulary.py:20-22 rules there is deliberately no second per-kind vocabulary table because the two would drift; a JSON enum here is exactly that second table, versioned on a different axis. Unlike the method case, NO concept record in the corpus is out of vocabulary today -- all 329 are `active` -- so this bump is prospective, not corrective, and no record changes meaning under it. See mixin-method-1.0 for the ruling's first statement and mixin-hypothesis-2.0 for the certified case where an enum IS legitimate."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "AUTHORED and honored, same as mixin-hypothesis-2.0. 179 of 329 concepts carry it: `local` (177), `project_specific` (2). Note that ProjectEntity's default is `core`, a value NO concept record carries -- a probe asserting `profile == 'core'` would be passing on the model default, not on authored data."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "schema_profile": false
+  }
+}

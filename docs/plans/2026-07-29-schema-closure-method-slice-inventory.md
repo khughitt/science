@@ -208,6 +208,10 @@ surface that owns it, and closure adds no new verdict.
 
 ### Consequence for the shipped `concept` mixin
 
+> **Closed 2026-07-29 by `mixin-concept-1.1`** (branch `mixin-concept-1-1`), which
+> drops the enum and changes nothing else. The finding below is the filing that
+> produced it; it is kept as written because it is the measurement, not the fix.
+
 The same reasoning applies retroactively. `concept` is not in `_CERTIFIED_KINDS`
 either, so `mixin-concept-1.0.json`'s enum escalated an uncertified vocabulary
 to a load refusal. Verified against `main` rather than assumed:

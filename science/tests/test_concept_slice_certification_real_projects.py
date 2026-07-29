@@ -46,7 +46,7 @@ from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
 CANDIDATE = ProfileString(
     base=ProfileComponent(BASE_NAME, "2.0"),
-    mixin=ProfileComponent("concept", "1.0"),
+    mixin=ProfileComponent("concept", "1.1"),
     extensions=(),
 )
 

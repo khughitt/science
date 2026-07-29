@@ -116,8 +116,12 @@ _BATTERY: dict[str, list[Any]] = {
     # prefix exists for: `kind: concept` would still pass while the id named another entity.
     "id": [42, "", "age", "dataset:age", "concept:age"],
     "kind": [42, "hypothesis", "Concept", "concept"],
-    # The descriptor declares exactly two (profiles/core.py:426). `archived` is legal for
-    # `hypothesis` and must not be legal here -- that is the whole point of a per-kind enum.
+    # The descriptor declares exactly two (profiles/core.py:426), and `mixin-concept-1.1`
+    # deliberately does NOT enum-lock them: `concept` is not in `_CERTIFIED_KINDS`, so the
+    # vocabulary is validate's WARN to report, not the schema's to refuse at load. Both
+    # tests below still bind -- the model takes `status: str | None`, so a schema that
+    # admits `archived` is not laxer than the model, and every admitted value must still
+    # survive the projection. `42` is the shape control that keeps this row failable.
     "status": [42, "", "archived", "draft", "deprecated", "active"],
     "title": [42, "Age"],
     "created": [42, "2026-13-01", "2026-02-31", "06-10-2026", "2026-06-10"],
