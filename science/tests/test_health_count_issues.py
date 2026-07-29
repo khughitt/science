@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -667,20 +668,10 @@ def test_legacy_task_and_invalid_aspects_now_count(tmp_path: Path) -> None:
 def test_accepted_and_unsuppressed_findings_are_disjoint_and_counted(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "science.yaml").write_text(
-        """
-name: test
-health:
-  accepted_validation:
-    - rule: manifest.check
-      severity: error
-      path: science.yaml
-      message_contains: ['missing required field: profile']
-      reason: reviewed
-""".lstrip(),
-        encoding="utf-8",
-    )
-    report = build_health_report(
+    config = tmp_path / "science.yaml"
+    config.write_text("name: test\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    unaccepted_report = build_health_report(
         tmp_path,
         ingestion_ref="health:test",
         generated_at="2026-07-28T12:00:00+00:00",
@@ -696,6 +687,28 @@ health:
             subject=finding.subject,
             identity_qualifiers=rule.identity_subset(finding.qualifiers),
         )
+
+    accepted_finding = next(
+        item
+        for item in unaccepted_report.findings
+        if item.finding.rule_id == "manifest.check" and "missing required field: profile" in item.finding.message
+    )
+    config.write_text(
+        "name: test\n"
+        "health:\n"
+        "  accepted_validation:\n"
+        f"    - finding_id: {identity(accepted_finding)}\n"
+        "      fingerprint_version: 1\n"
+        "      reason: reviewed\n"
+        "      severity_scope: [error]\n",
+        encoding="utf-8",
+    )
+    report = build_health_report(
+        tmp_path,
+        ingestion_ref="health:test",
+        generated_at="2026-07-28T12:00:00+00:00",
+        checks={"validate"},
+    )
 
     finding_ids = {identity(item) for item in report.findings}
     accepted_ids = {identity(item) for item in report.accepted}

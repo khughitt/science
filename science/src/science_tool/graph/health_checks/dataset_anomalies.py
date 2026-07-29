@@ -315,6 +315,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
         if fm.get("kind") != "dataset":
             continue
         entity_id = str(fm.get("id", md.stem))
+        file_path = md.relative_to(project_root).as_posix()
         origin = fm.get("origin", "external")  # legacy default
 
         # Invariant #7: external must not carry derivation:
@@ -325,7 +326,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                     "severity": "error",
                     "entity_id": entity_id,
                     "field": "derivation",
-                    "file_path": str(md),
+                    "file_path": file_path,
                     "message": "origin: external entity carries a derivation: block (invariant #7)",
                 }
             )
@@ -346,7 +347,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "severity": "error",
                         "entity_id": entity_id,
                         "field": ",".join(forbidden),
-                        "file_path": str(md),
+                        "file_path": file_path,
                         "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
                     }
                 )
@@ -360,7 +361,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_access_invalid",
                         "severity": "error",
                         "entity_id": entity_id,
-                        "file_path": str(md),
+                        "file_path": file_path,
                         "message": "origin: external entity access must be a mapping",
                     }
                 )
@@ -376,7 +377,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_consumed_but_unverified",
                         "severity": "error",
                         "entity_id": entity_id,
-                        "file_path": str(md),
+                        "file_path": file_path,
                         "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
                     }
                 )
@@ -394,7 +395,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                                 "code": "dataset_stale_review",
                                 "severity": "warning",
                                 "entity_id": entity_id,
-                                "file_path": str(md),
+                                "file_path": file_path,
                                 "message": f"last_reviewed {last_reviewed} is older than 12 months",
                             }
                         )
@@ -408,7 +409,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_missing_source_url",
                         "severity": "warning",
                         "entity_id": entity_id,
-                        "file_path": str(md),
+                        "file_path": file_path,
                         "message": "access.verified is true but source_url is empty",
                     }
                 )
@@ -439,7 +440,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                         "code": "dataset_verified_but_unstageable",
                         "severity": "warning",
                         "entity_id": entity_id,
-                        "file_path": str(md),
+                        "file_path": file_path,
                         "message": (
                             "access is verified but runtime files are not staged; add "
                             "datapackage:/local_path: or move the dataset out of use-now"
@@ -454,7 +455,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "code": "dataset_verified_but_unstageable",
                             "severity": "warning",
                             "entity_id": entity_id,
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"runtime path {stageable_path} does not exist on disk",
                         }
                     )
@@ -472,7 +473,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "error",
                             "entity_id": entity_id,
                             "counterpart": wf_run_id,
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
                         }
                     )
@@ -485,7 +486,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                                 "severity": "error",
                                 "entity_id": entity_id,
                                 "counterpart": wf_run_id,
-                                "file_path": str(md),
+                                "file_path": file_path,
                                 "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
                             }
                         )
@@ -500,7 +501,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "error",
                             "entity_id": entity_id,
                             "counterpart": str(inp),
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"input chain broken: {msg}",
                         }
                     )
@@ -518,7 +519,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "error",
                             "entity_id": entity_id,
                             "counterpart": str(cons),
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"consumed_by lists {cons} but it doesn't resolve to a research-package",
                         }
                     )
@@ -529,7 +530,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "error",
                             "entity_id": entity_id,
                             "counterpart": str(cons),
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
                         }
                     )
@@ -548,7 +549,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "warning",
                             "entity_id": entity_id,
                             "field": "license",
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"license drift: entity={fm_license!r} runtime={rt_license!r}",
                         }
                     )
@@ -561,7 +562,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "warning",
                             "entity_id": entity_id,
                             "field": "ontology_terms",
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"ontology_terms drift: entity={fm_ot} runtime={rt_ot}",
                         }
                     )
@@ -574,7 +575,7 @@ def check_dataset_anomalies(project_root: Path) -> InstrumentResult[dict]:
                             "severity": "warning",
                             "entity_id": entity_id,
                             "field": "update_cadence",
-                            "file_path": str(md),
+                            "file_path": file_path,
                             "message": f"update_cadence drift: entity={fm_uc!r} runtime={rt_uc!r}",
                         }
                     )
