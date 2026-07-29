@@ -1854,3 +1854,93 @@ are toolkit work and should use one reviewer gate per task. Task 4 crosses repos
 boundaries and starts only after the Task 3 cutover SHA is contained in the public
 Science repository's default branch. Task 5 is top-level verification; do not delegate
 its full-suite run.
+
+## Implementation record
+
+Plan 3 was implemented and verified on 2026-07-29.
+
+### Toolkit commits
+
+- Task 1 migration core and total raw-entry handling:
+  `33f972db`, `39ed6cdc`, and `4f74892e`.
+- Mixed-case rule-ID prerequisite: `2b863893`.
+- Task 2 command, strict input boundary, and idempotent absent-container handling:
+  `33e33617`, `83755803`, and `3b8a5c83`.
+- Task 3 fingerprint cutover: `cae81ce5`, followed by the acceptance-configuration
+  visibility fix `8e38a69b`.
+- Rollout prerequisite for project-relative dataset evidence paths: `b3772297`.
+- Final CLI budget classification and changed-file formatting fix: `9f924c00`.
+
+The Task 3 cutover SHA is `cae81ce5`. The reviewed cutover plus its dataset-path
+prerequisite is reachable from public `main` at
+`b4af2a16505c0d57b6427c5f0ba9bc63b456d840`; that is the exact toolkit revision
+used by the external consumer locks.
+
+### Consumer migrations
+
+| Consumer | Entries | Consumer commit | Publication |
+|---|---:|---|---|
+| `meta` | 2 | `cae81ce5` | editable in the same toolkit worktree |
+| natural-systems | 6 | `9089e1c15e9c16d2d72e5c776eb63a88f411ae28` | pushed feature branch |
+| multiple-myeloma | 24 | `f9c4e00e8e48d29005beda08020e76e14a75533b` | local; repository has no configured remote |
+| post-acute-infection | 20 | `8e2d9cf6992d5069a3e2f6185e7ff04f75253fc0` | pushed feature branch |
+
+The final read-only consistency audit found 2, 6, 24, and 20 unique current entries,
+respectively. Every entry has a 64-character lowercase hexadecimal `finding_id`,
+`fingerprint_version: 1`, canonical non-empty severity scope (`[warn]` in this
+corpus), and a nonblank reason. No entry retains `rule` or `message_contains`; no
+consumer contains duplicate finding IDs or `doc/audits/cases/`.
+
+Natural-systems and multiple-myeloma retain their unqualified Git source
+declarations, and both `science` and `science-model` lock records resolve to
+`b4af2a16`. Post-acute-infection's explicit source revision and both lock records name
+the same SHA. `meta` uses the toolkit and model editable from the same worktree as its
+migrated configuration.
+
+### Before/after evidence
+
+| Consumer | Before | After | Result |
+|---|---|---|---|
+| `meta` | 11 warn findings; 2 accepted; 0 unwired | identical | exact parity |
+| natural-systems | 128 findings (125 warn, 3 error); 6 accepted; 0 unwired | 70 findings (67 warn, 3 error); 6 accepted; 0 unwired | approved convergence exception |
+| multiple-myeloma | 60 warn findings; 24 accepted; 0 unwired | identical | exact parity |
+| post-acute-infection | 7 findings (6 warn, 1 error); 20 accepted; 0 unwired | identical | exact parity |
+
+Natural-systems' 58-finding reduction is entirely the approved prose-lint
+representation convergence: 114 old prose-lint rows became 56
+`prose-lints.hit` findings. Its three errors, six accepted findings, zero unwired
+producers, and accepted rule multiset were unchanged.
+
+The initial migration dry-runs and applies classified all 2/6/24/20 entries as
+`migrated`. Post-rollout dry-runs classified every entry as `already-current`, with
+`can_apply=true` and `needs_write=false`. An all-current `--apply` returned
+`applied=false` and left every `science.yaml` byte-identical. The recorded SHA-256
+values were:
+
+- `meta`: `f044165b1e907bbfbae93ad31018a3b3e20e09f8719b2fbea3980f2c08eaf20c`
+- natural-systems:
+  `4219f6c426c7b8cf9faabf5b777e80cc0a1202bb2053740d0893c93242bb73a4`
+- multiple-myeloma:
+  `4e66bea1206d041d3917a55fc7af747d5f2180e30cdb7c873ce63bf8343026a0`
+- post-acute-infection:
+  `919d00092f908a996d4706f9e99cd2d3d6e96b9419cedc96e1566ffd783085a5`
+
+### Final verification
+
+- Plan 3 scoped suite: 177 passed.
+- Explicit `real_projects` migration suite: 4 passed; all four projects were
+  nonblocking.
+- `science-model` suite: passed.
+- Full toolkit suite: passed after classifying the new growable
+  `findings migrate-acceptances` output as deferred in `9f924c00`.
+- Ruff: passed.
+- Changed-file Ruff format check: all 29 Python files changed from `cc675a7a` were
+  already formatted after the final formatting pass.
+- Pyright: 0 errors, 0 warnings, 0 informations.
+- The retired steady-state acceptance surfaces have zero matches.
+  `message_contains`, `canonical_acceptance_severity`, `legacy_validation_fields`,
+  and `entry_matches` survive only in
+  `science_tool/findings/acceptance_migration.py`.
+- The output-mode matrix verifies that legacy or invalid acceptance configuration
+  exits 2 only after complete table, JSON-stdout, or JSON-file emission. Its inverse
+  test verifies that an ordinary health ERROR finding still exits 0.
