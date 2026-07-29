@@ -414,6 +414,19 @@ Two edits, one commit, neither able to land alone:
 - `profiles/core.py` — `schema_closed=True` on the `concept` descriptor;
 - `entity_schema/profile.py` — `"concept": "1.0"` in **both** generation rows.
 
+> **Superseded 2026-07-29.** Both rows now select `concept/1.1`. The mixin this slice
+> shipped enum-locked `status` before `concept` was certified — a defect the method slice
+> identified and stated as a rule, and one this slice's own inventory did not catch
+> because the corpus never exercised it (all 329 records are `active`, so no probe could
+> go red). `mixin-concept-1.1` drops the enum and changes nothing else; `1.0` remains on
+> disk as a historical version armed by no row. The reasoning is recorded under "A Mixin
+> May Not Enum-Lock `status` Before Its Kind Is Certified" in
+> [`docs/conventions/schema-closure-slice-procedure.md`](../conventions/schema-closure-slice-procedure.md).
+> The lesson for step 1 is general: **a field whose corpus is uniform cannot be certified
+> by the corpus.** Where every record carries one value, the inventory has to reason from
+> the descriptor and the doctrine, because no measurement over that population can
+> distinguish a correct constraint from an over-tight one.
+
 Everything else derives. `PROJECT_MIXIN_NAMES`, `TYPE_MIXIN_NAMES`, and
 `_BASE_VERSION_FOR_MIXIN` all recompute from the descriptor, so the six modules that
 bind those names by value agree by construction rather than by discipline.
