@@ -226,6 +226,14 @@ They are **three rules, not one with a qualifier discriminator**, because a
 single provenance record can violate both typing conditions at once; sharing a
 rule id would collide on identity.
 
+The same frozen identity constrains deduplication. Finding identity is
+`(rule, path, paper_ref)`, so the evidence-ref arm must deduplicate per
+`(path, paper_ref)` across the **entire file**, not per `evidence_refs:` block.
+The sidecars deduplicated with a `seen` set scoped inside each block, which is
+a behaviour change, not a port: a paper cited from two blocks in one file
+produced two rows there and would now produce two identical identities, which
+the producer boundary rejects.
+
 The check runs in **both the `full` and `commit` profiles** and is **not**
 conditional on `--all`. A guardrail that only runs in the slow path is a
 guardrail that stops running.
@@ -284,7 +292,33 @@ promoted:
 | `~/d/science/meta/validate_local.py` | becomes a project-owned command |
 | `~/d/protein-landscape/validate_local.py` | becomes a project-owned command |
 
-### 4.2 Consumer documentation
+### 4.2 Rollout must be atomic per consumer
+
+A consumer that deletes its sidecar before installing the toolkit that carries
+the replacement has no policy at all in the interval. Three of the four pin the
+toolkit by revision, so deletion and adoption are separate acts that must not be
+separated:
+
+| project | pin site | current revision |
+|---|---|---|
+| `~/d/health/meta` | explicit `rev` in `pyproject.toml` `[tool.uv.sources]`, plus `uv.lock` | `3b72db60` (pre–Plan 2) |
+| `~/d/cancer/mechanisms/evolution` | unqualified Git source; revision resolved in `uv.lock` | `ed6b50dc` |
+| `~/d/protein-landscape` | unqualified Git source; revision resolved in `uv.lock` | `ed6b50dc` |
+| `~/d/science/meta` | editable, in-repository | n/a |
+
+The rollout therefore requires, in order:
+
+1. The toolkit commit is **reachable from the public default branch** —
+   `origin/main` on `khughitt/science`. A consumer cannot resolve an unpushed
+   revision, so no consumer commit may be authored before the push lands.
+2. Each consumer's change is **one commit**: pin and/or lock update, sidecar
+   deletion, and documentation change together. Never a commit that only deletes.
+
+Science/meta is exempt from the pin step — its toolkit source is editable and
+in-repository, so toolkit and consumer change move together by construction. Its
+sidecar deletion and documentation repair still land as one commit.
+
+### 4.3 Consumer documentation
 
 Each affected project's `AGENTS.md` records the change. For science/meta this is
 a **repair, not an addition**: its current documentation states that t034
@@ -298,16 +332,36 @@ separate question, out of scope here.
 
 ## 5. Verification
 
-### 5.1 Baselines are unavailable
+### 5.1 Baseline availability — three distinct states
 
-Every one of the four projects crashes on `science validate` today (§1.3) — the
-same constructor incompatibility, not a protein-landscape-specific defect. There
-is therefore **no before-state to diff against** in any of them.
+Sidecar-source incompatibility and observed crash are not the same thing. All
+four sidecar sources are incompatible with the Plan 2 API (§1.3), but what a
+project does today depends on which toolkit revision it has installed:
 
-Rather than describe absent baselines as takeable, the comparison is defined
-explicitly in two parts:
+| project | installed toolkit | today |
+|---|---|---|
+| `~/d/cancer/mechanisms/evolution` | locked at `ed6b50dc` (post–Plan 2) | **crashes** |
+| `~/d/protein-landscape` | locked at `ed6b50dc` (post–Plan 2) | **crashes** |
+| `~/d/science/meta` | editable, in-repository | **crashes** |
+| `~/d/health/meta` | pinned `rev = 3b72db60` (pre–Plan 2) | **runs**; exit 0, valid JSON |
 
-1. **Canonical-validator baseline.** Run each project with sidecars disabled, so
+Health/meta's pinned toolkit predates the producer cutover, so it still executes
+its sidecar. `.venv/bin/science validate --format json` exits 0 with 153
+warnings. **Its baseline is available and must be taken.**
+
+That baseline also sharpens §1.2. It contains **zero** rows from the guardrail:
+`doc/papers/` holds only an `archive/` subdirectory and no paper files, so the
+check ran, found an empty background set, and reported "checks pass" — an INFO
+that does not even reach the summary (`infos: 0`). The guardrail executed
+successfully and contributed nothing observable, while nine background papers
+sat in `entities/papers/`. The after-state's notice is therefore a net addition
+of observability, not a diff against an existing row.
+
+For the three crashing projects there is no before-state to diff against. The
+comparison is defined in two parts:
+
+1. **Canonical-validator baseline.** Run each crashing project with sidecars
+   disabled, so
    the toolkit's own checks execute and produce a real finding set. This is the
    before-state for everything in §3.1 and §3.4, and it must be finding-by-finding
    identical after the change — the retirement must not perturb canonical output.
