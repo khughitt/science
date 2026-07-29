@@ -334,6 +334,32 @@ the first is unfalsifiable.
   signature. Its graph diff is clean, which is the substantive evidence for that
   project; its finding-level diff could not be taken.
 
+## Step 7 — Arming
+
+Two edits arm enforcement: `schema_closed=True` on the `method` descriptor, and
+`"method": "1.0"` in **both** generation rows. `PROJECT_MIXIN_NAMES` and
+`TYPE_MIXIN_NAMES` both derive from the first, so the two lookups arming depends on
+cannot drift apart.
+
+Landing with them, because three guards refuse to exist before the profile does
+(see the procedure's "Step 5's Declarations Cannot Land Before Step 7"):
+
+- the six `UNHELD` entries;
+- `VALUE_RECONCILED_KINDS`, plus the complement assertion;
+- `test_method_entity.py`, the 17-field value battery.
+
+And three that had to move because the armed set grew:
+
+- `test_schema_closed_gate.py`'s hand-written roster — `{hypothesis, concept, method}`;
+- `entities.py`'s docstring naming the closed kinds;
+- **`test_dataset_register_run.py`'s fixture**, which seeded a `method` with no
+  `status`/`created`/`updated`. Legal while the kind was open; not a record any real
+  project has. Fixtures are the least complete records in the tree and a corpus sweep
+  does not see them.
+
+The four dormant assertions in `test_mixin_method_1_0.py` were flipped here, which is
+what makes the two-line arming edit impossible to land silently.
+
 ## What This Slice Does Not Close
 
 - `hypothesis`'s realignment to the `promoted_from` ownership ruling. Its mixin

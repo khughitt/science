@@ -180,11 +180,95 @@ authored ISO string where there is none.
 1. `concept` — **DONE** (2026-07-28). 329 documents, 4 non-base fields, the reference
    class. See
    [`../plans/2026-07-28-schema-closure-concept-slice-inventory.md`](../plans/2026-07-28-schema-closure-concept-slice-inventory.md).
-2. `method` — and it is the odd one out: the only tranche kind with a typed subclass
-   (`MethodEntity`), so step 5 is the two-directional check as originally written.
+2. `method` — **DONE** (2026-07-29). 51 documents, the only tranche kind with a typed
+   subclass (`MethodEntity`), so step 5 was the two-directional check as originally
+   written. See
+   [`../plans/2026-07-29-schema-closure-method-slice-inventory.md`](../plans/2026-07-29-schema-closure-method-slice-inventory.md).
 3. `search`.
 4. `observation`.
 5. `finding` last, because it alone carries a source migration.
+
+## A Mixin May Not Enum-Lock `status` Before Its Kind Is Certified
+
+`status` is the one field where closure and vocabulary certification collide, and they
+are different instruments on different axes.
+
+`validate/kind_severity.py` holds `_CERTIFIED_KINDS`, and
+`validate/checks/status_vocabulary.py` rules that an uncertified instrument may not fail
+anyone's build — which is why `<kind>.status-vocabulary` is a WARN for every kind but
+`hypothesis`. **A schema enum fails the build harder than a validate ERROR: it refuses
+the record at load, with no warning stage at all.** So a mixin may declare
+`status: {"type": "string"}` — shape, which is closure's business — and may enum-lock the
+vocabulary only once its kind joins `_CERTIFIED_KINDS`.
+
+`mixin-hypothesis-2.0` is the certified case, not a counterexample. `mixin-concept-1.0`
+enum-locked an *uncertified* vocabulary; it is latent rather than live only because all
+329 concepts are `active`, and it is recorded as debt in the method slice's inventory.
+The `method` corpus made the same choice immediately visible: one real record carries
+`status: proposed`.
+
+There is a third, independent reason. `status_vocabulary.py` deliberately keeps no
+per-kind table because "the two would drift" — and a JSON enum in a mixin is exactly that
+second table, one file further away and versioned on a different axis, so correcting a
+vocabulary would require a mixin version bump.
+
+## Step 5's Declarations Cannot Land Before Step 7
+
+The procedure above reads as though steps 1–6 land as six independent commits. Three of
+step 5's artifacts cannot:
+
+- `test_kind_reconciliation.py`'s `UNHELD` entries — `test_every_exemption_names_a_live_profile`
+  rejects a manifest entry for a `(generation, kind)` the profile table does not yet have.
+- `test_value_reconciliation.py`'s `VALUE_RECONCILED_KINDS` —
+  `test_the_declared_kinds_are_all_real_mixin_kinds` rejects a kind with no mixin.
+- The value battery file itself, which calls `default_profile_for_kind(kind, generation=…)`
+  and raises `ProfileParseError` until the generation rows exist.
+
+All three are guards working correctly: each refuses to track debt for something that does
+not exist. The consequence is that step 5's *declarations* belong in the step-7 commit,
+even though the reconciliation work and its findings belong to step 5. What can land at
+step 5 is the contract-reconciliation test, which reads the schema JSON and the registry
+directly and needs no resolved profile.
+
+## Unquoted YAML Dates Are a Standing Corpus Defect
+
+`created: 2026-04-07` without quotes parses as a `datetime.date`, which base 2.0 refuses
+as `{"type": "string", "format": "date"}`. **169 records across 7 projects** carry one, so
+every remaining slice inherits a share; the `method` slice hit 2 and repaired them.
+
+No `hypothesis` or `concept` record is affected, which is why `main` is sound rather than
+quietly broken — verify that per kind rather than assuming, since two armed kinds passing
+is also what "nobody has looked" produces.
+
+The systemic alternative is normalizing dates to ISO strings before
+`validate_against_schema`. It is defensible — the model already coerces both forms — but it
+is kind-agnostic and belongs in its own branch, not inside a kind's slice.
+
+### What the second slice added
+
+- **A byte-identical graph diff is not evidence.** It is exactly what a slice that armed
+  nothing produces. Pair it with a control in BOTH directions — one record carrying an
+  undeclared key, refused while armed and loading while unarmed — or step 6 proves only
+  that the sweep ran.
+- **Certify with the project's own extension declarations read, not assumed.** Both
+  extensions in the `method` corpus (`mm30.assessment`, `protein-landscape.promotion`)
+  turned out to be `hypothesis`-scoped, so protein-landscape's promotion extension does
+  not admit `promoted_from` on protein-landscape's own methods. The mixin carries all 20.
+- **A zero-occurrence field can be load-bearing.** `stochasticity` and `seed_params` are
+  authored by no record in any project, and are declared by `MethodEntity`, prescribed by
+  the template under `{ omit: true }`, and read by six production modules. Omitting them
+  would have passed every corpus check while making the shipped method-stochasticity
+  program unauthorable. Inventory the template's `omit: true` fields explicitly.
+- **Test FIXTURES author records too, and they are the least complete records in the
+  tree.** Arming broke `test_dataset_register_run.py`, whose seed wrote a `method` with no
+  `status`/`created`/`updated` — legal only while the kind was open. Budget for fixtures
+  alongside the guards that enumerate the armed set; a corpus sweep does not see them.
+  (That same fixture authors `stochasticity`, which no real record does — corroborating
+  that the zero-occurrence admission above was load-bearing.)
+- The Markdown authored-injected-key blind spot is **not** the one-line fix the first
+  slice recorded. `validate_canonical_markdown_record` gets one merged dict from
+  `adapter.load_raw(ref)` and cannot separate authored from injected keys; fixing it means
+  the adapter reports what it injected per record — a `StorageAdapter` protocol change.
 
 ### What the first slice cost that the procedure did not predict
 

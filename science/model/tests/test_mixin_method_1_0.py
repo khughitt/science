@@ -1,17 +1,20 @@
-"""Probes for the DORMANT `mixin-method-1.0` schema.
+"""Probes for the `mixin-method-1.0` schema.
 
-Step 2 of the method slice. The mixin exists on disk but no generation row selects
-it and `schema_closed` is still False, so nothing here changes what the toolkit
-loads today. These probes fix the candidate contract before the production surfaces
-are aligned to it.
+Authored at step 2 of the method slice, while the mixin was dormant, and armed at
+step 7. The four assertions under "armed" below were written inverted and flipped in
+the arming commit, so the two-line edit that turns enforcement on could not land
+without this file changing with it.
 
 Every strict probe composes the candidate profile through the REAL
 `EntityValidator._compose` (via `validate_as`). Hand-rolling
 `{"allOf": [...], "unevaluatedProperties": False}` here instead would certify this
 test file's idea of composition rather than the toolkit's.
 
-Arming a kind flips TWO independent lookups, and the fixture patches both because
-step 7 will satisfy both from one declaration:
+The `strict` fixture is retained rather than deleted: it pins the composition this
+file probes to `base 2.0 + method 1.0` explicitly, so the value and mutation probes
+keep testing the declared candidate even if the generation table later moves `method`
+to a new mixin version. Arming a kind flips TWO independent lookups, and the fixture
+patches both because one declaration now satisfies both:
 
 - `validator.py:135` gates `unevaluatedProperties: false` on `PROJECT_MIXIN_NAMES`;
 - `loader.py:92` gates the `mixin-` filename prefix on `TYPE_MIXIN_NAMES`, so an
@@ -30,13 +33,11 @@ import pytest
 import yaml
 from science_model.entity_schema import loader as loader_module
 from science_model.entity_schema import validator as validator_module
-from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import (
     BASE_NAME,
     PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
     ProfileComponent,
-    ProfileParseError,
     ProfileString,
     default_profile_for_kind,
 )
@@ -100,52 +101,52 @@ def _refuses(validator: EntityValidator, record: dict) -> str:
     return str(caught.value)
 
 
-# --- dormant: these four INVERT at step 7 ----------------------------------------
+# --- armed: both lookups flipped, from one declaration ---------------------------
 #
-# Written in the dormant direction on purpose. Each asserts the mixin is currently
-# inert, and each is flipped in the slice's final commit -- so the arming edit cannot
-# land silently. Arming touches two independent lookups, the composer's
-# `PROJECT_MIXIN_NAMES` and the loader's `TYPE_MIXIN_NAMES`, and both will derive from
-# `schema_closed=True` on the descriptor so the pair cannot drift apart.
+# These four assertions were written INVERTED while the mixin was dormant, and flipped
+# here in the slice's final step -- so the arming edit could not land silently. Arming
+# touches two independent lookups, the composer's `PROJECT_MIXIN_NAMES` and the loader's
+# `TYPE_MIXIN_NAMES`, and both now derive from `schema_closed=True` on the descriptor, so
+# the pair cannot drift apart.
 
 
-def test_method_is_not_yet_armed():
-    assert "method" not in PROJECT_MIXIN_NAMES
-    assert "method" not in TYPE_MIXIN_NAMES
+def test_method_is_armed():
+    assert "method" in PROJECT_MIXIN_NAMES
+    assert "method" in TYPE_MIXIN_NAMES
 
 
-def test_no_generation_row_selects_the_method_mixin():
-    """Step 7 adds `method` to BOTH rows, at the same version.
+@pytest.mark.parametrize("generation", [2, 3])
+def test_both_generation_rows_select_the_method_mixin(generation):
+    """BOTH rows, at the same version, and neither detail is incidental.
 
-    Neither detail is incidental: all five method-carrying projects pin generation 3,
-    but `sources.py:1704` calls `default_profile_for_kind(entity.kind)` with no
-    generation argument and therefore always resolves row 2. The two rows agreeing on
-    `1.0` is what keeps that call site consistent with the projects it resolves for.
+    All five method-carrying projects pin generation 3, but `sources.py:1704` calls
+    `default_profile_for_kind(entity.kind)` with no generation argument and therefore
+    always resolves row 2. The two rows agreeing on `1.0` is what keeps that call site
+    consistent with the projects it is resolving for.
     """
-    with pytest.raises(ProfileParseError):
-        default_profile_for_kind("method")
+    profile = default_profile_for_kind("method", generation=generation)
+    assert profile.render() == "science-entity-base/2.0+method/1.0"
 
 
-def test_the_mixin_is_not_yet_reachable_as_a_mixin():
+def test_the_mixin_is_now_reachable_as_a_mixin():
     """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    While dormant this resolves to `extension-method-1.0.json`: the file on disk is not
-    lax, it is UNREACHABLE. A slice that mistook this for "already passing" would arm
-    nothing and certify everything.
+    While dormant this raised `SchemaNotFoundError` for `extension-method-1.0.json`:
+    the file was not lax, it was UNREACHABLE. A slice that mistook that for "already
+    passing" would arm nothing and certify everything.
     """
-    with pytest.raises(SchemaNotFoundError):
-        EntityValidator().validate_as(_record(), CANDIDATE)
+    EntityValidator().validate_as(_record(), CANDIDATE)
 
 
-def test_composition_does_not_close_yet(strict):
+def test_composition_now_closes():
     """The defect this slice closes, asserted against the real composer.
 
-    Unarmed, `_compose` omits `unevaluatedProperties` -- but the mixin is unreachable
-    while dormant, so the honest dormant-side assertion is that the STRICT fixture is
-    what refuses the shadow key, and the default validator cannot even load the file.
-    At step 7 this becomes `EntityValidator()` with no fixture.
+    No fixture: unarmed, `_compose` omitted `unevaluatedProperties` and this record
+    loaded.
     """
-    assert "shadow_key" in _refuses(strict, _record(shadow_key="unvouched"))
+    with pytest.raises(EntityValidationError) as caught:
+        EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    assert "shadow_key" in str(caught.value)
 
 
 # --- value probes: the measured corpus validates ---------------------------------
