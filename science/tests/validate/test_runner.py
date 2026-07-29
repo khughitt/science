@@ -154,6 +154,28 @@ def test_health_validation_reports_required_metric_check_failure_as_unwired(
     assert result.instrument.code == "check-error"
 
 
+def test_execute_validation_projects_one_fixed_run_result_without_a_second_stream(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import science_tool.validate.runner as validate_runner
+
+    expected = run(
+        _project(tmp_path),
+        strict=False,
+        verbose=False,
+        enable_python_sidecar=False,
+    )
+    monkeypatch.setattr(validate_runner, "run", lambda *_args, **_kwargs: expected)
+
+    execution = validate_health.execute_validation(tmp_path)
+
+    assert execution.run_result is expected
+    assert execution.producer_result.instrument.rows == [
+        finding for finding in expected.results if finding.severity != "info"
+    ]
+
+
 def test_runner_uses_global_project_registry(tmp_path: Path) -> None:
     result = run(
         _project(tmp_path),

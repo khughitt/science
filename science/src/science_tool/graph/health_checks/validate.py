@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
+
 from science_model.audit import ProducerMetrics
 
 from science_tool.findings.producers import FindingProducer, FindingProducerResult
 from science_tool.graph.health_checks.base import HealthCheck, HealthContext
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.checks.prose_lints import NumericVerificationMetrics
+from science_tool.validate.runner import RunResult
 
 
 PRODUCER = FindingProducer(
@@ -19,29 +23,41 @@ PRODUCER = FindingProducer(
 )
 
 
-def run_check(context: HealthContext) -> FindingProducerResult:
+@dataclass(frozen=True)
+class ValidationHealthRun:
+    run_result: RunResult
+    producer_result: FindingProducerResult
+
+
+def execute_validation(project_root: Path) -> ValidationHealthRun:
     from science_tool.validate import runner as validate_runner
 
     run_result = validate_runner.run(
-        context.project_root,
+        project_root,
         strict=False,
         verbose=False,
         enable_python_sidecar=False,
     )
     numeric_result = run_result.producer_results["validate.prose-lints"]
     if numeric_result.instrument.status == "unwired":
-        return FindingProducerResult(
+        producer_result = FindingProducerResult(
             instrument=InstrumentResult.unwired(
                 code=numeric_result.instrument.code or "check-error",
                 reason=numeric_result.instrument.reason,
             )
         )
-    findings = [finding for finding in run_result.results if finding.severity != "info"]
-    numeric = numeric_result.metrics
-    return FindingProducerResult(
-        instrument=InstrumentResult.from_rows(findings),
-        metrics=ProducerMetrics.model_validate(numeric.model_dump(mode="json")),
-    )
+    else:
+        findings = [finding for finding in run_result.results if finding.severity != "info"]
+        numeric = numeric_result.metrics
+        producer_result = FindingProducerResult(
+            instrument=InstrumentResult.from_rows(findings),
+            metrics=ProducerMetrics.model_validate(numeric.model_dump(mode="json")),
+        )
+    return ValidationHealthRun(run_result=run_result, producer_result=producer_result)
+
+
+def run_check(context: HealthContext) -> FindingProducerResult:
+    return execute_validation(context.project_root).producer_result
 
 
 CHECK = HealthCheck(
