@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from click.testing import CliRunner
-from science_model.audit import EntitySubject, finding_fingerprint
+from science_model.audit import EntitySubject, LocationEvidence, finding_fingerprint
 
 from science_tool.cli import main
 from science_tool.graph.health import build_health_report
 from science_tool.graph.health_checks.dataset_anomalies import (
+    CHECK as DATASET_ANOMALIES_CHECK,
     DATASET_RULE_CODES,
     RULES as DATASET_RULES,
 )
+from science_tool.graph.health_checks.base import HealthContext
+from science_tool.graph.sources import ProjectSources
 
 _ACTOR = {
     "ingestion_ref": "health:test",
@@ -168,6 +173,37 @@ def test_dataset_rule_contracts_and_fingerprints_match_the_frozen_table() -> Non
                 identity_qualifiers=rule.identity_subset(reworded.qualifiers),
             )
             assert reworded_id == first_id
+
+
+def test_dataset_anomaly_evidence_path_is_relative_to_resolved_project_root(
+    tmp_path: Path,
+) -> None:
+    dataset = tmp_path / "entities" / "datasets" / "d.md"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_text(
+        """\
+---
+id: dataset:d
+kind: dataset
+origin: external
+derivation: {}
+access: {}
+---
+""",
+        encoding="utf-8",
+    )
+    context = HealthContext(
+        project_root=tmp_path.resolve(),
+        sources=cast(
+            ProjectSources,
+            SimpleNamespace(entities=[SimpleNamespace(canonical_id="dataset:d")]),
+        ),
+    )
+
+    result = DATASET_ANOMALIES_CHECK.run(context)
+
+    finding = result.instrument.rows[0]
+    assert finding.evidence == (LocationEvidence(path="entities/datasets/d.md"),)
 
 
 def test_health_cli_does_not_rebuild_the_registry_after_execution(
