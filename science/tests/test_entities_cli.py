@@ -1813,7 +1813,42 @@ def test_entity_sections_lists_retired_graph_authoring_templates() -> None:
 
             assert result.exit_code == 0, result.output
             payload = json.loads(result.output)
-            assert {row["key"] for row in payload["rows"]} == keys
+            # BODY rows only. `rows` also carries `area: "frontmatter"` rows, and a kind gains
+            # those the moment its schema closes -- `_entity_frontmatter_section_rows` returns []
+            # for a kind whose profile does not resolve. This assertion is about the retired
+            # authoring templates, so it must not silently double as a closure assertion; that
+            # is `test_entity_sections_lists_frontmatter_for_a_closed_kind` below.
+            body = {row["key"] for row in payload["rows"] if row["area"] == "body"}
+            assert body == keys
+
+
+def test_entity_sections_lists_frontmatter_for_a_closed_kind() -> None:
+    """A closed kind can tell an author what frontmatter it admits; an open one cannot.
+
+    `_entity_frontmatter_section_rows` swallows `ProfileParseError` and returns [], so this
+    output is empty for every kind whose slice has not landed. Both halves are asserted --
+    a one-sided check would pass just as well if the command stopped emitting frontmatter
+    rows entirely.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        seed_project(Path.cwd())
+
+        closed = runner.invoke(main, ["entity", "sections", "concept", "--format", "json"])
+        assert closed.exit_code == 0, closed.output
+        fields = {
+            row["key"]
+            for row in json.loads(closed.output)["rows"]
+            if row["area"] == "frontmatter"
+        }
+        assert {"id", "kind", "title", "status", "promoted_from"} <= fields
+        assert "schema_profile" not in fields  # narrowed away by the mixin
+
+        openk = runner.invoke(main, ["entity", "sections", "mechanism", "--format", "json"])
+        assert openk.exit_code == 0, openk.output
+        assert not [
+            row for row in json.loads(openk.output)["rows"] if row["area"] == "frontmatter"
+        ]
 
 
 def test_entity_sections_non_renderable_kind_gives_actionable_error() -> None:
