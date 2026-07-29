@@ -66,9 +66,7 @@ def test_invalid_current_shape_never_falls_back_to_legacy(raw):
 
 
 def test_old_shape_is_positive_legacy_classification():
-    classified = classify_acceptance_entry(
-        {"rule": "manifest.check", "severity": "warning", "reason": "reviewed"}
-    )
+    classified = classify_acceptance_entry({"rule": "manifest.check", "severity": "warning", "reason": "reviewed"})
     assert isinstance(classified, LegacyAcceptance)
 
 
@@ -81,9 +79,7 @@ def test_every_other_yaml_entry_is_invalid_with_a_stable_subject_digest(raw):
 
 
 def test_loader_keeps_non_mapping_entries_for_total_classification(tmp_path):
-    (tmp_path / "science.yaml").write_text(
-        "health:\n  accepted_validation:\n    - scalar\n", encoding="utf-8"
-    )
+    (tmp_path / "science.yaml").write_text("health:\n  accepted_validation:\n    - scalar\n", encoding="utf-8")
 
     entries = accepted_validation_entries(tmp_path)
 
@@ -92,16 +88,12 @@ def test_loader_keeps_non_mapping_entries_for_total_classification(tmp_path):
 
 
 def test_optional_accepted_on_is_an_iso_date():
-    entry = AcceptedValidationEntry.model_validate(
-        {**BASE, "accepted_on": "2026-07-29"}
-    )
+    entry = AcceptedValidationEntry.model_validate({**BASE, "accepted_on": "2026-07-29"})
     assert entry.accepted_on == date(2026, 7, 29)
 
 
 def test_current_entry_with_a_yaml_date_is_classified():
-    classified = classify_acceptance_entry(
-        {**BASE, "accepted_on": date(2026, 7, 29)}
-    )
+    classified = classify_acceptance_entry({**BASE, "accepted_on": date(2026, 7, 29)})
     assert isinstance(classified, CurrentAcceptance)
     assert classified.entry.accepted_on == date(2026, 7, 29)
 

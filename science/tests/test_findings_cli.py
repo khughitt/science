@@ -346,9 +346,7 @@ def _migration(*rows: EntryMigration) -> AcceptanceMigration:
 
 
 def _migrated_result(_project_root):
-    return _migration(
-        EntryMigration(0, "migrated", _entry("a" * 64), "matched exactly one current finding")
-    )
+    return _migration(EntryMigration(0, "migrated", _entry("a" * 64), "matched exactly one current finding"))
 
 
 def test_migrate_acceptances_is_dry_run_by_default(tmp_path, monkeypatch):
@@ -370,9 +368,7 @@ def test_migrate_acceptances_is_dry_run_by_default(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("verdict", ["invalid", "stale", "ambiguous", "duplicate", "indeterminate"])
-def test_migrate_acceptances_refuses_every_blocking_verdict_without_writing(
-    tmp_path, monkeypatch, verdict
-):
+def test_migrate_acceptances_refuses_every_blocking_verdict_without_writing(tmp_path, monkeypatch, verdict):
     original = _legacy_config()
     path = tmp_path / "science.yaml"
     path.write_text(original, encoding="utf-8")
@@ -432,7 +428,9 @@ def test_migrate_acceptances_apply_round_trips_only_acceptance_entries(tmp_path,
 
     def mixed_result(_project_root):
         return _migration(
-            EntryMigration(0, "already-current", _entry("c" * 64, accepted_on="2026-07-01"), "entry is already current"),
+            EntryMigration(
+                0, "already-current", _entry("c" * 64, accepted_on="2026-07-01"), "entry is already current"
+            ),
             EntryMigration(1, "migrated", _entry("a" * 64), "matched exactly one current finding"),
         )
 

@@ -99,9 +99,7 @@ def render_migrated_config(
         raise ValueError("science.yaml health must be a mapping")
     if not isinstance(health.get("accepted_validation"), list):
         raise ValueError("science.yaml health.accepted_validation must be a list")
-    health["accepted_validation"] = [
-        entry.model_dump(mode="json", exclude_none=True) for entry in entries
-    ]
+    health["accepted_validation"] = [entry.model_dump(mode="json", exclude_none=True) for entry in entries]
     stream = StringIO()
     yaml_round_trip.dump(document, stream)
     return stream.getvalue()
@@ -210,9 +208,7 @@ def migrate_acceptances_command(
 
     def render_text() -> None:
         for entry in migration.entries:
-            click.echo(
-                f"{entry.entry_index}: {entry.verdict}: {entry.detail}"
-            )
+            click.echo(f"{entry.entry_index}: {entry.verdict}: {entry.detail}")
 
     emit(output_format=output_format, payload=payload, render_text=render_text)
     if not migration.can_apply:
