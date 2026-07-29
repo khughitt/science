@@ -555,3 +555,33 @@ def test_migrate_acceptances_refuses_missing_or_invalid_required_config(
     payload = json.loads(result.output)
     assert payload["can_apply"] is False
     assert error_fragment in payload["error"]
+
+
+@pytest.mark.parametrize(
+    "config_text",
+    [
+        "name: no-health\n",
+        "health:\n  other_setting: true\n",
+    ],
+)
+def test_migrate_acceptances_treats_absent_optional_acceptance_containers_as_empty(
+    tmp_path,
+    config_text,
+):
+    path = tmp_path / "science.yaml"
+    path.write_text(config_text, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "applied": False,
+        "can_apply": True,
+        "needs_write": False,
+        "indeterminate_producers": [],
+        "entries": [],
+    }
+    assert path.read_text(encoding="utf-8") == config_text

@@ -124,10 +124,14 @@ def _read_required_acceptance_config(project_root: Path) -> str:
     document = yaml.safe_load(original)
     if not isinstance(document, dict):
         raise ValueError("science.yaml must be a mapping")
-    health = document.get("health")
+    if "health" not in document:
+        return original
+    health = document["health"]
     if not isinstance(health, dict):
         raise ValueError("science.yaml health must be a mapping")
-    if not isinstance(health.get("accepted_validation"), list):
+    if "accepted_validation" not in health:
+        return original
+    if not isinstance(health["accepted_validation"], list):
         raise ValueError("science.yaml health.accepted_validation must be a list")
     return original
 
