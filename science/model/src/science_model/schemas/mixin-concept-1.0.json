@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-concept-1.0.json",
+  "title": "science entity concept mixin",
+  "$comment": "DORMANT until the concept slice's final step arms it. Composes over base 2.0. Field set frozen by docs/plans/2026-07-28-schema-closure-concept-slice-inventory.md, measured over 329 authored records in mm30 (285), health (37) and natural-systems (7).",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^concept:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity, so this stops `id: dataset:foo` passing on a concept while deliberately not inventing a slug pattern. All 329 ids happen to satisfy `^concept:[a-z0-9][a-z0-9-]{1,63}$` today -- measured, not assumed -- and that is still not a reason to pin it here: the ruling is about the ids nobody has written yet. health_checks/identity_policy.py:207 already reports kebab-case violations for this kind as a finding."
+    },
+    "kind": {"const": "concept"},
+    "status": {
+      "type": "string",
+      "enum": ["active", "deprecated"],
+      "$comment": "From the DESCRIPTOR (profiles/core.py:426), not the corpus. All 329 records are `active`; a corpus that never exercised `deprecated` is no evidence that it is invalid."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "AUTHORED and honored, same as mixin-hypothesis-2.0. 179 of 329 concepts carry it: `local` (177), `project_specific` (2). Note that ProjectEntity's default is `core`, a value NO concept record carries -- a probe asserting `profile == 'core'` would be passing on the model default, not on authored data."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "schema_profile": false
+  }
+}
