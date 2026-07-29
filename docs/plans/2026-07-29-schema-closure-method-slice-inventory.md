@@ -32,10 +32,16 @@ All five projects pin `entity_schema_version: 3`. Two declare project
 extensions: mm30's `mm30.assessment` and protein-landscape's
 `protein-landscape.promotion`.
 
-**16 of the 20 `promoted_from` records live in mm30, which declares no promotion
-extension.** They are admitted today only because the kind is open. This is the
-sharpest single argument for the mixin declaring the field: closing `method`
-without it fails 16 mm30 records at load.
+**All 20 `promoted_from` records depend on this mixin declaring the field.** They
+are admitted today only because the kind is open. mm30 (16) declares no promotion
+extension at all, and protein-landscape's `protein-landscape.promotion` — the
+frozen literal oracle's own home — is scoped to `hypothesis`, so it does not
+reach that project's own 4 methods. This is the sharpest single argument for the
+disposition below.
+
+(An earlier revision of this document said "16 of 20", on the assumption that
+protein-landscape's extension covered its own 4. Step 4 read the declaration and
+found it `hypothesis`-scoped.)
 
 Sweep exclusions applied, per the trap the `concept` slice recorded: `.venv` /
 `site-packages` (the packaged `science_model/templates/method.md` carries
@@ -216,6 +222,71 @@ not live. It is recorded here as a defect of slice 1 and deliberately **not**
 fixed in this branch: the merge boundary is one kind per branch, and correcting
 `concept` means a versioned mixin bump that belongs to its own change.
 
+## Step 3 — Production-Surface Alignment: No Change Required
+
+Recorded rather than skipped, because "nothing needed changing" is a claim and
+each surface was checked:
+
+| surface | evidence |
+|---|---|
+| authored sources | zero `knowledge/sources/**/*.yaml` files declare a `method` entity in any project. Unlike `finding`, this slice carries no source migration |
+| template | `templates/method.md` emits exactly the ten keys the mixin admits, measured by rendering it, and its two `{ omit: true }` fields are both admitted |
+| writers | `build_entity_markdown(kind="method", …)` was executed; it emits the same ten keys. No caller injects `origins`/`added_by` for this kind |
+| readers | every field a reader consumes is admitted; no reader keys on a field the mixin refuses |
+| adapter records | validation runs on the authored view, before enrichment — `EntityRegistry.build` orders `validate_against_schema` → `enrich` → `model_validate`, so the eighteen enrichment keys are never shown to the schema |
+
+## Step 4 — Certification
+
+All 51 records validate against the composed candidate with
+`unevaluatedProperties: false` armed, after one repair.
+
+No project declares a `method` extension, so base + mixin **is** the production
+composition for this kind — asserted rather than assumed, since a future
+extension would silently widen what certification covers.
+
+### The repair: two unquoted YAML dates
+
+`~/d/protein-landscape`'s `coverage-denominators-and-claims` and
+`embedding-report-card` carried `created: 2026-04-07` unquoted. YAML parses that
+as `datetime.date`, and base 2.0 declares `created` as
+`{"type": "string", "format": "date"}`, so both were refused. Both records
+already quoted `updated` on the adjacent line, so the repair made each record
+self-consistent rather than imposing a new convention. Verified before the edit
+that the date was the *sole* defect: with the value coerced to an ISO string and
+nothing else changed, both records validate.
+
+Committed separately, in that repo (`6796628`).
+
+### The 167 records this slice leaves behind
+
+The two repaired records are not a protein-landscape quirk. A corpus sweep found
+**169 records across 7 projects** carrying an unquoted `created` or `updated`:
+
+| kind | records | | kind | records |
+|---|---:|---|---|---:|
+| `plan` | 44 | | `discussion` | 12 |
+| `question` | 31 | | `topic` | 8 |
+| `report` | 25 | | `probe` | 5 |
+| `evidence-line` | 21 | | `method` | **2** |
+| `interpretation` | 19 | | `paper` | 1 |
+
+**No `hypothesis` or `concept` record is affected**, which is why `main` is sound
+today rather than quietly broken — checked, because the alternative explanation
+for two armed kinds passing was that nobody had looked.
+
+Every remaining slice inherits a share of this. `topic` (8) and `paper` (1) are
+the immediate ones; `plan`, `question`, and `report` are not tranche kinds but
+carry 100 records between them.
+
+The systemic alternative — normalizing `datetime.date` to an ISO string before
+`validate_against_schema` — is a real candidate and deliberately not taken here.
+`created: 2026-04-07` is idiomatic YAML, the model already coerces both forms,
+and `model_dump(mode="json")` already round-trips through the ISO string, so the
+schema is arguably checking the serialization rather than the value. But that
+change is kind-agnostic: it alters the load path for `hypothesis` and `concept`
+too, and belongs in its own branch with its own certification, not inside one
+kind's slice.
+
 ## What This Slice Does Not Close
 
 - `hypothesis`'s realignment to the `promoted_from` ownership ruling. Its mixin
@@ -224,3 +295,15 @@ fixed in this branch: the merge boundary is one kind per branch, and correcting
 - The `method` status vocabulary itself. Whether `proposed` should join the
   descriptor's four values is a D5 certification question; this slice
   deliberately leaves the record loading and the warning firing.
+- The 167 unquoted-date records in kinds this slice does not close, and the
+  load-path normalization that would retire the whole class.
+- The Markdown adapter's authored-injected-key blind spot. `sources.py:434`
+  passes `MarkdownAdapter.INJECTED_KEYS` unconditionally while every other call
+  site passes `INJECTED_KEYS - authored`, so a record authoring `content:` has it
+  hidden from the schema rather than judged by it — the exact failure
+  `EntityRegistry.build`'s docstring names. The concept slice recorded this as a
+  one-line fix; it is not. `validate_canonical_markdown_record` receives one
+  merged `raw` dict from `adapter.load_raw(ref)` and cannot separate authored
+  from injected keys, so the fix requires the adapter to report what it injected
+  per record — a `StorageAdapter` protocol change. No `method` record exercises
+  it, and a certification test pins that fact.
