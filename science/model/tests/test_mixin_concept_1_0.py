@@ -23,9 +23,11 @@ the source module would not be seen.
 """
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 from science_model.entity_schema import loader as loader_module
 from science_model.entity_schema import validator as validator_module
 from science_model.entity_schema.loader import SchemaNotFoundError
@@ -39,6 +41,7 @@ from science_model.entity_schema.profile import (
     default_profile_for_kind,
 )
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+from science_model.templates import Renderer
 
 SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
 
@@ -224,6 +227,61 @@ def test_scalar_related_is_refused(strict):
 
 def test_non_string_related_item_is_refused(strict):
     _refuses(strict, _record(related=[3]))
+
+
+# --- production surfaces: the template is the only one that emits concept keys ----
+
+
+def _rendered_frontmatter() -> dict:
+    """Render `concept` through the PACKAGED template, which is what production uses.
+
+    `entities.py:796` imports `Renderer` from `science_model.templates`, so the
+    repo-root `templates/concept.md` is a second copy that renders nothing. It is kept
+    honest by `test_templates.py::test_root_and_packaged_migrated_templates_match`,
+    which byte-compares the two for every `template_ready` kind -- so asserting on the
+    packaged one here covers both, and asserting on the root copy would cover neither.
+    """
+    text = Renderer(today=date(2026, 5, 3)).render(
+        "concept",
+        fields={
+            "entity_id": "concept:age",
+            "kind": "concept",
+            "title": "Age",
+            "status": "active",
+            "related": [],
+            "source_refs": [],
+            "slug": "age",
+            "local_part": "age",
+            "created": "2026-05-03",
+            "updated": "2026-05-03",
+        },
+    )
+    return yaml.safe_load(text.split("---")[1])
+
+
+def test_the_rendered_template_validates_under_the_candidate(strict):
+    """The scaffold a new concept starts from must satisfy the schema that will judge it.
+
+    This is the failure the slice procedure names: templates emitting a field set
+    nothing enforces. Asserted in the direction that catches it -- add a key to
+    `templates/concept.md` that the mixin does not admit and this goes red.
+    """
+    strict.validate_as(_rendered_frontmatter(), CANDIDATE)
+
+
+def test_the_template_emits_no_field_outside_the_frozen_set():
+    """Narrower and louder than the validation above: names the drift rather than
+    reporting `unevaluatedProperties`."""
+    assert set(_rendered_frontmatter()) == {
+        "id",
+        "kind",
+        "title",
+        "status",
+        "related",
+        "source_refs",
+        "created",
+        "updated",
+    }
 
 
 # --- the mixin's own declaration -------------------------------------------------

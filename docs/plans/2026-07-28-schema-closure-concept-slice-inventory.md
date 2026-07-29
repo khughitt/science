@@ -242,6 +242,58 @@ only, and the procedure's wording should say so — otherwise the next four
 slices each re-derive it, and one of them will get it wrong in the direction
 that matters. Recording it here rather than assuming it.
 
+## Production-surface alignment (step 3)
+
+Step 3 required **no production edit**: every surface already emits a subset of the
+frozen field set. That is a measurement, not an assumption, and each item below is
+now asserted by a guard so a later edit cannot silently undo it.
+
+| surface | state | guard |
+|---|---|---|
+| packaged `science_model/templates/concept.md` | renders 8 keys, all admitted | `test_the_rendered_template_validates_under_the_candidate`, `test_the_template_emits_no_field_outside_the_frozen_set` |
+| repo-root `templates/concept.md` | byte-identical copy; renders nothing | pre-existing `test_root_and_packaged_migrated_templates_match` |
+| structured sources | none exist for this kind | the zero-row sweep above |
+| writers | none emit a concept record | the `promoted_from` sweep above |
+| readers | no undeclared-field reads | the consumer-read table above |
+| `_enrich_raw` profile defaulting | runs **after** validation | `build` validates, then enriches, then projects |
+| project extensions | **no project declares one for `concept`** | measured across all 39 `science.yaml` roots |
+
+Two facts worth stating separately, because both were assumptions until measured.
+
+**The packaged template is the one that renders.** `entities.py:796` imports
+`Renderer` from `science_model.templates`; the repo-root copy is a second file with
+its own inode. They are byte-identical today only because an existing parity guard
+holds them so. A step-3 edit to the root copy alone would have changed nothing.
+
+**`profile` is loader-defaulted, but only after validation.** `sources.py:1043`
+fills it inside `_enrich_raw`, which `build` runs *after* the schema check, so the
+schema sees the 179 authored values and never the 150 defaulted ones. The mixin
+therefore admits `profile` without requiring it.
+
+### Project distribution, and what step 7 must do about it
+
+Exactly three of the 39 `science.yaml` roots carry concepts:
+
+| project | records | `entity_schema_version` |
+|---|---|---|
+| `~/d/cancer/cancer-types/multiple-myeloma` | 285 | 3 |
+| `~/d/health/processes/post-acute-infection` | 37 | 3 |
+| `~/d/natural-systems` | 7 | 2 |
+
+**`concept` must be added to BOTH generation rows at `1.0`.** natural-systems is on
+generation 2; arming only generation 3 would leave its 7 records outside the closed
+profile while mm30's 285 were inside — a split contract across one kind, which is
+exactly what a generation row exists to prevent. The two rows carrying the same
+version also keeps `sources.py:1704` honest: it calls
+`default_profile_for_kind(entity.kind)` with **no** generation argument, so it always
+resolves the generation-2 row regardless of what the project declared.
+
+That call is also a step-6 item. It sits in a `try/except ProfileParseError` whose
+comment is explicit that the except branch is not a fallback. `concept` takes that
+branch today; once it appears in a generation row it will resolve, and a merge policy
+will be registered where none was before. That is intended, and it is a derived
+behaviour change that step 6's diff must show rather than discover.
+
 ## What this slice does not close
 
 Per the procedure's debt section, and confirmed against the tree:
