@@ -188,54 +188,56 @@ EXEMPTIONS: dict[str, str] = {
 # Reclassified from DEFERRED by the 2026-07-25 slice 1b-3 audit
 # (docs/plans/2026-07-25-context-budget-1b3-audit.md): fixed-shape output that
 # cannot grow with project size.
-EXEMPTIONS.update({
-    "annotate ack": "single-annotation-ID status mutation (open->ack)",
-    "annotate dismiss": "single-annotation-ID status mutation (open->dismissed) via the shared _crud_invoke helper",
-    "annotate extract": "single-paper extraction; fixed counts (written/skipped-by-reason/grounding_dropped) plus a note, no per-item loop",
-    "annotate fix": "single-annotation-ID status mutation (open->fixed) via the shared _crud_invoke helper",
-    "annotate promote-prose-decomposition": "promotes exactly one --unit (required, singular)",
-    "annotate pubtator": "single-paper (identifier) PubTator seeding",
-    "annotate stats": "aggregated counts by_status/by_source/by_type",
-    "benchmark gap-calibration": "output is O(number of --project flags supplied), not project size; each yields one top-10-capped calibration summary",
-    "commons dataset build": "Prints exactly one line: `snakemake exited {exit_code}`",
-    "commons member-payload": "Resolves exactly one promoted virtual member (member_id) to its payload",
-    "commons reference-graph resolve-member": "Resolves one (registry_id, member_key) pair to at most one GraphMemberMatch (or an 'unresolved' status record)",
-    "commons show": "Prints exactly one entity by canonical id (optionally merged with one named project's overlay)",
-    "dataset reconcile": "diffs at most 3 fixed cached fields between one dataset entity's frontmatter and its one datapackage.yaml",
-    "dataset show": "fixed ~8-10 field block for the one resolved dataset entity, plus that entity's own body",
-    "datasets hydrate-worktree": "iterates a hardcoded 3-tuple of data dirs (raw/processed/external); always three rows regardless of project size",
-    "datasets sources": "enumerates the fixed code-defined set of packaged adapters; grows only when the toolkit ships a new adapter",
-    "discussions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings (emit_entity_warnings)",
-    "discussions show": "Renders one entity's fixed field set (id, kind, title, status, path, related refs, source_refs, body)",
-    "doi lookup": "hardcoded <=6-key metadata dict for one DOI (doi/title/publisher/source/issued/url), not a per-record list",
-    "entity kinds": "one row per DECLARED kind -- the shipped profiles plus the project's own local manifest -- so it grows with the vocabulary, never with how many entities exist",
-    "entity sections": "rows come from the kind's fixed template/schema, not per-entity project data",
-    "entity show": "fixed field set for the one entity resolved by ref; related/source_refs are that entity's own authored lists",
-    "evidence-lines create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
-    "evidence-lines show": "Renders one entity's fixed field set",
-    "graph build": "a handful of fixed confirmation lines plus ontology-suggestion lines bounded by the code-shipped ontology registry",
-    "graph predicates": "returns the code-defined PREDICATE_REGISTRY verbatim; its docstring states it is not an instrument",
-    "graph project-summary": "InstrumentResult with exactly one row -- a single project-wide rollup",
-    "graph validate": "a fixed set of ~6 structural check rows (parseable_trig, provenance_completeness, etc.), not one per violation",
-    "hypotheses create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
-    "hypotheses show": "Renders one entity's fixed field set",
-    "interpretations create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
-    "interpretations show": "Renders one entity's fixed field set",
-    "paper-fetch": "one FetchResult record for a single paper; tiers/errors bounded by the fixed fetch-strategy algorithm, not project size",
-    "project artifacts diff": "Unified diff between ONE named artifact's canonical and installed bytes",
-    "project artifacts exec": "os.execv() replaces the current process with the canonical artifact's own binary",
-    "project artifacts list": "One line per artifact TYPE in the toolkit's static registry.yaml (currently exactly 1: validate.sh)",
-    "project artifacts update": "Fixed confirmation for ONE named artifact update: from-version -> to-version, commit status, backup path",
-    "project resolve-refs": "Output is one line per --query argument the CALLER supplies (a repeatable option), not per record in the project",
-    "project spec-path": "Resolves ONE --slug to one path; the payload is a fixed three-field record (slug, path, layout) or a hard failure",
-    "propositions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
-    "propositions show": "Renders one entity's fixed field set",
-    "questions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
-    "questions show": "Renders one entity's fixed field set",
-    "tasks block": "single task-state-change confirmation: one line naming the task and echoing back the user-supplied --by refs joined with commas",
-    "tasks show": "renders one task's fixed fields plus that task's own readiness list -- O(1) in project size",
-    "verdict parse": "parses exactly ONE named file argument into a single ParseResult document",
-})
+EXEMPTIONS.update(
+    {
+        "annotate ack": "single-annotation-ID status mutation (open->ack)",
+        "annotate dismiss": "single-annotation-ID status mutation (open->dismissed) via the shared _crud_invoke helper",
+        "annotate extract": "single-paper extraction; fixed counts (written/skipped-by-reason/grounding_dropped) plus a note, no per-item loop",
+        "annotate fix": "single-annotation-ID status mutation (open->fixed) via the shared _crud_invoke helper",
+        "annotate promote-prose-decomposition": "promotes exactly one --unit (required, singular)",
+        "annotate pubtator": "single-paper (identifier) PubTator seeding",
+        "annotate stats": "aggregated counts by_status/by_source/by_type",
+        "benchmark gap-calibration": "output is O(number of --project flags supplied), not project size; each yields one top-10-capped calibration summary",
+        "commons dataset build": "Prints exactly one line: `snakemake exited {exit_code}`",
+        "commons member-payload": "Resolves exactly one promoted virtual member (member_id) to its payload",
+        "commons reference-graph resolve-member": "Resolves one (registry_id, member_key) pair to at most one GraphMemberMatch (or an 'unresolved' status record)",
+        "commons show": "Prints exactly one entity by canonical id (optionally merged with one named project's overlay)",
+        "dataset reconcile": "diffs at most 3 fixed cached fields between one dataset entity's frontmatter and its one datapackage.yaml",
+        "dataset show": "fixed ~8-10 field block for the one resolved dataset entity, plus that entity's own body",
+        "datasets hydrate-worktree": "iterates a hardcoded 3-tuple of data dirs (raw/processed/external); always three rows regardless of project size",
+        "datasets sources": "enumerates the fixed code-defined set of packaged adapters; grows only when the toolkit ships a new adapter",
+        "discussions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings (emit_entity_warnings)",
+        "discussions show": "Renders one entity's fixed field set (id, kind, title, status, path, related refs, source_refs, body)",
+        "doi lookup": "hardcoded <=6-key metadata dict for one DOI (doi/title/publisher/source/issued/url), not a per-record list",
+        "entity kinds": "one row per DECLARED kind -- the shipped profiles plus the project's own local manifest -- so it grows with the vocabulary, never with how many entities exist",
+        "entity sections": "rows come from the kind's fixed template/schema, not per-entity project data",
+        "entity show": "fixed field set for the one entity resolved by ref; related/source_refs are that entity's own authored lists",
+        "evidence-lines create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+        "evidence-lines show": "Renders one entity's fixed field set",
+        "graph build": "a handful of fixed confirmation lines plus ontology-suggestion lines bounded by the code-shipped ontology registry",
+        "graph predicates": "returns the code-defined PREDICATE_REGISTRY verbatim; its docstring states it is not an instrument",
+        "graph project-summary": "InstrumentResult with exactly one row -- a single project-wide rollup",
+        "graph validate": "a fixed set of ~6 structural check rows (parseable_trig, provenance_completeness, etc.), not one per violation",
+        "hypotheses create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+        "hypotheses show": "Renders one entity's fixed field set",
+        "interpretations create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+        "interpretations show": "Renders one entity's fixed field set",
+        "paper-fetch": "one FetchResult record for a single paper; tiers/errors bounded by the fixed fetch-strategy algorithm, not project size",
+        "project artifacts diff": "Unified diff between ONE named artifact's canonical and installed bytes",
+        "project artifacts exec": "os.execv() replaces the current process with the canonical artifact's own binary",
+        "project artifacts list": "One line per artifact TYPE in the toolkit's static registry.yaml (currently exactly 1: validate.sh)",
+        "project artifacts update": "Fixed confirmation for ONE named artifact update: from-version -> to-version, commit status, backup path",
+        "project resolve-refs": "Output is one line per --query argument the CALLER supplies (a repeatable option), not per record in the project",
+        "project spec-path": "Resolves ONE --slug to one path; the payload is a fixed three-field record (slug, path, layout) or a hard failure",
+        "propositions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+        "propositions show": "Renders one entity's fixed field set",
+        "questions create": "Echoes exactly one 'Created <id> at <path>' line plus the created entity's own validation warnings",
+        "questions show": "Renders one entity's fixed field set",
+        "tasks block": "single task-state-change confirmation: one line naming the task and echoing back the user-supplied --by refs joined with commas",
+        "tasks show": "renders one task's fixed fields plus that task's own readiness list -- O(1) in project size",
+        "verdict parse": "parses exactly ONE named file argument into a single ParseResult document",
+    }
+)
 
 # Reclassified from DEFERRED by the 2026-07-26 slice 1b-3 write-audit-leak fix
 # (docs/plans/2026-07-25-context-budget-1b3-audit.md, Write-audit-leak section): these
@@ -247,15 +249,17 @@ EXEMPTIONS.update({
 # default (`--show-preexisting` lists it); `feedback add` caps the latter to the top
 # `_SIMILAR_NEIGHBORS_DISPLAY_LIMIT` neighbors plus a count. Both make the classification
 # true rather than assumed.
-EXEMPTIONS.update({
-    "dataset add": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "dataset verify-access": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "entities import": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "entity create": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "entity edit": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "entity note": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
-    "feedback add": "O(1) create confirmation; near-duplicate scan capped to top-K + count",
-})
+EXEMPTIONS.update(
+    {
+        "dataset add": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "dataset verify-access": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "entities import": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "entity create": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "entity edit": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "entity note": "O(1) write confirmation; pre-existing audit warnings summarized by default (--show-preexisting to list)",
+        "feedback add": "O(1) create confirmation; near-duplicate scan capped to top-K + count",
+    }
+)
 
 # Retired commands are exempt by construction: cli_retirement.RETIREMENTS owns which
 # commands are retired, and a fixed error string cannot grow with project size. Listing
@@ -306,13 +310,16 @@ DEFERRED: dict[str, DeferredCommand] = {
         "untrusted validation text can grow with the input report",
         "1b",
     ),
+    "findings migrate-acceptances": DeferredCommand(
+        "one output row per configured validation acceptance",
+        "1b",
+    ),
 }
 
 DEFERRED.update(
     {
         path: DeferredCommand(
-            "one output member per annotation, source, decomposition unit, "
-            "reconciliation action, path, or diagnostic",
+            "one output member per annotation, source, decomposition unit, reconciliation action, path, or diagnostic",
             "1b",
         )
         for path in (
@@ -371,8 +378,7 @@ DEFERRED.update(
 DEFERRED.update(
     {
         path: DeferredCommand(
-            "one output member per commons entity, resource, finding, promotion action, "
-            "or delegated build event",
+            "one output member per commons entity, resource, finding, promotion action, or delegated build event",
             "1b",
         )
         for path in (
@@ -401,7 +407,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per dataset, consumer, capability, link, resource, run, or warning", "1b")
+        path: DeferredCommand(
+            "one output member per dataset, consumer, capability, link, resource, run, or warning", "1b"
+        )
         for path in (
             "dataset capability-pairs",
             "dataset consumers",
@@ -413,7 +421,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per external dataset, file, resource, schema field, QA result, or adapter", "1b")
+        path: DeferredCommand(
+            "one output member per external dataset, file, resource, schema field, QA result, or adapter", "1b"
+        )
         for path in (
             "datasets infer-schema",
             "datasets qa",
@@ -432,7 +442,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per entity, archive action, import, consolidation member, or decision", "1b")
+        path: DeferredCommand(
+            "one output member per entity, archive action, import, consolidation member, or decision", "1b"
+        )
         for path in (
             "entities archive",
             "entities audit-identifiers",
@@ -446,7 +458,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per entity, field, relation, warning, migration action, or body element", "1b")
+        path: DeferredCommand(
+            "one output member per entity, field, relation, warning, migration action, or body element", "1b"
+        )
         for path in (
             "entity field-inventory",
             "entity migrate-hypothesis",
@@ -491,7 +505,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per inquiry, node, edge, validation check, or generated script line", "1b")
+        path: DeferredCommand(
+            "one output member per inquiry, node, edge, validation check, or generated script line", "1b"
+        )
         for path in ("inquiry export-chirho",)
     }
 )
@@ -505,10 +521,7 @@ DEFERRED.update(
     }
 )
 DEFERRED.update(
-    {
-        path: DeferredCommand("one output member per peer or peer validation issue", "1b")
-        for path in ("peers check",)
-    }
+    {path: DeferredCommand("one output member per peer or peer validation issue", "1b") for path in ("peers check",)}
 )
 DEFERRED.update(
     {
@@ -535,7 +548,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per telemetry event, command bucket, error class, or recent failure", "1b")
+        path: DeferredCommand(
+            "one output member per telemetry event, command bucket, error class, or recent failure", "1b"
+        )
         for path in (
             "telemetry export",
             "telemetry report",
@@ -544,7 +559,9 @@ DEFERRED.update(
 )
 DEFERRED.update(
     {
-        path: DeferredCommand("one output member per parsed verdict token, claim, interpretation, warning, or rollup group", "1b")
+        path: DeferredCommand(
+            "one output member per parsed verdict token, claim, interpretation, warning, or rollup group", "1b"
+        )
         for path in ("verdict rollup",)
     }
 )
