@@ -72,6 +72,7 @@ def test_prose_advisory_count_is_not_an_identity_field():
     }
     assert rule_kind_segment("canonical_parameter") == "canonical-parameter"
     assert rule_kind_segment("paper") == "paper"
+    assert rule_kind_segment("pH") == "ph"
 
 
 def test_ordinary_validation_identity_key_is_required_explicitly():

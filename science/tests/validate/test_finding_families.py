@@ -107,23 +107,35 @@ def _canonical_entries() -> tuple[CheckEntry, ...]:
 
 
 def test_declared_status_and_inverse_ids_equal_active_kind_expansion() -> None:
-    active = frozenset({"hypothesis", "workflow_run", "pre-registration"})
+    active = frozenset({"hypothesis", "workflow_run", "pre-registration", "pH"})
     assert {rule.id for rule in status_vocabulary_rules(active)} == {
         "hypothesis.status-vocabulary",
         "workflow-run.status-vocabulary",
         "pre-registration.status-vocabulary",
+        "ph.status-vocabulary",
     }
     assert {rule.id for rule in supersession_rules(active)} == {
         "hypothesis.unbacked-inverse",
         "workflow-run.unbacked-inverse",
         "pre-registration.unbacked-inverse",
+        "ph.unbacked-inverse",
     }
 
 
+@pytest.mark.parametrize(
+    "active",
+    [
+        frozenset({"workflow_run", "workflow-run"}),
+        frozenset({"pH", "ph"}),
+    ],
+)
 @pytest.mark.parametrize("factory", [status_vocabulary_rules, supersession_rules])
-def test_kind_family_collision_fails_before_registry_construction(factory) -> None:
+def test_kind_family_collision_fails_before_registry_construction(
+    factory,
+    active,
+) -> None:
     with pytest.raises(ValueError, match="collide"):
-        factory(frozenset({"workflow_run", "workflow-run"}))
+        factory(active)
 
 
 def test_sparse_family_emissions_are_declared_and_belong_to_active_registry() -> None:

@@ -139,7 +139,7 @@ def validation_observation(
 
 
 def rule_kind_segment(kind: str) -> str:
-    return kind.replace("_", "-")
+    return kind.lower().replace("_", "-")
 
 
 def validation_subject(project_root: Path, path: Path | None) -> FindingSubject:
