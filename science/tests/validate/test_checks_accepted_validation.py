@@ -60,5 +60,11 @@ def test_unrelated_rule_entry_is_silent(tmp_path: Path):
     assert not list(check_accepted_validation(ctx))
 
 
+def test_scalar_entry_does_not_crash_the_plan_2_scope_check(tmp_path: Path):
+    ctx = _ctx(tmp_path, "health:\n  accepted_validation:\n    - scalar\n")
+
+    assert not list(check_accepted_validation(ctx))
+
+
 def test_rule_is_never_gated(tmp_path: Path):
     assert "accepted-validation.evidence-scope-required" not in cumulative_rules("hygiene")

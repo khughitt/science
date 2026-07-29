@@ -41,6 +41,8 @@ SECTION, RULES = declare_validation_rules(
 def check_accepted_validation(ctx: ValidateContext) -> Iterator[CheckObservation]:
     emitted: set[str] = set()
     for entry in accepted_validation_entries(ctx.project_root):
+        if not isinstance(entry, dict):
+            continue
         rule = entry.get("rule")
         if rule in EVIDENCE_SCOPED_RULES and not entry_is_well_scoped(entry):
             semantic_fields = {
