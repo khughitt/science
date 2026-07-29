@@ -294,6 +294,63 @@ branch today; once it appears in a generation row it will resolve, and a merge p
 will be registered where none was before. That is intended, and it is a derived
 behaviour change that step 6's diff must show rather than discover.
 
+## Certification (step 4)
+
+**All 329 authored records satisfy the candidate profile with
+`unevaluatedProperties: false` armed.** Certified at the markdown adapter's authored
+boundary (`raw` minus `MarkdownAdapter.INJECTED_KEYS = {content, file_path,
+canonical_id}`), not at raw frontmatter, because the boundary is what `build` hands
+the schema. No record authors any of those three keys, so the subtraction is a no-op
+for this kind — asserted, not assumed, so the Markdown blind spot cannot be exercised
+here unnoticed.
+
+The full load path was verified by hand, with `concept` **temporarily armed for
+real** — `schema_closed=True` plus both generation rows — rather than monkeypatched.
+Six modules bind `PROJECT_MIXIN_NAMES` by value at import time
+(`graph/entity_schema_validation.py`, `entities.py`, `graph/sources.py`,
+`datasets/capability_migration.py`, `entity_schema/validator.py`, and `loader.py` for
+`TYPE_MIXIN_NAMES`), so a patch-based simulation that missed one would certify
+nothing while looking green.
+
+| project | before | after |
+|---|---|---|
+| mm30 | 4028 entities, 285 concepts | 4028 entities, 285 concepts |
+| natural-systems | 4160 entities, 7 concepts | 4160 entities, 7 concepts |
+
+Byte-identical, and a virtual record carrying an undeclared key was refused through
+the real adapter with a path-anchored error. The arming was then reverted and the
+branch re-verified inert.
+
+### The certification gap, stated rather than smoothed over
+
+`~/d/health/processes/post-acute-infection` **cannot be loaded at all**:
+
+```text
+ValueError: tasks/active.md predates the storage split;
+run `science tasks migrate-storage --apply`.
+```
+
+This reproduces on `main`, is unrelated to schema closure, and pre-dates this branch —
+the project has a `tasks/active.md` file where migrated projects have a `tasks/active/`
+directory. Its 37 concepts are therefore certified at the schema boundary only, not
+through the adapter. That is 11% of the corpus, and the gap closes when that project
+is migrated. It is recorded here rather than skipped past, because "the two projects
+that load, load fine" is not the same claim as "the corpus certifies".
+
+### Behaviour change to carry into step 6's allowlist
+
+A closure violation is a **hard load failure**, not a degradable one.
+`sources.py:603` raises `validation.error` for a `PROJECT_SCHEMA` rejection
+unconditionally — `strict_core_schema=False`, the mode documented to record a
+`SkippedEntity` so one bad entity cannot take a report offline, applies to the
+`ENTITY_SCHEMA` (Pydantic projection) rejection only.
+
+Verified this is the **established contract, not a new consequence**: an armed
+`hypothesis` record carrying an undeclared key raises identically today. `concept`
+joins an existing ruling rather than introducing a failure mode. It belongs on the
+allowlist all the same, because after step 7 a single malformed concept record takes
+`science health` down for the whole project where today it would not.
+
 ## What this slice does not close
 
 Per the procedure's debt section, and confirmed against the tree:
