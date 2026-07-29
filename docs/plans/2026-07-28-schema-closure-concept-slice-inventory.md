@@ -375,17 +375,29 @@ into the project it is given and nothing here should mutate a research repo.
 | the `undeclared_key` audit warning stops applying to `concept` | intended; it warns for kinds *outside* `strict_schema_kinds`, and enforcement replaces it |
 | materialized triples | **no change**, measured |
 
-No unlisted drift. Two derived surfaces could not be diffed, for reasons that are not
-this slice's:
+No unlisted drift.
 
-- **`science validate` fails on both projects, before any arming.** A project kind
-  named `pH` produces the rule id `pH.status-vocabulary` at
-  `validate/checks/status_vocabulary.py:72`, which `FindingRule` rejects as not
-  dotted-kebab-case. It reproduces on `main`, and `main` already carries a design doc
-  for mixed-case kind normalization — a known issue in flight, not a finding of this
-  slice.
-- **`~/d/health/processes/post-acute-infection`** cannot load at all (above), so its
-  37 concepts contribute to the schema-level certification and not to this diff.
+**`science validate`, diffed at merge time.** While the slice was in flight this
+surface could not be diffed at all: a project kind named `pH` produced the rule id
+`pH.status-vocabulary` at `validate/checks/status_vocabulary.py:72`, which
+`FindingRule` rejected as not dotted-kebab-case, so validate failed on both projects
+before any arming. `main` fixed it independently in `3ff3d54e` (mixed-case kind rule
+ids), which landed under this branch during the merge — so the comparison became
+available and was run rather than left as a recorded hole:
+
+| project | before closure | after closure | added | removed |
+|---|---|---|---|---|
+| natural-systems | 0 errors, 62 warnings | 0 errors, 62 warnings | 0 | 0 |
+| mm30 | 0 errors, 61 warnings | 0 errors, 61 warnings | 0 | 0 |
+
+Compared finding-by-finding, not by summary count: a substitution that preserved the
+count would otherwise read as no change. The baseline ran in a detached worktree at
+`3ff3d54e` — the merge's first parent, which carries the rule-id fix and not the
+closure — so the two runs differ in exactly one thing.
+
+**One surface remains undiffed.** `~/d/health/processes/post-acute-infection` cannot
+load at all (above), so its 37 concepts contribute to the schema-level certification
+and to neither the graph nor the validate diff.
 
 ### One fact worth recording rather than acting on
 
