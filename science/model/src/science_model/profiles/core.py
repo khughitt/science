@@ -425,7 +425,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "deprecated"],
             supersedable=False,
-            schema_closed=False,
+            schema_closed=True,
         ),
         EntityKind(
             name="construct",

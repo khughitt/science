@@ -42,11 +42,17 @@ def test_the_shipped_population_is_53() -> None:
     assert len(SHIPPED_KINDS) == 53
 
 
-def test_this_mechanism_closes_NO_new_kind() -> None:
-    # The mechanism branch must be behaviourally inert: it changes HOW the answer is derived, not
-    # WHAT it is. If this fails, a kind was closed without its atomic slice (design 4.0), which is
-    # the partial release the design prohibits.
-    assert PROJECT_MIXIN_NAMES == frozenset({"hypothesis"})
+def test_the_armed_set_is_exactly_the_kinds_whose_slices_have_landed() -> None:
+    # One entry per COMPLETED slice, and the list is hand-written so a kind cannot join by
+    # accident: `PROJECT_MIXIN_NAMES` derives from `schema_closed`, so an equality against a
+    # derived set would be the identity function. Growing this line without the seven-step
+    # slice behind it is the partial release design 4.0 prohibits.
+    #
+    #   hypothesis -- D5
+    #   concept    -- 2026-07-28, docs/plans/2026-07-28-schema-closure-concept-slice-inventory.md
+    #
+    # Remaining tranche kinds, in order: method, search, observation, finding.
+    assert PROJECT_MIXIN_NAMES == frozenset({"hypothesis", "concept"})
 
 
 _MINIMAL_EXTERNAL = {

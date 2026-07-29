@@ -30,7 +30,9 @@ keeps the declaration and enforcement inseparable in a release.
    all source paths, composing project extensions exactly as production does.
 5. **Reconcile the contracts.** Compare schema fields with the Pydantic
    projection and with every explicit reader or omit decision; unexplained
-   fields on either side block the slice.
+   fields on either side block the slice. For a kind with no typed subclass,
+   see "Untyped kinds" below — the gap direction has a manifest, and the
+   surplus direction has nothing to explain.
 6. **Diff derived behavior.** Compare graph, validation, dashboard, and other
    derived outputs against an explicit intended-change allowlist. Unlisted
    drift blocks the slice.
@@ -137,17 +139,62 @@ The 20 expected project identities are frozen. When `-m real_projects` is
 explicitly selected, a missing project fails rather than skips. Otherwise,
 "all 20 passed" can silently degrade into "the 17 available passed."
 
+## Untyped Kinds
+
+Four of the five tranche kinds — `concept`, `search`, `finding`, `observation` —
+have no entry in `CORE_KIND_MODELS` and project onto the generic `ProjectEntity`,
+70 fields shared with 29 other kinds. Only `method` is typed, and `hypothesis`, the
+kind the procedure was drafted against, is typed. So this is the common case, not
+the exception, and step 5 means something different for it.
+
+**The gap direction — schema admits, model does not declare — is not free.**
+`science/tests/test_kind_reconciliation.py` holds a frozen `UNHELD` manifest: every
+admitted-but-undeclared field needs either a `Reader` (a named symbol, AST-verified to
+perform a keyed read of that field) or a `PendingRuling` (explicit debt, written after
+looking for a reader and finding none). Equality is checked in both directions, so a
+stale exemption fails as loudly as a new gap. Search for the reader per field; do not
+infer one from a neighbouring kind's entry. The concept slice found five fields with
+no reader and one — `tags` — with a real kind-agnostic one, which no amount of
+reasoning by analogy from the commons entries would have produced.
+
+**The surplus direction — model declares, schema never admits — is not a finding.**
+`taxon` on a concept is dead weight in a shared model, and requiring an explanation per
+field would mean writing the same sentence fifty times.
+
+## A Slice Owes Its Value Battery
+
+`science/model/tests/test_value_reconciliation.py` requires every declared mixin to be
+either value-reconciled or listed in `PENDING_PROFILES`. A closing slice owes the
+battery in the same branch: `PENDING_PROFILES` is the debt list for mixins that exist
+and enforce nothing, which is exactly what a closed kind is not. S1b's four are the
+commons kinds; a tranche kind has no owner there.
+
+The battery covers the intersection of the composed schema with the model's declared
+fields, per generation, and every entry needs at least one value the schema refuses and
+one it admits. Compare against `model_dump(mode="json")`: `created` and `updated` are
+`datetime.date` on the model, so a plain dump reports preservation loss against the
+authored ISO string where there is none.
+
 ## Slice Order
 
-Use this order:
-
-1. `concept` first: 329 documents, 4 non-base fields, and the reference class.
-   It is the largest corpus with the simplest tail and proves the mechanism
-   against the reference class.
-2. `method`.
+1. `concept` — **DONE** (2026-07-28). 329 documents, 4 non-base fields, the reference
+   class. See
+   [`../plans/2026-07-28-schema-closure-concept-slice-inventory.md`](../plans/2026-07-28-schema-closure-concept-slice-inventory.md).
+2. `method` — and it is the odd one out: the only tranche kind with a typed subclass
+   (`MethodEntity`), so step 5 is the two-directional check as originally written.
 3. `search`.
 4. `observation`.
 5. `finding` last, because it alone carries a source migration.
+
+### What the first slice cost that the procedure did not predict
+
+Arming broke four guards outside the schema layer, none of them in the graph:
+`test_value_reconciliation` (×2, the battery above), `test_kind_reconciliation` (×2,
+the manifest above), `test_entity_construction_boundary`'s open-kind example (it was
+hard-coded to `concept`; it now derives an open kind, so the next slice will not break
+it), and `science entity sections`, which starts listing frontmatter fields for a kind
+once its profile resolves. Budget for guards that enumerate the armed set — the graph
+diff was byte-identical and told us none of this.
 
 ## Debt This Tranche Does Not Close
 

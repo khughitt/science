@@ -395,6 +395,64 @@ no materializer. That is consistent with the ownership ruling — it names a sou
 location, not an epistemic fact — but it means the field is schema-vouched and
 graph-invisible, and a future reader looking for it in the graph will not find it.
 
+## Arming (step 7)
+
+Two edits, one commit, neither able to land alone:
+
+- `profiles/core.py` — `schema_closed=True` on the `concept` descriptor;
+- `entity_schema/profile.py` — `"concept": "1.0"` in **both** generation rows.
+
+Everything else derives. `PROJECT_MIXIN_NAMES`, `TYPE_MIXIN_NAMES`, and
+`_BASE_VERSION_FOR_MIXIN` all recompute from the descriptor, so the six modules that
+bind those names by value agree by construction rather than by discipline.
+
+### What arming made fail, and what each failure meant
+
+Three guards fired. None was noise, and one of them was a gate this slice had to
+satisfy rather than update:
+
+| guard | resolution |
+|---|---|
+| `test_schema_closed_gate.py::test_this_mechanism_closes_NO_new_kind` | rewritten. It was the mechanism branch's inertness guard; it is now a hand-written roster of completed slices, one line per kind, so a future kind still cannot join by accident |
+| `test_value_reconciliation.py` (×2) | **a real gate, satisfied rather than relaxed** — see below |
+| the four dormancy probes in `test_mixin_concept_1_0.py` | flipped to their armed counterparts, as written |
+
+**The value-reconciliation ratchet is the one worth recording.** It requires every
+declared mixin to be classified as either value-reconciled (an authored probe battery)
+or pending debt, so that "a newly declared mixin cannot arrive with no probe values and
+no failing test". It fired exactly as designed.
+
+The tempting resolution was to add `(2, "concept")` and `(3, "concept")` to
+`PENDING_PROFILES` and cite S1b. That would have been wrong twice over: S1b's "other
+four" are the **commons** kinds (`dataset`, `paper`, `theme`, `topic`), so `concept`
+has no owner there; and `PENDING_PROFILES` is the debt list for mixins that exist but
+enforce nothing, which is precisely what a closed kind is not. A slice that arms
+enforcement owes the battery in the same branch.
+
+So `test_concept_entity.py` was authored: 13 shared fields — the intersection of the
+composed schema with `ProjectEntity` — probed against both generations for
+strictness, preservation, and battery/surface equality.
+
+It caught something on its first run, in itself rather than in the product: `created`
+and `updated` are `datetime.date` on the model, so a plain `model_dump()` compares a
+date object against the authored ISO string and reports preservation loss where there
+is none. `test_hypothesis_entity.py` had already solved this with `mode="json"`; the
+new file had to learn it the same way.
+
+The six admitted-but-undeclared fields (`promoted_from`, `contributors`, `licenses`,
+`sources`, `tags`, `version`) are deliberately **not** in the battery. The model
+declares none of them and preserves them as extras, so there is no model opinion for a
+schema opinion to be reconciled against. Their shapes are probed in
+`test_mixin_concept_1_0.py` and their survival in the step-5 reconciliation.
+
+### Left alone on purpose
+
+`validate/kind_severity.py`'s `_CERTIFIED_KINDS` is still `{"hypothesis"}`. That is
+the kind-certification advance — ERROR vs WARN severity, paired with a gate-tier entry
+— and it is a different ruling from schema closure with its own one-kind-at-a-time
+cadence. Bundling `concept` into it here would change validation severity under cover
+of a schema slice.
+
 ## What this slice does not close
 
 Per the procedure's debt section, and confirmed against the tree:

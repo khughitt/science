@@ -98,8 +98,14 @@ def parse_component(token: str) -> ProfileComponent:
 # number and every kind resolves against the same row, so two kinds can never disagree about which
 # generation the project is on.
 _MIXIN_VERSION_BY_GENERATION: dict[int, dict[str, str]] = {
-    2: {"dataset": "2.0", "paper": "2.0", "topic": "2.0", "theme": "2.0", "hypothesis": "1.0"},
-    3: {"dataset": "3.0", "paper": "2.0", "topic": "2.0", "theme": "2.0", "hypothesis": "2.0"},
+    2: {
+        "dataset": "2.0", "paper": "2.0", "topic": "2.0", "theme": "2.0",
+        "hypothesis": "1.0", "concept": "1.0",
+    },
+    3: {
+        "dataset": "3.0", "paper": "2.0", "topic": "2.0", "theme": "2.0",
+        "hypothesis": "2.0", "concept": "1.0",
+    },
 }
 
 # The base version is PER-KIND, not global. Commons kinds pin base 1.0 -- 369 live records depend

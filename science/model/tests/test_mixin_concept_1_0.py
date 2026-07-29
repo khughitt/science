@@ -30,13 +30,11 @@ import pytest
 import yaml
 from science_model.entity_schema import loader as loader_module
 from science_model.entity_schema import validator as validator_module
-from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema.profile import (
     BASE_NAME,
     PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
     ProfileComponent,
-    ProfileParseError,
     ProfileString,
     default_profile_for_kind,
 )
@@ -100,41 +98,50 @@ def _refuses(validator: EntityValidator, record: dict) -> str:
     return str(caught.value)
 
 
-# --- dormancy: this branch arms nothing ------------------------------------------
+# --- armed: both lookups flipped, from one declaration ---------------------------
+#
+# These four assertions were written inverted while the mixin was dormant, and flipped
+# here in the slice's final step. Arming touches two independent lookups -- the
+# composer's `PROJECT_MIXIN_NAMES` and the loader's `TYPE_MIXIN_NAMES` -- and both now
+# derive from `schema_closed=True` on the descriptor, so the pair cannot drift apart.
 
 
-def test_concept_is_not_yet_armed():
-    assert "concept" not in PROJECT_MIXIN_NAMES
+def test_concept_is_armed():
+    assert "concept" in PROJECT_MIXIN_NAMES
+    assert "concept" in TYPE_MIXIN_NAMES
 
 
 @pytest.mark.parametrize("generation", [2, 3])
-def test_no_generation_row_selects_the_concept_mixin(generation):
-    with pytest.raises(ProfileParseError):
-        default_profile_for_kind("concept", generation=generation)
+def test_both_generation_rows_select_the_concept_mixin(generation):
+    """BOTH rows, at the same version, and neither of those details is incidental.
 
-
-def test_the_mixin_is_unreachable_while_unarmed():
-    """Dormancy is stronger than "not strict": the file cannot be loaded as a mixin.
-
-    `loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`, so an unarmed
-    `concept` resolves to `extension-concept-1.0.json`, which does not exist. Adding
-    this file to the package therefore cannot change any current load path -- and this
-    assertion is one of the two that must flip at step 7.
+    natural-systems is pinned to generation 2 and mm30 to generation 3, so arming one
+    row would split one kind's contract across the corpus. And `sources.py:1704` calls
+    `default_profile_for_kind(entity.kind)` with no generation argument -- it always
+    resolves row 2 -- so the two rows agreeing on `1.0` is what keeps that call site
+    consistent with the projects it is resolving for.
     """
-    with pytest.raises(SchemaNotFoundError) as caught:
-        EntityValidator().validate_as(_record(), CANDIDATE)
-    assert "extension-concept-1.0.json" in str(caught.value)
+    profile = default_profile_for_kind("concept", generation=generation)
+    assert profile.render() == "science-entity-base/2.0+concept/1.0"
 
 
-def test_unarmed_composition_would_not_close(monkeypatch):
-    """The other half of dormancy: reachable but lax.
+def test_the_mixin_is_now_reachable_as_a_mixin():
+    """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    With ONLY the loader patched, `_compose` still omits `unevaluatedProperties`,
-    so a key no surface declares sails through. That is the defect the slice closes,
-    asserted against the real composer rather than described.
+    While dormant this raised `SchemaNotFoundError` for `extension-concept-1.0.json`:
+    the file was not lax, it was unreachable.
     """
-    monkeypatch.setattr(loader_module, "TYPE_MIXIN_NAMES", TYPE_MIXIN_NAMES | {"concept"})
-    EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    EntityValidator().validate_as(_record(), CANDIDATE)
+
+
+def test_composition_now_closes():
+    """The defect this slice closes, asserted against the real composer.
+
+    Unarmed, `_compose` omitted `unevaluatedProperties` and this record loaded.
+    """
+    with pytest.raises(EntityValidationError) as caught:
+        EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    assert "shadow_key" in str(caught.value)
 
 
 # --- value probes: the measured corpus validates ---------------------------------

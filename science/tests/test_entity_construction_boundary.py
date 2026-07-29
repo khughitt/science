@@ -18,6 +18,8 @@ import yaml
 from science_model.source_contracts import StructuredEntitySource
 from science_tool.entity_profiles import ProjectSchema, load_project_schema_if_pinned
 from science_tool.graph.entity_registry import EntityRegistry
+from science_model.profiles.core import CORE_PROFILE
+from science_model.profiles.schema import KindCategory
 from science_tool.graph.sources import load_project_sources, registry_for_project
 
 
@@ -257,11 +259,28 @@ def _valid_hypothesis_mapping() -> dict[str, Any]:
     }
 
 
-def _valid_concept_mapping() -> dict[str, Any]:
-    """The same, for the OPEN kind. `concept` has no mixin, so only base 2.0 applies."""
+def _an_open_kind() -> str:
+    """A kind with no mixin, DERIVED rather than named.
+
+    This was hard-coded to `concept` until the concept slice closed it, at which point the
+    open-kind test started asserting closed-kind behaviour and failed. Naming the next
+    victim (`method`, then `search`, ...) just moves the same breakage one slice along --
+    the tranche is going to close all five. Deriving it means the test keeps testing what
+    its name says for as long as any open kind exists.
+    """
+    return next(
+        kind.name
+        for kind in sorted(CORE_PROFILE.entity_kinds, key=lambda k: k.name)
+        if not kind.schema_closed and kind.category is KindCategory.AUTHORED_CORE
+    )
+
+
+def _valid_open_kind_mapping() -> dict[str, Any]:
+    """A minimal record for the open kind, which has no mixin -- only base 2.0 applies."""
+    kind = _an_open_kind()
     return {
-        "id": "concept:c1",
-        "kind": "concept",
+        "id": f"{kind}:c1",
+        "kind": kind,
         "title": "C1",
         "status": "active",
         "related": [],
@@ -605,12 +624,13 @@ def test_build_does_not_validate_an_OPEN_kind(tmp_path) -> None:
     # Open kinds keep loading exactly as before -- this branch closes nothing. A shadow key on an
     # open kind is preserved, not refused; that is the `extra="allow"` projection doing its job.
     registry, project_schema = _armed_registry(tmp_path)
+    kind = _an_open_kind()
     entity = registry.build(
-        "concept",
-        {**_valid_concept_mapping(), "shadow_key": "v"},
+        kind,
+        {**_valid_open_kind_mapping(), "shadow_key": "v"},
         project_schema=project_schema,
-        path="entities/concepts/0001-x.md",
+        path=f"entities/{kind}/0001-x.md",
         injected=frozenset(),
         enrich=_enrich_projection_fields,
     )
-    assert entity.kind == "concept"
+    assert entity.kind == kind

@@ -136,6 +136,55 @@ for _kind in _COMMONS_FOUR:
         PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
     )
 
+# `concept` (schema-closure slice, 2026-07-28). It has no typed subclass, so its projection is the
+# generic `ProjectEntity` and these six are admitted-but-undeclared. Each was swept for individually
+# rather than inferred from the commons entries above -- `tags` turned out to have a real reader
+# where the others have none.
+UNHELD[("concept", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter, kind-agnostic: it walks every markdown under entities/, so "
+        "entities/concepts/*.md is in scope",
+    ),
+)
+UNHELD[("concept", "promoted_from")] = (
+    _BOTH,
+    PendingRuling(
+        "132 of the 329 concepts author it and NOTHING reads it. The only occurrence in the tree "
+        "is a WRITE -- graph/decision_log.py:157, which stamps it onto `type: decision` owners, a "
+        "different kind. It is also absent from both materialized graphs (measured). Real "
+        "provenance with no consumer, not a gap to close by deleting the field"
+    ),
+)
+UNHELD[("concept", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("concept", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("concept", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "the same finding as paper/theme/topic below: keyed `sources` reads exist across the tree "
+        "(uv config, skill frontmatter, prose manifests, nested identity_contract keys), but none "
+        "reads a concept entity's frontmatter `sources`"
+    ),
+)
+UNHELD[("concept", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- a fetched API record (paper_fetch), "
+        "the project config (labnote_export, project_package.serialize), a migration journal "
+        "(tasks_migrate), or a derived row dict (managed_artifacts). None is concept frontmatter. "
+        "The commons `version` reader does not apply: it resolves a commons canonical by id, and "
+        "no concept id resolves to one"
+    ),
+)
+
 for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,
