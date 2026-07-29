@@ -498,3 +498,60 @@ def test_migrate_acceptances_apply_refuses_a_concurrent_config_edit(tmp_path, mo
     assert result.exit_code == 2, result.output
     assert "changed after migration classification" in json.loads(result.output)["error"]
     assert path.read_text(encoding="utf-8") == original + "# concurrent edit\n"
+
+
+def test_migrate_acceptances_apply_refuses_a_config_edit_during_classification(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+
+    def mutate_during_classification(_project_root):
+        path.write_text(original + "# concurrent edit\n", encoding="utf-8")
+        return _migrated_result(tmp_path)
+
+    monkeypatch.setattr(
+        findings_cli,
+        "run_acceptance_migration",
+        mutate_during_classification,
+        raising=False,
+    )
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "changed after migration classification" in json.loads(result.output)["error"]
+    assert path.read_text(encoding="utf-8") == original + "# concurrent edit\n"
+
+
+@pytest.mark.parametrize(
+    ("root_exists", "config_text", "error_fragment"),
+    [
+        (False, None, "No such file"),
+        (True, None, "No such file"),
+        (True, "health:\n  accepted_validation: scalar\n", "must be a list"),
+        (True, "health: [\n", "expected the node content"),
+    ],
+)
+def test_migrate_acceptances_refuses_missing_or_invalid_required_config(
+    tmp_path,
+    root_exists,
+    config_text,
+    error_fragment,
+):
+    project_root = tmp_path / "project"
+    if root_exists:
+        project_root.mkdir()
+    if config_text is not None:
+        (project_root / "science.yaml").write_text(config_text, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(project_root), "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["can_apply"] is False
+    assert error_fragment in payload["error"]

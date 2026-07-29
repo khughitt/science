@@ -119,6 +119,19 @@ def apply_migrated_config(
     atomic_write_text(path, rendered)
 
 
+def _read_required_acceptance_config(project_root: Path) -> str:
+    original = project_config_path(project_root).read_text(encoding="utf-8")
+    document = yaml.safe_load(original)
+    if not isinstance(document, dict):
+        raise ValueError("science.yaml must be a mapping")
+    health = document.get("health")
+    if not isinstance(health, dict):
+        raise ValueError("science.yaml health must be a mapping")
+    if not isinstance(health.get("accepted_validation"), list):
+        raise ValueError("science.yaml health.accepted_validation must be a list")
+    return original
+
+
 def _migration_payload(migration: AcceptanceMigration, *, applied: bool) -> dict[str, object]:
     entries: list[dict[str, object]] = []
     for entry in migration.entries:
@@ -162,10 +175,10 @@ def migrate_acceptances_command(
 ) -> None:
     """Classify legacy validation acceptances and optionally replace them atomically."""
     try:
+        original = _read_required_acceptance_config(project_root)
         migration = run_acceptance_migration(project_root)
         applied = False
         if apply and migration.can_apply and migration.needs_write:
-            original = project_config_path(project_root).read_text(encoding="utf-8")
             rendered = render_migrated_config(original, migration.output_entries)
             apply_migrated_config(
                 project_root,
