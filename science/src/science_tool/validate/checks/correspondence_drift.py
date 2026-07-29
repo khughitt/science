@@ -3,7 +3,8 @@
 Deterministic, advisory, and PERMANENT WARN: a screen that gates defeats its own
 imperfect-but-cheap contract, so this never uses `severity_for_kind` and never
 joins a gate tier. Findings feed `science entity review`; a confirmed false
-positive is suppressed with an evidence-scoped `accepted_validation` entry (§5.5).
+positive is suppressed by accepting the finding fingerprint in
+`accepted_validation`.
 """
 
 from __future__ import annotations
@@ -75,7 +76,7 @@ def _drift_result(
         f"The true status is at least {adjudicated.value!r} and may be higher -- "
         f"`adjudicate()` classifies, it does not estimate, and {Adjudicated.ACTIVE.value!r} is "
         f"its catch-all branch. Verify against the deliverables before setting a status, or "
-        f"accept with an evidence-scoped health.accepted_validation entry. "
+        f"accept the fingerprinted finding in health.accepted_validation. "
         f"evidence-signature: {signature}"
     )
     return validation_observation(

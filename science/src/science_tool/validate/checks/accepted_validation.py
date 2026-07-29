@@ -1,75 +1,101 @@
-"""Fail-closed guard: an `accepted_validation` entry for an evidence-scoped rule
-must carry a complete evidence-signature token (design §5.5). This is a canonical
-CHECK, not a filter side effect, because `validate/cli.py` treats acceptance
-filtering as removal-only (`len(filtered) == len(original)`).
-"""
+"""Positive classification for configured validation acceptances."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 
-from science_model.audit.fingerprint import canonical_json
+from science_model.audit import FindingRule, FindingSection, IdentifierSubject
 
-from science_tool.validate.findings import validation_observation
-from science_tool.validate.findings import declare_validation_rules
-from science_tool.data_root import PROJECT_CONFIG_FILENAME
 from science_tool.validate.acceptance import (
-    SIGNATURE_TOKEN_SPEC,
-    EVIDENCE_SCOPED_RULES,
+    CurrentAcceptance,
+    InvalidAcceptance,
+    LegacyAcceptance,
     accepted_validation_entries,
-    canonical_acceptance_severity,
-    entry_is_well_scoped,
+    classify_acceptance_entry,
 )
 from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
+from science_tool.validate.findings import (
+    EmptyQualifiers,
+    validation_observation,
+)
 from science_tool.validate.result import Severity
 
-_RULE = "accepted-validation.evidence-scope-required"
-
-
-SECTION, RULES = declare_validation_rules(
-    section_id="accepted-validation",
-    section_title="accepted validation",
+SECTION = FindingSection(
+    id="accepted-validation",
+    title="accepted validation",
     section_order=160,
-    rule_ids=("accepted-validation.evidence-scope-required",),
-    severities=frozenset({"error", "warn", "info"}),
 )
+RULE_LEGACY_SHAPE = FindingRule(
+    id="accepted-validation.legacy-shape",
+    severities=frozenset({"error"}),
+    subject_types=frozenset({"identifier"}),
+    identifier_namespaces=frozenset({"accepted-validation"}),
+    qualifier_schema=EmptyQualifiers,
+    identity_qualifiers=(),
+    title="Legacy validation acceptance",
+    section=SECTION.id,
+    display_order=16001,
+    default_visibility="visible",
+)
+RULE_INVALID_ENTRY = FindingRule(
+    id="accepted-validation.invalid-entry",
+    severities=frozenset({"error"}),
+    subject_types=frozenset({"identifier"}),
+    identifier_namespaces=frozenset({"accepted-validation"}),
+    qualifier_schema=EmptyQualifiers,
+    identity_qualifiers=(),
+    title="Invalid validation acceptance",
+    section=SECTION.id,
+    display_order=16002,
+    default_visibility="visible",
+)
+RULES = {rule.id: rule for rule in (RULE_LEGACY_SHAPE, RULE_INVALID_ENTRY)}
 
 
-@Check(section=SECTION, order=206, producer_id="validate.accepted-validation", rules=tuple(RULES.values()))
-def check_accepted_validation(ctx: ValidateContext) -> Iterator[CheckObservation]:
+@Check(
+    section=SECTION,
+    order=206,
+    producer_id="validate.accepted-validation",
+    rules=tuple(RULES.values()),
+)
+def check_accepted_validation(
+    ctx: ValidateContext,
+) -> Iterator[CheckObservation]:
     emitted: set[str] = set()
-    for entry in accepted_validation_entries(ctx.project_root):
-        if not isinstance(entry, dict):
+    for raw in accepted_validation_entries(ctx.project_root):
+        classified = classify_acceptance_entry(raw)
+        if isinstance(classified, CurrentAcceptance):
             continue
-        rule = entry.get("rule")
-        if rule in EVIDENCE_SCOPED_RULES and not entry_is_well_scoped(entry):
-            semantic_fields = {
-                name: entry.get(name)
-                for name in (
-                    "rule",
-                    "severity",
-                    "path",
-                    "task",
-                    "message_contains",
-                )
-            }
-            severity = canonical_acceptance_severity(semantic_fields["severity"])
-            if severity is None:
-                del semantic_fields["severity"]
-            else:
-                semantic_fields["severity"] = severity
-            semantic_key = canonical_json(semantic_fields).decode("utf-8")
-            if semantic_key in emitted:
-                continue
-            emitted.add(semantic_key)
+        if classified.raw_digest in emitted:
+            continue
+        emitted.add(classified.raw_digest)
+        subject = IdentifierSubject(
+            namespace="accepted-validation",
+            value=classified.raw_digest,
+        )
+        if isinstance(classified, LegacyAcceptance):
             yield validation_observation(
-                severity=Severity.WARN,
-                path=Path(PROJECT_CONFIG_FILENAME),
+                severity=Severity.ERROR,
+                path=None,
                 line=None,
-                message=f"accepted_validation entry for {rule!r} (path={entry.get('path')!r}) must be evidence-scoped: message_contains needs a complete '{SIGNATURE_TOKEN_SPEC}' token AND path must name one non-empty, project-relative plan, else it would blind that rule even after the plan's deliverables change.",
-                rule=RULES["accepted-validation.evidence-scope-required"],
+                message=(
+                    "legacy accepted_validation entry cannot suppress findings; "
+                    "run `science findings migrate-acceptances`"
+                ),
+                rule=RULE_LEGACY_SHAPE,
                 task=None,
-                qualifiers={"key": ["acceptance-entry", semantic_key]},
+                qualifiers={},
+                subject=subject,
+            )
+        elif isinstance(classified, InvalidAcceptance):
+            yield validation_observation(
+                severity=Severity.ERROR,
+                path=None,
+                line=None,
+                message=(f"invalid accepted_validation entry cannot suppress findings: {classified.error}"),
+                rule=RULE_INVALID_ENTRY,
+                task=None,
+                qualifiers={},
+                subject=subject,
             )

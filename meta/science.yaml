@@ -25,17 +25,15 @@ aspects:
 - hypothesis-testing
 health:
   accepted_validation:
-  - rule: belief.fragile-single-line
-    severity: warning
-    message_contains:
-    - proposition/bes-does-not-rescue-underpowered-studies-by-pooling-data
-    - evidence-line/lit-assertion/364fc3f7cff7f79296f7dcad7525b0c9d278a09332333fb960c44f6996bebb23
+  - finding_id: 4478686a16035b43006962010252197a66979f2a62b2cc105c638515d30bcc9e
+    fingerprint_version: 1
+    severity_scope:
+    - warn
     reason: Reviewed BES negative proposition sensitivity; the claim remains intentionally narrow two-source literature support pending further independent corroboration.
-  - rule: belief.fragile-single-line
-    severity: warning
-    message_contains:
-    - proposition/conceptual-replication-evidence-can-be-aggregated-over-informative-hypotheses
-    - evidence-line/lit-assertion/bcee4bbe69494c61f691d01f1aefdb879df35e769e4c17c34767ab82c02c768e
+  - finding_id: 8f5a5ed1132410561ccf682f14b7ed5b0c42630a5749f078f1500ec20f7ee7bd
+    fingerprint_version: 1
+    severity_scope:
+    - warn
     reason: Reviewed conceptual-replication aggregation sensitivity; the claim remains intentionally narrow two-source literature support pending further independent corroboration.
 prose_lint:
   exclude_paths:

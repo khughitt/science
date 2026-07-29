@@ -1,56 +1,151 @@
 from pathlib import Path
 
+import yaml
 from science_model.audit import PathSubject, ReportedFinding
 
-from science_tool.validate.acceptance import partition_health_acceptances
+from science_tool.findings.catalog import build_project_registry
+from science_tool.findings.producers import validate_finding
+from science_tool.validate.acceptance import (
+    AcceptedValidationEntry,
+    partition_accepted_findings,
+)
 from science_tool.validate.checks.manifest import RULES
 
 
-def _finding(message: str):
+def _finding(*, severity: str = "warn"):
     return RULES["manifest.check"].build(
         subject=PathSubject(path="science.yaml"),
-        severity="warn",
+        severity=severity,
         qualifiers={"key": ["profile"]},
-        message=message,
+        message="missing profile",
     )
 
 
-def test_health_acceptance_partitions_current_shape_without_overlap(
-    tmp_path: Path,
+def _write_acceptance(
+    root: Path,
+    *,
+    finding_id: str,
+    severity_scope: list[str],
+    reason: str = "  reviewed  ",
 ) -> None:
-    (tmp_path / "science.yaml").write_text(
-        """
-name: test
-health:
-  accepted_validation:
-    - rule: manifest.check
-      severity: warning
-      path: science.yaml
-      message_contains: [missing profile]
-      reason: reviewed
-""".lstrip(),
+    (root / "science.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "test",
+                "health": {
+                    "accepted_validation": [
+                        {
+                            "finding_id": finding_id,
+                            "fingerprint_version": 1,
+                            "severity_scope": severity_scope,
+                            "reason": reason,
+                        }
+                    ]
+                },
+            },
+            sort_keys=False,
+        ),
         encoding="utf-8",
     )
-    matched = ReportedFinding(
-        producer_id="validate",
-        finding=_finding("missing profile"),
-    )
+
+
+def test_health_acceptance_partitions_exact_fingerprint_without_overlap(
+    tmp_path: Path,
+) -> None:
+    finding = _finding()
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(registry, "validate", finding)
+    _write_acceptance(tmp_path, finding_id=finding_id, severity_scope=["warn"])
+    matched = ReportedFinding(producer_id="validate", finding=finding)
     other = ReportedFinding(
         producer_id="validate",
-        finding=_finding("different warning"),
+        finding=RULES["manifest.check"].build(
+            subject=PathSubject(path="science.yaml"),
+            severity="warn",
+            qualifiers={"key": ["created"]},
+            message="missing created",
+        ),
     )
-    remaining, accepted = partition_health_acceptances(
+
+    remaining, accepted = partition_accepted_findings(
         tmp_path,
         [matched, other],
+        registry=registry,
     )
-    accepted_ids = {item.acceptance_key for item in accepted}
-    assert [item.finding.message for item in remaining] == ["different warning"]
-    assert len(accepted_ids) == 1
-    assert not ({item.finding.message for item in accepted} & {item.finding.message for item in remaining})
+
+    expected_entry = AcceptedValidationEntry.model_validate(
+        {
+            "finding_id": finding_id,
+            "fingerprint_version": 1,
+            "severity_scope": ["warn"],
+            "reason": "reviewed",
+        }
+    )
+    assert remaining == [other]
+    assert [item.finding for item in accepted] == [finding]
+    assert accepted[0].acceptance_key == expected_entry.acceptance_key
+    assert accepted[0].reason == "reviewed"
+
+
+def test_warn_scope_does_not_accept_later_error_with_same_fingerprint(
+    tmp_path: Path,
+) -> None:
+    warn = _finding(severity="warn")
+    error = _finding(severity="error")
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(registry, "validate", warn)
+    assert validate_finding(registry, "validate", error) == finding_id
+    _write_acceptance(tmp_path, finding_id=finding_id, severity_scope=["warn"])
+    reported = ReportedFinding(producer_id="validate", finding=error)
+
+    remaining, accepted = partition_accepted_findings(
+        tmp_path,
+        [reported],
+        registry=registry,
+    )
+
+    assert remaining == [reported]
+    assert accepted == []
+
+
+def test_wildcard_migrated_scope_accepts_warn_or_error(
+    tmp_path: Path,
+) -> None:
+    warn = _finding(severity="warn")
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(registry, "validate", warn)
+    _write_acceptance(
+        tmp_path,
+        finding_id=finding_id,
+        severity_scope=["warn", "error"],
+    )
+
+    for severity in ("warn", "error"):
+        reported = ReportedFinding(
+            producer_id="validate",
+            finding=_finding(severity=severity),
+        )
+        remaining, accepted = partition_accepted_findings(
+            tmp_path,
+            [reported],
+            registry=registry,
+        )
+        assert remaining == []
+        assert [item.finding.severity for item in accepted] == [severity]
 
 
 def test_non_validation_findings_are_never_accepted(tmp_path: Path) -> None:
-    item = ReportedFinding(producer_id="other", finding=_finding("missing profile"))
-    remaining, accepted = partition_health_acceptances(tmp_path, [item])
+    finding = _finding()
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(registry, "validate", finding)
+    _write_acceptance(tmp_path, finding_id=finding_id, severity_scope=["warn"])
+    item = ReportedFinding(producer_id="other", finding=finding)
+
+    remaining, accepted = partition_accepted_findings(
+        tmp_path,
+        [item],
+        registry=registry,
+    )
+
     assert remaining == [item]
     assert accepted == []

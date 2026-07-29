@@ -6,19 +6,17 @@ from science_model.audit import PathSubject
 from science_tool.findings.acceptance_migration import (
     MigrationRow,
     classify_migration,
+    entry_matches,
+    legacy_validation_fields,
 )
 from science_tool.validate.acceptance import (
     InvalidAcceptance,
     classify_acceptance_entry,
-    entry_matches,
-    legacy_validation_fields,
 )
 from science_tool.validate.checks.manifest import RULES
 
 
-def _finding(
-    message: str, *, key: list[str] | None = None, severity: str = "warn"
-):
+def _finding(message: str, *, key: list[str] | None = None, severity: str = "warn"):
     return RULES["manifest.check"].build(
         subject=PathSubject(path="science.yaml"),
         severity=severity,
@@ -123,12 +121,16 @@ def test_zero_and_multiple_matches_are_stale_and_ambiguous():
         MigrationRow(_finding("missing profile", key=["profile"]), "a" * 64),
         MigrationRow(_finding("missing profile", key=["name"]), "b" * 64),
     ]
-    assert classify_migration(
-        [_legacy(message_contains=["absent"])], rows, {"validate.manifest": "ok"}
-    ).entries[0].verdict == "stale"
-    assert classify_migration(
-        [_legacy(message_contains=["missing"])], rows, {"validate.manifest": "ok"}
-    ).entries[0].verdict == "ambiguous"
+    assert (
+        classify_migration([_legacy(message_contains=["absent"])], rows, {"validate.manifest": "ok"}).entries[0].verdict
+        == "stale"
+    )
+    assert (
+        classify_migration([_legacy(message_contains=["missing"])], rows, {"validate.manifest": "ok"})
+        .entries[0]
+        .verdict
+        == "ambiguous"
+    )
 
 
 @pytest.mark.parametrize("message_contains", [7, ["valid", 7]])
@@ -146,9 +148,7 @@ def test_duplicate_finding_id_rejects_even_different_scopes():
     row = MigrationRow(_finding("missing profile"), "a" * 64)
     wildcard = _legacy()
     del wildcard["severity"]
-    result = classify_migration(
-        [_legacy(), wildcard], [row], {"validate.manifest": "ok"}
-    )
+    result = classify_migration([_legacy(), wildcard], [row], {"validate.manifest": "ok"})
     assert [item.verdict for item in result.entries] == ["duplicate", "duplicate"]
     assert not result.can_apply
 
@@ -196,8 +196,7 @@ def test_migration_preserves_the_set_of_suppressed_findings():
     migrated_suppressed = {
         (row.finding_id, row.finding.severity)
         for row in rows
-        if row.finding_id == migrated.finding_id
-        and row.finding.severity in migrated.severity_scope
+        if row.finding_id == migrated.finding_id and row.finding.severity in migrated.severity_scope
     }
 
     assert migrated_suppressed == old_suppressed

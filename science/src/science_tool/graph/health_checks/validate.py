@@ -38,15 +38,22 @@ def execute_validation(project_root: Path) -> ValidationHealthRun:
         verbose=False,
         enable_python_sidecar=False,
     )
-    numeric_result = run_result.producer_results["validate.prose-lints"]
-    if numeric_result.instrument.status == "unwired":
+    unwired_producers = tuple(
+        sorted(
+            producer_id
+            for producer_id, result in run_result.producer_results.items()
+            if result.instrument.status == "unwired"
+        )
+    )
+    if unwired_producers:
         producer_result = FindingProducerResult(
             instrument=InstrumentResult.unwired(
-                code=numeric_result.instrument.code or "check-error",
-                reason=numeric_result.instrument.reason,
+                code="validation-checks-unwired",
+                reason=("validation checks unwired: " + ", ".join(unwired_producers)),
             )
         )
     else:
+        numeric_result = run_result.producer_results["validate.prose-lints"]
         findings = [finding for finding in run_result.results if finding.severity != "info"]
         numeric = numeric_result.metrics
         producer_result = FindingProducerResult(

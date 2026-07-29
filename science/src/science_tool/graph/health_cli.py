@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import Protocol
 from uuid import uuid4
 
 import click
 from rich.console import Console
 from science_model.audit import (
+    AuditReport,
     EntitySubject,
     FindingSubject,
     IdentifierSubject,
@@ -21,6 +23,19 @@ from science_tool.findings.producers import FindingRegistry
 from science_tool.findings.reporting import report_sort_key
 from science_tool.graph.health_projection import ProjectedHealthReport
 from science_tool.output import emit, serialize_json
+
+ACCEPTANCE_CONFIGURATION_RULES = frozenset(
+    {
+        "accepted-validation.legacy-shape",
+        "accepted-validation.invalid-entry",
+    }
+)
+
+
+def report_has_invalid_acceptance_configuration(
+    report: AuditReport,
+) -> bool:
+    return any(item.finding.rule_id in ACCEPTANCE_CONFIGURATION_RULES for item in report.findings)
 
 
 class HealthSink(Protocol):
@@ -240,3 +255,5 @@ def health_command(
     sink.flush()
     if output_path is not None:
         click.echo(bounded_control_notice(f"wrote the complete health report to {output_path}"))
+    if report_has_invalid_acceptance_configuration(report):
+        sys.exit(2)

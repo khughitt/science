@@ -205,7 +205,11 @@ def _json_payload(result: RunResult) -> dict[str, Any]:
 
 
 def _with_accepted_warnings_filtered(project_root: Path, result: RunResult) -> RunResult:
-    filtered_results = filter_accepted_warnings(project_root, result.results)
+    filtered_results = filter_accepted_warnings(
+        project_root,
+        result.results,
+        registry=result.registry,
+    )
     if len(filtered_results) == len(result.results):
         return result
     return replace(

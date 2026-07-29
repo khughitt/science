@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from science_model.audit import AuditFinding, Evidence, FindingRule
+from science_model.audit import (
+    AuditFinding,
+    Evidence,
+    FindingRule,
+    FindingSubject,
+)
 
 from science_tool.validate.findings import build_validation_finding
 
@@ -33,11 +38,14 @@ class Result:
     rule: FindingRule
     task: str | None
     qualifiers: Mapping[str, object]
+    subject: FindingSubject | None = None
     evidence: tuple[Evidence, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule, FindingRule):
             raise TypeError(f"Result.rule must be FindingRule, got {type(self.rule).__name__}")
+        if self.subject is not None and self.path is not None:
+            raise ValueError("Result subject and path cannot both be set")
 
     @property
     def rule_id(self) -> str:
@@ -47,6 +55,14 @@ class Result:
         observed = dict(self.qualifiers)
         if self.task is not None and "task" not in observed:
             observed["task"] = self.task
+        if self.subject is not None:
+            return self.rule.build(
+                subject=self.subject,
+                severity=self.severity.value,
+                qualifiers=observed,
+                message=self.message,
+                evidence=list(self.evidence),
+            )
         return build_validation_finding(
             project_root=project_root,
             rule=self.rule,

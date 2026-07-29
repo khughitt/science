@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Mapping, Sequence, cast
+from typing import Any, Literal, Mapping, Sequence, cast
 
 from science_model.audit import AuditFinding
 
@@ -10,10 +10,7 @@ from science_tool.validate.acceptance import (
     CurrentAcceptance,
     InvalidAcceptance,
     LegacyAcceptance,
-    canonical_acceptance_severity,
     classify_acceptance_entry,
-    entry_matches,
-    legacy_validation_fields,
 )
 
 InstrumentStatus = Literal["ok", "empty", "unwired"]
@@ -26,6 +23,71 @@ MigrationVerdict = Literal[
     "duplicate",
     "indeterminate",
 ]
+
+
+def canonical_acceptance_severity(severity: object) -> str | None:
+    """Return the matcher spelling, or ``None`` for a wildcard value."""
+    if not isinstance(severity, str):
+        return None
+    return "warn" if severity in {"warn", "warning"} else severity
+
+
+def _text_matches(value: str, needles: object) -> bool:
+    if needles is None:
+        return True
+    if isinstance(needles, str):
+        return needles in value
+    if isinstance(needles, list):
+        return all(isinstance(needle, str) and needle in value for needle in needles)
+    return False
+
+
+def _severity_matches(
+    entry_severity: object,
+    finding_severity: str,
+) -> bool:
+    canonical_entry = canonical_acceptance_severity(entry_severity)
+    if canonical_entry is None:
+        return True
+    return canonical_entry == canonical_acceptance_severity(finding_severity)
+
+
+def entry_matches(
+    entry: dict[str, Any],
+    *,
+    rule: str | None,
+    severity: str,
+    path: str | None,
+    task: str | None,
+    message: str,
+) -> bool:
+    reason = entry.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        return False
+    entry_rule = entry.get("rule")
+    if not isinstance(entry_rule, str) or rule != entry_rule:
+        return False
+    if not _severity_matches(entry.get("severity"), severity):
+        return False
+    entry_path = entry.get("path")
+    if isinstance(entry_path, str) and path != entry_path:
+        return False
+    entry_task = entry.get("task")
+    if isinstance(entry_task, str) and task != entry_task:
+        return False
+    return _text_matches(message, entry.get("message_contains"))
+
+
+def legacy_validation_fields(finding: AuditFinding) -> dict[str, object]:
+    path = finding.subject.path if finding.subject.type == "path" else None
+    task = finding.qualifiers.get("task")
+    return {
+        "rule": finding.rule_id,
+        "severity": finding.severity,
+        "path": path,
+        "task": task if isinstance(task, str) else None,
+        "message": finding.message,
+    }
 
 
 @dataclass(frozen=True)
@@ -70,13 +132,7 @@ def classify_migration(
     classified_entries = [classify_acceptance_entry(entry) for entry in entries]
     has_legacy_entry = any(isinstance(entry, LegacyAcceptance) for entry in classified_entries)
     indeterminate_producers = (
-        tuple(
-            sorted(
-                producer_id
-                for producer_id, status in producer_statuses.items()
-                if status == "unwired"
-            )
-        )
+        tuple(sorted(producer_id for producer_id, status in producer_statuses.items() if status == "unwired"))
         if has_legacy_entry
         else ()
     )
@@ -111,8 +167,7 @@ def classify_migration(
                     verdict="indeterminate",
                     replacement=None,
                     detail=(
-                        "cannot migrate while validation producers are unwired: "
-                        + ", ".join(indeterminate_producers)
+                        "cannot migrate while validation producers are unwired: " + ", ".join(indeterminate_producers)
                     ),
                 )
             )
@@ -132,9 +187,7 @@ def classify_migration(
             ):
                 matches.append(row)
         if not matches:
-            migrated_entries.append(
-                EntryMigration(index, "stale", None, "matched no current findings")
-            )
+            migrated_entries.append(EntryMigration(index, "stale", None, "matched no current findings"))
             continue
         if len(matches) > 1:
             migrated_entries.append(

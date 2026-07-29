@@ -119,6 +119,7 @@ def validation_observation(
     rule: FindingRule,
     task: str | None,
     qualifiers: Mapping[str, object],
+    subject: FindingSubject | None = None,
     evidence: Sequence[Evidence] = (),
 ) -> CheckObservation:
     """Build the internal issue/notice split before the producer boundary."""
@@ -134,6 +135,7 @@ def validation_observation(
         rule=rule,
         task=task,
         qualifiers=qualifiers,
+        subject=subject,
         evidence=tuple(evidence),
     )
 
