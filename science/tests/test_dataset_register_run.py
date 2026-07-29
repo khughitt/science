@@ -62,8 +62,12 @@ def _seed_workflow_and_run(
     )
     methods_dir = root / "entities" / "methods"
     methods_dir.mkdir(parents=True, exist_ok=True)
+    # `method` is schema-closed, so this fixture must author what every real method record
+    # carries: base 2.0 requires `created`/`updated` and mixin-method-1.0 requires `status`.
+    # A minimal stub was legal only while the kind was open.
     (methods_dir / "const.md").write_text(
-        '---\nid: "method:const"\nkind: "method"\ntitle: "Const"\nstochasticity: "deterministic"\n---\n',
+        '---\nid: "method:const"\nkind: "method"\ntitle: "Const"\nstatus: "active"\n'
+        'created: "2026-01-01"\nupdated: "2026-01-01"\nstochasticity: "deterministic"\n---\n',
         encoding="utf-8",
     )
     steps_dir = root / "entities" / "workflow-steps"

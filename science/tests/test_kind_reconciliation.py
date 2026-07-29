@@ -185,6 +185,63 @@ UNHELD[("concept", "version")] = (
     ),
 )
 
+# `method` (schema-closure slice, 2026-07-29). UNLIKE `concept`, this kind HAS a typed subclass, so
+# the gap is computed against `MethodEntity` rather than `ProjectEntity`. That makes the surplus
+# direction meaningful and it is CLEAN: `stochasticity` and `seed_params` -- the only two fields
+# MethodEntity adds -- are both admitted by the mixin. The gap direction lands on the same six names
+# as `concept`, because MethodEntity inherits ProjectEntity's declared set unchanged.
+#
+# Same six names, but each was swept for AGAIN rather than copied across: the procedure forbids
+# inferring a reader from a neighbouring kind's entry, and a kind-agnostic reader has to be
+# confirmed to reach `entities/methods/` specifically.
+UNHELD[("method", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter, kind-agnostic: it walks every markdown under entities/ via "
+        "iter_entity_markdown, so entities/methods/*.md is in scope",
+    ),
+)
+UNHELD[("method", "promoted_from")] = (
+    _BOTH,
+    PendingRuling(
+        "20 of the 51 methods author it and NOTHING reads it -- the same finding as `concept`, "
+        "re-derived. The only occurrence in the tree is a WRITE, graph/decision_log.py:157, which "
+        "stamps it onto `type: decision` owners, a different kind. Note that protein-landscape's "
+        "`protein-landscape.promotion` extension -- the field's frozen literal oracle -- is scoped "
+        "to `hypothesis`, so it does not admit this field on that project's own 4 methods either. "
+        "Real provenance with no consumer, not a gap to close by deleting the field"
+    ),
+)
+UNHELD[("method", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("method", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("method", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "keyed `sources` reads exist across the tree -- datasets_register's proxy dict, "
+        "tooling_dependency's uv config, prose_epistemics' artifact and report dicts, "
+        "skill_inventory's entry dict, store.queries' derived row -- but none reads a method "
+        "entity's frontmatter `sources`"
+    ),
+)
+UNHELD[("method", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- the project config "
+        "(labnote_export:853, project_package.serialize:102), a fetched API record "
+        "(paper_fetch:494), a derived row dict (managed_artifacts), or a migration journal "
+        "(tasks_migrate:650). None is method frontmatter. The commons `version` reader does not "
+        "apply: it resolves a commons canonical by id, and no method id resolves to one"
+    ),
+)
+
 for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,

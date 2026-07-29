@@ -50,9 +50,10 @@ def test_the_armed_set_is_exactly_the_kinds_whose_slices_have_landed() -> None:
     #
     #   hypothesis -- D5
     #   concept    -- 2026-07-28, docs/plans/2026-07-28-schema-closure-concept-slice-inventory.md
+    #   method     -- 2026-07-29, docs/plans/2026-07-29-schema-closure-method-slice-inventory.md
     #
-    # Remaining tranche kinds, in order: method, search, observation, finding.
-    assert PROJECT_MIXIN_NAMES == frozenset({"hypothesis", "concept"})
+    # Remaining tranche kinds, in order: search, observation, finding.
+    assert PROJECT_MIXIN_NAMES == frozenset({"hypothesis", "concept", "method"})
 
 
 _MINIMAL_EXTERNAL = {

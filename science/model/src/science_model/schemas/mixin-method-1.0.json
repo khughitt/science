@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-method-1.0.json",
+  "title": "science entity method mixin",
+  "$comment": "DORMANT until the method slice's final step arms it. Composes over base 2.0. Field set frozen by docs/plans/2026-07-29-schema-closure-method-slice-inventory.md, measured over 51 authored records in mm30 (25), protein-landscape (13), health/processes/post-acute-infection (6), seq-feats (5) and cbioportal (2).",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^method:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity, so this stops `id: dataset:foo` passing on a method while deliberately not inventing a slug pattern. health_checks/identity_policy.py:207 already reports kebab-case violations for this kind as a finding."
+    },
+    "kind": {"const": "method"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum, deliberately -- and this is where the method slice departs from mixin-concept-1.0. The descriptor (profiles/core.py:504) declares active/superseded/retired/archived, but `method` is NOT in _CERTIFIED_KINDS (validate/kind_severity.py:24), so `method.status-vocabulary` is a WARN by policy and status_vocabulary.py rules that an uncertified instrument may not fail anyone's build. A schema enum fails it HARDER than a validate ERROR: it refuses the record at load with no warning stage. cbioportal's method:length-aware-geneset-enrichment carries `status: proposed` today, and the same module records that when this check first shipped, ~3 of every 4 errors were the VOCABULARY being wrong rather than the entity. Third reason, independent of the other two: status_vocabulary.py:20-22 rules there is deliberately no second per-kind table because the two would drift -- a JSON enum here is exactly that second table, versioned on a different axis. A mixin may enum-lock `status` once its kind joins _CERTIFIED_KINDS, and not before (mixin-hypothesis-2.0 is the certified case, not a counterexample)."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "AUTHORED and honored, same as mixin-hypothesis-2.0 and mixin-concept-1.0. 4 of 51 methods carry it, all `local`, all in protein-landscape. ProjectEntity's default is `core`, a value NO method record carries -- a probe asserting `profile == 'core'` would be passing on the model default, not on authored data."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "stochasticity": {
+      "enum": ["deterministic", "seedable", "nondeterministic"],
+      "$comment": "ZERO records author this, and it is admitted anyway -- the procedure's zero-occurrence case, exactly. It is prescribed by templates/method.md as `{ omit: true }` (templates.py:243: declared in the kind's frontmatter contract, not rendered), declared on MethodEntity, and read by seed_policy_derivation.py, datasets_stochasticity.py, validate/checks/methods.py and validate/checks/workflow_steps.py. Omitting it would close the kind against the whole shipped method-stochasticity program: the first author to classify a method would find the record refused at load. Mirrors science_model.entities.Stochasticity. Explicit `null` is NOT admitted -- the model types it `Stochasticity | None = None` and ABSENCE already means unclassified, so admitting null would be a second spelling of absence, the defect mixin-hypothesis-2.0 refuses by name when it excludes `proposed`/`under-investigation` from `verdict`."
+    },
+    "seed_params": {
+      "type": "array",
+      "items": {"type": "string"},
+      "$comment": "Zero records author it; admitted for the same three-surface reason as `stochasticity`. NO minItems: `seedable` with an empty seed_params is the state every seedable method in the live corpus is in, and validate/checks/methods.py reports it as a WARN. The schema must not promote that warning to a hard failure."
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "datasets": {"type": "array", "items": {"type": "string"}},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "schema_profile": false
+  }
+}
