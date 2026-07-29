@@ -4,7 +4,7 @@
 
 **Goal:** Stop `science validate` from importing and executing project-authored `validate_local.py`, promote the one reusable project check into the canonical check set, and migrate all four consumer repositories atomically.
 
-**Architecture:** The `hook` API and Python-sidecar import are deleted outright from `validate/runner.py`; a new `validate.python-sidecar-removed` rule on the existing `VALIDATION_RUNTIME_PRODUCER` reports a stale sidecar file as a structured ERROR instead of crashing. The `reviews-are-not-evidence` policy — currently duplicated in two projects and scanning a directory the papers left — becomes three WARN rules on the existing `validate.papers` producer, with roots resolved through `resolve_path_policy`. Consumer repositories then update their toolkit pin, delete their sidecar, and fix their docs in one commit each.
+**Architecture:** The `hook` API and Python-sidecar import are deleted outright from `validate/runner.py`; a new `validate.python-sidecar-removed` rule on the existing `VALIDATION_RUNTIME_PRODUCER` reports a stale sidecar file as a structured ERROR instead of crashing. The `reviews-are-not-evidence` policy — currently duplicated in two projects and scanning a directory the papers left — becomes three WARN rules on the **existing `validate.papers` producer**, with roots resolved through `resolve_path_policy` and refs read through parsed frontmatter rather than regex. Consumer repositories then update their toolkit pin, delete their sidecar, and fix their docs in one commit each.
 
 **Tech Stack:** Python 3.13, Pydantic v2, click, pytest, uv. Findings model in `science-model` (`science_model.audit`); validation in `science_tool.validate`.
 
@@ -15,129 +15,166 @@
 - **No compatibility layer.** No shim for `hook`, no deprecation wrapper, no re-export. Deliberate breaking change.
 - **Run from the package directory.** `cd science` before any `uv run`. There is no root `pyproject.toml`.
 - **Test commands:** `cd science && uv run --frozen pytest`. Default runs exclude `snapshot` and `real_projects` markers; opt in with `-m snapshot` / `-m real_projects`.
-- **Full suite is ~10k tests / 2-3 min** — longer than the default 120s timeout. Run scoped selections per task; reserve the full run for Task 7 with an explicit long timeout.
+- **Full suite is ~10k tests / 2-3 min** — longer than the default 120s timeout. Run scoped selections per task; reserve the full run for Task 8 with an explicit long timeout.
 - **Never run two suites concurrently in the same worktree** — they race on shared test-output paths.
 - **Lint/types from `science/`:** `uv run ruff check` and `uv run pyright`. Pyright is configured once by the repo-root `pyrightconfig.json`; test directories are not type-checked.
+- **Every check fixture must contain a `science.yaml`.** `ValidateContext.from_project_root` raises `ValidateContextError` without it, before any check runs.
+- **Parse, don't regex.** Use `ctx.frontmatter(path)` for entity refs and `ctx.read_yaml(path)` for provenance. The sidecars' regexes require indented list items; every live entity uses top-level `- paper:...`, and they mishandle quoted YAML scalars and hyphenated or dotted paper IDs.
 - **Conventional commits.** No AI-attribution trailers on commits, PRs, or comments.
 - **Privacy:** use `~/d/` in docs and code, never `/home/keith/` or `/mnt/ssd/Dropbox/`.
-- **Working branch:** `sidecar-retirement`, worktree `.worktrees/sidecar-retirement/`.
-- **Baselines are captured in Task 1, before any code change.** Tasks 4–5 delete the very mechanism (`enable_python_sidecar`, the env-var branch) that a with-sidecars-disabled baseline needs. Capturing later is impossible.
+- **Search with `rg`,** not `grep` pipelines.
+- **Working branch:** `sidecar-retirement`, worktree `~/d/science/.worktrees/sidecar-retirement/`.
+- **Consumer work happens in isolated worktrees,** never in a consumer's primary checkout. Two of the consumer repos are Dropbox-synced and their primary checkouts float off their working branch.
+
+---
+
+## Preconditions
+
+Both must hold before Task 1. Neither is optional.
+
+- [ ] **P1: Plan 3 is merged to `main`.** `finding-convergence-plan-3` changes `validate/findings.py`, `validate/acceptance.py`, and `findings/acceptance_migration.py` — the finding and acceptance interfaces this work declares new rules against.
+- [ ] **P2: This branch is rebased onto post–Plan 3 `main`.**
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement
+git fetch origin && git rebase origin/main
+cd science && uv run --frozen pytest tests/validate -q
+```
+
+Expected: rebase clean, validate tests green.
 
 ---
 
 ## File Structure
 
 **Toolkit — created:**
-- `science/tests/validate/test_checks_papers_background_reviews.py` — all promoted-check coverage
-- `science/tests/validate/test_sidecar_retirement.py` — retirement rule + non-execution coverage
+- `science/tests/validate/test_checks_papers_background_reviews.py`
+- `science/tests/validate/test_sidecar_retirement.py`
 
 **Toolkit — modified:**
-- `science/src/science_tool/validate/checks/papers.py` — three new rules + two check arms
+- `science/src/science_tool/validate/checks/papers.py` — three rules on the existing section/producer
 - `science/src/science_tool/validate/runtime.py` — `RULE_PYTHON_SIDECAR_REMOVED`
 - `science/src/science_tool/validate/runner.py` — delete hook API and sidecar import; drop `enable_python_sidecar`
 - `science/src/science_tool/validate/__init__.py` — drop `hook` export
 - `science/src/science_tool/validate/context.py` — drop three stale `doc/`-rooted fields
 - `science/src/science_tool/graph/health_checks/validate.py` — drop `enable_python_sidecar=False`
-- `science/src/science_tool/project_artifacts/registry.yaml` — drop `extension_protocol`, bump version
-- `science/src/science_tool/project_artifacts/cli.py` — drop the porting command
-- `science/src/science_tool/budget/registry.py` — drop the porting command's entry
-- `science/tests/validate/test_context.py:24-26` — drop assertions on deleted fields
-- `docs/conventions/validate.md`, `docs/migration/*.md`
-- `skills/generated/science-command-preamble/references/docs/conventions/validate.md` — regenerated, never hand-edited
+- `science/src/science_tool/project_artifacts/registry.yaml` — `extension_protocol.kind: none`
+- `science/src/science_tool/project_artifacts/cli.py`, `science/src/science_tool/budget/registry.py`
+- `science/tests/validate/test_context.py:24-26`
+- `meta/validate_local.py` (deleted), `meta/evidence/README.md`, `meta/evidence/t034-causal-graph-contract.md`, `meta/entities/questions/0010-causal-graph-construction-pipeline.md`, `meta/src/t034_validator/__main__.py`
+- `docs/conventions/validate.md`, `docs/migration/*.md`, `skills/generated/…` (regenerated)
 
 **Toolkit — deleted:**
-- `science/src/science_tool/project_artifacts/port_validate_sidecar.py` and its tests
-
-**Consumers — deleted:** `validate_local.py` in `~/d/health/meta`, `~/d/cancer/mechanisms/evolution`, `~/d/protein-landscape`, `~/d/science/meta`
+- `science/src/science_tool/project_artifacts/port_validate_sidecar.py`
+- `science/tests/test_cli_artifacts_port_validate_sidecar.py`
 
 ---
 
-### Task 1: Capture all baselines before any change
+### Task 1: Capture all baselines with one pinned toolkit revision
 
-**Files:**
-- Create: `~/scratch/sidecar-baselines/` (outside all repos — never commit baselines)
+**Files:** none in-repo. Baselines land in `~/scratch/sidecar-baselines/`.
 
 **Interfaces:**
-- Produces: four baseline JSON files that Task 7 diffs against.
+- Produces: five baseline JSON files that Task 8 diffs against.
 
-Per design §5.1 the four projects are in three different states. Health/meta pins the toolkit at pre–Plan 2 `3b72db60` and runs clean; the other three are locked at post–Plan 2 `ed6b50dc` (or editable) and crash.
+Design §5.1: the four projects sit in three different states, and their installed revisions differ (`3b72db60` vs `ed6b50dc`). Comparing each project's own installed revision to a post-retirement toolkit would conflate this change with everything between those revisions. **All canonical baselines use one revision: post–Plan 3 `main`, pre-retirement.**
 
-- [ ] **Step 1: Create the baseline directory**
+- [ ] **Step 1: Build the pinned baseline environment**
 
 ```bash
 mkdir -p ~/scratch/sidecar-baselines
+cd ~/d/science && git rev-parse origin/main > ~/scratch/sidecar-baselines/BASELINE_SHA
+uv venv ~/scratch/sidecar-baselines/venv
+~/scratch/sidecar-baselines/venv/bin/pip install \
+  "science @ git+https://github.com/khughitt/science.git@$(cat ~/scratch/sidecar-baselines/BASELINE_SHA)#subdirectory=science"
 ```
 
-- [ ] **Step 2: Capture health/meta's real baseline — its sidecar executes**
+- [ ] **Step 2: Record the pre-existing crashes**
 
 ```bash
-cd ~/d/health/meta
-.venv/bin/science validate --format json > ~/scratch/sidecar-baselines/health-meta.json
-echo "exit=$?"
-```
-
-Expected: `exit=0`, valid JSON, `summary.warnings == 153`, `summary.infos == 0`.
-
-This is the only project whose baseline includes sidecar execution. Note that it contains **zero** rows from the guardrail — `doc/papers/` holds only an `archive/` subdirectory, so the check found an empty background set and reported a pass as an INFO that never reached the summary.
-
-- [ ] **Step 3: Confirm the other three crash, and record the traceback**
-
-```bash
-for p in ~/d/cancer/mechanisms/evolution ~/d/protein-landscape ~/d/science/meta; do
+BIN=~/scratch/sidecar-baselines/venv/bin/science
+for p in ~/d/cancer/mechanisms/evolution ~/d/protein-landscape ~/d/science/meta ~/d/health/meta; do
   echo "=== $p ==="
-  (cd "$p" && uv run --frozen science validate --format json 2>&1 | tail -5)
+  (cd "$p" && "$BIN" validate --format json 2>&1 | tail -3)
 done > ~/scratch/sidecar-baselines/crashes.txt 2>&1
 cat ~/scratch/sidecar-baselines/crashes.txt
 ```
 
-Expected: each ends with `TypeError: Result.__init__() missing 1 required positional argument: 'qualifiers'`.
+Expected: all four end with `TypeError: Result.__init__() missing 1 required positional argument: 'qualifiers'`. Under the pinned post–Plan 2 revision health/meta crashes too; its clean run only happens against its own pinned `3b72db60`.
 
-- [ ] **Step 4: Capture canonical-validator baselines for the three crashing projects**
+- [ ] **Step 3: Capture health/meta's own-revision baseline separately**
+
+This is the one baseline in which a sidecar actually executes, and it is informational — not the parity target.
+
+```bash
+cd ~/d/health/meta
+.venv/bin/science validate --format json > ~/scratch/sidecar-baselines/health-meta-own-rev.json
+test $? -eq 0 || { echo "FAIL: expected exit 0"; exit 1; }
+```
+
+Expected: exit 0, `summary.warnings == 153`, `summary.infos == 0`, and **zero** guardrail rows — `doc/papers/` holds only an `archive/` subdirectory.
+
+- [ ] **Step 4: Capture the four canonical baselines — the parity targets**
 
 The sidecar-disabling env var still exists at this point. This is the last moment it can be used.
 
 ```bash
-for p in ~/d/cancer/mechanisms/evolution ~/d/protein-landscape ~/d/science/meta; do
+BIN=~/scratch/sidecar-baselines/venv/bin/science
+set -e
+for p in ~/d/cancer/mechanisms/evolution ~/d/protein-landscape ~/d/science/meta ~/d/health/meta; do
   name=$(basename "$p")
-  (cd "$p" && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 uv run --frozen science validate --format json) \
+  ( cd "$p" && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$BIN" validate --all --strict --format json ) \
     > ~/scratch/sidecar-baselines/"$name"-canonical.json
-  echo "$name exit=$?"
+  echo "$name captured"
 done
 ```
 
-Expected: each exits 0 with valid JSON.
-
-- [ ] **Step 5: Capture health/meta's canonical baseline too**
+`~/d/science/meta` and `~/d/health/meta` both basename to `meta` — capture them to distinct names:
 
 ```bash
-cd ~/d/health/meta
-SCIENCE_VALIDATE_DISABLE_SIDECAR=1 .venv/bin/science validate --format json \
-  > ~/scratch/sidecar-baselines/health-meta-canonical.json
+mv ~/scratch/sidecar-baselines/meta-canonical.json ~/scratch/sidecar-baselines/health-meta-canonical.json
+BIN=~/scratch/sidecar-baselines/venv/bin/science
+( cd ~/d/science/meta && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$BIN" validate --all --strict --format json ) \
+  > ~/scratch/sidecar-baselines/science-meta-canonical.json
 ```
 
-- [ ] **Step 6: Verify all five files parse**
+- [ ] **Step 5: Verify all five files parse, and fail loudly if any is missing**
 
 ```bash
-for f in ~/scratch/sidecar-baselines/*.json; do
-  python3 -c "import json,sys; d=json.load(open('$f')); print('$f', d['summary'])"
-done
+python3 - <<'PY'
+import json, sys
+from pathlib import Path
+base = Path.home() / "scratch/sidecar-baselines"
+expected = [
+    "health-meta-own-rev.json", "health-meta-canonical.json",
+    "evolution-canonical.json", "protein-landscape-canonical.json",
+    "science-meta-canonical.json",
+]
+missing = [n for n in expected if not (base / n).exists()]
+if missing:
+    sys.exit(f"FAIL missing baselines: {missing}")
+for n in expected:
+    print(n, json.loads((base / n).read_text())["summary"])
+PY
 ```
 
-Expected: five lines, each printing a summary dict. No commit — baselines live outside the repos.
+Expected: five summary lines, no `FAIL`. No commit — baselines live outside the repos.
 
 ---
 
-### Task 2: Declare the three background-review rules and implement the evidence-ref arm
+### Task 2: Add the background-review rules to the existing papers producer
 
 **Files:**
 - Modify: `science/src/science_tool/validate/checks/papers.py`
 - Test: `science/tests/validate/test_checks_papers_background_reviews.py`
 
 **Interfaces:**
-- Consumes: `declare_validation_rules` from `science_tool.validate.findings`; `resolve_path_policy` from `science_tool.entities`; `Check` from `science_tool.validate.checks`.
-- Produces: `BACKGROUND_REVIEW_RULES: dict[str, FindingRule]` keyed by the three rule ids; `check_background_reviews(ctx) -> Iterator[CheckObservation]`.
+- Consumes: existing `SECTION`, `RULES`, `check_papers` in `papers.py`; `declare_validation_rules`, `validation_observation` from `science_tool.validate.findings`; `resolve_path_policy` from `science_tool.entities`; `CheckObservation` from `science_tool.validate.checks`.
+- Produces: `RULE_EVIDENCE_REF`, `RULE_SOURCE_TYPING`, `RULE_EVIDENCE_TIER`; helper `_background_review_observations(ctx) -> Iterator[CheckObservation]` called from the existing decorated `check_papers`.
 
-- [ ] **Step 1: Write the failing test**
+The architecture promises the existing `validate.papers` producer. Do **not** create a second producer — extend the existing section and rules, and make the new logic an undecorated helper the existing `@Check` function yields from.
+
+- [ ] **Step 1: Write the failing tests**
 
 ```python
 """Promoted reviews-are-not-evidence guardrail."""
@@ -146,101 +183,180 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from science_tool.validate.checks.papers import (
     RULE_EVIDENCE_REF,
-    check_background_reviews,
+    RULE_EVIDENCE_TIER,
+    RULE_SOURCE_TYPING,
+    _background_review_observations,
 )
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.observations import ValidationNotice
 from science_tool.validate.result import Result
 
 
+@pytest.fixture
+def project(tmp_path: Path) -> Path:
+    """A minimal Science project. Without science.yaml the context refuses to build."""
+    (tmp_path / "science.yaml").write_text("name: fixture\n", encoding="utf-8")
+    return tmp_path
+
+
 def _paper(root: Path, key: str, status: str) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / f"{key}.md").write_text(
-        f"---\nkind: paper\ntitle: {key}\nstatus: {status}\n---\n",
-        encoding="utf-8",
+    papers = root / "entities" / "papers"
+    papers.mkdir(parents=True, exist_ok=True)
+    (papers / f"{key}.md").write_text(
+        f'---\nkind: paper\ntitle: "{key}"\nstatus: {status}\n---\n', encoding="utf-8"
     )
 
 
-def _ctx(tmp_path: Path) -> ValidateContext:
+def _entity(root: Path, kind_dir: str, name: str, frontmatter: str) -> None:
+    d = root / "entities" / kind_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.md").write_text(f"---\n{frontmatter}---\n\nbody\n", encoding="utf-8")
+
+
+def _provenance(root: Path, name: str, body: str) -> None:
+    d = root / "doc" / "provenance"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.yaml").write_text(body, encoding="utf-8")
+
+
+def _ctx(root: Path) -> ValidateContext:
     return ValidateContext.from_project_root(
-        tmp_path, strict=False, verbose=False, include_all_checks=False
+        root, strict=False, verbose=False, include_all_checks=False
     )
 
 
-def test_background_paper_in_evidence_refs_warns(tmp_path: Path) -> None:
-    _paper(tmp_path / "entities" / "papers", "Tasci2022", "background")
-    hyp = tmp_path / "entities" / "hypotheses"
-    hyp.mkdir(parents=True)
-    (hyp / "0001-h.md").write_text(
-        "---\nkind: hypothesis\nevidence_refs:\n- paper:Tasci2022\n---\n",
-        encoding="utf-8",
+def _issues(root: Path) -> list[Result]:
+    return [o for o in _background_review_observations(_ctx(root)) if isinstance(o, Result)]
+
+
+def test_background_paper_in_evidence_refs_warns(project: Path) -> None:
+    _paper(project, "Tasci2022", "background")
+    _entity(
+        project, "hypotheses", "0001-h",
+        "kind: hypothesis\nevidence_refs:\n- paper:Tasci2022\n",
     )
 
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
+    issues = _issues(project)
 
     assert len(issues) == 1
     assert issues[0].rule is RULE_EVIDENCE_REF
     assert issues[0].qualifiers["paper_ref"] == "Tasci2022"
 
 
-def test_active_paper_in_evidence_refs_is_silent(tmp_path: Path) -> None:
-    _paper(tmp_path / "entities" / "papers", "Smith2024", "active")
-    hyp = tmp_path / "entities" / "hypotheses"
-    hyp.mkdir(parents=True)
-    (hyp / "0001-h.md").write_text(
-        "---\nkind: hypothesis\nevidence_refs:\n- paper:Smith2024\n---\n",
-        encoding="utf-8",
+def test_unindented_list_items_are_parsed(project: Path) -> None:
+    """Every live entity writes top-level `- paper:...`; the sidecar regex required indentation."""
+    _paper(project, "Tasci2022", "background")
+    _entity(
+        project, "themes", "0007-t",
+        "kind: theme\nevidence_refs:\n- paper:Tasci2022\n- report:0012-x\n",
     )
 
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
-
-    assert issues == []
+    assert len(_issues(project)) == 1
 
 
-def test_source_refs_are_not_evidence_refs(tmp_path: Path) -> None:
-    """The health/meta corpus cites background papers under source_refs."""
-    _paper(tmp_path / "entities" / "papers", "Tasci2022", "background")
-    themes = tmp_path / "entities" / "themes"
-    themes.mkdir(parents=True)
-    (themes / "0007-t.md").write_text(
-        "---\nkind: theme\nsource_refs:\n- paper:Tasci2022\n"
-        "evidence_refs:\n- report:0012-x\n---\n",
-        encoding="utf-8",
+def test_hyphenated_and_dotted_paper_ids(project: Path) -> None:
+    _paper(project, "van-der-Berg-2021.v2", "background")
+    _entity(
+        project, "reports", "0001-r",
+        "kind: report\nevidence_refs:\n- paper:van-der-Berg-2021.v2\n",
     )
 
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
-
-    assert issues == []
-
-
-def test_duplicate_citation_across_blocks_dedupes_file_wide(tmp_path: Path) -> None:
-    """Identity is (rule, path, paper_ref); a per-block seen set would collide."""
-    _paper(tmp_path / "entities" / "papers", "Tasci2022", "background")
-    hyp = tmp_path / "entities" / "hypotheses"
-    hyp.mkdir(parents=True)
-    (hyp / "0001-h.md").write_text(
-        "---\nkind: hypothesis\nevidence_refs:\n- paper:Tasci2022\n---\n"
-        "\n## Later\n\nevidence_refs:\n- paper:Tasci2022\n",
-        encoding="utf-8",
-    )
-
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
+    issues = _issues(project)
 
     assert len(issues) == 1
+    assert issues[0].qualifiers["paper_ref"] == "van-der-Berg-2021.v2"
 
 
-def test_no_background_papers_emits_notice(tmp_path: Path) -> None:
-    _paper(tmp_path / "entities" / "papers", "Smith2024", "active")
+def test_active_paper_in_evidence_refs_is_silent(project: Path) -> None:
+    _paper(project, "Smith2024", "active")
+    _entity(
+        project, "hypotheses", "0001-h",
+        "kind: hypothesis\nevidence_refs:\n- paper:Smith2024\n",
+    )
 
-    observations = list(check_background_reviews(_ctx(tmp_path)))
+    assert _issues(project) == []
+
+
+def test_source_refs_are_not_evidence_refs(project: Path) -> None:
+    """The health/meta corpus cites background papers under source_refs."""
+    _paper(project, "Tasci2022", "background")
+    _entity(
+        project, "themes", "0007-t",
+        "kind: theme\nsource_refs:\n- paper:Tasci2022\nevidence_refs:\n- report:0012-x\n",
+    )
+
+    assert _issues(project) == []
+
+
+def test_duplicate_citation_dedupes_file_wide(project: Path) -> None:
+    """Identity is (rule, path, paper_ref); duplicates would collide at the producer."""
+    _paper(project, "Tasci2022", "background")
+    _entity(
+        project, "hypotheses", "0001-h",
+        "kind: hypothesis\nevidence_refs:\n- paper:Tasci2022\n- cite:Tasci2022\n",
+    )
+
+    assert len(_issues(project)) == 1
+
+
+def test_no_background_papers_emits_notice(project: Path) -> None:
+    _paper(project, "Smith2024", "active")
+
+    observations = list(_background_review_observations(_ctx(project)))
 
     assert all(isinstance(o, ValidationNotice) for o in observations)
     assert any("no status:background" in o.message for o in observations)
+
+
+def test_compliant_provenance_record_is_silent(project: Path) -> None:
+    """Both live health/meta Tasci2022 records are already correctly typed."""
+    _paper(project, "Tasci2022", "background")
+    _provenance(
+        project, "tasci",
+        "source_ref: paper:Tasci2022\nevidence_tier: background\nreview_typed_source: true\n",
+    )
+
+    assert _issues(project) == []
+
+
+def test_quoted_source_ref_and_real_booleans(project: Path) -> None:
+    """YAML quoting and native booleans must not defeat the check."""
+    _paper(project, "Tasci2022", "background")
+    _provenance(
+        project, "tasci",
+        'source_ref: "paper:Tasci2022"\nevidence_tier: "background"\nreview_typed_source: yes\n',
+    )
+
+    assert _issues(project) == []
+
+
+def test_provenance_violating_both_conditions_yields_two_findings(project: Path) -> None:
+    """Separate rules exist precisely so these two do not collide on identity."""
+    _paper(project, "Tasci2022", "background")
+    _provenance(
+        project, "tasci",
+        "source_ref: paper:Tasci2022\nevidence_tier: primary\nreview_typed_source: false\n",
+    )
+
+    issues = _issues(project)
+
+    assert len(issues) == 2
+    assert {i.rule for i in issues} == {RULE_SOURCE_TYPING, RULE_EVIDENCE_TIER}
+    assert {i.qualifiers["paper_ref"] for i in issues} == {"Tasci2022"}
+
+
+def test_provenance_for_active_paper_is_silent(project: Path) -> None:
+    _paper(project, "Smith2024", "active")
+    _provenance(project, "smith", "source_ref: paper:Smith2024\nevidence_tier: primary\n")
+
+    assert _issues(project) == []
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run to verify failure**
 
 ```bash
 cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
@@ -248,21 +364,15 @@ cd science && uv run --frozen pytest tests/validate/test_checks_papers_backgroun
 
 Expected: FAIL — `ImportError: cannot import name 'RULE_EVIDENCE_REF'`.
 
-- [ ] **Step 3: Declare the qualifier schema and three rules**
+- [ ] **Step 3: Extend the existing rule table in `papers.py`**
 
-Append to `science/src/science_tool/validate/checks/papers.py`:
+Replace the existing `declare_validation_rules(...)` call — keep the same `section_id`, so the rules join the existing `validate.papers` section:
 
 ```python
-class BackgroundReviewQualifiers(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    paper_ref: str
-    task: str | None = None
-
-
-BACKGROUND_SECTION, BACKGROUND_REVIEW_RULES = declare_validation_rules(
-    section_id="papers-background-reviews",
-    section_title="background reviews are not evidence",
-    section_order=111,
+SECTION, RULES = declare_validation_rules(
+    section_id="papers",
+    section_title="papers",
+    section_order=110,
     rule_ids=(
         "papers.background-review-evidence-ref",
         "papers.background-review-source-typing",
@@ -274,28 +384,47 @@ BACKGROUND_SECTION, BACKGROUND_REVIEW_RULES = declare_validation_rules(
     identity_qualifiers=("paper_ref",),
 )
 
-RULE_EVIDENCE_REF = BACKGROUND_REVIEW_RULES["papers.background-review-evidence-ref"]
-RULE_SOURCE_TYPING = BACKGROUND_REVIEW_RULES["papers.background-review-source-typing"]
-RULE_EVIDENCE_TIER = BACKGROUND_REVIEW_RULES["papers.background-review-evidence-tier"]
+RULE_EVIDENCE_REF = RULES["papers.background-review-evidence-ref"]
+RULE_SOURCE_TYPING = RULES["papers.background-review-source-typing"]
+RULE_EVIDENCE_TIER = RULES["papers.background-review-evidence-tier"]
 ```
 
-Add to the imports at the top of the file:
+with `BackgroundReviewQualifiers` declared above it:
 
 ```python
-import re
+class BackgroundReviewQualifiers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    paper_ref: str
+    task: str | None = None
+```
+
+Add to the imports:
+
+```python
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.findings import declare_validation_rules, validation_observation
 ```
 
-Three separate rules, not one discriminated by qualifier: a single provenance record can violate both typing conditions at once, and a shared rule id would collide on identity.
+Three rules, not one discriminated by qualifier: a single provenance record can violate both typing conditions at once, and a shared rule id would collide on identity.
 
-- [ ] **Step 4: Implement the background-paper set and the evidence-ref arm**
+- [ ] **Step 4: Implement the helper — parsed refs, no regex**
 
 ```python
-_REF_RE = re.compile(r"(?:paper|cite):([A-Za-z0-9_]+)")
-_EVIDENCE_REFS_RE = re.compile(r"(?m)^evidence_refs:\s*\n((?:[ \t]+-.*(?:\n|$))+)")
+_REF_PREFIXES = ("paper", "cite")
+
+
+def _paper_key(ref: Any) -> str | None:
+    """Extract the paper key from a `paper:Key` / `cite:Key` reference scalar."""
+    if not isinstance(ref, str):
+        return None
+    prefix, separator, key = ref.partition(":")
+    if not separator or prefix not in _REF_PREFIXES:
+        return None
+    return key.strip() or None
 
 
 def _background_papers(ctx: ValidateContext) -> set[str]:
@@ -316,13 +445,83 @@ def _citation_roots(ctx: ValidateContext) -> tuple[Path, ...]:
     )
 
 
-@Check(
-    section=BACKGROUND_SECTION,
-    order=8,
-    producer_id="validate.papers-background-reviews",
-    rules=tuple(BACKGROUND_REVIEW_RULES.values()),
-)
-def check_background_reviews(ctx: ValidateContext) -> Iterator[object]:
+def _evidence_ref_observations(
+    ctx: ValidateContext, background: set[str]
+) -> Iterator[CheckObservation]:
+    for root in _citation_roots(ctx):
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            refs = ctx.frontmatter(path).get("evidence_refs")
+            if not isinstance(refs, list):
+                continue
+            # Dedupe per (path, paper_ref) across the WHOLE file: finding identity
+            # is (rule, path, paper_ref), so a repeated citation would emit two
+            # identical identities and the producer boundary would reject them.
+            seen: set[str] = set()
+            for ref in refs:
+                key = _paper_key(ref)
+                if key is None or key not in background or key in seen:
+                    continue
+                seen.add(key)
+                yield validation_observation(
+                    severity=Severity.WARN,
+                    path=path,
+                    line=None,
+                    message=(
+                        f"evidence_refs cites paper:{key} (status:background); use a "
+                        "primary citation or synthesis report instead of the review directly"
+                    ),
+                    rule=RULE_EVIDENCE_REF,
+                    task=None,
+                    qualifiers={"paper_ref": key},
+                )
+
+
+def _provenance_observations(
+    ctx: ValidateContext, background: set[str]
+) -> Iterator[CheckObservation]:
+    provenance_root = ctx.doc_dir / "provenance"
+    if not provenance_root.is_dir():
+        return
+    for path in sorted(provenance_root.glob("*.yaml")):
+        record = ctx.read_yaml(path)
+        if not isinstance(record, dict):
+            continue
+        key = _paper_key(record.get("source_ref"))
+        if key is None or key not in background:
+            continue
+
+        if record.get("review_typed_source") is not True:
+            yield validation_observation(
+                severity=Severity.WARN,
+                path=path,
+                line=None,
+                message=(
+                    f"source_ref names paper:{key} (status:background) without "
+                    "review_typed_source: true"
+                ),
+                rule=RULE_SOURCE_TYPING,
+                task=None,
+                qualifiers={"paper_ref": key},
+            )
+
+        if record.get("evidence_tier") != "background":
+            yield validation_observation(
+                severity=Severity.WARN,
+                path=path,
+                line=None,
+                message=(
+                    f"source_ref names paper:{key} (status:background) without "
+                    "evidence_tier: background"
+                ),
+                rule=RULE_EVIDENCE_TIER,
+                task=None,
+                qualifiers={"paper_ref": key},
+            )
+
+
+def _background_review_observations(ctx: ValidateContext) -> Iterator[CheckObservation]:
     background = _background_papers(ctx)
     if not background:
         yield ValidationNotice(
@@ -333,36 +532,12 @@ def check_background_reviews(ctx: ValidateContext) -> Iterator[object]:
         return
 
     violations = 0
-    for root in _citation_roots(ctx):
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*.md")):
-            text = ctx.read_text_cached(path)
-            # Dedupe per (path, paper_ref) across the WHOLE file, not per block:
-            # finding identity is (rule, path, paper_ref), so two blocks citing the
-            # same paper would emit two identical identities and the producer
-            # boundary would reject them.
-            seen: set[str] = set()
-            for block in _EVIDENCE_REFS_RE.findall(text):
-                for match in _REF_RE.finditer(block):
-                    key = match.group(1)
-                    if key not in background or key in seen:
-                        continue
-                    seen.add(key)
-                    violations += 1
-                    yield validation_observation(
-                        severity=Severity.WARN,
-                        path=path,
-                        line=None,
-                        message=(
-                            f"evidence_refs cites paper:{key} (status:background); "
-                            "use a primary citation or synthesis report instead of "
-                            "the review directly"
-                        ),
-                        rule=RULE_EVIDENCE_REF,
-                        task=None,
-                        qualifiers={"paper_ref": key},
-                    )
+    for observation in _provenance_observations(ctx, background):
+        violations += 1
+        yield observation
+    for observation in _evidence_ref_observations(ctx, background):
+        violations += 1
+        yield observation
 
     yield ValidationNotice(
         path=None,
@@ -374,192 +549,35 @@ def check_background_reviews(ctx: ValidateContext) -> Iterator[object]:
     )
 ```
 
-Note `resolve_path_policy(...).root` is project-relative — join it to `ctx.project_root`. Reports live **flat** under the `report` root; there is no `synthesis/` subdirectory in either live project, which is why `rglob` walks the root itself.
+`ctx.read_yaml` resolves quoted scalars and native booleans, so `review_typed_source: yes` is `True` and `"paper:Tasci2022"` is unquoted for us. `resolve_path_policy(...).root` is project-relative — join it to `ctx.project_root`. Reports live **flat** under the `report` root; there is no `synthesis/` subdirectory in either live project.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 5: Yield the helper from the existing decorated check**
+
+Change the existing `check_papers` body to yield its current notice and then delegate:
+
+```python
+@Check(section=SECTION, order=7, producer_id="validate.papers", rules=tuple(RULES.values()))
+def check_papers(ctx: ValidateContext) -> Iterator[CheckObservation]:
+    papers_root = resolve_path_policy("paper").root
+    yield _result(
+        Severity.INFO,
+        papers_root.as_posix(),
+        f"Paper summary structure is checked in {papers_root.as_posix()}/",
+    )
+    yield from _background_review_observations(ctx)
+```
+
+Annotate every generator `Iterator[CheckObservation]`, never `Iterator[object]` — pyright rejects the latter against `InternalCheckFn`.
+
+- [ ] **Step 6: Run the tests**
 
 ```bash
 cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
 ```
 
-Expected: 5 passed.
+Expected: 11 passed.
 
-- [ ] **Step 6: Lint and typecheck**
-
-```bash
-cd science && uv run ruff check && uv run pyright
-```
-
-Expected: both clean.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add science/src/science_tool/validate/checks/papers.py \
-        science/tests/validate/test_checks_papers_background_reviews.py
-git commit -m "feat(validate): promote the reviews-are-not-evidence evidence-ref arm"
-```
-
----
-
-### Task 3: Implement the provenance typing arm
-
-**Files:**
-- Modify: `science/src/science_tool/validate/checks/papers.py`
-- Test: `science/tests/validate/test_checks_papers_background_reviews.py`
-
-**Interfaces:**
-- Consumes: `RULE_SOURCE_TYPING`, `RULE_EVIDENCE_TIER`, `_background_papers` from Task 2.
-- Produces: nothing new; extends `check_background_reviews`.
-
-This is the arm health/meta has and evolution lacks. Its root is `ctx.doc_dir / "provenance"` — the one deliberately non-entity root, because there is no canonical `entities/provenance` kind.
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `science/tests/validate/test_checks_papers_background_reviews.py`:
-
-```python
-from science_tool.validate.checks.papers import RULE_EVIDENCE_TIER, RULE_SOURCE_TYPING
-
-
-def _provenance(root: Path, name: str, body: str) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / f"{name}.yaml").write_text(body, encoding="utf-8")
-
-
-def test_compliant_provenance_record_is_silent(tmp_path: Path) -> None:
-    """Both health/meta Tasci2022 records are already correctly typed."""
-    _paper(tmp_path / "entities" / "papers", "Tasci2022", "background")
-    _provenance(
-        tmp_path / "doc" / "provenance",
-        "tasci",
-        "source_ref: paper:Tasci2022\nevidence_tier: background\nreview_typed_source: true\n",
-    )
-
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
-
-    assert issues == []
-
-
-def test_provenance_record_violating_both_conditions_yields_two_findings(
-    tmp_path: Path,
-) -> None:
-    """Separate rules exist precisely so these two do not collide on identity."""
-    _paper(tmp_path / "entities" / "papers", "Tasci2022", "background")
-    _provenance(
-        tmp_path / "doc" / "provenance",
-        "tasci",
-        "source_ref: paper:Tasci2022\nevidence_tier: primary\nreview_typed_source: false\n",
-    )
-
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
-
-    assert len(issues) == 2
-    assert {i.rule for i in issues} == {RULE_SOURCE_TYPING, RULE_EVIDENCE_TIER}
-    assert {i.qualifiers["paper_ref"] for i in issues} == {"Tasci2022"}
-
-
-def test_provenance_for_active_paper_is_silent(tmp_path: Path) -> None:
-    _paper(tmp_path / "entities" / "papers", "Smith2024", "active")
-    _provenance(
-        tmp_path / "doc" / "provenance",
-        "smith",
-        "source_ref: paper:Smith2024\nevidence_tier: primary\n",
-    )
-
-    issues = [o for o in check_background_reviews(_ctx(tmp_path)) if isinstance(o, Result)]
-
-    assert issues == []
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -k provenance -v
-```
-
-Expected: FAIL — `ImportError: cannot import name 'RULE_SOURCE_TYPING'` is already resolved by Task 2, so expect assertion failures (`assert 0 == 2`).
-
-- [ ] **Step 3: Implement the provenance arm**
-
-Add to `papers.py`:
-
-```python
-_SOURCE_REF_RE = re.compile(r"^source_ref:\s*([^\s#]+)", re.MULTILINE)
-_EVIDENCE_TIER_RE = re.compile(r"^evidence_tier:\s*([^\s#]+)", re.MULTILINE)
-_REVIEW_TYPED_RE = re.compile(r"^review_typed_source:\s*([^\s#]+)", re.MULTILINE)
-
-
-def _match_value(pattern: re.Pattern[str], text: str) -> str | None:
-    match = pattern.search(text)
-    return match.group(1) if match else None
-
-
-def _check_provenance(
-    ctx: ValidateContext,
-    path: Path,
-    background: set[str],
-) -> Iterator[object]:
-    text = ctx.read_text_cached(path)
-    source_ref = _match_value(_SOURCE_REF_RE, text)
-    if source_ref is None:
-        return
-    match = _REF_RE.fullmatch(source_ref)
-    if match is None or match.group(1) not in background:
-        return
-    key = match.group(1)
-
-    if _match_value(_REVIEW_TYPED_RE, text) != "true":
-        yield validation_observation(
-            severity=Severity.WARN,
-            path=path,
-            line=None,
-            message=(
-                f"source_ref names paper:{key} (status:background) without "
-                "review_typed_source: true"
-            ),
-            rule=RULE_SOURCE_TYPING,
-            task=None,
-            qualifiers={"paper_ref": key},
-        )
-
-    if _match_value(_EVIDENCE_TIER_RE, text) != "background":
-        yield validation_observation(
-            severity=Severity.WARN,
-            path=path,
-            line=None,
-            message=(
-                f"source_ref names paper:{key} (status:background) without "
-                "evidence_tier: background"
-            ),
-            rule=RULE_EVIDENCE_TIER,
-            task=None,
-            qualifiers={"paper_ref": key},
-        )
-```
-
-Then, inside `check_background_reviews`, immediately after the `if not background:` early return and before the citation-root loop:
-
-```python
-    provenance_root = ctx.doc_dir / "provenance"
-    if provenance_root.is_dir():
-        for path in sorted(provenance_root.glob("*.yaml")):
-            for observation in _check_provenance(ctx, path, background):
-                violations += 1
-                yield observation
-```
-
-Move `violations = 0` above this block so both arms increment the same counter.
-
-- [ ] **Step 4: Run the full test module**
-
-```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
-```
-
-Expected: 8 passed.
-
-- [ ] **Step 5: Assert the check runs in both profiles and is not `--all`-gated**
+- [ ] **Step 7: Assert both profiles, no `--all` gate**
 
 Append:
 
@@ -571,51 +589,97 @@ def test_check_runs_in_every_profile() -> None:
     """A guardrail that only runs in the slow path is a guardrail that stops running."""
     for profile in VALIDATE_PROFILES:
         names = {entry.fn.__name__ for entry in _checks_for_profile(profile)}
-        assert "check_background_reviews" in names, profile
+        assert "check_papers" in names, profile
+
+
+def test_check_is_not_gated_on_include_all(project: Path) -> None:
+    _paper(project, "Tasci2022", "background")
+    _entity(project, "hypotheses", "0001-h", "kind: hypothesis\nevidence_refs:\n- paper:Tasci2022\n")
+
+    ctx = ValidateContext.from_project_root(
+        project, strict=False, verbose=False, include_all_checks=False
+    )
+    issues = [o for o in _background_review_observations(ctx) if isinstance(o, Result)]
+
+    assert len(issues) == 1
 ```
 
-- [ ] **Step 6: Run it**
+- [ ] **Step 8: Run, lint, typecheck**
 
 ```bash
-cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py::test_check_runs_in_every_profile -v
-```
-
-Expected: PASS. If it fails, the section or function name has been added to `_COMMIT_EXCLUDED_SECTIONS` / `_COMMIT_EXCLUDED_FUNCTIONS` in `runner.py` — remove it.
-
-- [ ] **Step 7: Lint, typecheck, commit**
-
-```bash
+cd science && uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -v
 cd science && uv run ruff check && uv run pyright
+```
+
+Expected: 13 passed; ruff and pyright clean. If `test_check_runs_in_every_profile` fails, `check_papers` or the `papers` section has been added to `_COMMIT_EXCLUDED_SECTIONS` / `_COMMIT_EXCLUDED_FUNCTIONS` in `runner.py` — remove it.
+
+- [ ] **Step 9: Prove the check can fail — mutate, confirm red, restore**
+
+§5.2 says the live corpus is compliant, so these fixtures are the only falsification available. Verify they are load-bearing.
+
+```bash
+cd science
+cp src/science_tool/validate/checks/papers.py /tmp/papers.py.bak
+python3 - <<'PY'
+from pathlib import Path
+p = Path("src/science_tool/validate/checks/papers.py")
+p.write_text(p.read_text().replace(
+    'for kind in ("theme", "report", "hypothesis")',
+    'for kind in ()',
+))
+PY
+uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q
+```
+
+Expected: **FAILURES** in `test_background_paper_in_evidence_refs_warns`, `test_unindented_list_items_are_parsed`, `test_hyphenated_and_dotted_paper_ids`, `test_duplicate_citation_dedupes_file_wide`, `test_check_is_not_gated_on_include_all`. If any of those still pass, the fixture is not exercising the citation-root walk.
+
+- [ ] **Step 10: Restore and confirm green**
+
+```bash
+cd science && cp /tmp/papers.py.bak src/science_tool/validate/checks/papers.py && rm /tmp/papers.py.bak
+uv run --frozen pytest tests/validate/test_checks_papers_background_reviews.py -q
+git diff --quiet src/science_tool/validate/checks/papers.py || echo "RESTORE FAILED"
+```
+
+Expected: 13 passed; no `RESTORE FAILED`.
+
+- [ ] **Step 11: Commit**
+
+```bash
 git add science/src/science_tool/validate/checks/papers.py \
         science/tests/validate/test_checks_papers_background_reviews.py
-git commit -m "feat(validate): add the provenance typing arm to the background-review check"
+git commit -m "feat(validate): promote the reviews-are-not-evidence guardrail to a canonical check"
 ```
 
 ---
 
-### Task 4: Add the retirement rule and stop executing project Python
+### Task 3: Retire the sidecar — rule, non-execution, and the whole extension surface
 
 **Files:**
-- Modify: `science/src/science_tool/validate/runtime.py`
-- Modify: `science/src/science_tool/validate/runner.py`
-- Modify: `science/src/science_tool/validate/__init__.py`
+- Modify: `science/src/science_tool/validate/runtime.py`, `runner.py`, `__init__.py`, `context.py`
+- Modify: `science/src/science_tool/graph/health_checks/validate.py`
+- Modify: `science/src/science_tool/project_artifacts/registry.yaml`, `cli.py`
+- Modify: `science/src/science_tool/budget/registry.py`
+- Modify: `science/tests/validate/test_context.py:24-26`
+- Delete: `science/src/science_tool/project_artifacts/port_validate_sidecar.py`, `science/tests/test_cli_artifacts_port_validate_sidecar.py`
 - Test: `science/tests/validate/test_sidecar_retirement.py`
 
 **Interfaces:**
-- Consumes: `FindingProducer`, `FindingRule`, `RUNTIME_SECTION`, `RuntimeEmptyQualifiers` from `runtime.py`.
-- Produces: `RULE_PYTHON_SIDECAR_REMOVED`, registered on `VALIDATION_RUNTIME_PRODUCER`.
+- Consumes: `RUNTIME_SECTION`, `RuntimeEmptyQualifiers`, `FindingProducer` from `runtime.py`.
+- Produces: `RULE_PYTHON_SIDECAR_REMOVED`; `run()` without `enable_python_sidecar`.
 
-- [ ] **Step 1: Write the failing test**
+This is one task, not two. The parameter removal and the hook removal are not independently green — a plan that commits a knowingly-red test is not a plan.
+
+- [ ] **Step 1: Write the failing tests**
 
 ```python
 """Python validation sidecars are reported, never executed."""
 
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path
-
-import pytest
 
 from science_tool.validate.runner import run
 from science_tool.validate.runtime import RULE_PYTHON_SIDECAR_REMOVED, RULE_SIDECAR_REMOVED
@@ -628,14 +692,20 @@ pathlib.Path(__file__).parent.joinpath("{SENTINEL}").write_text("ran")
 '''
 
 
+def _project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: fixture\n", encoding="utf-8")
+    return tmp_path
+
+
 def _run(root: Path):
     return run(root, strict=False, verbose=False)
 
 
 def test_sidecar_file_yields_exactly_one_retirement_finding(tmp_path: Path) -> None:
-    (tmp_path / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
+    root = _project(tmp_path)
+    (root / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
 
-    result = _run(tmp_path)
+    result = _run(root)
 
     matching = [f for f in result.results if f.rule_id == RULE_PYTHON_SIDECAR_REMOVED.id]
     assert len(matching) == 1
@@ -644,24 +714,32 @@ def test_sidecar_file_yields_exactly_one_retirement_finding(tmp_path: Path) -> N
 
 
 def test_sidecar_is_never_imported_or_executed(tmp_path: Path) -> None:
-    (tmp_path / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
+    root = _project(tmp_path)
+    (root / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
 
-    _run(tmp_path)
+    _run(root)
 
     assert "validate_local" not in sys.modules
-    assert not (tmp_path / SENTINEL).exists()
+    assert not (root / SENTINEL).exists()
 
 
 def test_python_and_legacy_sidecars_are_distinct_rules(tmp_path: Path) -> None:
-    (tmp_path / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
-    (tmp_path / "validate.local.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    root = _project(tmp_path)
+    (root / "validate_local.py").write_text(SIDECAR, encoding="utf-8")
+    (root / "validate.local.sh").write_text("#!/bin/sh\n", encoding="utf-8")
 
-    result = _run(tmp_path)
+    result = _run(root)
 
     rule_ids = {f.rule_id for f in result.results}
     assert RULE_PYTHON_SIDECAR_REMOVED.id in rule_ids
     assert RULE_SIDECAR_REMOVED.id in rule_ids
     assert RULE_PYTHON_SIDECAR_REMOVED.id != RULE_SIDECAR_REMOVED.id
+
+
+def test_clean_project_has_no_retirement_finding(tmp_path: Path) -> None:
+    result = _run(_project(tmp_path))
+
+    assert not [f for f in result.results if f.rule_id == RULE_PYTHON_SIDECAR_REMOVED.id]
 
 
 def test_hook_api_is_gone() -> None:
@@ -671,12 +749,10 @@ def test_hook_api_is_gone() -> None:
 
 
 def test_run_has_no_sidecar_parameter() -> None:
-    import inspect
-
     assert "enable_python_sidecar" not in inspect.signature(run).parameters
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 2: Run to verify failure**
 
 ```bash
 cd science && uv run --frozen pytest tests/validate/test_sidecar_retirement.py -v
@@ -701,160 +777,136 @@ RULE_PYTHON_SIDECAR_REMOVED = FindingRule(
 )
 ```
 
-Empty identity qualifiers are correct: a project either carries the file or does not. Then extend the producer:
+Empty identity qualifiers are correct: a project either carries the file or does not. Then extend the producer's `rules` tuple to `(RULE_CHECK_ERROR, RULE_SIDECAR_REMOVED, RULE_PYTHON_SIDECAR_REMOVED)`.
+
+- [ ] **Step 4: Rewrite `run()` as straight-line code**
+
+Delete from `runner.py`: `HookFn`, `_HOOK_NAMES`, `_HOOKS`, `_MISSING_MODULE`, `HookName` (both `TYPE_CHECKING` branches), `_PythonSidecarState`, `hook`, `_dispatch_hooks`, `_clear_hooks`, `_install_python_sidecar`, `_module_is_from_project`, `_legacy_sidecar_removed_result`, `_LEGACY_SIDECAR_PORTING_GUIDE`, and `enable_python_sidecar` from the signature. Remove the now-unused `importlib.util`, `os`, `sys`, `ModuleType`, `Literal`/`cast` imports if nothing else uses them.
+
+There is no residual `try:`. `run()`'s body from the registry line through the return becomes:
 
 ```python
-VALIDATION_RUNTIME_PRODUCER = FindingProducer(
-    producer_id="validate.runtime",
-    namespace="validate_checks",
-    source_module="validate/runtime.py",
-    rules=(RULE_CHECK_ERROR, RULE_SIDECAR_REMOVED, RULE_PYTHON_SIDECAR_REMOVED),
-    sections=(RUNTIME_SECTION,),
-)
-```
+    registry = _validation_registry(ctx.project_root)
+    producer_results: dict[str, FindingProducerResult] = {}
+    notices: list[ValidationNotice] = []
+    runtime_findings: list[AuditFinding] = []
 
-- [ ] **Step 4: Delete the hook API and sidecar import from `runner.py`**
+    if (ctx.project_root / "validate.local.sh").exists():
+        runtime_findings.append(
+            RULE_SIDECAR_REMOVED.build(
+                subject=ProjectSubject(),
+                severity="error",
+                qualifiers={},
+                message=(
+                    "validate.local.sh is no longer supported; see "
+                    f"{_SIDECAR_RETIREMENT_GUIDE}"
+                ),
+            )
+        )
+    if (ctx.project_root / "validate_local.py").is_file():
+        runtime_findings.append(
+            RULE_PYTHON_SIDECAR_REMOVED.build(
+                subject=ProjectSubject(),
+                severity="error",
+                qualifiers={},
+                message=(
+                    "validate_local.py is no longer executed; project checks belong "
+                    f"in the toolkit. See {_SIDECAR_RETIREMENT_GUIDE}"
+                ),
+            )
+        )
 
-Delete: `HookFn`, `_HOOK_NAMES`, `_HOOKS`, `_MISSING_MODULE`, `HookName` (both branches of the `TYPE_CHECKING` block), `_PythonSidecarState`, `hook`, `_dispatch_hooks`, `_clear_hooks`, `_install_python_sidecar`, `_module_is_from_project`, and `_legacy_sidecar_removed_result` if it becomes unused.
+    for entry in checks:
+        # ... unchanged check loop, including its per-check try/except ...
 
-Replace lines 131–150 of `run()` with:
-
-```python
-    python_sidecar_path = ctx.project_root / "validate_local.py"
-    legacy_sidecar_path = ctx.project_root / "validate.local.sh"
+    runtime_result = FindingProducerResult(
+        instrument=InstrumentResult.from_rows(runtime_findings),
+    )
+    producer_results[VALIDATION_RUNTIME_PRODUCER.producer_id] = validate_producer_result(
+        registry, VALIDATION_RUNTIME_PRODUCER.producer_id, runtime_result
+    )
+    results = [
+        finding
+        for producer_result in producer_results.values()
+        for finding in producer_result.instrument.rows
+    ]
+    run_result = _tally(
+        results, producer_results, tuple(notices), registry, checks, skipped_checks, profile
+    )
     try:
-        if legacy_sidecar_path.exists():
-            runtime_findings.append(
-                RULE_SIDECAR_REMOVED.build(
-                    subject=ProjectSubject(),
-                    severity="error",
-                    qualifiers={},
-                    message=(
-                        "validate.local.sh is no longer supported; see "
-                        f"{_SIDECAR_RETIREMENT_GUIDE}"
-                    ),
-                )
-            )
-        if python_sidecar_path.is_file():
-            runtime_findings.append(
-                RULE_PYTHON_SIDECAR_REMOVED.build(
-                    subject=ProjectSubject(),
-                    severity="error",
-                    qualifiers={},
-                    message=(
-                        "validate_local.py is no longer executed; project checks "
-                        f"belong in the toolkit. See {_SIDECAR_RETIREMENT_GUIDE}"
-                    ),
-                )
-            )
+        tier = resolve_gate_tier(fail_on, ctx.manifest)
+    except ValueError as exc:
+        raise ValidateContextError(str(exc)) from exc
+    return replace(run_result, gate_tier=tier, gated=tuple(gated_findings(results, tier)))
 ```
 
-Delete the `if sidecar_enabled:` block that dispatched `extra_checks` (lines 187–190), and replace the entire `finally:` block (lines 217–225) with nothing — `run()` no longer needs teardown, so the `try:` becomes plain sequential code. Remove the now-unused `import importlib.util`, `import os`, `import sys`, `from types import ModuleType`, and `cast` if unused.
-
-Replace the guide constant:
+The only remaining `try:` blocks are the per-check exception handler and the `resolve_gate_tier` conversion. The `run_result: RunResult | None = None` pre-declaration is no longer needed. Add:
 
 ```python
 _SIDECAR_RETIREMENT_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
 ```
 
-- [ ] **Step 5: Drop the `hook` export**
+- [ ] **Step 5: Drop the `hook` export and fix the production caller**
 
-In `science/src/science_tool/validate/__init__.py`, remove `hook` from both the import from `runner` and `__all__`.
+Remove `hook` from the `runner` import and `__all__` in `science/src/science_tool/validate/__init__.py`. Remove the `enable_python_sidecar=False,` argument from the `run(...)` call in `science/src/science_tool/graph/health_checks/validate.py`.
 
-- [ ] **Step 6: Run the tests**
+- [ ] **Step 6: Delete the stale context fields**
 
-```bash
-cd science && uv run --frozen pytest tests/validate/test_sidecar_retirement.py -v
-```
+In `context.py`, delete the `papers_dir`, `provenance_dir`, and `themes_dir` declarations and their `from_project_root` assignments. Delete the matching assertions at `science/tests/validate/test_context.py:24-26`. A field whose sole consumer is a test pinning it to a wrong value is how the drift stayed invisible.
 
-Expected: 5 passed. `test_run_has_no_sidecar_parameter` will still fail until Task 5 — that is expected; mark it `xfail` only if you are committing between tasks, otherwise complete Task 5 before committing.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add science/src/science_tool/validate/runtime.py \
-        science/src/science_tool/validate/runner.py \
-        science/src/science_tool/validate/__init__.py \
-        science/tests/validate/test_sidecar_retirement.py
-git commit -m "feat(validate)!: stop executing project-authored validation sidecars"
-```
-
----
-
-### Task 5: Remove the rest of the extension surface
-
-**Files:**
-- Modify: `science/src/science_tool/validate/runner.py` (drop `enable_python_sidecar`)
-- Modify: `science/src/science_tool/graph/health_checks/validate.py`
-- Modify: `science/src/science_tool/validate/context.py`
-- Modify: `science/tests/validate/test_context.py:24-26`
-- Modify: `science/src/science_tool/project_artifacts/registry.yaml`
-- Modify: `science/src/science_tool/project_artifacts/cli.py`
-- Modify: `science/src/science_tool/budget/registry.py`
-- Delete: `science/src/science_tool/project_artifacts/port_validate_sidecar.py` and its tests
-
-**Interfaces:**
-- Consumes: nothing new.
-- Produces: `run()` without `enable_python_sidecar`.
-
-Deleting the env-var branch while leaving the parameter would leave a keyword that silently does nothing — explicit over defensive.
-
-- [ ] **Step 1: Drop the parameter and fix its production caller**
-
-Remove `enable_python_sidecar: bool = True,` from `run()`'s signature in `runner.py`. Then remove the `enable_python_sidecar=False,` argument from the `run(...)` call in `science/src/science_tool/graph/health_checks/validate.py`.
-
-- [ ] **Step 2: Delete the stale context fields**
-
-In `science/src/science_tool/validate/context.py`, delete the `papers_dir`, `provenance_dir`, and `themes_dir` field declarations and their assignments in `from_project_root`. These carry `doc/`-rooted paths and have zero production consumers. Delete the corresponding assertions at `science/tests/validate/test_context.py:24-26`.
-
-A field whose sole consumer is a test pinning it to a wrong value is how the drift stayed invisible.
-
-- [ ] **Step 3: Delete the porting command**
+- [ ] **Step 7: Delete the porting command**
 
 ```bash
 git rm science/src/science_tool/project_artifacts/port_validate_sidecar.py
 git rm science/tests/test_cli_artifacts_port_validate_sidecar.py
 ```
 
-Do **not** touch `science/tests/test_query_iter_sidecars.py` — "sidecar" there refers to query iteration, an unrelated concept.
+Remove its click command and lazy import from `project_artifacts/cli.py`, and its `"single generated-sidecar path"` entry from `budget/registry.py`. Do **not** touch `science/tests/test_query_iter_sidecars.py` — "sidecar" there is query iteration, an unrelated concept.
 
-Remove its click command and its lazy import from `science/src/science_tool/project_artifacts/cli.py`, and remove its `"single generated-sidecar path"` entry from `science/src/science_tool/budget/registry.py`.
+- [ ] **Step 8: Replace the advertised extension protocol**
 
-- [ ] **Step 4: Remove the advertised extension protocol**
+In `project_artifacts/registry.yaml`, replace the `validate.sh` artifact's `extension_protocol` block with:
 
-In `science/src/science_tool/project_artifacts/registry.yaml`, delete the `extension_protocol:` block from the `validate.sh` artifact (the `kind: python_sidecar` / `sidecar_path: validate_local.py` / `contract:` keys). Bump the artifact's `version`, move the current hash into `previous_hashes`, and add a `migrations` entry, following the existing `2026.05.12.1 → 2026.05.21.1` pattern in that file.
+```yaml
+    extension_protocol:
+      kind: none
+      rationale: >
+        science validate never executes project-authored code. Project checks
+        belong in the toolkit's canonical check set.
+```
 
-The artifact body itself does not change — only its metadata — so `current_hash` stays the same. Verify with `science/tests/test_validate_sh_section_8.py`, which asserts the hash/version relationship, and update the version constants it pins.
+`extension_protocol` is a **required** field on `Artifact`, and `ExtensionKind.NONE` is a valid pairing for `consumer: direct_execute` — deleting the block outright fails schema validation.
 
-- [ ] **Step 5: Run the affected tests**
+**Do not touch `version`, `current_hash`, `previous_hashes`, or `migrations`.** The `validate.sh` body does not change, so `current_hash` is unchanged, and the registry's `_no_duplicate_hash` validator rejects a `current_hash` that also appears in `previous_hashes`. The registry versions artifact *bytes* and has no vocabulary for a metadata-only revision; introducing one is out of scope.
+
+- [ ] **Step 9: Run the affected tests**
 
 ```bash
 cd science && uv run --frozen pytest \
   tests/validate/test_sidecar_retirement.py \
   tests/validate/test_context.py \
   tests/test_validate_sh_section_8.py \
-  tests/test_budget_regression.py -v
+  tests/test_budget_regression.py \
+  tests/test_registry_schema.py -v
 ```
 
 Expected: all pass, including `test_run_has_no_sidecar_parameter`.
 
-- [ ] **Step 6: Lint, typecheck, commit**
+- [ ] **Step 10: Lint, typecheck, commit**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
 git add -A science/
-git commit -m "refactor(validate)!: remove the sidecar extension surface"
+git commit -m "feat(validate)!: retire the project Python validation sidecar"
 ```
 
 ---
 
-### Task 6: Documentation and regenerated mirrors
+### Task 4: Documentation and regenerated mirrors
 
 **Files:**
-- Modify: `docs/conventions/validate.md`
-- Modify: `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`
-- Modify: `docs/migration/managed-artifacts-template.md`
-- Regenerate: `skills/generated/science-command-preamble/references/docs/conventions/validate.md`
+- Modify: `docs/conventions/validate.md`, `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`, `docs/migration/managed-artifacts-template.md`
+- Regenerate: `skills/generated/…`
 
 - [ ] **Step 1: Update `docs/conventions/validate.md`**
 
@@ -862,34 +914,32 @@ Remove the Python-sidecar discovery contract and the `SCIENCE_VALIDATE_DISABLE_S
 
 - [ ] **Step 2: Retarget the porting guide**
 
-Rewrite `docs/migration/2026-05-19-validate-local-sh-porting-guide.md` from "port your shell sidecar to Python" to "sidecars are retired." It must answer: where does a reusable policy check go (a toolkit check — open a design conversation), and where does a genuinely project-specific check go (a project-owned command the project runs itself, with nothing enforcing it).
+Rewrite `docs/migration/2026-05-19-validate-local-sh-porting-guide.md` from "port your shell sidecar to Python" to "sidecars are retired." It must answer: where a reusable policy check goes (a toolkit check — open a design conversation), and where a genuinely project-specific check goes (a project-owned command the project runs itself, with nothing enforcing it).
 
 - [ ] **Step 3: Fix `docs/migration/managed-artifacts-template.md`**
 
-This file is **not** historical and still instructs projects to migrate logic *into* a sidecar (line ~157, "Use when the project has substantial logic that needs to migrate into the sidecar"; line ~262 references `validate.local.sh`). Leaving it is an active instruction to recreate what this work removes. Update or retire it.
+Not historical, and still instructs projects to migrate logic *into* a sidecar (~line 157) and references `validate.local.sh` (~line 262). Leaving it is an active instruction to recreate what this work removes.
 
-- [ ] **Step 4: Regenerate the committed mirror**
+- [ ] **Step 4: Regenerate committed mirrors**
 
-Never hand-edit files under `skills/generated/`. Regenerate them with the skills generator, then confirm exact fresh-generation equality:
+Never hand-edit files under `skills/generated/`.
 
 ```bash
 cd science && uv run --frozen science agents generate
-git diff --stat skills/generated/
+git diff --stat ../skills/generated/
 ```
 
 The command is `science agents generate` — `science skills` has only `coverage`, `curate`, `lint`, and `sources`, none of which regenerate the mirror.
 
-Expected: only `science-command-preamble/references/docs/conventions/validate.md` changes, matching the Step 1 edit.
-
-- [ ] **Step 5: Verify no stale references remain**
+- [ ] **Step 5: Confirm no stale instructions remain**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/sidecar-retirement
-grep -rn "validate_local\|SCIENCE_VALIDATE_DISABLE_SIDECAR\|@hook" docs/ templates/ skills/ \
-  | grep -v "docs/plans/" | grep -v "historical/"
+cd ~/d/science/.worktrees/sidecar-retirement
+rg -n --glob '!docs/plans/**' --glob '!**/historical/**' \
+   'validate_local|SCIENCE_VALIDATE_DISABLE_SIDECAR|@hook' docs/ templates/ skills/
 ```
 
-Expected: only retirement-context mentions (the porting guide describing what was removed). No instructions to create a sidecar.
+Expected: only retirement-context mentions in the porting guide. No instruction to create a sidecar.
 
 - [ ] **Step 6: Commit**
 
@@ -900,295 +950,432 @@ git commit -m "docs(validate): retarget sidecar documentation to retirement"
 
 ---
 
-### Task 7: Full-suite and real-project verification
+### Task 5: Migrate `meta/` on this branch
 
-**Files:** none modified — this task only verifies.
+**Files:**
+- Delete: `meta/validate_local.py`
+- Modify: `meta/evidence/README.md`, `meta/evidence/t034-causal-graph-contract.md`, `meta/entities/questions/0010-causal-graph-construction-pipeline.md`, `meta/src/t034_validator/__main__.py`
 
-- [ ] **Step 1: Run the full toolkit suite with an explicit long timeout**
+`meta/` is an in-repository consumer with an editable toolkit source. It must move **on this branch, before the push** — pushing a toolkit that reports `validate.python-sidecar-removed` while the repo still carries the sidecar it reports on would contradict the atomicity claim.
+
+- [ ] **Step 1: Delete the sidecar**
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement && git rm meta/validate_local.py
+```
+
+- [ ] **Step 2: Repair every active t034 reference**
+
+`meta/AGENTS.md` makes **no** t034 or `validate_local` claim — do not edit it. The live stale references are:
+
+| file | current claim |
+|---|---|
+| `meta/evidence/README.md:6-7` | "`validate.sh` runs `python -m t034_validator evidence/` via `validate.local.sh`" — wrong on both counts |
+| `meta/evidence/t034-causal-graph-contract.md` | references `validate_local` |
+| `meta/entities/questions/0010-causal-graph-construction-pipeline.md` | references `validate_local` |
+| `meta/src/t034_validator/__main__.py` docstring | "CLI for the t034 validator. Invoked from validate.local.sh." |
+
+Leave `meta/tasks/done/2026-06.md` alone — a completed task record is history.
+
+Each replacement states the direct invocation and that nothing enforces it:
+
+```
+Run t034 validation directly: `uv run python -m t034_validator evidence/`.
+It is no longer part of `science validate`; nothing enforces that it runs.
+```
+
+- [ ] **Step 3: Verify the t034 CLI standalone**
+
+The directory argument is required — `__main__.main` returns 2 on `len(argv) != 2`.
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement/meta && uv run python -m t034_validator evidence/
+echo "exit=$?"
+```
+
+Expected: a `t034: N payload(s), 0 error(s), 0 load error(s)` summary and `exit=0`.
+
+- [ ] **Step 4: Verify meta validates cleanly**
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement/meta
+uv run --frozen science validate --all --strict --format json > /tmp/meta-after.json
+status=$?
+echo "validator exit=$status"
+python3 - <<'PY'
+import json
+d = json.load(open("/tmp/meta-after.json"))
+print(d["summary"])
+rules = {r.get("rule") for r in d["results"]}
+assert "validate.python-sidecar-removed" not in rules, "sidecar finding still present"
+assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
+print("OK")
+PY
+```
+
+Expected: `validator exit=0`, `OK`. Capture the status immediately — never `| head` before reading `$?`, which reports the pipe's last command.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd ~/d/science/.worktrees/sidecar-retirement
+git add -A meta/
+git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly"
+```
+
+---
+
+### Task 6: Full-suite and canonical parity verification
+
+**Files:** none modified.
+
+- [ ] **Step 1: Full toolkit suite**
 
 ```bash
 cd science && uv run --frozen pytest
 ```
 
-Run this with a 600000 ms tool timeout. ~10k tests, 2–3 min. Expected: all pass.
+Run with a 600000 ms tool timeout. Expected: all pass.
 
-- [ ] **Step 2: Run the model suite**
+- [ ] **Step 2: Model suite and opt-in markers**
 
 ```bash
 cd science/model && uv run --frozen pytest
-```
-
-- [ ] **Step 3: Run the opt-in markers**
-
-```bash
 cd science && uv run --frozen pytest -m snapshot
 cd science && uv run --frozen pytest -m real_projects
 ```
 
-- [ ] **Step 4: Confirm canonical parity against the Task 1 baselines**
+- [ ] **Step 3: Build the after-toolkit environment and capture after-states**
 
-Install the branch toolkit into a scratch venv and re-run each project, diffing finding-by-finding against `~/scratch/sidecar-baselines/*-canonical.json`. The retirement must not perturb canonical output.
+Task 1 never produced these; they must be created here.
+
+```bash
+set -e
+uv venv ~/scratch/sidecar-baselines/after-venv
+~/scratch/sidecar-baselines/after-venv/bin/pip install -e ~/d/science/.worktrees/sidecar-retirement/science
+BIN=~/scratch/sidecar-baselines/after-venv/bin/science
+declare -A ROOTS=(
+  [evolution]=~/d/cancer/mechanisms/evolution
+  [protein-landscape]=~/d/protein-landscape
+  [science-meta]=~/d/science/.worktrees/sidecar-retirement/meta
+  [health-meta]=~/d/health/meta
+)
+for name in "${!ROOTS[@]}"; do
+  ( cd "${ROOTS[$name]}" && "$BIN" validate --all --strict --format json ) \
+    > ~/scratch/sidecar-baselines/"$name"-after.json
+  echo "$name captured"
+done
+```
+
+- [ ] **Step 4: Diff finding-by-finding, failing on any missing file**
+
+```bash
+python3 - <<'PY'
+import json, sys
+from pathlib import Path
+
+base = Path.home() / "scratch/sidecar-baselines"
+names = ["evolution", "protein-landscape", "science-meta", "health-meta"]
+NEW_PREFIXES = ("papers.background-review", "validate.python-sidecar-removed")
+failed = False
+
+def rows(p: Path):
+    if not p.exists():
+        sys.exit(f"FAIL missing required file: {p}")   # never SKIP
+    return json.loads(p.read_text())["results"]
+
+def ident(rs):
+    return sorted(
+        (r.get("rule"), r.get("path"), r.get("message"))
+        for r in rs
+        if not str(r.get("rule") or "").startswith(NEW_PREFIXES)
+    )
+
+for n in names:
+    before = ident(rows(base / f"{n}-canonical.json"))
+    after = ident(rows(base / f"{n}-after.json"))
+    if before == after:
+        print(f"{n}: MATCH ({len(before)} rows)")
+    else:
+        failed = True
+        print(f"{n}: DIFF")
+        for row in set(before) ^ set(after):
+            print("   ", row)
+
+sys.exit(1 if failed else 0)
+PY
+```
+
+Expected: `MATCH` for all four, exit 0. Any missing file is a hard failure, never a skip.
+
+- [ ] **Step 5: Confirm zero new warnings, and check notices out-of-band**
+
+Per design §5.2 the corpus is compliant.
 
 ```bash
 python3 - <<'PY'
 import json, sys
 from pathlib import Path
 base = Path.home() / "scratch/sidecar-baselines"
-for name in ("evolution", "protein-landscape", "meta", "health-meta"):
-    b = base / f"{name}-canonical.json"
-    a = base / f"{name}-after.json"
-    if not (b.exists() and a.exists()):
-        print(f"SKIP {name}"); continue
-    def ident(d):
-        return sorted((r.get("rule"), r.get("path"), r.get("message")) for r in json.load(open(d))["results"])
-    print(name, "MATCH" if ident(b) == ident(a) else "DIFF")
+for n in ("evolution", "health-meta"):
+    rs = json.loads((base / f"{n}-after.json").read_text())["results"]
+    warns = [r for r in rs if str(r.get("rule") or "").startswith("papers.background-review")]
+    print(n, "background-review warnings:", len(warns))
+    if warns:
+        sys.exit(f"FAIL {n}: expected zero; corpus changed or roots are wrong")
 PY
 ```
 
-Expected: `MATCH` for every project, apart from the newly-added `papers.background-review-*` notice rows.
+**Notices are not carried in `--format json`.** Verify them through verbose text instead:
 
-- [ ] **Step 5: Confirm the expected delta is zero new warnings**
+```bash
+BIN=~/scratch/sidecar-baselines/after-venv/bin/science
+( cd ~/d/cancer/mechanisms/evolution && "$BIN" validate --all --strict --verbose ) \
+  | rg 'no status:background papers'
+( cd ~/d/health/meta && "$BIN" validate --all --strict --verbose ) \
+  | rg '9 status:background paper'
+```
 
-Per design §5.2 the corpus is compliant. Expected after promotion:
+Expected: evolution matches the no-background notice (all 15 papers are active); health/meta matches the 9-paper, 0-violation notice.
 
-| project | expected |
-|---|---|
-| evolution | notice: no `status: background` papers. **Zero warnings.** |
-| health/meta | notice: 9 background papers, 0 violations. **Zero warnings.** |
+If either produces a **warning**, stop. Either the corpus changed since 2026-07-29 or the roots are wrong. Do not adjust the expectation to match the output.
 
-If either produces a warning, **stop** — either the corpus changed since 2026-07-29 or the roots are wrong. Do not adjust the expectation to match the output.
-
-- [ ] **Step 6: Commit nothing; record results**
-
-Paste the parity table into the PR description or a results doc. No code change.
+- [ ] **Step 6: Record results — no code change**
 
 ---
 
-### Task 8: Push the toolkit to the public default branch
+### Task 7: Approval gate, then publish
 
 **Files:** none.
 
-A consumer cannot resolve an unpushed revision. No consumer commit may be authored before this lands.
+A consumer cannot resolve an unpushed revision, so this must precede Tasks 8–10. It is also the one irreversible step in the plan.
 
-- [ ] **Step 1: Merge to `main`**
+- [ ] **Step 1: Obtain explicit approval to merge and push**
 
-Verify the branch first — this repo's `main` checkout floats because it is Dropbox-synced.
+Present the Task 6 parity table and ask for a go/no-go on pushing `origin/main`. **Do not proceed without an explicit yes.** Prior approval of the design is not approval of the push.
+
+- [ ] **Step 2: Merge on a verified branch**
+
+This repo's `main` checkout floats because it is Dropbox-synced.
 
 ```bash
-cd /mnt/ssd/Dropbox/science
-git branch --show-current   # must print: main
+cd ~/d/science
+git branch --show-current   # must print: main — stop if it does not
 git merge --no-ff sidecar-retirement
 ```
 
-- [ ] **Step 2: Push and confirm reachability**
+- [ ] **Step 3: Push and confirm reachability**
 
 ```bash
 git push origin main
 git ls-remote origin main
 ```
 
-Expected: the remote SHA matches local `main`. Record that SHA — Tasks 9–11 pin to it.
+Expected: remote SHA matches local `main`. Record it — Tasks 8–10 pin to it.
 
 ---
 
-### Task 9: Migrate `~/d/health/meta` atomically
+### Task 8: Migrate `~/d/health/meta` atomically
 
-**Files:**
-- Modify: `~/d/health/meta/pyproject.toml:13`, `~/d/health/meta/uv.lock`, `~/d/health/meta/AGENTS.md`
-- Delete: `~/d/health/meta/validate_local.py`
+**Files:** `pyproject.toml:13`, `uv.lock`, `AGENTS.md`; delete `validate_local.py`
 
-This project pins an explicit `rev`. One commit: pin, deletion, docs.
-
-- [ ] **Step 1: Update the pin**
-
-Replace `rev = "3b72db60b8d591cf3dbac8ae25ca194f6cda9c8b"` in `[tool.uv.sources]` with the Task 8 SHA.
-
-- [ ] **Step 2: Relock and sync**
+- [ ] **Step 1: Work in an isolated worktree**
 
 ```bash
-cd ~/d/health/meta && uv lock && uv sync --frozen
+cd ~/d/health && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
+cd .worktrees/sidecar-retirement && git branch --show-current
 ```
 
-- [ ] **Step 3: Delete the sidecar**
+- [ ] **Step 2: Update the explicit pin and relock**
+
+Replace `rev = "3b72db60b8d591cf3dbac8ae25ca194f6cda9c8b"` in `[tool.uv.sources]` with the Task 7 SHA, then:
 
 ```bash
-cd ~/d/health/meta && git rm validate_local.py
+uv lock && uv sync
+rg -A2 '^name = "science"' uv.lock
 ```
 
-- [ ] **Step 4: Update `AGENTS.md`**
+Expected: the `source = { git = ... #<sha> }` line shows the Task 7 SHA.
 
-Record that the reviews-are-not-evidence guardrail is now a toolkit check and the project no longer owns it. Remove any instruction to edit `validate_local.py`.
-
-- [ ] **Step 5: Verify**
+- [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
 
 ```bash
-cd ~/d/health/meta && uv run science validate --format json | python3 -c "
-import json,sys; d=json.load(sys.stdin); print(d['summary'])"
+git rm meta/validate_local.py 2>/dev/null || git rm validate_local.py
 ```
 
-Expected: exit 0, `errors: 0`, and **zero** `papers.background-review-*` warnings. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
+Record in `AGENTS.md` that the reviews-are-not-evidence guardrail is now a toolkit check the project no longer owns.
 
-- [ ] **Step 6: Commit atomically**
+- [ ] **Step 4: Verify, capturing status before parsing**
 
 ```bash
-cd ~/d/health/meta
-git add pyproject.toml uv.lock AGENTS.md
-git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
+uv run --frozen science validate --all --strict --format json > /tmp/hm-after.json
+status=$?
+echo "validator exit=$status"
+python3 - <<'PY'
+import json
+d = json.load(open("/tmp/hm-after.json"))
+print(d["summary"])
+rules = {r.get("rule") for r in d["results"]}
+assert "validate.python-sidecar-removed" not in rules
+assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
+print("OK")
+PY
 ```
 
-Note this repo has **no GitHub remote** — commit only, never push.
+Expected: `validator exit=0`, `OK`. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
+
+- [ ] **Step 5: Commit atomically, merge, clean up**
+
+```bash
+git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
+cd ~/d/health && git branch --show-current   # verify before merging
+git merge --no-ff sidecar-retirement
+git worktree remove .worktrees/sidecar-retirement
+```
+
+This repo has **no GitHub remote** — commit and merge only, never push.
 
 ---
 
-### Task 10: Migrate `~/d/cancer/mechanisms/evolution` atomically
+### Task 9: Migrate `~/d/cancer/mechanisms/evolution` atomically
 
-**Files:**
-- Modify: `~/d/cancer/mechanisms/evolution/uv.lock:3062`, `AGENTS.md`
-- Delete: `~/d/cancer/mechanisms/evolution/validate_local.py`
+**Files:** `uv.lock:3062`, `AGENTS.md`; delete `validate_local.py`
 
 Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50dc`.
 
-- [ ] **Step 1: Relock to the Task 8 SHA**
+- [ ] **Step 1: Isolated worktree**
 
 ```bash
-cd ~/d/cancer/mechanisms/evolution && uv lock --upgrade-package science && uv sync --frozen
-grep -A2 '^name = "science"' uv.lock
+cd ~/d/cancer && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
+cd .worktrees/sidecar-retirement/mechanisms/evolution
 ```
 
-Expected: the `source = { git = ... #<sha> }` line shows the Task 8 SHA.
-
-- [ ] **Step 2: Delete the sidecar and update docs**
+- [ ] **Step 2: Relock to the Task 7 SHA**
 
 ```bash
-cd ~/d/cancer/mechanisms/evolution && git rm validate_local.py
+uv lock --upgrade-package science && uv sync
+rg -A2 '^name = "science"' uv.lock
 ```
 
-Update `AGENTS.md` as in Task 9 Step 4.
-
-- [ ] **Step 3: Verify the original crashing command now succeeds**
+- [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
 
 ```bash
-cd ~/d/cancer/mechanisms/evolution && uv run science validate --format json | head -c 200; echo; echo "exit=$?"
+git rm validate_local.py
 ```
 
-Expected: `exit=0`, valid JSON, no traceback. This is the reproduction from Task 1 Step 3 now passing.
-
-- [ ] **Step 4: Confirm the expected notice**
-
-Expected: a notice reporting no `status: background` papers (all 15 are active), and **zero** `papers.background-review-*` warnings.
-
-- [ ] **Step 5: Commit atomically**
+- [ ] **Step 4: Run the exact original command that crashed**
 
 ```bash
-cd ~/d/cancer/mechanisms/evolution
-git add uv.lock AGENTS.md
-git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
+uv run --frozen science validate --all --strict --format json > /tmp/evo-after.json
+status=$?
+echo "validator exit=$status"
+python3 - <<'PY'
+import json
+d = json.load(open("/tmp/evo-after.json"))
+print(d["summary"])
+rules = {r.get("rule") for r in d["results"]}
+assert "validate.python-sidecar-removed" not in rules
+assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
+print("OK")
+PY
 ```
 
-This repo is Dropbox-synced — verify the branch before committing.
+Expected: `validator exit=0`, `OK`, no traceback. This is the Task 1 Step 2 reproduction now resolved.
+
+- [ ] **Step 5: Confirm the notice out-of-band**
+
+```bash
+uv run --frozen science validate --all --strict --verbose | rg 'no status:background papers'
+```
+
+Expected: a match — all 15 papers are active, so a notice and zero warnings.
+
+- [ ] **Step 6: Commit atomically, merge, clean up**
+
+```bash
+git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
+cd ~/d/cancer && git branch --show-current   # Dropbox-synced; verify before merging
+git merge --no-ff sidecar-retirement
+git worktree remove .worktrees/sidecar-retirement
+```
 
 ---
 
-### Task 11: Migrate `~/d/protein-landscape` atomically
+### Task 10: Migrate `~/d/protein-landscape` atomically
 
-**Files:**
-- Modify: `~/d/protein-landscape/uv.lock:4412`, `AGENTS.md`
-- Delete: `~/d/protein-landscape/validate_local.py`
+**Files:** `uv.lock:4412`, `AGENTS.md`; delete `validate_local.py`
 
-Its check is **not** promoted — the expensive-pipeline-artifact check becomes a project-owned command with nothing enforcing it (design §4).
+Its check is **not** promoted — the expensive-artifact check becomes a project-owned command with nothing enforcing it (design §4).
 
-- [ ] **Step 1: Relock to the Task 8 SHA**
+- [ ] **Step 1: Isolated worktree, relock**
 
 ```bash
-cd ~/d/protein-landscape && uv lock --upgrade-package science && uv sync --frozen
+cd ~/d/protein-landscape && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
+cd .worktrees/sidecar-retirement
+uv lock --upgrade-package science && uv sync
+rg -A2 '^name = "science"' uv.lock
 ```
 
-- [ ] **Step 2: Convert the sidecar to a standalone script**
+- [ ] **Step 2: Delete the wrapper only**
 
-Move the artifact-presence logic out of `validate_local.py` into a plain project script (for example `scripts/check_expensive_artifacts.py`). The existing hook is 66 lines using `json` and `subprocess` and yields four `Result` sites plus one INFO. Port each of the four to a printed message and a non-zero exit; drop the INFO ("All expensive pipeline artifacts present") to a success message on stdout. The script imports nothing from `science_tool.validate`.
+The standalone checker **already exists** at `code/scripts/check_expensive_artifacts.py` (6 KB). `validate_local.py` is a thin hook wrapper around it. Delete the wrapper; **do not** create a duplicate script.
 
 ```bash
-cd ~/d/protein-landscape && git rm validate_local.py
+git rm validate_local.py
 ```
 
 - [ ] **Step 3: Document the loss in `AGENTS.md`**
 
-State plainly: this check no longer runs as part of `science validate`, it is not in `--format json` output, and **nothing enforces that it runs**. Give the exact command.
+State plainly: this check no longer runs as part of `science validate`, it is not in `--format json` output, and **nothing enforces that it runs**. Give the exact command:
 
-- [ ] **Step 4: Verify**
-
-```bash
-cd ~/d/protein-landscape && uv run science validate --format json | head -c 200; echo; echo "exit=$?"
+```
+uv run --frozen python code/scripts/check_expensive_artifacts.py
 ```
 
-Expected: `exit=0`, valid JSON, no traceback — the crash recorded in the method-slice inventory is resolved.
-
-- [ ] **Step 5: Commit atomically**
+- [ ] **Step 4: Confirm the standalone checker runs**
 
 ```bash
-cd ~/d/protein-landscape
-git add uv.lock AGENTS.md scripts/
-git commit -m "chore: drop the validation sidecar and run artifact checks standalone"
+uv run --frozen python code/scripts/check_expensive_artifacts.py
+echo "checker exit=$?"
 ```
 
----
-
-### Task 12: Migrate `~/d/science/meta` atomically
-
-**Files:**
-- Modify: `~/d/science/meta/AGENTS.md`
-- Delete: `~/d/science/meta/validate_local.py`
-
-No pin step — its toolkit source is editable and in-repository, so toolkit and consumer move together by construction.
-
-- [ ] **Step 1: Delete the sidecar**
+- [ ] **Step 5: Verify validation**
 
 ```bash
-cd ~/d/science && git rm meta/validate_local.py
+uv run --frozen science validate --all --strict --format json > /tmp/pl-after.json
+status=$?
+echo "validator exit=$status"
+python3 -c "
+import json; d=json.load(open('/tmp/pl-after.json')); print(d['summary'])
+assert 'validate.python-sidecar-removed' not in {r.get('rule') for r in d['results']}
+print('OK')"
 ```
 
-- [ ] **Step 2: Repair the documentation**
+Expected: `validator exit=0`, `OK`, no traceback — the crash in the method-slice inventory is resolved.
 
-This is a **repair, not an addition**: `meta/AGENTS.md` currently states that t034 validation is invoked through `validate_local.py`, which is now false. Replace it with the direct `t034_validator` CLI invocation, and state that it no longer runs as part of `science validate` and nothing enforces it.
-
-- [ ] **Step 3: Verify**
+- [ ] **Step 6: Commit atomically, merge, clean up**
 
 ```bash
-cd ~/d/science/meta && uv run science validate --format json | head -c 200; echo; echo "exit=$?"
-```
-
-Expected: `exit=0`, valid JSON, no traceback, and no t034 findings.
-
-- [ ] **Step 4: Confirm the t034 CLI still works standalone**
-
-```bash
-cd ~/d/science/meta && uv run python -m t034_validator
-```
-
-`src/t034_validator/__main__.py` exists, so `python -m` is the invocation. The package has **no** console script — `[project.scripts]` declares only `h01-sim` — so do not document a `t034-validate` entry point that does not exist.
-
-- [ ] **Step 5: Commit atomically**
-
-```bash
-cd ~/d/science
-git add meta/AGENTS.md
-git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly"
+git add -A && git commit -m "chore: drop the validation sidecar; run artifact checks standalone"
+cd ~/d/protein-landscape && git branch --show-current
+git merge --no-ff sidecar-retirement
+git worktree remove .worktrees/sidecar-retirement
 ```
 
 ---
 
 ## Verification Checklist
 
-Design §5.3 coverage, mapped to tasks:
+Design §5.3 coverage:
 
 | § | Requirement | Task |
 |---|---|---|
-| 5.3.1 | exactly one occurrence of `validate.python-sidecar-removed`, valid JSON | 4 |
-| 5.3.2 | sidecar never imported or executed (`sys.modules` + sentinel) | 4 |
-| 5.3.3 | project-authored `FindingRule` cannot enter the registry | pre-existing; confirmed by Task 7 full suite |
-| 5.3.4 | the two sidecar rules are distinct | 4 |
-| 5.3.5 | three rules fire; both typing conditions yield two findings | 2, 3 |
-| 5.3.6 | check present in `full` and `commit` profiles | 3 |
-| 5.3.7 | the check can fail — mutation turns the fixture red | 2, 3 |
+| 5.3.1 | exactly one `validate.python-sidecar-removed`, valid JSON | 3 |
+| 5.3.2 | never imported or executed (`sys.modules` + sentinel) | 3 |
+| 5.3.3 | project-authored `FindingRule` cannot enter the registry | pre-existing; Task 6 full suite |
+| 5.3.4 | the two sidecar rules are distinct | 3 |
+| 5.3.5 | three rules fire; both typing conditions yield two findings | 2 |
+| 5.3.6 | check present in `full` and `commit` profiles, not `--all`-gated | 2 |
+| 5.3.7 | the check can fail — mutate, confirm red, restore green | 2, steps 9–10 |
 
-**On §5.3.7:** §5.2 means the real corpus cannot falsify this check — it is compliant. The fixtures in Tasks 2 and 3 are the only falsification available, which is exactly why `test_background_paper_in_evidence_refs_warns` and `test_provenance_record_violating_both_conditions_yields_two_findings` are load-bearing rather than decorative. Before declaring Task 3 done, mutate `_citation_roots` to return an empty tuple and confirm those tests go red.
+**On §5.3.7:** §5.2 means the real corpus cannot falsify this check — it is compliant. Task 2's fixtures are the only falsification available, which is why steps 9 and 10 are executable steps rather than a closing remark.

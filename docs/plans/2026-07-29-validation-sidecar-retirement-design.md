@@ -142,9 +142,19 @@ an in-place correction.
   (`"single generated-sidecar path"`) and its tests with it.
 - `project_artifacts/registry.yaml`: the `validate.sh` artifact still advertises
   `extension_protocol: {kind: python_sidecar, sidecar_path: validate_local.py}`
-  with a contract paragraph describing `@hook(...)` registration. Remove the
-  protocol block and bump the artifact version with a migration entry, per the
-  registry's existing `previous_hashes` / `migrations` discipline.
+  with a contract paragraph describing `@hook(...)` registration. **Replace** it
+  with `{kind: none, rationale: ...}` — `extension_protocol` is a required field
+  on `Artifact` (`registry_schema.py`), and `ExtensionKind.NONE` is a valid
+  pairing for `consumer: direct_execute`. Deleting the block outright fails
+  schema validation.
+
+  **No version or hash migration.** The `validate.sh` body does not change — only
+  its metadata — so `current_hash` is unchanged, and the registry's
+  `_no_duplicate_hash` validator explicitly rejects a `current_hash` that also
+  appears in `previous_hashes`. The registry's version semantics describe artifact
+  *bytes*, and it has no vocabulary for a metadata-only revision. Bumping the
+  version here would require redesigning those semantics, which is out of scope:
+  leave `version`, `current_hash`, `previous_hashes`, and `migrations` untouched.
 - `ValidateContext.papers_dir`, `.provenance_dir`, `.themes_dir`. These carry the
   stale `doc/`-rooted paths from §1.2 and have **zero production consumers** —
   the only reference in the tree is `tests/validate/test_context.py:24-26`,
@@ -360,11 +370,21 @@ of observability, not a diff against an existing row.
 For the three crashing projects there is no before-state to diff against. The
 comparison is defined in two parts:
 
-1. **Canonical-validator baseline.** Run each crashing project with sidecars
-   disabled, so
+1. **Canonical-validator baseline.** Run every project with sidecars disabled, so
    the toolkit's own checks execute and produce a real finding set. This is the
    before-state for everything in §3.1 and §3.4, and it must be finding-by-finding
    identical after the change — the retirement must not perturb canonical output.
+
+   **One toolkit revision for all four.** The baseline must be taken with a single
+   post–Plan 3, pre-retirement revision run against every project root — not with
+   each project's own installed revision. Health/meta sits at `3b72db60` and the
+   others at `ed6b50dc`; comparing those to a post-retirement toolkit would
+   conflate this change with every unrelated change between those revisions.
+   Plan 3 merging and the branch rebasing onto it is therefore a **precondition**
+   of baseline capture, not merely of landing.
+
+   Notices are not carried in `--format json`. Where a notice is the expected
+   output, assert it through `RunResult.notices` or verbose text rendering.
 2. **Intended-policy evaluation.** Evaluate the promoted check of §3.3 separately,
    against the corpus, on its own terms. It has no predecessor output to match,
    because its predecessor never observed its subject.
