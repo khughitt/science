@@ -87,23 +87,31 @@ class InvalidAcceptance:
 ClassifiedAcceptance = CurrentAcceptance | LegacyAcceptance | InvalidAcceptance
 
 
-def _digest_json_value(value: object) -> object:
+def _digest_json_value(value: object, ancestors: frozenset[int] = frozenset()) -> object:
     if isinstance(value, date):
         return {"__science_yaml_date__": value.isoformat()}
     if isinstance(value, bytes):
         return {"__science_yaml_binary__": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+        if id(value) in ancestors:
+            return {"__science_yaml_cycle__": type(value).__qualname__}
+        ancestors = ancestors | {id(value)}
     if isinstance(value, Mapping):
         if all(isinstance(key, str) for key in value):
-            return {key: _digest_json_value(item) for key, item in value.items()}
+            return {
+                key: _digest_json_value(item, ancestors) for key, item in value.items()
+            }
         pairs = [
-            [_digest_json_value(key), _digest_json_value(item)]
+            [_digest_json_value(key, ancestors), _digest_json_value(item, ancestors)]
             for key, item in value.items()
         ]
         return {"__science_yaml_mapping__": sorted(pairs, key=canonical_json)}
     if isinstance(value, (list, tuple)):
-        return [_digest_json_value(item) for item in value]
+        return [_digest_json_value(item, ancestors) for item in value]
     if isinstance(value, (set, frozenset)):
-        members = sorted((_digest_json_value(item) for item in value), key=canonical_json)
+        members = sorted(
+            (_digest_json_value(item, ancestors) for item in value), key=canonical_json
+        )
         return {"__science_yaml_set__": members}
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -181,7 +189,11 @@ def legacy_validation_fields(finding: AuditFinding) -> dict[str, object]:
 def partition_health_acceptances(
     project_root: Path, reported_findings: list[ReportedFinding]
 ) -> tuple[list[ReportedFinding], list[AcceptedFinding]]:
-    entries = accepted_validation_entries(project_root)
+    entries = [
+        entry
+        for entry in accepted_validation_entries(project_root)
+        if isinstance(entry, dict)
+    ]
     remaining: list[ReportedFinding] = []
     accepted: list[AcceptedFinding] = []
     for reported in reported_findings:
@@ -229,7 +241,7 @@ SIGNATURE_TOKEN_SPEC = f"evidence-signature: {SIGNATURE_VERSION}:<64-hex>"
 _SIGNATURE_RE = re.compile(rf"\bevidence-signature: {SIGNATURE_VERSION}:[0-9a-f]{{64}}\b")
 
 
-def accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:
+def accepted_validation_entries(project_root: Path) -> list[object]:
     manifest_path = project_config_path(project_root)
     try:
         manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
@@ -243,7 +255,7 @@ def accepted_validation_entries(project_root: Path) -> list[dict[str, Any]]:
     entries = health.get("accepted_validation")
     if not isinstance(entries, list):
         return []
-    return [entry for entry in entries if isinstance(entry, dict)]
+    return entries
 
 
 def _message_contains_values(needles: object) -> list[str]:
@@ -336,7 +348,11 @@ def filter_accepted_warnings(
     project_root: Path,
     results: list[AuditFinding],
 ) -> list[AuditFinding]:
-    entries = accepted_validation_entries(project_root)
+    entries = [
+        entry
+        for entry in accepted_validation_entries(project_root)
+        if isinstance(entry, dict)
+    ]
     if not entries:
         return results
     kept: list[AuditFinding] = []

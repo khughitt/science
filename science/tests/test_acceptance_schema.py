@@ -9,6 +9,7 @@ from science_tool.validate.acceptance import (
     CurrentAcceptance,
     InvalidAcceptance,
     LegacyAcceptance,
+    accepted_validation_entries,
     classify_acceptance_entry,
     raw_acceptance_digest,
 )
@@ -79,6 +80,17 @@ def test_every_other_yaml_entry_is_invalid_with_a_stable_subject_digest(raw):
     assert len(classified.raw_digest) == 32
 
 
+def test_loader_keeps_non_mapping_entries_for_total_classification(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "health:\n  accepted_validation:\n    - scalar\n", encoding="utf-8"
+    )
+
+    entries = accepted_validation_entries(tmp_path)
+
+    assert entries == ["scalar"]
+    assert isinstance(classify_acceptance_entry(entries[0]), InvalidAcceptance)
+
+
 def test_optional_accepted_on_is_an_iso_date():
     entry = AcceptedValidationEntry.model_validate(
         {**BASE, "accepted_on": "2026-07-29"}
@@ -104,6 +116,16 @@ def test_current_entry_with_a_yaml_date_is_classified():
 )
 def test_every_yaml_value_has_a_digest_and_invalid_classification(raw):
     classified = classify_acceptance_entry(raw)
+    assert isinstance(classified, InvalidAcceptance)
+    assert classified.raw_digest == raw_acceptance_digest(raw)
+    assert len(classified.raw_digest) == 32
+
+
+def test_recursive_yaml_alias_is_invalid_with_a_stable_digest():
+    raw = yaml.safe_load("&a [*a]")
+
+    classified = classify_acceptance_entry(raw)
+
     assert isinstance(classified, InvalidAcceptance)
     assert classified.raw_digest == raw_acceptance_digest(raw)
     assert len(classified.raw_digest) == 32
