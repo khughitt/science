@@ -7,6 +7,8 @@ from collections.abc import Iterator
 from science_model.audit import FindingRule, FindingSection, IdentifierSubject
 
 from science_tool.validate.acceptance import (
+    ACCEPTANCE_INVALID_ENTRY_RULE_ID,
+    ACCEPTANCE_LEGACY_SHAPE_RULE_ID,
     CurrentAcceptance,
     InvalidAcceptance,
     LegacyAcceptance,
@@ -27,7 +29,7 @@ SECTION = FindingSection(
     section_order=160,
 )
 RULE_LEGACY_SHAPE = FindingRule(
-    id="accepted-validation.legacy-shape",
+    id=ACCEPTANCE_LEGACY_SHAPE_RULE_ID,
     severities=frozenset({"error"}),
     subject_types=frozenset({"identifier"}),
     identifier_namespaces=frozenset({"accepted-validation"}),
@@ -39,7 +41,7 @@ RULE_LEGACY_SHAPE = FindingRule(
     default_visibility="visible",
 )
 RULE_INVALID_ENTRY = FindingRule(
-    id="accepted-validation.invalid-entry",
+    id=ACCEPTANCE_INVALID_ENTRY_RULE_ID,
     severities=frozenset({"error"}),
     subject_types=frozenset({"identifier"}),
     identifier_namespaces=frozenset({"accepted-validation"}),

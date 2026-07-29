@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Literal, Mapping
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -17,6 +18,14 @@ from science_tool.findings.producers import FindingRegistry, validate_finding
 
 AcceptanceSeverity = Literal["warn", "error"]
 _SEVERITY_ORDER = {"warn": 0, "error": 1}
+ACCEPTANCE_LEGACY_SHAPE_RULE_ID = "accepted-validation.legacy-shape"
+ACCEPTANCE_INVALID_ENTRY_RULE_ID = "accepted-validation.invalid-entry"
+ACCEPTANCE_CONFIGURATION_RULES = frozenset(
+    {
+        ACCEPTANCE_LEGACY_SHAPE_RULE_ID,
+        ACCEPTANCE_INVALID_ENTRY_RULE_ID,
+    }
+)
 
 
 class AcceptedValidationEntry(BaseModel):
@@ -157,14 +166,14 @@ def accepted_validation_entries(project_root: Path) -> list[object]:
 
 
 def partition_accepted_findings(
-    project_root: Path,
-    reported_findings: list[ReportedFinding],
+    entries: Sequence[object],
+    findings: Sequence[ReportedFinding],
     *,
     registry: FindingRegistry,
 ) -> tuple[list[ReportedFinding], list[AcceptedFinding]]:
-    entries = tuple(
+    current_entries = tuple(
         classified.entry
-        for raw in accepted_validation_entries(project_root)
+        for raw in entries
         if isinstance(
             classified := classify_acceptance_entry(raw),
             CurrentAcceptance,
@@ -172,8 +181,11 @@ def partition_accepted_findings(
     )
     remaining: list[ReportedFinding] = []
     accepted: list[AcceptedFinding] = []
-    for reported in reported_findings:
+    for reported in findings:
         if reported.producer_id != "validate":
+            remaining.append(reported)
+            continue
+        if reported.finding.rule_id in ACCEPTANCE_CONFIGURATION_RULES:
             remaining.append(reported)
             continue
         finding_id = validate_finding(
@@ -184,7 +196,7 @@ def partition_accepted_findings(
         matched = next(
             (
                 entry
-                for entry in entries
+                for entry in current_entries
                 if entry.finding_id == finding_id and reported.finding.severity in entry.severity_scope
             ),
             None,
@@ -213,7 +225,7 @@ def filter_accepted_warnings(
         ReportedFinding(producer_id="validate", finding=finding) for finding in results if finding.severity == "warn"
     ]
     remaining_warnings, _accepted = partition_accepted_findings(
-        project_root,
+        accepted_validation_entries(project_root),
         warnings,
         registry=registry,
     )

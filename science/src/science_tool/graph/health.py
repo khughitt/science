@@ -25,7 +25,10 @@ from science_tool.graph.health_checks.schema_invalid import (
 )
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
-from science_tool.validate.acceptance import partition_accepted_findings
+from science_tool.validate.acceptance import (
+    accepted_validation_entries,
+    partition_accepted_findings,
+)
 
 
 @dataclass(frozen=True)
@@ -86,7 +89,7 @@ def _partition_validation_acceptances(
         return producer_results, ()
     reported = [ReportedFinding(producer_id="validate", finding=finding) for finding in validate_result.instrument.rows]
     remaining, accepted = partition_accepted_findings(
-        project_root,
+        accepted_validation_entries(project_root),
         reported,
         registry=registry,
     )

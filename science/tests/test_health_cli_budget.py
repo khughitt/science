@@ -10,11 +10,18 @@ from science_tool.budget.measure import visible_len
 from science_tool.budget.registry import BUDGETS
 from science_tool.cli import main
 from science_tool.findings.catalog import build_project_registry
-from science_tool.findings.producers import FindingProducerResult
+from science_tool.findings.producers import (
+    FindingProducerResult,
+    validate_finding,
+)
 from science_tool.findings.reporting import build_audit_report
 from science_tool.graph.health import HealthExecution
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.checks.manifest import RULES as MANIFEST_RULES
+from science_tool.validate.checks.accepted_validation import (
+    check_accepted_validation,
+)
+from science_tool.validate.context import ValidateContext
 
 
 def test_health_json_stdout_is_a_complete_valid_audit_report(tmp_path: Path) -> None:
@@ -123,6 +130,13 @@ def test_health_table_reports_section_cap_and_stays_within_budget(
 
 
 def _write_manifest_with_acceptance(root: Path, entry: object) -> None:
+    _write_manifest_with_acceptances(root, [entry])
+
+
+def _write_manifest_with_acceptances(
+    root: Path,
+    entries: list[object],
+) -> None:
     (root / "science.yaml").write_text(
         yaml.safe_dump(
             {
@@ -133,7 +147,7 @@ def _write_manifest_with_acceptance(root: Path, entry: object) -> None:
                 "profile": "research",
                 "layout_version": 3,
                 "knowledge_profiles": {"local": "local"},
-                "health": {"accepted_validation": [entry]},
+                "health": {"accepted_validation": entries},
             },
             sort_keys=False,
         ),
@@ -246,3 +260,60 @@ def test_ordinary_error_finding_does_not_gate_health(
     assert result.exit_code == 0, result.output
     emitted = AuditReport.model_validate_json(result.output)
     assert emitted.totals.findings_by_severity["error"] == 1
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"rule": "manifest.check", "severity": "warning", "reason": "reviewed"},
+        {"finding_id": "not-a-fingerprint", "reason": "reviewed"},
+    ],
+)
+def test_acceptance_configuration_findings_cannot_be_accepted_by_another_entry(
+    tmp_path: Path,
+    raw: object,
+) -> None:
+    _write_manifest_with_acceptance(tmp_path, raw)
+    context = ValidateContext.from_project_root(
+        tmp_path,
+        strict=False,
+        verbose=False,
+    )
+    [configuration_observation] = list(check_accepted_validation(context))
+    configuration_finding = configuration_observation.to_finding(tmp_path)
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(
+        registry,
+        "validate",
+        configuration_finding,
+    )
+    _write_manifest_with_acceptances(
+        tmp_path,
+        [
+            raw,
+            {
+                "finding_id": finding_id,
+                "fingerprint_version": 1,
+                "severity_scope": ["error"],
+                "reason": "attempted self-acceptance",
+            },
+        ],
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "health",
+            "--project-root",
+            str(tmp_path),
+            "--check",
+            "validate",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    report = AuditReport.model_validate_json(result.output)
+    assert configuration_finding.rule_id in {item.finding.rule_id for item in report.findings}
+    assert configuration_finding.rule_id not in {item.finding.rule_id for item in report.accepted}

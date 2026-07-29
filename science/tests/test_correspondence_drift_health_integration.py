@@ -5,7 +5,10 @@ from science_model.audit import PathSubject, ReportedFinding
 from science_tool.correspondence.signature import SIGNATURE_VERSION
 from science_tool.findings.catalog import build_project_registry
 from science_tool.findings.producers import validate_finding
-from science_tool.validate.acceptance import partition_accepted_findings
+from science_tool.validate.acceptance import (
+    accepted_validation_entries,
+    partition_accepted_findings,
+)
 from science_tool.validate.checks.correspondence_drift import (
     RULE_CORRESPONDENCE_DRIFT,
 )
@@ -37,7 +40,7 @@ health:
         encoding="utf-8",
     )
     remaining, accepted = partition_accepted_findings(
-        tmp_path,
+        accepted_validation_entries(tmp_path),
         [ReportedFinding(producer_id="validate", finding=finding)],
         registry=registry,
     )

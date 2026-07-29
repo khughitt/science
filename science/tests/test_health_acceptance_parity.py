@@ -7,6 +7,7 @@ from science_tool.findings.catalog import build_project_registry
 from science_tool.findings.producers import validate_finding
 from science_tool.validate.acceptance import (
     AcceptedValidationEntry,
+    accepted_validation_entries,
     partition_accepted_findings,
 )
 from science_tool.validate.checks.manifest import RULES
@@ -68,7 +69,7 @@ def test_health_acceptance_partitions_exact_fingerprint_without_overlap(
     )
 
     remaining, accepted = partition_accepted_findings(
-        tmp_path,
+        accepted_validation_entries(tmp_path),
         [matched, other],
         registry=registry,
     )
@@ -99,7 +100,7 @@ def test_warn_scope_does_not_accept_later_error_with_same_fingerprint(
     reported = ReportedFinding(producer_id="validate", finding=error)
 
     remaining, accepted = partition_accepted_findings(
-        tmp_path,
+        accepted_validation_entries(tmp_path),
         [reported],
         registry=registry,
     )
@@ -126,7 +127,7 @@ def test_wildcard_migrated_scope_accepts_warn_or_error(
             finding=_finding(severity=severity),
         )
         remaining, accepted = partition_accepted_findings(
-            tmp_path,
+            accepted_validation_entries(tmp_path),
             [reported],
             registry=registry,
         )
@@ -142,10 +143,32 @@ def test_non_validation_findings_are_never_accepted(tmp_path: Path) -> None:
     item = ReportedFinding(producer_id="other", finding=finding)
 
     remaining, accepted = partition_accepted_findings(
-        tmp_path,
+        accepted_validation_entries(tmp_path),
         [item],
         registry=registry,
     )
 
     assert remaining == [item]
     assert accepted == []
+
+
+def test_partition_uses_the_provided_entry_snapshot(tmp_path: Path) -> None:
+    finding = _finding()
+    registry = build_project_registry(tmp_path)
+    finding_id = validate_finding(registry, "validate", finding)
+    entry = {
+        "finding_id": finding_id,
+        "fingerprint_version": 1,
+        "severity_scope": ["warn"],
+        "reason": "reviewed",
+    }
+    reported = ReportedFinding(producer_id="validate", finding=finding)
+
+    remaining, accepted = partition_accepted_findings(
+        [entry],
+        [reported],
+        registry=registry,
+    )
+
+    assert remaining == []
+    assert [item.finding for item in accepted] == [finding]

@@ -23,12 +23,8 @@ from science_tool.findings.producers import FindingRegistry
 from science_tool.findings.reporting import report_sort_key
 from science_tool.graph.health_projection import ProjectedHealthReport
 from science_tool.output import emit, serialize_json
-
-ACCEPTANCE_CONFIGURATION_RULES = frozenset(
-    {
-        "accepted-validation.legacy-shape",
-        "accepted-validation.invalid-entry",
-    }
+from science_tool.validate.acceptance import (
+    ACCEPTANCE_CONFIGURATION_RULES,
 )
 
 
