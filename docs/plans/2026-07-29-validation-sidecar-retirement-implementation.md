@@ -837,7 +837,24 @@ Empty identity qualifiers are correct: a project either carries the file or does
 
 - [ ] **Step 4: Rewrite `run()` as straight-line code**
 
-Delete from `runner.py`: `HookFn`, `_HOOK_NAMES`, `_HOOKS`, `_MISSING_MODULE`, `HookName` (both `TYPE_CHECKING` branches), `_PythonSidecarState`, `hook`, `_dispatch_hooks`, `_clear_hooks`, `_install_python_sidecar`, `_module_is_from_project`, `_legacy_sidecar_removed_result`, `_LEGACY_SIDECAR_PORTING_GUIDE`, and `enable_python_sidecar` from the signature. Remove the now-unused `importlib.util`, `os`, `sys`, `ModuleType`, `Literal`/`cast` imports if nothing else uses them.
+Delete from `runner.py`: `HookFn`, `_HOOK_NAMES`, `_HOOKS`, `_MISSING_MODULE`, `HookName` (both `TYPE_CHECKING` branches), `_PythonSidecarState`, `hook`, `_dispatch_hooks`, `_clear_hooks`, `_install_python_sidecar`, `_module_is_from_project`, `_legacy_sidecar_removed_result`, and `enable_python_sidecar` from the signature. Remove the now-unused `importlib.util`, `os`, `sys`, `ModuleType`, `Literal`/`cast` imports if nothing else uses them.
+
+**Keep `_LEGACY_SIDECAR_PORTING_GUIDE` and the legacy message byte-for-byte.** Only the `_legacy_sidecar_removed_result()` wrapper goes; its message string is inlined unchanged. Do not introduce a second guide constant — one constant, both messages.
+
+The current text at `runner.py:320` is:
+
+```python
+message = f"validate.local.sh is no longer supported; migrate it using {_LEGACY_SIDECAR_PORTING_GUIDE}"
+```
+
+Four places pin that exact string, and this task has no business changing the output contract of a rule it is not retiring:
+
+- `tests/validate/test_parity_with_sidecar.py:27` — `_REMOVED_MESSAGE`
+- `tests/validate/snapshots/json_default.json:12`
+- `tests/validate/snapshots/text_default.txt:5`
+- the bash `validate.local.sh` implementation the parity tests compare against
+
+Rewording it to "see" would turn a retained-behaviour test red for no reason and force a snapshot regeneration that hides the real diff.
 
 There is no residual `try:`. `run()`'s body from the registry line through the return becomes:
 
@@ -854,8 +871,8 @@ There is no residual `try:`. `run()`'s body from the registry line through the r
                 severity="error",
                 qualifiers={},
                 message=(
-                    "validate.local.sh is no longer supported; see "
-                    f"{_SIDECAR_RETIREMENT_GUIDE}"
+                    "validate.local.sh is no longer supported; migrate it using "
+                    f"{_LEGACY_SIDECAR_PORTING_GUIDE}"
                 ),
             )
         )
@@ -867,7 +884,7 @@ There is no residual `try:`. `run()`'s body from the registry line through the r
                 qualifiers={},
                 message=(
                     "validate_local.py is no longer executed; project checks belong "
-                    f"in the toolkit. See {_SIDECAR_RETIREMENT_GUIDE}"
+                    f"in the toolkit. See {_LEGACY_SIDECAR_PORTING_GUIDE}"
                 ),
             )
         )
@@ -896,11 +913,9 @@ There is no residual `try:`. `run()`'s body from the registry line through the r
     return replace(run_result, gate_tier=tier, gated=tuple(gated_findings(results, tier)))
 ```
 
-The only remaining `try:` blocks are the per-check exception handler and the `resolve_gate_tier` conversion. The `run_result: RunResult | None = None` pre-declaration is no longer needed. Add:
+The only remaining `try:` blocks are the per-check exception handler and the `resolve_gate_tier` conversion. The `run_result: RunResult | None = None` pre-declaration is no longer needed.
 
-```python
-_SIDECAR_RETIREMENT_GUIDE = "docs/migration/2026-05-19-validate-local-sh-porting-guide.md"
-```
+`_LEGACY_SIDECAR_PORTING_GUIDE` already exists in `runner.py` with the value `docs/migration/2026-05-19-validate-local-sh-porting-guide.md`. Leave it exactly as it is — Task 4 retargets the *contents* of that document, not its path.
 
 - [ ] **Step 5: Drop the `hook` export and fix the production caller**
 
@@ -921,6 +936,38 @@ done
 ```
 
 Expected: `absent` four times. A `PRESENT` means Task 6's parity run will show a new `validate.sidecar-removed` row for that project and the comparator's `NEW_PREFIXES` must be widened to admit it.
+
+Pin the new behaviour so it cannot silently regress. Post–Plan 3, `graph/health_checks/validate.py` exposes `execute_validation(project_root) -> ValidationHealthRun` (a frozen dataclass of `run_result` and `producer_result`), and `run_check` is a one-line projection of it. `tests/validate/test_runner.py` already imports the module as `validate_health` and has a `_project(tmp_path)` helper. Append there:
+
+```python
+def test_graph_health_reports_the_legacy_sidecar(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    (project / "validate.local.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    execution = validate_health.execute_validation(project)
+
+    rows = [
+        finding
+        for finding in execution.producer_result.instrument.rows
+        if finding.rule_id == "validate.sidecar-removed"
+    ]
+    assert len(rows) == 1
+    assert rows[0].severity == "error"
+
+
+def test_graph_health_is_clean_without_a_legacy_sidecar(tmp_path: Path) -> None:
+    execution = validate_health.execute_validation(_project(tmp_path))
+
+    assert not [
+        finding
+        for finding in execution.producer_result.instrument.rows
+        if finding.rule_id == "validate.sidecar-removed"
+    ]
+```
+
+Both are red before Step 5 and green after: today `enable_python_sidecar=False` suppresses the row, so the first test fails on `len(rows) == 1`. The second guards the other direction — that the row is driven by the file, not emitted unconditionally.
+
+Note the second call site while you are in this file: `test_execute_validation_projects_one_fixed_run_result_without_a_second_stream` (post–Plan 3, ~line 289) passes `enable_python_sidecar=False` to `run(...)` when building its `expected` fixture. Drop that argument; it is covered by the Step 9 `test_runner.py` row but is easy to miss because it sits in a health test rather than a hook test.
 
 - [ ] **Step 6: Delete the stale context fields**
 
@@ -998,10 +1045,12 @@ Leave the rest of that module untouched. Its `version`, `current_hash`, and chan
 ```bash
 ( cd ~/d/science/.worktrees/sidecar-retirement/science && \
   rg -n --glob '!tests/test_command_docs.py' \
-     'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
+     'enable_python_sidecar\s*(?:=|:)|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
 ```
 
 Expected: no output.
+
+The `enable_python_sidecar` pattern is anchored to `\s*(?:=|:)` so it matches declarations (`enable_python_sidecar: bool = True`) and call-site keywords (`enable_python_sidecar=False`) but not the bare identifier. Step 1's `test_run_has_no_sidecar_parameter` asserts `"enable_python_sidecar" not in inspect.signature(run).parameters` — a quoted string with no `=` or `:` after it. An unanchored pattern would match the regression test that exists to prove the removal, so the scan could never come back clean.
 
 `tests/test_command_docs.py` is excluded deliberately. Its `SCIENCE_VALIDATE_DISABLE_SIDECAR` occurrences are assertions that the string appears in `docs/conventions/validate.md`, which this task does not edit — so the module is still green here and goes red only when Task 4 rewrites that document. Drop the `--glob` exclusion from this command once Task 4 lands and re-run it as part of Task 4 Step 6.
 
@@ -1129,7 +1178,7 @@ Three exclusions, each for a different reason:
 - `**/historical/**` — e.g. `docs/plans/historical/2026-05-29-external-datapackage-resources-implementation.md`, a completed plan preserved as-is.
 - `docs/audits/**` — audit records (`plans-cleanup/reviews.jsonl`, `project-plans-cleanup/meta/*.md` and its `reviews.jsonl`). These are dated observations of what the tree contained at audit time. Rewriting them would falsify the record. They are history, not instruction; do not edit them.
 
-Expected: only retirement-context mentions in the porting guide. No instruction to create a sidecar.
+Expected: retirement-context mentions only — in the retargeted porting guide, and in `docs/conventions/validate.md`, which after Step 1 names `validate_local.py` when documenting the `validate.python-sidecar-removed` error. Both describe the retirement. Neither instructs a project to create a sidecar; that is the property being checked.
 
 - [ ] **Step 8: Re-run the Task 3 API scan without its exclusion**
 
@@ -1137,10 +1186,10 @@ Task 3 Step 10 had to exempt `tests/test_command_docs.py`. Step 5 removed the re
 
 ```bash
 ( cd ~/d/science/.worktrees/sidecar-retirement/science && \
-  rg -n 'enable_python_sidecar|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
+  rg -n 'enable_python_sidecar\s*(?:=|:)|_dispatch_hooks|SCIENCE_VALIDATE_DISABLE_SIDECAR|validate import .*\bhook\b' src tests )
 ```
 
-Expected: no output.
+Expected: no output. Same anchored `enable_python_sidecar` pattern as Task 3 Step 10, for the same reason — the bare identifier still appears in `test_run_has_no_sidecar_parameter`, by design.
 
 - [ ] **Step 9: Run the documentation tests**
 
