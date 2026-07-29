@@ -676,7 +676,7 @@ def test_multi_issue_emitters_have_one_semantic_identity_per_row(
     assert len(identities) == len(set(identities))
 
 
-def test_accepted_validation_coalesces_equivalent_severity_spellings_at_registered_boundary(
+def test_accepted_validation_groups_duplicate_identical_raw_entries_at_registered_boundary(
     tmp_path: Path,
 ) -> None:
     from science_tool.validate import runner
@@ -687,13 +687,13 @@ def test_accepted_validation_coalesces_equivalent_severity_spellings_at_register
         "health:\n"
         "  accepted_validation:\n"
         "    - rule: plan.correspondence-drift\n"
-        "      severity: warn\n"
+        "      severity: warning\n"
         "      path: entities/plans/one.md\n"
         "      reason: first spelling\n"
         "    - rule: plan.correspondence-drift\n"
         "      severity: warning\n"
         "      path: entities/plans/one.md\n"
-        "      reason: equivalent spelling\n",
+        "      reason: first spelling\n",
         encoding="utf-8",
     )
     entry = next(item for item in _canonical_entries() if item.producer.producer_id == "validate.accepted-validation")

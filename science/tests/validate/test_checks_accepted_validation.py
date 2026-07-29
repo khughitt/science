@@ -2,63 +2,90 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.correspondence.signature import SIGNATURE_VERSION
+import pytest
+import yaml
+
 from science_tool.validate.checks.accepted_validation import check_accepted_validation
 from science_tool.validate.context import ValidateContext
-from science_tool.validate.gates import cumulative_rules
-
-_SIG = f"{SIGNATURE_VERSION}:" + "a" * 64
 
 
-def _ctx(root: Path, manifest_health: str) -> ValidateContext:
-    (root / "science.yaml").write_text(f"name: f\nprofile: research\n{manifest_health}", encoding="utf-8")
-    return ValidateContext.from_project_root(root, strict=False, verbose=False)
-
-
-def test_unscoped_entry_for_scoped_rule_warns(tmp_path: Path):
-    ctx = _ctx(
-        tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
-        '      path: "entities/plans/0001-x.md"\n      reason: "x"\n',
+def _write_entries(root: Path, entries: list[object]) -> None:
+    (root / "science.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "f",
+                "profile": "research",
+                "health": {"accepted_validation": entries},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
     )
-    results = list(check_accepted_validation(ctx))
-    assert len(results) == 1
-    assert results[0].rule_id == "accepted-validation.evidence-scope-required"
-    assert results[0].severity.value == "warn"
-    assert not results[0].path.is_absolute()
 
 
-def test_scoped_entry_with_valid_signature_is_silent(tmp_path: Path):
-    ctx = _ctx(
+def _run_check(root: Path):
+    ctx = ValidateContext.from_project_root(root, strict=False, verbose=False)
+    return list(check_accepted_validation(ctx))
+
+
+def _current_entry() -> dict[str, object]:
+    return {
+        "finding_id": "a" * 64,
+        "fingerprint_version": 1,
+        "severity_scope": ["warn"],
+        "reason": "reviewed",
+    }
+
+
+def test_legacy_entry_emits_migration_error(tmp_path: Path) -> None:
+    _write_entries(
         tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
-        '      path: "entities/plans/0001-x.md"\n      reason: "x"\n'
-        f'      message_contains: "evidence-signature: {_SIG}"\n',
+        [{"rule": "manifest.check", "severity": "warning", "reason": "reviewed"}],
     )
-    assert not list(check_accepted_validation(ctx))
+
+    findings = _run_check(tmp_path)
+
+    assert [item.rule_id for item in findings] == ["accepted-validation.legacy-shape"]
+    assert findings[0].severity == "error"
+    assert findings[0].subject.type == "identifier"
+    assert "migrate-acceptances" in findings[0].message
 
 
-def test_signature_present_but_absolute_path_warns(tmp_path: Path):
-    # A complete signature is not enough on its own: an absolute path would blind the
-    # rule beyond one project-relative plan, so the guard still fires.
-    ctx = _ctx(
-        tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "plan.correspondence-drift"\n'
-        '      path: "/abs/entities/plans/0001-x.md"\n      reason: "x"\n'
-        f'      message_contains: "evidence-signature: {_SIG}"\n',
-    )
-    results = list(check_accepted_validation(ctx))
-    assert len(results) == 1
-    assert results[0].rule_id == "accepted-validation.evidence-scope-required"
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "scalar",
+        {"reason": "missing identity"},
+        {
+            "finding_id": "a" * 64,
+            "fingerprint_version": 2,
+            "severity_scope": ["warn"],
+            "reason": "reviewed",
+        },
+    ],
+)
+def test_invalid_entry_emits_invalid_not_legacy(tmp_path: Path, raw: object) -> None:
+    _write_entries(tmp_path, [raw])
+
+    findings = _run_check(tmp_path)
+
+    assert [item.rule_id for item in findings] == ["accepted-validation.invalid-entry"]
+    assert findings[0].subject.type == "identifier"
 
 
-def test_unrelated_rule_entry_is_silent(tmp_path: Path):
-    ctx = _ctx(
-        tmp_path,
-        'health:\n  accepted_validation:\n    - rule: "code.metadata-gap"\n      path: "x.py"\n      reason: "x"\n',
-    )
-    assert not list(check_accepted_validation(ctx))
+def test_valid_current_entry_emits_no_hygiene_finding(tmp_path: Path) -> None:
+    _write_entries(tmp_path, [_current_entry()])
+
+    assert _run_check(tmp_path) == []
 
 
-def test_rule_is_never_gated(tmp_path: Path):
-    assert "accepted-validation.evidence-scope-required" not in cumulative_rules("hygiene")
+def test_duplicate_identical_raw_entries_group_into_one_finding(
+    tmp_path: Path,
+) -> None:
+    raw = {"reason": "missing identity"}
+    _write_entries(tmp_path, [raw, raw])
+
+    findings = _run_check(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].rule_id == "accepted-validation.invalid-entry"

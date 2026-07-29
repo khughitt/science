@@ -1,8 +1,8 @@
 # Finding Convergence — Design
 
-> **Status:** revision 22. **Plan 1 (the contract) is implemented**; Plan 2 (the
-> atomic convergence) and Plan 3 (acceptance migration) are outstanding. **Spec 1 of
-> three** in the autonomous-audit program,
+> **Status:** revision 26. **Plan 1 (the contract) and Plan 2 (the atomic
+> convergence) are implemented**; Plan 3 (acceptance migration) is outstanding.
+> **Spec 1 of three** in the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
 > emitted contract so that Spec 2 (unattended lens agents) consumes a type already
@@ -195,6 +195,56 @@
 > carrying all location evidence; groups over the evidence bound are summarized rather
 > than truncated. Section 9 permits this one count reduction because the grouped rows are
 > semantically indistinguishable. Every other no-count-reduction ruling remains intact.
+>
+> **Revision 23 fixes the Plan 3 contract.** Health refuses an unmigrated entry as an
+> ERROR finding rather than by refusing to run, so a stale `science.yaml` never costs the
+> operator every unrelated finding in the report. The replacement schema spells severity
+> canonically (`warn`, not `warning`) and makes `accepted_on` optional, because migrated
+> entries have no recoverable acceptance date and inventing one would be metadata that
+> reads as true and is not. `stale`, `ambiguous`, and `duplicate` become command verdicts
+> instead of declared rules: the health cutover makes them unreachable outside the
+> migration command, which mutates nothing and therefore has nothing to suppress. The
+> evidence-scope machinery is deleted outright — a signature that is a declared identity
+> qualifier invalidates its own acceptance through `finding_id`, which is what the
+> config-shape lint was approximating (§10).
+>
+> **Revision 24 closes six gaps review found in revision 23.** (1) "The ERROR sets the
+> exit code" named no mechanism — health has no severity-driven exit at all, so a stale
+> config would still exit 0; §10.2 now specifies an acceptance-configuration gate exiting
+> 2, deliberately not a general severity gate, since 34 health emission sites already
+> produce ERRORs. (2) Discriminating legacy from current by *parse failure* would
+> misreport an unsupported `fingerprint_version` or a typo'd key as "legacy, run the
+> migration"; classification is now positive and total across current/legacy/invalid, the
+> loader stops discarding non-mapping entries, and diagnostic identity comes from a
+> raw-entry digest that is defined even when no acceptance key exists. (3) The aggregate
+> `validate` status attests nothing about completeness — `run_check` propagates `unwired`
+> from `validate.prose-lints` alone — so the migration would call a missing row stale;
+> both the aggregate and the migration's indeterminate test move to per-check statuses.
+> (4) Rollout now lands each consumer's toolkit pin with its migrated `science.yaml`,
+> since either half alone is wrong. (5) Duplicate detection keys on `finding_id` rather
+> than the `(finding_id, severity_scope)` pair, which admitted overlapping scopes with no
+> precedence rule, and `severity_scope` is frozen as a canonical deduplicated set.
+> (6) Corrected wording that implied active-kind membership perturbs a fingerprint; §3
+> freezes the inputs, and a registry lacking a rule refuses validation instead.
+>
+> **Revision 25 makes the migration idempotent and removes an interim dependency
+> cycle.** A valid replacement-shape entry now reports `already-current`, participates
+> in duplicate-`finding_id` detection, and does not block `can_apply`; an all-current
+> `--apply` is a byte-identical no-op rather than a stale failure. Mixed old/current lists
+> migrate wholly, preserving current entries. Producer completeness gates only legacy
+> entries that need matching. The old matcher remains in `validate/acceptance.py` while
+> Plan 2 health still calls it; the migration imports it in one direction, then the
+> atomic cutover moves it after the final health caller is deleted. The rollout also
+> makes publishing the cutover to the public default branch an explicit operator
+> checkpoint, because unqualified consumer Git sources cannot lock a feature-branch-only
+> commit.
+>
+> **Revision 26 keeps migration syntax failures distinct from stale acceptances.** A
+> raw entry that positive classification rejects now reports the blocking command
+> verdict `invalid`, carrying the exact classifier error. `stale` is reserved for a
+> valid legacy matcher that ran against a complete finding stream and matched nothing.
+> This mirrors §10.2's health distinction between `legacy-shape` and `invalid-entry`
+> instead of discarding it at the migration boundary.
 
 ## Motivation
 
@@ -1166,7 +1216,7 @@ intentional observable difference.
 | `tooling_scaffold` | `len(rows)` | `tooling.scaffold` | — | — |
 | `validation` | `len(WARN/ERROR rows)` | one declared rule per concrete canonical validation rule id, including §6's derived kind/issue families; ordinary rules use the required semantic `key` | command-only INFO becomes `ValidationNotice`; numeric coverage metrics retained | WARN lint hits become `prose-lints.hit` with `check` + normalized `match`; different matches remain one-to-one, while repeated semantically identical `(path, check, normalized match)` hits group with all locations as evidence. This is the sole approved WARN/ERROR count reduction because no stable identity can distinguish those duplicate rows without using forbidden position. INFO configured-severity summaries become `prose-lints.advisory`, `ProjectSubject`, identity qualifier `check`, and non-identity occurrence qualifier `count`; §6 freezes all 30 static rule mappings across checks/runner and the INFO-only `papers` removal; every other semantic key prevents same-rule/same-subject rows from collapsing; INFO never entered health `count_issues` |
 | `prose_lints.numeric-verification.coverage` | 0 (INFO measurement) | — | `verified`, `unverifiable`, `mismatch`, and `error` tallies | retained as metrics under R1; never enters the finding stream or `count_issues` |
-| `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching |
+| `accepted_validation` | excluded | validation-producer findings only, reported in the `accepted` channel (§10–§11) | — | remains excluded; `paper.status-vocabulary` and all other current IDs continue matching. **Plan 3** retires `accepted-validation.evidence-scope-required` and adds `accepted-validation.legacy-shape` and `accepted-validation.invalid-entry` (both ERROR) in its place; both fire only on an entry health cannot apply, so every project migrated in that landing ends at zero occurrences of either |
 | `layered_claims.migration_issues` | `len()` | `layered-claim.migration` | — | — |
 | `layered_claims.rival_model_packets_…` | `len()` | `layered-claim.rival-model-gap` | — | — |
 | `layered_claims.*_coverage` (×2) | `+1` each when incomplete | `layered-claim.coverage-incomplete`, `ProjectSubject`, qualifier = which coverage | both coverage metrics retained | net count unchanged; the metric stops being the issue |
@@ -1263,9 +1313,19 @@ moving today's accepted warnings into `findings` would silently change totals. T
   shape because reading the input one is explicitly its job.
 
 There is no steady state with dual health matchers and no compatibility layer retained
-after migration. Before Plan 3, health accepts the current shape. After Plan 3, health
-fails loud on the current shape and instructs the operator to run the migration command;
-the command can still classify and rewrite it under the four-outcome contract below.
+after migration. Before Plan 3, health accepts the legacy prose-keyed shape. After Plan
+3, health fails loud on that shape and instructs the operator to run the migration
+command; the command can still classify it under the seven-verdict contract below and is a
+no-op on valid replacement entries.
+
+**Health fails loud as a finding, not as a refusal to run.** An unmigrated entry emits
+`accepted-validation.legacy-shape` at ERROR, naming the migration command, and suppresses
+nothing — so the findings that entry used to hide reappear in the same run and the count
+moves visibly. The alternative, refusing to assemble a report at all, would let a stale
+config hide every unrelated finding in the project, which is the opposite of what a
+diagnostic command is for. The command still exits nonzero, through the
+acceptance-configuration gate specified in §10.2 — an exit condition health does not have
+today and which Plan 3 must add, rather than a property the ERROR provides on its own.
 
 **Plan 2 preserves the health call site's exact acceptance scope.**
 
@@ -1300,36 +1360,55 @@ non-validation findings.
   that acceptance loses the automatic invalidation it has today.
 - **Refuse to migrate unless every relevant producer ran.** "No finding matches" while
   the owning producer was skipped or `unwired` is **indeterminate, not stale** — this is
-  the fourth outcome, and it aborts rather than rewriting.
+  the indeterminate outcome, and it aborts legacy matching rather than rewriting.
+  Valid replacement-shape entries require no producer observation and remain
+  `already-current`.
 - **`--apply` is all-or-nothing across entries, not merely atomic on the file.** Atomic
   rewriting says how `science.yaml` is written; it does not say what happens when some
-  entries are stale or ambiguous. **Any non-unique outcome aborts the whole migration
-  with no mutation.** The operator resolves the reported entries and reruns. A partial
-  migration that drops unresolved entries would delete acceptance decisions as a side
-  effect of a rewrite, which is exactly the silent-suppression direction §10 exists to
-  prevent.
-- **Duplicate `(finding_id, severity_scope)` entries are rejected** after rewriting —
-  two prose acceptances can legitimately collapse onto one fingerprint, and a silently
-  deduplicated pair hides that one of them was never doing anything.
-- **`accepted-validation.stale` and `accepted-validation.ambiguous` are declared
-  unsuppressible** — an acceptance-hygiene rule that could itself be accepted is a
-  silencer for the silencer.
+  entries are invalid, stale, or ambiguous. **Any blocking verdict aborts the whole
+  migration with no mutation.** The operator resolves the reported entries and reruns.
+  A partial migration that drops unresolved entries would delete acceptance decisions
+  as a side effect of a rewrite, which is exactly the silent-suppression direction §10
+  exists to prevent.
+- **Two entries sharing a `finding_id` are rejected** after rewriting, whatever their
+  severity scopes or whether each entry was migrated or already current — two prose
+  acceptances can legitimately collapse onto one fingerprint, and a silently
+  deduplicated pair hides that one of them was never doing anything. Keying the check on
+  the `(finding_id, severity_scope)` pair instead would admit overlapping scopes for one
+  fingerprint (§10.2).
+- **`invalid`, `stale`, `ambiguous`, and `duplicate` are command verdicts, not declared
+  rules.** Once health refuses the old shape outright, none can arise anywhere but
+  inside `migrate-acceptances`, which aborts and mutates nothing. A command that changes
+  no state has nothing to suppress, so there is no silencer to guard against and no rule
+  to declare unsuppressible. `already-current` is likewise a command-only success
+  verdict, not a health finding. The command reports every verdict; only a blocking
+  verdict exits non-zero.
 
 **Outcomes:**
 
 | Outcome | Action | Mutates? |
 |---|---|---|
-| **Every** entry matches exactly one finding, all producers ran | Rewrite all entries to `{finding_id, severity_scope}`. | yes, wholly |
-| Any entry matches no finding, all producers ran | Emit `accepted-validation.stale` for it; **abort**. | no |
-| Any entry matches more than one | Emit `accepted-validation.ambiguous` for it; **abort**. | no |
-| Any relevant producer skipped or `unwired` | **Indeterminate** — abort before matching. | no |
+| A valid replacement-shape entry is encountered | Report it `already-current`; preserve all fields, including `accepted_on`. | no by itself |
+| Every legacy entry matches exactly one finding and every relevant producer ran | Report each `migrated`; rewrite the complete mixed list when `--apply` is set. | yes, wholly |
+| Positive classification rejects a raw entry | Report it `invalid` with the exact classifier error; **abort**. | no |
+| A valid legacy entry matches no finding, all producers ran | Report it `stale`; **abort**. | no |
+| Any entry matches more than one | Report it `ambiguous`; **abort**. | no |
+| Two output entries share a `finding_id`, including current/current or current/migrated | Report every member `duplicate`; **abort**. | no |
+| A producer needed by a legacy entry is skipped or `unwired` | Report that legacy entry `indeterminate`, naming the producer; **abort** before matching it. | no |
 
 Under dry-run every entry is classified and reported, so one pass shows the operator the
 complete set of problems rather than the first one.
 
-**No failure case suppresses anything.** An acceptance matching nothing becomes a finding
-in its own right, never a silent no-op — the fail-loud direction required by the standing
-rule that evidence and metadata are never tuned to silence a check.
+`can_apply` is true exactly when every verdict is `migrated` or `already-current` and no
+duplicate `finding_id` exists. `--apply` writes only when at least one entry is
+`migrated`; an all-current configuration reports `applied: false`, exits 0, and remains
+byte-identical. In a mixed list, current entries pass through with their complete
+replacement-shape data while legacy entries are rewritten. This makes the command safe
+to rerun and keeps the real-corpus preflight valid after rollout.
+
+**No failure case suppresses anything.** An acceptance matching nothing is reported as a
+dead entry, never a silent no-op — the fail-loud direction required by the standing rule
+that evidence and metadata are never tuned to silence a check.
 
 The replacement YAML schema is:
 
@@ -1338,17 +1417,30 @@ health:
   accepted_validation:
     - finding_id: "<64-hex>"
       fingerprint_version: 1
-      severity_scope: ["warning"]
+      severity_scope: ["warn"]        # subset of {warn, error}, non-empty
       reason: "<required>"
-      accepted_on: "<ISO-8601 date>"
+      accepted_on: "<ISO-8601 date>"  # optional; omitted by migration
 ```
 
 `rule` and `message_contains` are removed, not retained alongside.
 
-An acceptance entry's own subject, when it becomes a hygiene finding, is
-`IdentifierSubject(namespace="accepted-validation", value=<acceptance key>)` — never a
-`PathSubject` pointer into `health.accepted_validation`, which is a bare positional list
-(`validate/acceptance.py:26`) whose indices move when any earlier entry is deleted.
+**Severity is spelled canonically.** `severity_scope` takes `warn` and `error`, the
+spellings the shared finding boundary normalizes to. The input shape's `warning` is an
+accident of the shell script this validation was ported from; a schema being frozen now
+should not inherit it.
+
+**`accepted_on` is optional and the migration omits it.** A pre-migration entry carries
+no date, and the positional YAML list it lives in makes the original acceptance date
+unrecoverable. Stamping the migration date would record a mechanical rewrite as a human
+decision — a field that reads as provenance and is not. An absent date honestly means
+"predates migration, unknown". The cost is accepted: the 50 oldest entries carry no
+review date until someone next touches them.
+
+An acceptance entry's own subject, when the entry itself becomes a finding, is an
+`IdentifierSubject(namespace="accepted-validation", …)` — never a `PathSubject` pointer
+into `health.accepted_validation`, which is a bare positional list whose indices move when
+any earlier entry is deleted. §10.2 fixes the identifier value, which must be defined for
+entries too malformed to carry an acceptance key.
 
 **The acceptance key is frozen** as
 `sha256("science.acceptance.v1\n" + canonical_json(key_fields))[:32]` under the §3
@@ -1381,7 +1473,7 @@ rather than acquiring a sentinel representation. Fail-loud on an entry that was 
 dead.
 
 Collapsing "absent severity" and "malformed severity" onto one key is intentional: they
-are the same acceptance, so §10's duplicate-`(finding_id, severity_scope)` rejection will
+are the same acceptance, so §10's duplicate-`finding_id` rejection will
 correctly flag them as duplicates rather than silently keeping both.
 
 `reason` is excluded — it is a validity precondition (`entry_matches` rejects a blank one),
@@ -1393,6 +1485,201 @@ them.
 Content-derived, so it survives reordering and deletion of siblings; truncated to 32 hex
 characters because it names a config entry rather than identifying a stored record, and
 nothing resolves by scanning it.
+
+#### 10.1 The migration command
+
+`science findings migrate-acceptances` lives beside `ingest` in `findings/cli.py`. It
+does five things in order:
+
+1. **Load** the raw acceptance entries through
+   `accepted_validation_entries(project_root)`. The command is the sole remaining
+   consumer that can interpret the legacy shape, because migration is explicitly its
+   job.
+2. **Classify shape** positively. A valid replacement entry becomes `already-current`;
+   a legacy entry proceeds to matching; every other value becomes `invalid` with the
+   classifier error preserved.
+3. **Run** the `validate` health producer (`graph/health_checks/validate.py`,
+   `producer_id="validate"`) when at least one legacy entry needs matching, and inspect
+   every canonical producer status.
+4. **Classify legacy entries** against that producer's raw, pre-suppression rows, then
+   reject duplicate `finding_id` values across both migrated and already-current output.
+5. **Report** the complete classification, and rewrite `science.yaml` only when
+   `--apply` is set, every verdict is `migrated` or `already-current`, and at least one
+   entry is `migrated`.
+
+**The findings it matches against are the ones health will match against, by
+construction.** `health.py` applies acceptance to exactly `instrument.rows` of that same
+producer, so running the producer — rather than re-deriving a validation stream from the
+`science validate` runner — makes "what the migration matched" and "what health matches"
+the same object rather than two implementations that agree until they don't. Matching
+against a saved `AuditReport` is excluded on the same correctness condition that governs
+Plan 2: a report's `findings` channel is already post-acceptance and cannot see what
+current entries suppress.
+
+**The aggregate status does not attest that the validation pass was complete, and Plan 3
+must fix that before relying on it.** `run_check` propagates `unwired` from
+`validate.prose-lints` alone; every other canonical validation producer can be `unwired`
+in `RunResult.producer_results` while the aggregate result stays wired with rows. A
+migration reading only the aggregate would call a missing row **stale** — deleting an
+acceptance because the check that produces its finding failed to run — which is the exact
+inversion of the indeterminate outcome. Two changes follow:
+
+- `run_check` propagates `unwired` when **any** canonical validation producer is
+  `unwired`, aggregating their codes rather than reporting one check's status as the
+  whole pass's status. This makes health honest independently of the migration, and is a
+  behavior change: projects with a failing check now see an unwired validation producer
+  instead of a silently short report.
+- The migration inspects `RunResult.producer_results` directly, so its indeterminate test
+  is over per-check statuses rather than the aggregate. An entry whose `rule` is owned by
+  an `unwired` check is reported indeterminate **naming that check**, not stale.
+
+The classification itself is a pure function of `(entries, rows, producer_statuses)` in
+a new `findings/acceptance_migration.py`, with no I/O. The CLI owns loading, the producer
+run, rendering, and the single atomic write. That split is what lets every verdict be
+tested against fixtures without constructing a project. While Plan 2 health is live, the
+migration imports the old-shape matcher (`entry_matches`, `_text_matches`,
+`_severity_matches`, `canonical_acceptance_severity`) and `legacy_validation_fields`
+from `validate/acceptance.py`; `acceptance.py` never imports the migration module. During
+the atomic cutover, after the last health caller is deleted, those functions move into
+the migration module. No interim cycle or post-cutover re-export is permitted.
+
+**`severity_scope` derivation.** An entry with an explicit string severity migrates to
+its normalized singleton. An entry whose `severity` is absent or non-string is a wildcard
+under `_severity_matches` and migrates to `["warn", "error"]`, preserving the wildcard
+rather than narrowing it to whichever severity happened to match on migration day.
+Narrowing would be a silent behavior change disguised as a mechanical rewrite. No
+surveyed entry takes this branch; all 50 carry an explicit warning.
+
+#### 10.2 The health cutover
+
+The replacement entry gets a model in `validate/acceptance.py`: frozen, `extra="forbid"`,
+with a 64-hex `finding_id`, `fingerprint_version: Literal[1]`, a canonical
+`severity_scope`, a nonblank `reason`, and an optional `accepted_on`.
+
+**`severity_scope` is frozen as a canonical set, not a list.** It is deduplicated and
+emitted in fixed order — `warn` before `error` — so `["error","warn"]`,
+`["warn","warn"]`, and `["warn","error"]` are the same value rather than three spellings
+that key differently. Any other member is refused.
+
+**At most one entry per `finding_id`.** The duplicate outcome triggers on a repeated
+`finding_id` regardless of scope, not on a repeated `(finding_id, severity_scope)` pair.
+Pair-uniqueness lets `["warn"]` and `["warn","error"]` coexist for one fingerprint, where
+both match a warning and `AcceptedFinding` has room for exactly one `acceptance_key` and
+one `reason` — a precedence question with no good answer. Requiring one entry per
+fingerprint deletes the question instead of resolving it, and two entries for the same
+finding are exactly the ambiguity the operator should see.
+
+**Classification is positive, not "failed to parse".** Deciding legacy-versus-current by
+parse failure would report an unsupported `fingerprint_version`, a malformed scope, a
+blank reason, or a typo'd key as "legacy shape, run the migration" — advice that is
+wrong and, for the version case, contradicts §8's refusal to coerce unknown versions.
+Every raw entry is therefore classified into exactly three outcomes:
+
+| Raw entry | Outcome | Behavior |
+|---|---|---|
+| a mapping with `finding_id` | **current** — validate against the model | participates in matching; a model failure is *invalid*, never legacy |
+| a mapping with no `finding_id` and a string `rule` | **legacy** | `accepted-validation.legacy-shape` (ERROR), naming the migration command |
+| anything else — non-mapping element, mapping with neither key, or a current-shaped entry the model rejects | **invalid** | `accepted-validation.invalid-entry` (ERROR), carrying the specific parse error |
+
+`accepted_validation_entries` stops discarding non-mapping list elements
+(`acceptance.py:132`), because an entry that vanishes before classification is a silently
+ignored acceptance — the failure mode this whole section exists to end. It returns raw
+elements; the check classifies them.
+
+**Diagnostic identity is total.** A finding about a malformed entry cannot be keyed by
+the §10 acceptance key: that key is undefined for an entry without a string `rule` or with
+an unrepresentable `message_contains` — precisely the entries most likely to be malformed.
+The subject for all three `accepted-validation.*` findings is therefore
+`IdentifierSubject(namespace="accepted-validation", value=sha256(canonical_json(raw))[:32])`
+over the raw entry as read. That is total over any YAML-representable value, stable under
+sibling deletion, and one identity rule rather than two.
+
+Matching computes each finding's canonical identity with
+`validate_finding(registry, "validate", finding)` — the same function the generic producer
+boundary already calls — and accepts when that identity equals `entry.finding_id` and the
+finding's severity is in `severity_scope`. There is no second fingerprint implementation.
+The acceptance boundary therefore needs the registry, and it must be the registry the
+report was produced with (§6). To be exact about why: registry membership does **not**
+enter the digest — §3 freezes the inputs to rule ID, subject, and identity qualifiers — so
+a different active-kind set does not perturb a fingerprint. What it changes is whether the
+rule is declared at all, and a registry lacking the rule refuses validation outright
+rather than returning a different identity. Implementation must not read this requirement
+as license to fold registry state into the frozen identity.
+
+`validate/checks/accepted_validation.py` is rewritten in place rather than deleted and
+recreated, keeping its registration and order. Its evidence-scope logic is deleted; it
+emits the two ERROR rules above.
+
+**Unsuppressibility needs no mechanism.** A legacy or invalid entry never reaches the
+matcher, so it cannot suppress anything — including the ERROR it just produced. The
+property falls out of the design rather than being enforced by a special case.
+
+**Exit behavior is an acceptance-configuration gate, not a severity gate.** `science
+health` today has no severity-driven exit at all (`graph/health_cli.py`), and 34 emission
+sites across the health checks already produce ERROR findings; making any ERROR exit
+nonzero would silently convert a diagnostic into a gate across every project, which is
+outside Plan 3. Instead: a report containing any `accepted-validation.legacy-shape` or
+`accepted-validation.invalid-entry` finding exits **2**. The justification is categorical
+rather than a per-rule exception — health could not apply the acceptance configuration it
+was given, so the counts it printed are not the counts the operator configured, and the
+run is not certifiable whatever its findings say. Ordinary finding severity continues not
+to affect the exit code, stated here so it is a decision rather than an omission someone
+later "fixes". The gate applies to every output mode, including `--format json` and
+`--output`, and is tested in all three.
+
+`filter_accepted_warnings`, the `science validate` CLI's separate warn-only path, switches
+to the same matcher and takes its registry from `RunResult.registry`.
+
+#### 10.3 What Plan 3 deletes
+
+`pre_migration_acceptance_key`, `_pre_migration_key_fields`, and
+`partition_health_acceptances` go with the old health path. `EVIDENCE_SCOPED_RULES`,
+`entry_is_evidence_scoped`, `entry_path_is_project_relative`, and `entry_is_well_scoped`
+go entirely, along with the `accepted-validation.evidence-scope-required` check.
+
+The correspondence evidence signature becomes a declared identity qualifier on
+`plan.correspondence-drift`. Changing a plan's deliverables changes the signature, which
+changes `finding_id`, which stops the acceptance from matching: **automatic invalidation
+becomes structural instead of a config-shape lint.** The path-scoping requirement the
+deleted guard enforced is subsumed too — `finding_id` pins the subject, so one entry can
+only ever match one plan's finding.
+
+#### 10.4 Rollout and stored state
+
+The four surveyed repositories migrate in the same landing: `--apply` against each, from
+the local toolkit checkout, with each `science.yaml` committed in its own repository.
+Two of the four have no remote; those are local commits.
+
+**Publishing the toolkit is an explicit rollout checkpoint.** Natural-systems and
+multiple-myeloma use unqualified Git sources, so their regenerated locks resolve from
+the public repository's default branch and cannot select a commit reachable only from a
+feature branch. Task 4 therefore pauses for operator authorization, publishes the
+reviewed cutover through the repository's normal integration path, and verifies that the
+cutover SHA is contained in the remote default branch before regenerating any consumer
+lock. This is a deliberate exception to a local-main-unpushed workflow, not an incidental
+side effect of `uv lock`.
+
+**The migrated config and the toolkit pin must land in the same consumer commit.**
+Consumers depend on Science by exact revision in `uv.lock`, so the two halves are only
+correct together: a migrated `science.yaml` under the old pin suppresses nothing, because
+the old matcher requires a `rule` key the new entries no longer have, and every accepted
+warning reappears. An unmigrated `science.yaml` under the new pin emits
+`accepted-validation.legacy-shape` and exits 2. Each consumer commit therefore carries the
+Plan 3 revision pin, the regenerated `uv.lock` (`uv sync --frozen`), and the rewritten
+`science.yaml` together.
+
+Verification is operational rather than assertional: capture `science health` counts
+**before** under the old pin with the old config, and **after** under the new pin with the
+migrated config. Equality across that pair is the direct proof that re-keying changed
+nothing observable. Comparing runs under a single pin would prove nothing, since one side
+of each comparison would be a configuration that pin cannot interpret.
+
+**No stored case requires migration.** `acceptance_key` is persisted onto `Occurrence`,
+so pre-migration keys would be durable if any existed — but no consumer project has a
+`doc/audits/cases/` store, ingestion has no producer of reports until Spec 2, and Spec 2
+follows Spec 1. Plan 3 therefore lands before the first occurrence is ever written. This
+is a fact about sequencing that the plan must re-verify at execution time, not an
+assumption to inherit.
 
 ### 11. The output contract
 
@@ -1570,12 +1857,12 @@ class AuditReport(TypedDict):
     malformed value and a list containing a non-string fail key construction and do not
     match. Plan 3 additionally proves the equal keys are reported as duplicates and
     each malformed entry is reported `stale` and aborts.
-25. **Acceptance migration** — all four outcomes; the severity-scope invariant (an
-    accepted warning does not suppress a later error at the same fingerprint); the
-    unsuppressibility of the two hygiene rules; **one stale entry among many valid ones
-    aborts the entire `--apply` with `science.yaml` unmodified**; duplicate
-    `(finding_id, severity_scope)` after rewriting is rejected; dry-run reports every
-    problem entry rather than the first.
+25. **Acceptance migration** — all seven verdicts, including idempotent
+    `already-current` and syntax/model `invalid`; the severity-scope invariant (an
+    accepted warning does not suppress a later error at the same fingerprint); **one
+    stale or invalid entry among many valid ones aborts the entire `--apply` with
+    `science.yaml` unmodified**; duplicate `finding_id` after rewriting is rejected;
+    dry-run reports every problem entry rather than the first.
 26. **Count ledger** — real converter fixtures assert every §9 row, including each
     layered-claim subrow, numeric-verification metrics, accepted and unwired channels,
     both data-audit row classes, and the prose semantic-duplicate exception. Each
@@ -1627,6 +1914,43 @@ class AuditReport(TypedDict):
     eligible; an explicit `warning`/`warn` entry suppresses a `warn` finding but not an error; a
     wildcard-severity entry can suppress either validation severity; no entry suppresses
     a non-validation finding; and `science validate` remains warn-only.
+33. **Every migration verdict is reachable** — over fixture inputs: a unique match
+    migrates; a valid replacement entry reports `already-current`; a classifier failure
+    reports `invalid` with its exact error; no legacy match reports `stale`; two matches
+    report `ambiguous`; and two output entries collapsing onto one `finding_id` report
+    `duplicate` even when their severity scopes differ or one was already current. Both
+    malformed `message_contains` shapes are valid legacy shapes but match nothing, so
+    they remain `stale` rather than acquiring a representation. Every failing case
+    leaves `science.yaml` byte-identical. An all-current `--apply` also leaves the file
+    byte-identical, exits 0, and reports `applied: false`. Indeterminacy is asserted
+    **per check, not per aggregate**: an `unwired` non-prose-lints validation producer
+    with a wired aggregate result marks the legacy entry indeterminate before matching
+    and names the failing check, while an already-current entry remains pass-through.
+34. **Migration is count-neutral** — for a synthetic corpus, the set of findings
+    suppressed by old-shape entries equals the set suppressed by their migrated
+    replacements. This is the claim the migration rests on, asserted directly rather than
+    inferred from per-entry matching.
+35. **Health refuses the old shape without losing the report** — a project carrying one
+    unmigrated entry still produces a complete `AuditReport`; the entry emits
+    `accepted-validation.legacy-shape` at ERROR naming the migration command; it
+    suppresses nothing, including itself; and the finding it previously hid appears in
+    the same report. **The command exits 2** in table, `--format json`, and `--output`
+    modes alike, while a report whose only ERROR findings come from ordinary producers
+    still exits 0 — both directions asserted, so neither the gate nor its deliberate
+    narrowness can regress silently.
+36. **Entry classification is total and positive** — a current-shaped entry with an
+    unsupported `fingerprint_version`, a malformed `severity_scope`, a blank `reason`, or
+    an unknown key reports `accepted-validation.invalid-entry` and **never**
+    `legacy-shape`; a non-mapping list element survives loading and reports
+    `invalid-entry` rather than vanishing; an old-shape entry with no string `rule`, for
+    which no acceptance key exists, still gets a subject via the raw-entry digest; and
+    `["error","warn"]`, `["warn","warn"]`, and `["warn","error"]` are accepted as one
+    canonical value rather than three.
+37. **The live corpora migrate cleanly** — an opt-in `real_projects` test dry-runs the
+    migration over the four surveyed projects and asserts every entry classifies
+    `migrated` or `already-current`, with no blocking verdict. Excluded from default runs;
+    it catches an invalid, stale, or ambiguous entry before `--apply` touches anyone's
+    configuration and remains green after the rollout converts those same projects.
 
 ## Out of scope
 
@@ -1640,6 +1964,12 @@ class AuditReport(TypedDict):
   *about* a measurement crossing a policy threshold, and the measurement is retained
   alongside. §9 is the exhaustive list; no producer may add another without a ledger
   row.
+- **Detecting a dead acceptance in the replacement shape.** A migrated entry whose
+  finding is later fixed sits in `science.yaml` matching nothing. Nothing detects that
+  today either — `filter_accepted_warnings` is removal-only and the evidence-scope check
+  covered only one rule — so Plan 3 preserves the status quo rather than regressing it.
+  Named here so it is a deferred decision rather than an oversight; a staleness rule over
+  the new shape is cheap to add once entries carry stable identities.
 - Retiring `doc/curations/` ledgers. The curation sweep's narrative output is a Spec 2
   question; Spec 1 only removes the reason it needs prose carry-over parsing.
 
@@ -1655,4 +1985,4 @@ class AuditReport(TypedDict):
   `accepted_validation` entries: post-acute-infection (21), multiple-myeloma (24),
   `meta/` (2), natural-systems (3). Repositories outside the local checkout set remain
   unsurveyed, so `migrate-acceptances` must be safe to run against an unknown corpus —
-  which the four-outcome contract (§10) already requires.
+  which the seven-verdict contract (§10) already requires.
