@@ -1,9 +1,11 @@
-"""Probes for the DORMANT `mixin-concept-1.0` schema.
+"""Probes for the ARMED `mixin-concept-1.1` schema.
 
-Step 2 of the concept slice. The mixin exists on disk but no generation row selects
-it and `schema_closed` is still False, so nothing here changes what the toolkit
-loads today. These probes fix the candidate contract before the production surfaces
-are aligned to it.
+Grew out of step 2 of the concept slice, which authored `mixin-concept-1.0`. That
+version enum-locked `status` before `concept` was certified; 1.1 drops the enum and
+changes nothing else (verified property-by-property, not asserted). 1.0 stays on
+disk as a historical version armed by no generation row, so this file follows the
+version the toolkit actually selects and there is no 1.0 probe file -- a probe
+against a schema nothing can select would be an assertion that cannot fail.
 
 Every strict probe composes the candidate profile through the REAL
 `EntityValidator._compose` (via `validate_as`). Hand-rolling
@@ -45,7 +47,7 @@ SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schem
 
 CANDIDATE = ProfileString(
     base=ProfileComponent(BASE_NAME, "2.0"),
-    mixin=ProfileComponent("concept", "1.0"),
+    mixin=ProfileComponent("concept", "1.1"),
     extensions=(),
 )
 
@@ -65,7 +67,7 @@ PROMOTED_FROM_ORACLE = {
 
 
 def _mixin() -> dict:
-    return json.loads((SCHEMAS / "mixin-concept-1.0.json").read_text())
+    return json.loads((SCHEMAS / "mixin-concept-1.1.json").read_text())
 
 
 def _record(**overrides) -> dict:
@@ -118,17 +120,18 @@ def test_both_generation_rows_select_the_concept_mixin(generation):
     natural-systems is pinned to generation 2 and mm30 to generation 3, so arming one
     row would split one kind's contract across the corpus. And `sources.py:1704` calls
     `default_profile_for_kind(entity.kind)` with no generation argument -- it always
-    resolves row 2 -- so the two rows agreeing on `1.0` is what keeps that call site
-    consistent with the projects it is resolving for.
+    resolves row 2 -- so the two rows agreeing on `1.1` is what keeps that call site
+    consistent with the projects it is resolving for. The 1.0 -> 1.1 bump had to move
+    BOTH rows for the same reason the original arming did.
     """
     profile = default_profile_for_kind("concept", generation=generation)
-    assert profile.render() == "science-entity-base/2.0+concept/1.0"
+    assert profile.render() == "science-entity-base/2.0+concept/1.1"
 
 
 def test_the_mixin_is_now_reachable_as_a_mixin():
     """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    While dormant this raised `SchemaNotFoundError` for `extension-concept-1.0.json`:
+    While dormant this raised `SchemaNotFoundError` for `extension-concept-<ver>.json`:
     the file was not lax, it was unreachable.
     """
     EntityValidator().validate_as(_record(), CANDIDATE)
@@ -203,9 +206,23 @@ def test_foreign_id_prefix_is_refused(strict):
     _refuses(strict, _record(id="dataset:age"))
 
 
-def test_status_outside_the_descriptor_is_refused(strict):
-    """`archived` is valid for `hypothesis` and not for `concept` (profiles/core.py:426)."""
-    _refuses(strict, _record(status="archived"))
+@pytest.mark.parametrize("value", ["active", "deprecated", "archived", "proposed", "draft"])
+def test_the_status_shape_is_admitted_without_the_vocabulary(strict, value):
+    """The 1.0 -> 1.1 ruling, asserted in the direction that would catch its reversal.
+
+    1.0 declared `enum: [active, deprecated]` and refused the last three of these. The
+    descriptor (profiles/core.py:426) still declares exactly those two -- that has not
+    changed and is not what this asserts. What changed is WHERE the vocabulary is
+    enforced: `concept` is not in `_CERTIFIED_KINDS`, so its vocabulary check is a WARN
+    that validate reports, not a load-time refusal the author never sees. Re-add the
+    enum and the last three go red.
+    """
+    strict.validate_as(_record(status=value), CANDIDATE)
+
+
+def test_a_non_string_status_is_still_refused(strict):
+    """Dropping the enum drops the vocabulary, not the shape."""
+    _refuses(strict, _record(status=42))
 
 
 def test_missing_status_is_refused(strict):
@@ -216,7 +233,7 @@ def test_missing_status_is_refused(strict):
 
 def test_authored_schema_profile_is_refused(strict):
     """The narrowing: `profile` is the authored field, `schema_profile` its derived one."""
-    _refuses(strict, _record(schema_profile=f"{BASE_NAME}/2.0+concept/1.0"))
+    _refuses(strict, _record(schema_profile=f"{BASE_NAME}/2.0+concept/1.1"))
 
 
 def test_empty_promoted_from_is_refused(strict):
@@ -319,3 +336,39 @@ def test_mixin_declares_exactly_the_frozen_field_set():
         "source_refs",
         "schema_profile",
     }
+
+
+def test_status_declares_no_enum():
+    """Narrower and louder than the value probes above.
+
+    Those pass a handful of strings; this names the property, so an enum re-added with
+    a wider vocabulary that happens to cover them still fails here.
+    """
+    status = _mixin()["properties"]["status"]
+    assert status["type"] == "string"
+    assert "enum" not in status
+    # The key set too, so a `const` or a `pattern` smuggling the vocabulary back in is
+    # caught by the same test that catches `enum`.
+    assert set(status) == {"type", "$comment"}
+
+
+def test_1_1_differs_from_1_0_in_STATUS_ALONE():
+    """The bump's whole claim, mechanized rather than asserted in a `$comment`.
+
+    A bump that quietly carried a second change would be indistinguishable from this
+    one by its version number. `$id` and `$comment` are excluded because they are
+    REQUIRED to differ -- comparing them would make this test unfailable in the wrong
+    direction.
+    """
+    previous = json.loads((SCHEMAS / "mixin-concept-1.0.json").read_text())
+    current = _mixin()
+    ignored = {"$id", "$comment"}
+    assert {k: v for k, v in previous.items() if k not in ignored | {"properties"}} == {
+        k: v for k, v in current.items() if k not in ignored | {"properties"}
+    }
+    differing = {
+        key
+        for key in set(previous["properties"]) | set(current["properties"])
+        if previous["properties"].get(key) != current["properties"].get(key)
+    }
+    assert differing == {"status"}
