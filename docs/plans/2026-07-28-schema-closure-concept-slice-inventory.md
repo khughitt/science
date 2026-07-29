@@ -351,6 +351,50 @@ joins an existing ruling rather than introducing a failure mode. It belongs on t
 allowlist all the same, because after step 7 a single malformed concept record takes
 `science health` down for the whole project where today it would not.
 
+## Derived-behaviour diff (step 6)
+
+Both concept-carrying projects that load were copied to scratch, materialized,
+armed for real (`schema_closed=True` + both generation rows), and re-materialized in
+the same process that printed its own armed kind set.
+
+| project | concepts | `knowledge/graph.trig` |
+|---|---|---|
+| natural-systems | 7 | **byte-identical**, 8,483,066 bytes |
+| mm30 | 285 | **byte-identical**, 20,226,172 bytes |
+
+Copies rather than the live repos, because `materialize_graph` writes `graph.trig`
+into the project it is given and nothing here should mutate a research repo.
+
+### The intended-change allowlist
+
+| change | status |
+|---|---|
+| `concept` enters `strict_schema_kinds`, so its records are schema-checked at load | intended; the point of the slice |
+| `sources.py:1704` stops taking its `ProfileParseError` branch for `concept` and registers a merge policy | intended; the except branch is documented as "no contract exists", which stops being true |
+| a malformed concept record becomes a hard load failure rather than a degraded one | intended, and pre-existing for `hypothesis` (verified) |
+| the `undeclared_key` audit warning stops applying to `concept` | intended; it warns for kinds *outside* `strict_schema_kinds`, and enforcement replaces it |
+| materialized triples | **no change**, measured |
+
+No unlisted drift. Two derived surfaces could not be diffed, for reasons that are not
+this slice's:
+
+- **`science validate` fails on both projects, before any arming.** A project kind
+  named `pH` produces the rule id `pH.status-vocabulary` at
+  `validate/checks/status_vocabulary.py:72`, which `FindingRule` rejects as not
+  dotted-kebab-case. It reproduces on `main`, and `main` already carries a design doc
+  for mixed-case kind normalization — a known issue in flight, not a finding of this
+  slice.
+- **`~/d/health/processes/post-acute-infection`** cannot load at all (above), so its
+  37 concepts contribute to the schema-level certification and not to this diff.
+
+### One fact worth recording rather than acting on
+
+`promoted_from` appears **zero** times in either materialized graph. It is admitted by
+the composed schema, preserved by the projection as a pydantic extra, and consumed by
+no materializer. That is consistent with the ownership ruling — it names a source
+location, not an epistemic fact — but it means the field is schema-vouched and
+graph-invisible, and a future reader looking for it in the graph will not find it.
+
 ## What this slice does not close
 
 Per the procedure's debt section, and confirmed against the tree:
