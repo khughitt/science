@@ -196,7 +196,6 @@ counts after their match criteria and non-empty `reason` are checked.
 | Variable | Meaning |
 |---|---|
 | `NO_COLOR` | Disables terminal color output through the shared Science CLI color policy. |
-| `SCIENCE_VALIDATE_DISABLE_SIDECAR=1` | For `science validate`, disables both Python sidecar discovery and deprecated legacy `validate.local.sh` discovery. |
 
 `FORCE_COLOR` and the root `--color` option are handled by the shared Science
 CLI styling layer.
@@ -208,7 +207,8 @@ Use `science validate` directly when you need structured output or a
 project-root-selectable CLI entrypoint; use `validate.sh` when a project or tool
 expects the managed artifact path.
 
-`validate_local.py` is imported by default when it exists in the project root.
-If `SCIENCE_VALIDATE_DISABLE_SIDECAR` is set to `1`, `science validate` skips Python sidecar discovery and deprecated legacy `validate.local.sh` discovery, including legacy sidecar deprecation warnings.
-Because `validate.sh` delegates to `science validate`, this environment variable affects validation reached through the shim as well.
-Python sidecars register hooks with `science_tool.validate.hook()` for `pre_validation`, `extra_checks`, or `post_validation`.
+`science validate` runs only toolkit-defined checks and never executes project-authored code. If `validate_local.py` is present at the project root,
+validation reports the `validate.python-sidecar-removed` error; remove or rename
+the file. Reusable policy checks belong in the toolkit. A genuinely
+project-specific check belongs in a project-owned command that the project runs
+itself; `science validate` does not enforce it.
