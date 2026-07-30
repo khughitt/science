@@ -350,6 +350,22 @@ repository, under exactly the argv the broker builds:
 | `log.showSignature=true` + `gpg.program=./spawn.sh` | `log` | **EXECUTES** |
 | `core.pager=./spawn.sh` | `log` | **INERT** |
 
+The `log.showSignature=true` row is not the cosmetic kind of `RENDERS` that
+`grep.column=true` or `color.ui=always` are. Against the crafted signed commit, git
+verifies it with the default `gpg` on `PATH`, and that program's complaint lands in the
+same stdout the probe compares:
+
+```
+gpg: no valid OpenPGP data found.
+gpg: the signature could not be verified.
+Please remember that the signature file (.sig or .asc)
+should be the first file given on the command line.
+```
+
+That is why the row reads `RENDERS` at all — it executes something the probe's marker
+cannot name, not something that changes output harmlessly — and it is why the pinning
+table above carries `log.showSignature=false` rather than a blanked `gpg.program=`.
+
 Keys that EXECUTE are neutralized by `-c` in `_HARDENING`. Keys that only RENDER are
 pinned in argv, or by the environment where argv cannot reach them. Keys recorded
 INERT are left alone, per this module's standing rule: blanking them would assert a
