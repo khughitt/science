@@ -105,9 +105,6 @@ toolkit_root=~/d/science/.worktrees/sidecar-retirement
 test -n "$(git -C "$toolkit_root" rebase --show-current-patch)" || {
   echo "HARD STOP: no paused rebase to continue"; exit 1;
 }
-test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
-  echo "HARD STOP: resolve both files before staging"; exit 1;
-}
 git -C "$toolkit_root" diff --check
 if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
   "$toolkit_root/science/src/science_tool/budget/registry.py" \
@@ -115,9 +112,36 @@ if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
   echo "HARD STOP: conflict markers remain"
   exit 1
 fi
+( cd "$toolkit_root/science" && uv run --frozen python - <<'PY'
+import click
+from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
+from science_tool.cli import main
+
+assert DEFERRED["findings migrate-acceptances"].growth_reason == "one output row per configured validation acceptance"
+assert "project artifacts port-validate-sidecar" not in BUDGETS | EXEMPTIONS | DEFERRED
+assert (len(BUDGETS), len(EXEMPTIONS), len(DEFERRED)) == (69, 121, 102)
+
+def leaves(command: click.Command, prefix: tuple[str, ...] = ()) -> set[str]:
+    if isinstance(command, click.Group):
+        return {leaf for name in command.list_commands(click.Context(command)) for leaf in leaves(command.get_command(click.Context(command), name), prefix + (name,))}
+    return {" ".join(prefix)}
+
+assert "project artifacts port-validate-sidecar" not in leaves(main)
+PY
+)
+( cd "$toolkit_root/science" && uv run --frozen pytest -q \
+  tests/test_budget_boundary.py::test_every_leaf_command_is_classified \
+  tests/test_budget_boundary.py::test_classification_partition_has_the_audited_cardinality )
 git -C "$toolkit_root" add \
   science/src/science_tool/budget/registry.py \
   science/tests/test_budget_boundary.py
+expected_staged_paths=$'science/src/science_tool/budget/registry.py\nscience/tests/test_budget_boundary.py'
+test "$(git -C "$toolkit_root" diff --cached --name-only)" = "$expected_staged_paths" || {
+  echo "HARD STOP: staged paths are not exactly the two resolved files"; exit 1;
+}
+test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
+  echo "HARD STOP: unmerged paths remain after staging"; exit 1;
+}
 GIT_EDITOR=true git -C "$toolkit_root" rebase --continue
 test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unresolved rebase paths remain"; exit 1;
@@ -1812,6 +1836,23 @@ printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s
   "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/rebased-real-projects.txt" \
   "$approved_attempt_root/current-main-failure-signatures.txt" "$approved_attempt_root/rebased-feature-failure-signatures.txt" \
   > "$approval_record"
+printf 'evidence\ttask-6-manifest\t%s\t%s\n' "$approved_attempt_root/task-6-manifest.tsv" \
+  "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" >> "$approval_record"
+declare -A evidence_key=(
+  [final-parity-table]=final-parity-table
+  [parity-table]=parity-table
+  [rebased-real-projects]=rebased-real-projects
+  [current-main-signatures]=current-main-failure-signatures
+  [feature-signatures]=rebased-feature-failure-signatures
+)
+for approval_key in final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
+  manifest_key=${evidence_key[$approval_key]}
+  artifact_path=$(awk -F '\t' -v key="$manifest_key" '$1 == "artifact" && $2 == key {print $3}' "$approved_attempt_root/task-6-manifest.tsv")
+  expected_digest=$(awk -F '\t' -v key="$manifest_key" '$1 == "artifact" && $2 == key {print $4}' "$approved_attempt_root/task-6-manifest.tsv")
+  test -n "$artifact_path" && test -n "$expected_digest" || { echo "HARD STOP: missing manifest evidence $manifest_key"; exit 1; }
+  test "$(sha256sum "$artifact_path" | awk '{print $1}')" = "$expected_digest" || { echo "HARD STOP: manifest evidence checksum mismatch for $manifest_key"; exit 1; }
+  printf 'evidence\t%s\t%s\t%s\n' "$approval_key" "$artifact_path" "$expected_digest" >> "$approval_record"
+done
 sha256sum "$approval_record" > "$approval_digest_path"
 printf 'Approved publication record: %s\n' "$approval_record"
 ```
@@ -1835,12 +1876,17 @@ test "$approved_baseline_sha" = "$recorded_origin_main_sha" || { echo "HARD STOP
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
 test "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval after-toolkit SHA mismatch"; exit 1; }
-for artifact_path in \
-  "$(awk -F '\t' '$1 == "parity-artifact" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "real-project-artifact" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "current-main-signatures" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "feature-signatures" {print $2}' "$approval_record")"; do
-  test -s "$artifact_path" || { echo "HARD STOP: approved artifact drift at $artifact_path"; exit 1; }
+verify_approved_evidence() {
+  local evidence_key=$1
+  local evidence_path
+  local evidence_digest
+  evidence_path=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $3}' "$approval_record")
+  evidence_digest=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $4}' "$approval_record")
+  test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
+  test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
+}
+for evidence_key in task-6-manifest final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
+  verify_approved_evidence "$evidence_key"
 done
 integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
 test ! -e "$integration_root" || { echo "HARD STOP: preserve prior publish worktree $integration_root"; exit 1; }
@@ -1880,12 +1926,17 @@ approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_r
 test "$approved_baseline_sha" = a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 || { echo "HARD STOP: approval baseline SHA mismatch"; exit 1; }
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
-for artifact_path in \
-  "$(awk -F '\t' '$1 == "parity-artifact" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "real-project-artifact" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "current-main-signatures" {print $2}' "$approval_record")" \
-  "$(awk -F '\t' '$1 == "feature-signatures" {print $2}' "$approval_record")"; do
-  test -s "$artifact_path" || { echo "HARD STOP: approved artifact drift at $artifact_path"; exit 1; }
+verify_approved_evidence() {
+  local evidence_key=$1
+  local evidence_path
+  local evidence_digest
+  evidence_path=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $3}' "$approval_record")
+  evidence_digest=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $4}' "$approval_record")
+  test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
+  test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
+}
+for evidence_key in task-6-manifest final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
+  verify_approved_evidence "$evidence_key"
 done
 integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
 test -d "$integration_root" || { echo "HARD STOP: missing approved integration worktree"; exit 1; }
