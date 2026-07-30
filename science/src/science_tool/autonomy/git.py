@@ -14,7 +14,7 @@ actor-controlled layer, so the hardening below cannot be un-set from inside the 
 WHAT WAS PROBED, AND WHAT ACTUALLY EXECUTES. Each key below was built as a working attack
 in a scratch repository against git 2.55, under exactly the commands this package runs --
 `rev-parse`, `status --porcelain`, `log`, `show <commit>:<path>`, `diff --raw`,
-`diff --name-status`:
+`diff --name-status`, `grep`:
 
 * `core.fsmonitor` -- EXECUTES, under `status`.
 * `core.hooksPath` -- EXECUTES, under `status`, via the `post-index-change` hook. So does
@@ -29,13 +29,37 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   git does not page.
 * `core.sshCommand`, `core.editor`, `core.alternateRefsCommand` -- no command here
   contacts a remote, opens an editor, or reads an alternate object store.
+* `log.showSignature=true` combined with `gpg.program=./spawn.sh`, against a commit
+  carrying a `gpgsig` header -- EXECUTES, under `log`. Neither key alone fires: with no
+  signed commit in view there is nothing to verify, and with `log.showSignature` unset
+  git never asks. `-c log.showSignature=false` disarms it; blanking `gpg.program` instead
+  does not -- verification stays enabled and git falls back to the default `gpg` on
+  `PATH`, so the row still reads EXECUTES against a program this key never named.
+* `diff.<driver>.textconv` reached through a `grep`-side attribute, `core.pager`, and
+  `pager.grep` -- all INERT, under `grep`. `grep` never invokes a textconv filter and,
+  like every other call in this module, always runs with captured output, so no pager is
+  ever spawned.
+* `grep.column=true`, `color.grep=always`, `color.ui=always`, `log.showSignature=true`
+  alone -- RENDER, under `grep` or `log` respectively: they change output but spawn
+  nothing. The broker pins the argv keys this shapes (`--no-color`, explicit
+  `--pretty=format:`, etc.) rather than neutralizing them here, since there is nothing
+  here to neutralize.
+* `grep.patternType`, `grep.extendedRegexp`, `grep.lineNumber`, `grep.fullName`,
+  `grep.threads`, `core.quotePath`, `log.date`, `log.decorate`, `log.abbrevCommit`,
+  `log.mailmap`, `format.pretty` -- INERT under the canonical argv the broker builds:
+  each is either pinned explicitly in that argv or has no bearing on the fixed
+  `--pretty=format:` this module's `log` callers already use.
 
 Only what was shown to execute is neutralized. Blanking the rest would assert a defense
-against behaviour this code has been shown not to have.
+against behaviour this code has been shown not to have. `grep`'s three execution
+candidates (`diff.<driver>.textconv`, `core.pager`, `pager.grep`) all measured INERT --
+that is itself the probe's finding for `grep`, not an oversight: `grep` contributes
+nothing to `_HARDENING`.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -48,8 +72,24 @@ class GitError(ValueError):
     """
 
 
+#: The environment every autonomy git call runs under. `LC_ALL` and `LANG` are pinned
+#: because argv is not the whole invocation: a POSIX class such as `[[:alpha:]]` matches a
+#: different character set under `C` than under a UTF-8 locale, so two honest replays of one
+#: pattern against one commit would disagree -- and §5.3 refuses on disagreement. The same
+#: pin fixes git's DIAGNOSTIC text, which the broker's defined-miss classifier reads: under a
+#: translated locale the miss messages would not match and an absent path would halt the run.
+#:
+#: `TZ` is deliberately NOT pinned: `%aI` carries its own offset, so the rendered log does not
+#: depend on the reader's zone. Pinning it would assert a defense against behaviour the chosen
+#: format has been shown not to have.
+_ENVIRONMENT: dict[str, str] = {"LC_ALL": "C", "LANG": "C"}
+
 #: The fixed half of the hardening -- keys whose names are known in advance.
-_HARDENING: tuple[str, ...] = ("core.fsmonitor=", "core.hooksPath=/dev/null")
+_HARDENING: tuple[str, ...] = (
+    "core.fsmonitor=",
+    "core.hooksPath=/dev/null",
+    "log.showSignature=false",
+)
 
 #: `filter.<name>.<key>` entries git executes. `required` is deliberately NOT reset: a
 #: driver whose command is blanked while `required` stays true makes git exit non-zero,
@@ -70,7 +110,11 @@ def _run(
     repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]
 ) -> subprocess.CompletedProcess[bytes]:
     try:
-        return subprocess.run(_argv(repo_root, overrides, args), capture_output=True)
+        return subprocess.run(
+            _argv(repo_root, overrides, args),
+            capture_output=True,
+            env={**os.environ, **_ENVIRONMENT},
+        )
     except (OSError, ValueError) as exc:
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
 
