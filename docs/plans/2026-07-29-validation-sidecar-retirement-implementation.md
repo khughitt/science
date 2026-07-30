@@ -1438,6 +1438,10 @@ git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly
 **Files:** none modified. Every prior Task 6 result, including the
 `af031823` suite and parity evidence, is superseded by this rebase. Preserve
 the old files; do not overwrite them or describe them as approval evidence.
+The Task 6 attempt captured from feature SHA
+`27e4b60d9a68371718257bb6f3db791973fd1313` is also invalidated as approval
+evidence by this plan amendment. Preserve its outputs as diagnostic evidence
+and start a fresh attempt from the commit containing this amended gate.
 
 - [ ] **Step 1: Rebase on the recorded current main, resolve the two budget overlaps, and run focused budget tests first**
 
@@ -1549,14 +1553,25 @@ for consumer_name in health-meta evolution protein-landscape; do
 done
 ```
 
-- [ ] **Step 3: Run broader verification sequentially and explicitly compare known real-project failures with current main**
+- [ ] **Step 3: Run broader verification sequentially and compare the complete real-project marker with stable current-main state**
 
-Run no suites concurrently. The toolkit suite, model suite, snapshot marker,
-and real-project marker must all be rerun from the rebased feature worktree.
-The three known real-project failures are not waived: capture the complete
-output, then run their exact node IDs against both the `a7f3337e` toolkit
-worktree and the rebased feature worktree. Any changed result, or any
-additional failed node in the rebased marker, is a hard failure.
+Run no suites concurrently. The toolkit suite, model suite, and snapshot marker
+must be rerun from the rebased feature worktree. Run the complete
+`real_projects` marker once from the immutable current-main toolkit and once
+from the immutable feature toolkit. Capture the full logs and statuses, then
+require equal statuses and exact equality of the sorted `FAILED ...`
+signatures. Empty signature files are valid only when both markers exit zero.
+A current-main-only or feature-only failure is a hard stop. Matching nonzero
+markers remain visible external-failure evidence; they are not green.
+
+Bracket the two marker runs with byte-identical state records for every live
+external project root consumed by the marker. Each record binds the declared
+root and HEAD to a digest over tracked status bytes, the full binary tracked
+diff from HEAD, and every untracked path, file mode, and content, including
+ignored paths.
+The gate reads but never modifies these repositories. `science/meta` is not a
+live external root: each marker consumes the copy already SHA-pinned inside its
+immutable toolkit worktree.
 If an explicit `--basetemp` is used for any suite, precheck that neither that
 path nor any ancestor contains a `.git` marker; the default pytest temp path is
 preferred.
@@ -1583,47 +1598,161 @@ run_zero_suite() {
 run_zero_suite toolkit-suite "$attempt_root/toolkit-after/science" "" "$attempt_root/toolkit-suite.txt"
 run_zero_suite model-suite "$attempt_root/toolkit-after/science/model" "" "$attempt_root/model-suite.txt"
 run_zero_suite snapshot-marker "$attempt_root/toolkit-after/science" "-m snapshot" "$attempt_root/snapshot-marker.txt"
-set +e
-( cd "$attempt_root/toolkit-after/science" && uv run --frozen pytest -m real_projects ) > "$attempt_root/rebased-real-projects.txt" 2>&1
-rebased_real_status=$?
-set -e
-printf 'command\trebased-real-project-marker\tcd %s/science && uv run --frozen pytest -m real_projects\texit\t%s\t%s\n' "$attempt_root/toolkit-after" "$rebased_real_status" "$attempt_root/rebased-real-projects.txt" >> "$attempt_root/task-6-manifest.tsv"
-test "$(rg -c '^FAILED ' "$attempt_root/rebased-real-projects.txt")" -eq 3 || {
-  echo "HARD STOP: rebased real-project marker did not have exactly the three recorded failures"; exit 1;
+
+external_root_labels=(
+  '~/d/natural-systems'
+  '~/d/cancer/cancer-types/multiple-myeloma'
+  '~/d/health/processes/post-acute-infection'
+  '~/d/health/meta'
+  '~/d/cancer/mechanisms/evolution'
+  '~/d/cancer/data-sources/cbioportal'
+  '~/d/protein-landscape'
+  '~/d/seq-feats'
+)
+capture_external_state() {
+  local output_path=$1
+  local input_dir="$output_path.inputs"
+  test ! -e "$output_path" && test ! -e "$input_dir" || {
+    echo "HARD STOP: external-state capture path already exists: $output_path"; exit 1;
+  }
+  mkdir -p "$input_dir"
+  : > "$output_path"
+  local external_index
+  for external_index in "${!external_root_labels[@]}"; do
+    local external_root_label=${external_root_labels[$external_index]}
+    local external_root_path=${external_root_label/#\~/$HOME}
+    test -d "$external_root_path" || {
+      echo "HARD STOP: external project root is missing: $external_root_label"; exit 1;
+    }
+    test "$(git -C "$external_root_path" rev-parse --is-inside-work-tree 2>/dev/null)" = true || {
+      echo "HARD STOP: external project is not a Git worktree: $external_root_label"; exit 1;
+    }
+    test -z "$(git -C "$external_root_path" rev-parse --show-prefix)" || {
+      echo "HARD STOP: external project path is not its Git worktree root: $external_root_label"; exit 1;
+    }
+    local external_head
+    local digest_input
+    local untracked_list
+    local sorted_untracked_list
+    local state_digest
+    external_head=$(git -C "$external_root_path" rev-parse HEAD)
+    digest_input="$input_dir/$(printf '%02d' "$external_index").bin"
+    untracked_list="$input_dir/$(printf '%02d' "$external_index")-untracked-paths.bin"
+    sorted_untracked_list="$input_dir/$(printf '%02d' "$external_index")-untracked-paths-sorted.bin"
+    git -C "$external_root_path" ls-files --others -z > "$untracked_list"
+    LC_ALL=C sort -z "$untracked_list" > "$sorted_untracked_list"
+    {
+      printf 'head\0%s\0tracked-status\0' "$external_head"
+      git -C "$external_root_path" status --porcelain=v1 -z --untracked-files=no
+      printf 'tracked-diff\0'
+      git -C "$external_root_path" diff --binary --full-index --no-color \
+        --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ HEAD --
+      printf 'untracked\0'
+      while IFS= read -r -d '' relative_path; do
+        local absolute_path="$external_root_path/$relative_path"
+        printf 'path\0%s\0mode\0%s\0' "$relative_path" "$(stat -c '%f' -- "$absolute_path")"
+        if [[ -L "$absolute_path" ]]; then
+          printf 'symlink-target\0'
+          readlink -z -- "$absolute_path"
+        elif [[ -f "$absolute_path" ]]; then
+          printf 'file-content-sha256\0'
+          sha256sum < "$absolute_path" | awk '{printf "%s%c", $1, 0}'
+        else
+          echo "HARD STOP: unsupported untracked path type: $external_root_label/$relative_path"
+          exit 1
+        fi
+      done < "$sorted_untracked_list"
+    } > "$digest_input"
+    state_digest=$(sha256sum "$digest_input" | awk '{print $1}')
+    printf 'external-project\t%s\t%s\t%s\n' \
+      "$external_root_label" "$external_head" "$state_digest" >> "$output_path"
+  done
 }
-run_case() {
-  local label=$1
-  local case_toolkit_root=$2
-  local node_id=$3
+run_real_project_marker() {
+  local command_key=$1
+  local suite_dir=$2
+  local output_path=$3
   set +e
-  ( cd "$case_toolkit_root/science" && uv run --frozen pytest -q -m real_projects "$node_id" ) \
-    > "$attempt_root/$label-$(basename "$node_id").txt" 2>&1
-  local case_status=$?
+  ( cd "$suite_dir" && uv run --frozen pytest -m real_projects ) > "$output_path" 2>&1
+  local marker_status=$?
   set -e
-  printf '%s\t%s\t%s\t%s\n' "$label" "$node_id" "$case_status" "$attempt_root/$label-$(basename "$node_id").txt" >> "$attempt_root/known-real-project-statuses.tsv"
+  printf 'command\t%s\tcd %s && uv run --frozen pytest -m real_projects\texit\t%s\t%s\n' \
+    "$command_key" "$suite_dir" "$marker_status" "$output_path" >> "$attempt_root/task-6-manifest.tsv"
 }
-for node_id in \
-  tests/skills_coverage/test_coverage_real_projects.py::test_health_meta_commons_datasets_are_grounded_and_not_owned \
-  tests/test_correspondence_drift_real_projects.py::test_detector_fires_on_multiple_myeloma \
-  tests/validate/test_parity_canonical_body.py::test_real_downstream_projects_match_bash_validate_semantics; do
-  run_case current-main "$attempt_root/toolkit-before" "$node_id"
-  run_case rebased-feature "$attempt_root/toolkit-after" "$node_id"
+
+capture_external_state "$attempt_root/external-state-before-current-main.tsv"
+run_real_project_marker current-main-real-project-marker \
+  "$attempt_root/toolkit-before/science" "$attempt_root/current-main-real-projects.txt"
+capture_external_state "$attempt_root/external-state-between-real-project-markers.tsv"
+if ! cmp -s "$attempt_root/external-state-before-current-main.tsv" \
+  "$attempt_root/external-state-between-real-project-markers.tsv"; then
+  diff -u "$attempt_root/external-state-before-current-main.tsv" \
+    "$attempt_root/external-state-between-real-project-markers.tsv" || true
+  echo "HARD STOP: external project state changed during the current-main marker; preserve this attempt and start fresh"
+  exit 1
+fi
+run_real_project_marker feature-real-project-marker \
+  "$attempt_root/toolkit-after/science" "$attempt_root/feature-real-projects.txt"
+capture_external_state "$attempt_root/external-state-after-feature.tsv"
+if ! cmp -s "$attempt_root/external-state-before-current-main.tsv" \
+  "$attempt_root/external-state-after-feature.tsv"; then
+  diff -u "$attempt_root/external-state-before-current-main.tsv" \
+    "$attempt_root/external-state-after-feature.tsv" || true
+  echo "HARD STOP: external project state changed during the feature marker; preserve this attempt and start fresh"
+  exit 1
+fi
+
+for marker_label in current-main feature; do
+  marker_log="$attempt_root/$marker_label-real-projects.txt"
+  raw_signatures="$attempt_root/$marker_label-real-project-failure-signatures.unsorted.txt"
+  sorted_signatures="$attempt_root/$marker_label-real-project-failure-signatures.txt"
+  set +e
+  rg --no-filename '^FAILED ' "$marker_log" > "$raw_signatures"
+  rg_status=$?
+  set -e
+  test "$rg_status" -le 1 || {
+    echo "HARD STOP: could not extract failure signatures from $marker_log"; exit 1;
+  }
+  LC_ALL=C sort "$raw_signatures" > "$sorted_signatures"
 done
-awk -F '\t' '$1 == "current-main" { before[$2] = $3 } $1 == "rebased-feature" { if (!($2 in before) || before[$2] != $3) { print "HARD STOP: real-project behavior changed for " $2; failed = 1 } } END { exit failed }' \
-  "$attempt_root/known-real-project-statuses.tsv"
-awk -F '\t' '$3 == 0 { print "HARD STOP: expected nonzero known failure: " $2; failed = 1 } END { exit failed }' \
-  "$attempt_root/known-real-project-statuses.tsv"
-for label in current-main rebased-feature; do
-  rg --no-filename '^FAILED ' "$attempt_root"/"$label"-*.txt | sort > "$attempt_root/$label-failure-signatures.txt"
-done
-test -s "$attempt_root/current-main-failure-signatures.txt" || { echo "HARD STOP: missing current-main failure signature"; exit 1; }
-test -s "$attempt_root/rebased-feature-failure-signatures.txt" || { echo "HARD STOP: missing rebased-feature failure signature"; exit 1; }
-diff -u "$attempt_root/current-main-failure-signatures.txt" "$attempt_root/rebased-feature-failure-signatures.txt"
+
+current_main_real_status=$(awk -F '\t' '$1 == "command" && $2 == "current-main-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
+feature_real_status=$(awk -F '\t' '$1 == "command" && $2 == "feature-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
+test -n "$current_main_real_status" && test -n "$feature_real_status" || {
+  echo "HARD STOP: missing full real-project marker status"; exit 1;
+}
+test "$current_main_real_status" = "$feature_real_status" || {
+  echo "HARD STOP: full real-project marker statuses differ: current main $current_main_real_status, feature $feature_real_status"
+  exit 1
+}
+case "$current_main_real_status" in
+  0)
+    test ! -s "$attempt_root/current-main-real-project-failure-signatures.txt" \
+      && test ! -s "$attempt_root/feature-real-project-failure-signatures.txt" || {
+        echo "HARD STOP: a green marker emitted FAILED signatures"; exit 1;
+      }
+    ;;
+  1)
+    test -s "$attempt_root/current-main-real-project-failure-signatures.txt" \
+      && test -s "$attempt_root/feature-real-project-failure-signatures.txt" || {
+        echo "HARD STOP: a failing marker has no FAILED signatures"; exit 1;
+      }
+    ;;
+  *)
+    echo "HARD STOP: full real-project markers exited $current_main_real_status, not a test result"
+    exit 1
+    ;;
+esac
+diff -u "$attempt_root/current-main-real-project-failure-signatures.txt" \
+  "$attempt_root/feature-real-project-failure-signatures.txt" || {
+    echo "HARD STOP: current-main-only or feature-only real-project failure"; exit 1;
+  }
 ```
 
-Record the three matched nonzero statuses as known external-state failures in
-the final parity table. Step 6 is the single owner of their manifest artifact
-rows and checksums. They remain visible evidence, not a green result or an
+Record matching nonzero full-marker statuses and their complete sorted
+signatures in the final parity evidence. Step 6 is the single owner of the
+marker-log, signature, and external-state manifest artifact rows and checksums.
+Matching external failures remain visible evidence, not a green result or an
 implicit exception.
 
 - [ ] **Step 4: Recapture four canonical before reports from `a7f3337e` and the pinned snapshots**
@@ -1750,6 +1879,12 @@ record_artifact() {
   test -s "$artifact_path" || { echo "HARD STOP: missing artifact $artifact_key"; exit 1; }
   printf 'artifact\t%s\t%s\t%s\n' "$artifact_key" "$artifact_path" "$(sha256sum "$artifact_path" | awk '{print $1}')" >> "$attempt_root/task-6-manifest.tsv"
 }
+record_file_artifact() {
+  local artifact_key=$1
+  local artifact_path=$2
+  test -f "$artifact_path" || { echo "HARD STOP: missing artifact file $artifact_key"; exit 1; }
+  printf 'artifact\t%s\t%s\t%s\n' "$artifact_key" "$artifact_path" "$(sha256sum "$artifact_path" | awk '{print $1}')" >> "$attempt_root/task-6-manifest.tsv"
+}
 for consumer_name in health-meta evolution protein-landscape science-meta; do
   record_artifact "$consumer_name-canonical" "$attempt_root/$consumer_name-canonical.json"
   record_artifact "$consumer_name-after" "$attempt_root/$consumer_name-after.json"
@@ -1758,10 +1893,13 @@ record_artifact parity-table "$attempt_root/parity-table.md"
 record_artifact toolkit-suite "$attempt_root/toolkit-suite.txt"
 record_artifact model-suite "$attempt_root/model-suite.txt"
 record_artifact snapshot-marker "$attempt_root/snapshot-marker.txt"
-record_artifact rebased-real-projects "$attempt_root/rebased-real-projects.txt"
-record_artifact known-real-project-statuses "$attempt_root/known-real-project-statuses.tsv"
-record_artifact current-main-failure-signatures "$attempt_root/current-main-failure-signatures.txt"
-record_artifact rebased-feature-failure-signatures "$attempt_root/rebased-feature-failure-signatures.txt"
+record_artifact current-main-real-projects "$attempt_root/current-main-real-projects.txt"
+record_artifact feature-real-projects "$attempt_root/feature-real-projects.txt"
+record_file_artifact current-main-real-project-failure-signatures "$attempt_root/current-main-real-project-failure-signatures.txt"
+record_file_artifact feature-real-project-failure-signatures "$attempt_root/feature-real-project-failure-signatures.txt"
+record_artifact external-state-before-current-main "$attempt_root/external-state-before-current-main.tsv"
+record_artifact external-state-between-real-project-markers "$attempt_root/external-state-between-real-project-markers.tsv"
+record_artifact external-state-after-feature "$attempt_root/external-state-after-feature.tsv"
 record_artifact evolution-verbose "$attempt_root/evolution-verbose.txt"
 record_artifact health-meta-verbose "$attempt_root/health-meta-verbose.txt"
 ATTEMPT_ROOT="$attempt_root" python3 - <<'PY'
@@ -1774,14 +1912,16 @@ singletons = {row[0]: row for row in lines if row and row[0] in {"toolkit-before
 required_artifacts = {
     *(f"{name}-{phase}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("canonical", "after")),
     "parity-table", "toolkit-suite", "model-suite", "snapshot-marker",
-    "rebased-real-projects", "known-real-project-statuses",
-    "current-main-failure-signatures", "rebased-feature-failure-signatures",
+    "current-main-real-projects", "feature-real-projects",
+    "current-main-real-project-failure-signatures", "feature-real-project-failure-signatures",
+    "external-state-before-current-main", "external-state-between-real-project-markers",
+    "external-state-after-feature",
     "evolution-verbose", "health-meta-verbose",
 }
 artifact_keys = {row[1] for row in lines if len(row) == 4 and row[0] == "artifact"}
 consumer_names = {row[1] for row in lines if len(row) == 5 and row[0] == "consumer"}
 command_names = {row[1] for row in lines if len(row) >= 5 and row[0] == "command"}
-required_commands = {"toolkit-suite", "model-suite", "snapshot-marker", "rebased-real-project-marker", "evolution-verbose", "health-meta-verbose", *(f"{phase}-{name}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("before", "after"))}
+required_commands = {"toolkit-suite", "model-suite", "snapshot-marker", "current-main-real-project-marker", "feature-real-project-marker", "evolution-verbose", "health-meta-verbose", *(f"{phase}-{name}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("before", "after"))}
 missing = ({"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"} - singletons.keys()) | (required_artifacts - artifact_keys) | ({"health-meta", "evolution", "protein-landscape", "science-meta"} - consumer_names) | (required_commands - command_names)
 if missing or singletons["toolkit-after"][1] != singletons["feature-branch"][1]:
     raise SystemExit(f"HARD STOP: incomplete or inconsistent manifest: {sorted(missing)}")
@@ -1791,7 +1931,17 @@ sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.s
   printf '# Task 6 parity — toolkit before %s; toolkit after %s; branch %s\n\n' \
     a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$attempt_root/task-6-manifest.tsv")" "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")"
   printf 'Pinned consumers: health/meta `36ba8ec83f91d35ba82961836bfc1731b00d9e8b`; evolution `25fd2cb475807c8f5af0d2553244368c55fd3ad2`; protein-landscape `6796628c06a562ff45029f317a0f0fdf1a2fec9e`; science/meta tree `%s`.\n\n' "$(awk -F '\t' '$1 == "consumer" && $2 == "science-meta" {print $4}' "$attempt_root/task-6-manifest.tsv")"
-  printf 'Known real-project failure signatures matched current main; see manifest artifacts.\n\n'
+  current_main_real_status=$(awk -F '\t' '$1 == "command" && $2 == "current-main-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
+  feature_real_status=$(awk -F '\t' '$1 == "command" && $2 == "feature-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
+  printf 'Full real-project marker parity: current main exit `%s`; feature exit `%s`. External project state matched before, between, and after the marker runs; see the checksummed manifest artifacts.\n\n' \
+    "$current_main_real_status" "$feature_real_status"
+  if test "$current_main_real_status" = 0; then
+    printf 'Both full real-project markers were green and emitted no `FAILED ...` signatures.\n\n'
+  else
+    printf 'Both full real-project markers remained nonzero. These matching external failures are visible evidence, not a green result:\n\n```text\n'
+    cat "$attempt_root/current-main-real-project-failure-signatures.txt"
+    printf '```\n\n'
+  fi
   cat "$attempt_root/parity-table.md"
 } > "$attempt_root/final-parity-table.md"
 record_artifact final-parity-table "$attempt_root/final-parity-table.md"
@@ -1811,9 +1961,11 @@ sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.s
 ```
 
 The manifest, its detached SHA-256 file, `final-parity-table.md`, four before
-reports, four after reports, verbose-notice evidence, and the explicit
-current-main comparison are the Task 6 result. Re-run this entire task after
-any rebase, merge-resolution change, or consumer snapshot drift.
+reports, four after reports, verbose-notice evidence, both complete
+real-project marker logs and statuses, both complete failure-signature files,
+and all three identical external-state records are the Task 6 result. Re-run
+this entire task after any rebase, merge-resolution change, or external state
+drift.
 
 ---
 
@@ -1826,8 +1978,9 @@ the divergent local `main` checkout at `395f3af22425ac30926fc6c46b71d76366e70902
 
 - [ ] **Step 1: Obtain explicit approval to merge and push**
 
-Present Task 6's final parity table, manifest SHA-256, and explicitly recorded
-real-project comparison; ask for a go/no-go on pushing `origin/main`. **Do not
+Present Task 6's final parity table, manifest SHA-256, both full-marker statuses
+and logs, both signature files, and the three identical external-state records;
+ask for a go/no-go on pushing `origin/main`. **Do not
 proceed without an explicit yes.** Prior approval of the design is not approval
 of the push. Immediately after that yes, create this immutable approval record.
 It is the only point at which `latest-attempt.txt` may be read for publication;
@@ -1859,28 +2012,36 @@ test -z "$duplicate_artifact_keys" || {
   exit 1
 }
 for artifact_path in "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/parity-table.md" \
-  "$approved_attempt_root/rebased-real-projects.txt" "$approved_attempt_root/current-main-failure-signatures.txt" \
-  "$approved_attempt_root/rebased-feature-failure-signatures.txt"; do
-  test -s "$artifact_path" || { echo "HARD STOP: missing approval artifact $artifact_path"; exit 1; }
+  "$approved_attempt_root/current-main-real-projects.txt" "$approved_attempt_root/feature-real-projects.txt" \
+  "$approved_attempt_root/current-main-real-project-failure-signatures.txt" "$approved_attempt_root/feature-real-project-failure-signatures.txt" \
+  "$approved_attempt_root/external-state-before-current-main.tsv" "$approved_attempt_root/external-state-between-real-project-markers.tsv" \
+  "$approved_attempt_root/external-state-after-feature.tsv"; do
+  test -f "$artifact_path" || { echo "HARD STOP: missing approval artifact $artifact_path"; exit 1; }
 done
-printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\nreal-project-artifact\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\n' \
+printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\ncurrent-main-real-project-log\t%s\nfeature-real-project-log\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\nexternal-state-before-current-main\t%s\nexternal-state-between-markers\t%s\nexternal-state-after-feature\t%s\n' \
   "$approved_attempt_root" "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" \
   "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
   "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
-  "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/rebased-real-projects.txt" \
-  "$approved_attempt_root/current-main-failure-signatures.txt" "$approved_attempt_root/rebased-feature-failure-signatures.txt" \
+  "$approved_attempt_root/final-parity-table.md" \
+  "$approved_attempt_root/current-main-real-projects.txt" "$approved_attempt_root/feature-real-projects.txt" \
+  "$approved_attempt_root/current-main-real-project-failure-signatures.txt" "$approved_attempt_root/feature-real-project-failure-signatures.txt" \
+  "$approved_attempt_root/external-state-before-current-main.tsv" "$approved_attempt_root/external-state-between-real-project-markers.tsv" \
+  "$approved_attempt_root/external-state-after-feature.tsv" \
   > "$approval_record"
 printf 'evidence\ttask-6-manifest\t%s\t%s\n' "$approved_attempt_root/task-6-manifest.tsv" \
   "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" >> "$approval_record"
-declare -A evidence_key=(
-  [final-parity-table]=final-parity-table
-  [parity-table]=parity-table
-  [rebased-real-projects]=rebased-real-projects
-  [current-main-signatures]=current-main-failure-signatures
-  [feature-signatures]=rebased-feature-failure-signatures
+approval_artifact_keys=(
+  final-parity-table
+  parity-table
+  current-main-real-projects
+  feature-real-projects
+  current-main-real-project-failure-signatures
+  feature-real-project-failure-signatures
+  external-state-before-current-main
+  external-state-between-real-project-markers
+  external-state-after-feature
 )
-for approval_key in final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
-  manifest_key=${evidence_key[$approval_key]}
+for manifest_key in "${approval_artifact_keys[@]}"; do
   mapfile -t manifest_evidence_rows < <(
     awk -F '\t' -v key="$manifest_key" \
       '$1 == "artifact" && $2 == key {print $3 "\t" $4}' \
@@ -1892,7 +2053,7 @@ for approval_key in final-parity-table parity-table rebased-real-projects curren
   IFS=$'\t' read -r artifact_path expected_digest <<< "${manifest_evidence_rows[0]}"
   test -n "$artifact_path" && test -n "$expected_digest" || { echo "HARD STOP: incomplete manifest evidence $manifest_key"; exit 1; }
   test "$(sha256sum "$artifact_path" | awk '{print $1}')" = "$expected_digest" || { echo "HARD STOP: manifest evidence checksum mismatch for $manifest_key"; exit 1; }
-  printf 'evidence\t%s\t%s\t%s\n' "$approval_key" "$artifact_path" "$expected_digest" >> "$approval_record"
+  printf 'evidence\t%s\t%s\t%s\n' "$manifest_key" "$artifact_path" "$expected_digest" >> "$approval_record"
 done
 sha256sum "$approval_record" > "$approval_digest_path"
 printf 'Approved publication record: %s\n' "$approval_record"
@@ -1926,7 +2087,10 @@ verify_approved_evidence() {
   test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
   test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
 }
-for evidence_key in task-6-manifest final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
+for evidence_key in task-6-manifest final-parity-table parity-table \
+  current-main-real-projects feature-real-projects \
+  current-main-real-project-failure-signatures feature-real-project-failure-signatures \
+  external-state-before-current-main external-state-between-real-project-markers external-state-after-feature; do
   verify_approved_evidence "$evidence_key"
 done
 integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
@@ -1976,7 +2140,10 @@ verify_approved_evidence() {
   test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
   test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
 }
-for evidence_key in task-6-manifest final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
+for evidence_key in task-6-manifest final-parity-table parity-table \
+  current-main-real-projects feature-real-projects \
+  current-main-real-project-failure-signatures feature-real-project-failure-signatures \
+  external-state-before-current-main external-state-between-real-project-markers external-state-after-feature; do
   verify_approved_evidence "$evidence_key"
 done
 integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
