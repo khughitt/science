@@ -1,16 +1,16 @@
 # Agent evidence broker — design
 
-**Status:** proposed (revision 5)
+**Status:** proposed (revision 6)
 **Sub-project A** of three. B is the multi-assignment dispatch harness; C is
 `/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
 defers to and never built. A is independently landable and useful without either.
 
-Revisions 2 through 5 respond to design review: six production-boundary defects in revision 1, six in
-revision 2, six in revision 3, five in revision 4. Each is closed below and named at the point it is
-closed, because the reasoning that produced the defect is more useful to a reader than the corrected
-text alone.
+Revisions 2 through 6 respond to design review: six production-boundary defects in revision 1, six in
+revision 2, six in revision 3, five in revision 4, six in revision 5. Each is closed below and named at
+the point it is closed, because the reasoning that produced the defect is more useful to a reader than
+the corrected text alone.
 
-Two patterns run through what review kept finding, and both predict where the implementation will go
+Three patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
 
 **Guards narrower than the rule they enforce.** `any(location)` where the rule was "everything was
@@ -23,9 +23,16 @@ decides what a pattern means. "Sealed runs are unaffected by a project move" —
 took a live session. Both were true of the intent and false of the design, and prose is where that gap
 hides, because a sentence can assert a property no field implements.
 
-Hence §7's discipline, and one addition to it: where the document *claims* a property, the test suite
-should establish that property under the condition the claim names — replay with the control-plane
-directory deleted, not merely replay.
+**Fixes applied to the headline and not to the path production takes.** Revision 5 sealed every replay
+input into the exposure, corrected `check_correspondence`'s signature — and left `append_review`, the
+only caller that ships, still resolving a baseline. The schema was right, the checker was right, and a
+project rename would still have zeroed every agent review in the run. A property proven on the path
+nobody uses is not proven.
+
+Hence §7's discipline, and two additions to it: where the document *claims* a property, the suite
+establishes that property **under the condition the claim names** — replay with the control-plane
+directory deleted, not merely replay — and **through the production entry point**, not only against the
+function whose signature was corrected.
 
 ## 1. The problem
 
@@ -196,9 +203,24 @@ because the `Evidence` union has no pattern-bearing variant to cite them with.
 **A malformed search pattern is a third case**: it is the requester's own input, carries no
 repository fact, and is refused as retryable rather than treated as instrument failure.
 
-**Every search carries the policy's prefixes as `:(exclude)` pathspecs**, whether or not the caller
-supplied a pathspec of its own. Search is the one operation that never names a path, so denying a
-directory to `read` while `git grep` returns hits from inside it denies nothing.
+**Every search carries the policy's prefixes as `:(top,literal,exclude)` pathspecs**, whether or not
+the caller supplied a pathspec of its own. Search is the one operation that never names a path, so
+denying a directory to `read` while `git grep` returns hits from inside it denies nothing.
+
+**`literal` is load-bearing, not decoration.** `normalize_project_path` refuses `..`, absolute paths
+and NUL, and permits everything else — including `*`, `?` and `[]`, which are ordinary characters in a
+filename and wildmatch syntax in a pathspec. A directory literally named `private/[drafts]` is denied
+by `read`, where the prefix is compared as text, and *not* excluded by a bare
+`:(exclude)private/[drafts]`, where `[drafts]` is a character class matching one letter. The deny
+policy would then hold on one operation and leak on the other, silently, for exactly the paths whose
+names happen to contain punctuation. `literal` disables wildmatch; `top` anchors to the repository root
+so the exclusion does not drift with the caller's pathspec.
+
+The deeper requirement is that the two operations agree. `read` denial and `search` exclusion are
+independent implementations of one policy, so §7 tests them **against each other** on the same inputs:
+metacharacters, and component boundaries in both directions — `private` must deny `private/x` and must
+not deny `privateer/x`, on both paths. A policy enforced by two mechanisms is a policy that can be half
+enforced.
 
 ### 3.2.1 Canonical invocation — `grep` and `log` must be probed before they ship
 
@@ -228,6 +250,22 @@ the argv the broker builds, so that determinism does not depend on a config file
 | `grep` | pattern type passed explicitly, never inherited; `--no-color`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
 | `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
 | `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
+| all three | `LC_ALL=C`, `LANG=C` in the child environment |
+
+**Argv is not the whole invocation; the environment is part of it.** `run_git` passes no `env` today,
+so git inherits the supervisor's locale, and a POSIX class such as `[[:alpha:]]` matches a different
+character set under `C` than under a UTF-8 locale. Two honest replays of the same pattern against the
+same commit then disagree, and §5.3 refuses on disagreement. Pinning `LC_ALL` and `LANG` is what makes
+"deterministic given the commit" true of a regex engine rather than only of a file.
+
+The same pin does a second job the broker specifically needs: **git's diagnostic text is localized, and
+§3.2 classifies defined misses by reading it.** Under a translated locale the miss messages would not
+match, and the classifier would fall through to "anything else raises" — turning an ordinary absent
+path into a halted run. Miss classification is only sound in a pinned locale.
+
+`TZ` is deliberately not pinned: `%aI` carries its own offset, so the rendered log does not depend on
+the reader's zone. Pinning it would be defending against behaviour the format has been chosen not to
+have, which is the discipline `git.py` already states for config keys.
 
 Config-derived rendering is the reason revision 1's determinism claim ("determinism comes free from
 the pin") was too strong. It comes free from the pin *plus* a canonical invocation.
@@ -284,6 +322,14 @@ cross-process and needs a contract rather than an object.
   commit, surface policy, instrument identity, and the inline manifest are all read from `RunBaseline`.
   **None of them is settable on the command line.** A caller cannot lower a budget it did not set,
   raise one it did, weaken the deny policy, or point the session at a different journal.
+- **Handle validation, before it is ever joined to a path.** The handle is actor-supplied and becomes a
+  path component in `run_dir`, so `--session ../../other-project/<slug>` is the obvious first attack. It
+  is parsed as a *generated run id* — the same constructive check `AutonomousRunRecord._validate_identity`
+  performs, rebuilding `<date>-<agent>-<short-id>` and comparing — and rejected before any join. Then,
+  after loading, **the baseline's own `run_id` must equal the handle**. Validating the string and never
+  checking what it opened would leave a directory that merely looks like a run id resolving to another
+  run's baseline, which is the same class of defect as revision 4's unscoped project key: a name checked
+  for shape and never for what it refers to.
 - **Open.** `science evidence open` writes the journal with `O_EXCL` through the anchored-descriptor
   primitives in `findings/paths.py`, for the same reason `write_baseline` uses exclusive creation:
   reusing a journal path discards the exposure record of whatever run already owns it.
@@ -293,8 +339,9 @@ cross-process and needs a contract rather than an object.
   There is no counter to reset. Truncating the journal to buy rounds destroys the entries that make
   the truncator's own citations correspond, so the move is self-defeating rather than merely detected.
 - **Seal.** `finish_run` reads the journal, replays it, and copies it into the run record as
-  `EvidenceExposure`. After sealing, the journal is retained; it is the only thing that can re-check
-  a run later.
+  `EvidenceExposure`. After sealing, the record is self-sufficient (§4.1): re-checking needs the record
+  and a repository. The journal is retained as the supervisor's own copy of what it served, not as an
+  input anything later depends on.
 
 `Session` is also usable in-process, without the CLI, so B can hold sessions in the supervisor where
 its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
@@ -442,7 +489,12 @@ replay (§5.1); storing them would be storing the actor's account of its own exp
 
 **Validators:**
 
-- `requests_used <= budget`.
+- **`requests_used == len([e for e in entries if e.op != "inline"])`, then `requests_used <= budget`.**
+  Revision 5 bounded the count by the budget and never tied it to the entries it is derived from, so a
+  record carrying ten request entries and `requests_used=1` validated — a spend counter that could
+  disagree with the log it counts. `AuditFindingRecord` already states the rule this violates: "Every
+  derived value stored here is RECOMPUTED and checked on construction… A stored derived value nobody
+  validates is a value that can lie." The budget bound is meaningful only once the count is honest.
 - Every entry's `commit` equals `EvidenceExposure.commit` — a run that read two trees did not have one
   evidence surface.
 - **`EvidenceExposure.commit == AutonomousRunRecord.base_commit`.** Revision 1 required only internal
@@ -718,8 +770,10 @@ When the broker writes the journal it is trustworthy by construction, but a reco
 was written by whatever wrote that file, and a `sha256` field is as forgeable as the rest of the JSON.
 Determinism comes from the pin **and** the canonical invocation in §3.2.1.
 
-Inline entries are not in the tree and cannot be re-served; they are checked against the baseline
-manifest instead (§4.3).
+Inline entries are not in the tree and cannot be re-served; they are checked against
+**`exposure.inline`** — the sealed copy of the manifest, not the baseline's. The baseline is where the
+manifest is *declared* (§4.3) and the exposure is where it is *sealed* (§4.1); replay reads the sealed
+copy, and reaches for no control-plane file at all.
 
 Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
 read many of the same files.
@@ -772,12 +826,18 @@ two would be the empty/unwired confusion one level up.
 def append_review(project_root, finding_id, submission: ReviewSubmission, *, actor) -> Review
 ```
 
-- **Branches on `reviewer_kind`.** Only an agent submission resolves a run record and baseline and runs
+- **Branches on `reviewer_kind`.** Only an agent submission resolves a run record and runs
   `check_correspondence`. Human and deterministic submissions get `correspondence=None` and are stored.
   Revision 3 resolved a baseline for every submission, which would have made the boundary unusable for
   the two reviewer kinds §4.2.1 says are unaffected: a human review's `run_ref` need not name an
   autonomous run at all, and demanding a control-plane baseline for one would refuse every human review
   in the toolkit. Broker the kind that needs brokering.
+- **Resolves the run record and nothing else.** No baseline, no control-plane lookup, no session.
+  Revision 5 sealed every replay input into the exposure and then left this boundary — the only path
+  production actually takes — still resolving a baseline, so a project rename would have reintroduced
+  the exact failure §4.1 claims to have closed, *while the direct checker test stayed green*. A property
+  proven only on the path nobody uses is not proven. The regression test in §7 appends a review through
+  this function with the control-plane directory deleted.
 - Calls `check_correspondence`. The result is **computed here and cannot be supplied**: `ReviewSubmission`
   has no field for it.
 - Refuses `violated` with an `IngestError`, consistent with `_assert_attested_provenance` refusing a
@@ -803,8 +863,20 @@ Plus two backstops:
 
 **A run record gets `evidence=None` only if a session was never opened.** `start_run` records
 `EvidenceSession` in `RunBaseline`; at `finish_run`, a baseline that says "brokered" plus a missing or
-unreadable journal yields `RunDisposition.UNWIRED`, which blocks — rather than writing a record that
-reads as unbrokered.
+unreadable journal yields `RunOutcome(RunDisposition.UNWIRED, record=None)` — **no record at all.**
+
+Revision 5 said "yields `UNWIRED`, which blocks — rather than writing a record that reads as
+unbrokered", and specified no state in which that is possible. `evidence` is `EvidenceExposure | None`
+and `None` is defined as "never brokered", so a failed seal has nothing honest to write: an exposure
+does not exist, and `None` asserts something false about a run that *was* brokered.
+
+`RunOutcome.record` is already `AutonomousRunRecord | None`, and `finish_run` already writes no record
+when it cannot attest — "an invented record here would be the fabrication this slice exists to
+prevent." A failed seal is a third case of that rule, and this is a deliberate narrow exception to
+`finish_run`'s "identity is known, so write an attestation saying we could not tell": identity *is*
+known here, but the record still cannot express the truth, so writing one would trade a missing
+attestation for a false one. The branch reads as unattested, which is the designed failure direction —
+and, unlike a written record, it is retryable.
 
 Without this rule, losing a journal silently downgrades every review in that run from `verified` to
 `unwired` — which, under §4.2.1, silently drops their support to zero. Either direction of silent
@@ -820,6 +892,16 @@ downgrade is a lie about what was checked.
   `basic` produce the same served bytes for the same request; `color.ui=always` does not colour the
   output; `log.showSignature=true` does not change the served log. Each written from the probe, so the
   probe's findings are what the tests assert.
+- **Locale** — `[[:alpha:]]` against a non-ASCII corpus produces byte-identical results with the parent
+  process under `C`, under a UTF-8 locale, and under a translated locale; the defined-miss classifier
+  recognises an absent path in all three. Run as a replay across differing parent locales, since that
+  is the failure being prevented.
+- **Pathspec translation** — a directory literally named `private/[drafts]` is excluded from search, not
+  interpreted as a character class; `private` denies `private/x` and does not deny `privateer/x`; and
+  the `read` denial and the `search` exclusion are asserted to **agree** on the same table of inputs,
+  because two mechanisms for one policy is how a policy comes to be half enforced.
+- **Session handle** — `--session ../../elsewhere` is refused before any path join; a handle that parses
+  but whose baseline carries a different `run_id` is refused after loading.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused lexically; **a
   working-tree symlink over a base-commit path does not deny the request**, since the blob read never
   consults the working tree; the dual as-spelled/resolved check still catches a symlink escape on
@@ -835,9 +917,11 @@ downgrade is a lie about what was checked.
   `--broker-spec` and `--baseline-out` together are refused, as are `--session` and `--baseline` on
   `finish`; a brokered run whose baseline is elsewhere is refused rather than searched for; a
   control-plane root inside the project is refused.
-- **Sealing** — a sealed run replays from `(record, repo)` alone, with the control-plane directory
-  **deleted**: the named regression test for the move case, written so a future change that reintroduces
-  a live-session dependency fails here rather than in a project someone renamed.
+- **Sealing** — a sealed run replays from `(record, repo)` alone with the control-plane directory
+  **deleted**, asserted **through `append_review`** and not only against `check_correspondence`: the
+  production path is the one the claim is about, and revision 5's version of this guard would have
+  passed while production still resolved a baseline. A failed seal returns
+  `RunOutcome(UNWIRED, record=None)`, and no record is written for it.
 - **Protocol version** — an exposure sealed at protocol `N` read by a toolkit at `N+1` yields
   `unwired`/`REPLAY_PROTOCOL_MISMATCH`, never `violated`; the same exposure at `N` replays clean.
 - **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
