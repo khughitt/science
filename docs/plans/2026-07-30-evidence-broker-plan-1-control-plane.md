@@ -1268,3 +1268,143 @@ root, and the control plane is deliberately outside one. If you find yourself re
 **Nothing in this plan creates a directory.** `control_plane_root` resolves and validates;
 `run_dir` calculates. Exclusive creation of `baseline.json`, the journal, and `served/` is
 plan 2's, through `autonomy/baseline.py`'s `open("x")` + containment pairing.
+
+## Implementation record
+
+Branch `feat/review-plans`, worktree `.worktrees/review-plans`. What follows is what was
+measured during implementation, not what this plan predicted — where the two differ, that
+is recorded explicitly rather than smoothed over.
+
+### Commits, per task
+
+**Task 1 — probe `git grep` and `git log`:**
+
+| Commit | Description |
+|---|---|
+| `6b8ca252` | docs: record what git grep and log execute under probe |
+| `1d1faea4` | docs: explain why log.showSignature=true reads RENDERS, not INERT (fix round 1: an Important review finding — the RENDERS row was recorded with no reasoning distinguishing it from a cosmetic render) |
+
+**Task 2 — canonical invocation for `grep` and `log`:**
+
+| Commit | Description |
+|---|---|
+| `785e4f98` | feat(autonomy): pin the git child environment and harden grep/log |
+| `2a901214` | docs(autonomy): stop claiming log.showSignature=true spawns nothing (fix round 1: an Important defect the coordinator caught in the diff — the docstring's RENDERS bullet contradicted its own composite EXECUTES bullet) |
+
+**Task 3 — the control plane:**
+
+| Commit | Description |
+|---|---|
+| `44c11161` | feat(autonomy): add the project-scoped control plane |
+| `8852a288` | fix(autonomy): reject dates fromisoformat over-accepts and empty control-plane env (fix round 1: a Critical finding in the plan's own reference code, plus a bundled Minor) |
+
+**Task 4 — plan correction (this document):**
+
+| Commit | Description |
+|---|---|
+| `4eb72c9a` | docs(plan): correct two defective snippets the implementation exposed |
+
+### The probe: git version and verdict counts
+
+Git version at probe time: **2.55.0**. 21 candidates probed, one row each, no crashes and
+no blank verdicts:
+
+- **1 EXECUTES** — the composite `log.showSignature=true` + `gpg.program=./spawn.sh`, under
+  `log`.
+- **4 RENDERS** — `grep.column=true`, `color.grep=always`, `color.ui=always` (all under
+  `grep`), and `log.showSignature=true` alone (under `log`).
+- **16 INERT** — the remaining `grep` and `log` rendering/execution candidates, including
+  all three `grep`-side execution candidates (`diff.<driver>.textconv`, `core.pager`,
+  `pager.grep`).
+
+### Whether `_HARDENING` gained a key
+
+Yes — exactly one entry, `"log.showSignature=false"`, added to
+`science/src/science_tool/autonomy/git.py`'s `_HARDENING` tuple. It is the only
+neutralization the probe justified: the single `EXECUTES` row above.
+
+`grep` contributed **nothing** to `_HARDENING`. All three of its execution candidates
+(`diff.<driver>.textconv`, `core.pager`, `pager.grep`) measured INERT. That is recorded here
+as a finding, not an absence: this module's standing rule is that only what was shown to
+execute is neutralized, so an empty result for `grep` is exactly what the rule predicts when
+none of its candidates fire, and the probe is what makes that a measured claim rather than an
+assumption. (Task 1's report additionally notes *why* — the probe's `subprocess.run` calls
+capture output with no tty, so git's pager logic, which checks `isatty`, never engages
+regardless of `core.pager`/`pager.grep`; that mechanism is recorded as an observation in the
+task report, not asserted as a defense in the code or the design doc, per the same rule.)
+
+### Suite results
+
+- **Scoped autonomy surface** (Task 4 Step 1's 14 modules): `exit 0`.
+- **Full toolkit suite** (`cd science && uv run --frozen pytest -q`, run from the top level
+  per Task 4 Step 2): `exit 0`. This repository's pytest configuration suppresses the
+  `N passed` summary line, so exit status — not a test count — is the evidence recorded here.
+- **No production caller** (Task 4 Step 3): `grep -rn "control_plane" science/src --include="*.py"`
+  returns exactly three matches, all inside `control_plane.py` itself (its `control_plane_root`
+  definition, and its two internal callers in `project_metadata_path` and `run_dir`). Plan 1
+  ships no caller, by design — that was always deferred to plan 2.
+- **Branch**: confirmed `feat/review-plans`.
+
+Per-task scoped counts, from the task reports: Task 1 produced a 21-row probe table (no test
+suite — discovery, not TDD). Task 2: 4/4 `test_autonomy_git_canonical.py`, plus a 5-module
+regression run, all passing, 0 skipped. Task 3: 30/30 `test_autonomy_control_plane.py`
+pre-fix, growing to 35 post-fix (30 original + 4 new date-shape cases + 1 empty-env case),
+combined with `test_autonomy_baseline.py`'s 11 for 46/46, 0 skipped.
+
+### Where the plan was wrong
+
+Three items. Two are defects in the plan's own reference code, caught by review during
+implementation and since corrected in this file (`4eb72c9a`); the third is a prediction that
+held, recorded alongside them so this section does not misrepresent the plan as worse than it
+was.
+
+1. **The `run_slug` reference code under-validated its date substring.** Task 3's original
+   snippet gated `date.fromisoformat(slug[:10])` on nothing but length and a `-` at index 10.
+   On Python 3.11+, `date.fromisoformat` accepts far more than strict `YYYY-MM-DD`: ISO week
+   notation (`2026-W31-4`) and basic format with characters 8–9 discarded unread — including
+   a path separator, so `run_dir(project, "20260730/x-lens-a3f1")` produced **two** path
+   components instead of one run directory. `generate_run_id` only ever emits
+   `date.isoformat()`, i.e. strict `YYYY-MM-DD`, so nothing legitimate could have triggered
+   this, but a hostile handle could. Found in Task 3's review (Critical), fixed in the shipped
+   module with a `_DATE_SHAPE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")` shape gate ahead of
+   `fromisoformat` (commit `8852a288`), and the plan's own snippet — both the reference
+   implementation and the `test_a_handle_no_generate_run_id_call_could_produce_is_refused`
+   parametrization — has since been corrected to match (commit `4eb72c9a`).
+
+2. **The plan's locale test reached for `fr_FR.UTF-8`**, which is not a generated locale on
+   this machine even though git's French message catalogue (`/usr/share/locale/fr/LC_MESSAGES/git.mo`)
+   is installed. Pinning `LC_ALL` to an ungenerated locale name falls back to `C`, so the
+   negative control (`english == translated`) would have passed trivially and the test would
+   have skipped — an honest inconclusive, but one that verified nothing on a machine that
+   could have tested the real hazard. `LANGUAGE`, not the locale name, is the lever that
+   selects git's message catalogue. Task 2 substituted `LANGUAGE=fr` over the already-installed
+   `en_US.UTF-8` and reproduced the hazard for real (confirmed both directions:
+   `LC_ALL=en_US.UTF-8 LANGUAGE=fr` → French; `LC_ALL=C LANGUAGE=` → English). The plan's
+   snippet has since been corrected the same way (commit `4eb72c9a`).
+
+3. **The plan predicted, and this held**: `log.showSignature=false` is the hardening spelling
+   (not a blanked `gpg.program=`, which the plan's Step 6 explicitly warned would clear the
+   probe's marker while leaving verification itself enabled against the default `gpg` on
+   `PATH`), and the composite `log.showSignature=true` + `gpg.program=./spawn.sh` row was the
+   only row of 21 to read `EXECUTES`. Both predictions matched Task 1's measured table exactly.
+   This is recorded alongside the two defects above so the record does not read as though
+   everything in the plan was wrong.
+
+### Deferred minors
+
+Four, carried forward from the ledger rather than dropped. None were addressed in this plan;
+they are noted here for whoever picks up plan 2 or a later cleanup pass.
+
+1. **Task 1** — `grep.column=true` measured RENDERS but is not named in the design's §3.2.1
+   argv-pinning table. It belongs to plan 2's `serve.py` argv construction, not to this plan.
+2. **Task 1** — the plan's probe script (scratch-only, never committed or linted) imports
+   `os` and `shutil` without using them, flagged by pyright in scratch. No repo impact.
+3. **Task 2** — the `git.py` docstring's composite-EXECUTES bullet phrase "neither key alone
+   fires: with no signed commit in view there is nothing to verify" is imprecise — all three
+   signature rows in Task 1's probe were measured *against* the crafted signed commit, not
+   against an unsigned one.
+4. **Task 3** — `_DATE_SHAPE_RE` uses `\d`, which is Unicode-aware (matches non-ASCII decimal
+   digits), while `date.fromisoformat` is ASCII-only. Not currently exploitable because the
+   two gates are coupled — a non-ASCII "digit" that passes the shape check still fails
+   `fromisoformat` — but the coupling is implicit rather than enforced, and is worth tightening
+   if either gate changes independently.
