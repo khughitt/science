@@ -2374,11 +2374,22 @@ git -C "$integration_root" merge --no-ff "$approved_feature_sha" -m "merge: reti
 merge_sha=$(git -C "$integration_root" rev-parse HEAD)
 first_parent_sha=$(git -C "$integration_root" rev-parse HEAD^1)
 second_parent_sha=$(git -C "$integration_root" rev-parse HEAD^2)
+integration_tree_sha=$(git -C "$integration_root" rev-parse "HEAD^{tree}")
+approved_feature_tree_sha=$(git -C "$integration_root" rev-parse "$approved_feature_sha^{tree}")
+test -z "$(git -C "$integration_root" status --porcelain)" || {
+  echo "HARD STOP: integration worktree is dirty after merge"; exit 1;
+}
+test "$(git -C "$integration_root" branch --show-current)" = "$integration_branch" || {
+  echo "HARD STOP: integration worktree is not on $integration_branch"; exit 1;
+}
 test "$first_parent_sha" = "$approved_baseline_sha" || {
   echo "HARD STOP: merge first parent is $first_parent_sha"; exit 1;
 }
 test "$second_parent_sha" = "$approved_feature_sha" || {
   echo "HARD STOP: merge second parent is $second_parent_sha"; exit 1;
+}
+test "$integration_tree_sha" = "$approved_feature_tree_sha" || {
+  echo "HARD STOP: merge tree differs from the approved feature tree"; exit 1;
 }
 ```
 
@@ -2477,10 +2488,29 @@ verify_approved_evidence_set
 integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
 integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 test -d "$integration_root" || { echo "HARD STOP: missing approved integration worktree"; exit 1; }
-merge_sha=$(git -C "$integration_root" rev-parse HEAD)
 git -C "$integration_root" fetch --prune origin
 test "$(git -C "$integration_root" rev-parse origin/main)" = "$approved_baseline_sha" || {
   echo "HARD STOP: origin/main advanced after integration; reassess and recapture Task 6"; exit 1;
+}
+merge_sha=$(git -C "$integration_root" rev-parse HEAD)
+first_parent_sha=$(git -C "$integration_root" rev-parse HEAD^1)
+second_parent_sha=$(git -C "$integration_root" rev-parse HEAD^2)
+integration_tree_sha=$(git -C "$integration_root" rev-parse "HEAD^{tree}")
+approved_feature_tree_sha=$(git -C "$integration_root" rev-parse "$approved_feature_sha^{tree}")
+test -z "$(git -C "$integration_root" status --porcelain)" || {
+  echo "HARD STOP: integration worktree became dirty before push"; exit 1;
+}
+test "$(git -C "$integration_root" branch --show-current)" = "$integration_branch" || {
+  echo "HARD STOP: integration worktree left $integration_branch before push"; exit 1;
+}
+test "$first_parent_sha" = "$approved_baseline_sha" || {
+  echo "HARD STOP: pre-push merge first parent is $first_parent_sha"; exit 1;
+}
+test "$second_parent_sha" = "$approved_feature_sha" || {
+  echo "HARD STOP: pre-push merge second parent is $second_parent_sha"; exit 1;
+}
+test "$integration_tree_sha" = "$approved_feature_tree_sha" || {
+  echo "HARD STOP: pre-push merge tree differs from the approved feature tree"; exit 1;
 }
 git -C "$integration_root" push origin HEAD:main
 remote_main_sha=$(git -C "$integration_root" ls-remote origin refs/heads/main | awk '{print $1}')
@@ -2490,8 +2520,10 @@ git -C ~/d/science/.worktrees/sidecar-retirement worktree remove "$integration_r
 git -C ~/d/science/.worktrees/sidecar-retirement branch -D "$integration_branch"
 ```
 
-Expected: the merge commit's first parent is the recorded remote SHA and
-`git ls-remote` confirms that exact merge commit on `origin/main`.
+Expected: the integration worktree is clean and on the derived integration
+branch; the merge commit's first parent is the recorded remote SHA, its second
+parent and tree are the approved feature's, and `git ls-remote` confirms that
+exact merge commit on `origin/main`.
 
 If publication stops before the successful cleanup, retain the immutable
 approval record and its SHA-256 file. Remove only the explicitly derived
@@ -2523,7 +2555,8 @@ git -C "$toolkit_root" worktree prune
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
 baseline, feature, published SHA, manifest digest, and exact clean consumer
 snapshot from that record. Drift means recapturing and reverifying Task 6
-before editing.
+before editing. Capture the primary checkout's exact nonempty branch in the
+approved attempt before creating the migration worktree.
 
 ```bash
 set -euo pipefail
@@ -2546,6 +2579,34 @@ test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_m
 test "$required_head" = 36ba8ec83f91d35ba82961836bfc1731b00d9e8b || { echo "HARD STOP: health/meta missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: health/meta source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: health/meta HEAD drift; recapture Task 6"; exit 1; }
+intended_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: health/meta primary checkout is detached"; exit 1;
+}
+test -n "$intended_source_branch" || { echo "HARD STOP: health/meta primary branch is empty"; exit 1; }
+branch_state_path="$attempt_root/consumer-primary-branch-health-meta.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+approval_record_digest=$(sha256sum "$approval_record" | awk '{print $1}')
+expected_branch_state=$(printf 'consumer\thealth-meta\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$approval_record_digest" "$source_root" "$intended_source_branch")
+if [[ -e "$branch_state_path" || -L "$branch_state_path" || -e "$branch_state_digest_path" || -L "$branch_state_digest_path" ]]; then
+  test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+    test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+      echo "HARD STOP: health/meta branch-state collision is incomplete or not a regular file"; exit 1;
+    }
+  test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+    echo "HARD STOP: health/meta branch-state digest drift"; exit 1;
+  }
+  test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+    echo "HARD STOP: health/meta branch-state collision differs from current approved state"; exit 1;
+  }
+else
+  (set -o noclobber; printf '%s\n' "$expected_branch_state" > "$branch_state_path") || {
+    echo "HARD STOP: health/meta branch-state creation collision"; exit 1;
+  }
+  (set -o noclobber; sha256sum "$branch_state_path" > "$branch_state_digest_path") || {
+    echo "HARD STOP: health/meta branch-state digest creation collision"; exit 1;
+  }
+fi
 ```
 
 - [ ] **Step 1: Work in an isolated worktree**
@@ -2555,7 +2616,10 @@ The repository root is `~/d/health/meta`, **not** `~/d/health` — the latter is
 ```bash
 cd ~/d/health/meta && git rev-parse --show-toplevel   # confirm before proceeding
 git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
-cd .worktrees/sidecar-retirement && git branch --show-current
+cd .worktrees/sidecar-retirement
+test "$(git branch --show-current)" = sidecar-retirement || {
+  echo "HARD STOP: health/meta migration worktree is on the wrong branch"; exit 1;
+}
 ```
 
 - [ ] **Step 2: Update the explicit pin and relock**
@@ -2604,10 +2668,40 @@ Expected: no `FAIL` line and `OK`. The nine background papers are cited under `s
 - [ ] **Step 5: Commit atomically, merge, clean up**
 
 ```bash
+set -euo pipefail
 git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
-cd ~/d/health/meta && git branch --show-current   # must print the working branch; stop if not
-git merge --no-ff sidecar-retirement
-git worktree remove .worktrees/sidecar-retirement
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+test -n "$attempt_root" || { echo "HARD STOP: approval attempt root missing"; exit 1; }
+source_root=~/d/health/meta
+branch_state_path="$attempt_root/consumer-primary-branch-health-meta.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+  test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+    echo "HARD STOP: approved health/meta branch state is missing or not a regular file"; exit 1;
+  }
+test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+  echo "HARD STOP: approved health/meta branch-state digest drift"; exit 1;
+}
+intended_source_branch=$(awk -F '\t' '$1 == "branch" {print $2}' "$branch_state_path")
+test -n "$intended_source_branch" || { echo "HARD STOP: saved health/meta primary branch is empty"; exit 1; }
+expected_branch_state=$(printf 'consumer\thealth-meta\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$(sha256sum "$approval_record" | awk '{print $1}')" "$source_root" "$intended_source_branch")
+test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+  echo "HARD STOP: saved health/meta branch state is malformed or belongs to another task"; exit 1;
+}
+current_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: health/meta primary checkout is detached before merge"; exit 1;
+}
+test "$current_source_branch" = "$intended_source_branch" || {
+  echo "HARD STOP: health/meta primary branch changed from $intended_source_branch to $current_source_branch"; exit 1;
+}
+test -z "$(git -C "$source_root" status --porcelain)" || {
+  echo "HARD STOP: health/meta primary checkout is dirty before merge"; exit 1;
+}
+git -C "$source_root" merge --no-ff sidecar-retirement
+git -C "$source_root" worktree remove .worktrees/sidecar-retirement
 ```
 
 This repo has **no GitHub remote** — commit and merge only, never push. It is also Dropbox-synced, so its primary checkout floats; verify the branch before merging.
@@ -2621,7 +2715,9 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
 baseline, feature, published SHA, manifest digest, and exact clean consumer
-snapshot from that record. No migration is authorized after drift.
+snapshot from that record. No migration is authorized after drift. Capture the
+primary checkout's exact nonempty branch in the approved attempt before
+creating the migration worktree.
 
 ```bash
 set -euo pipefail
@@ -2644,6 +2740,34 @@ test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_m
 test "$required_head" = 25fd2cb475807c8f5af0d2553244368c55fd3ad2 || { echo "HARD STOP: evolution missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: evolution source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: evolution HEAD drift; recapture Task 6"; exit 1; }
+intended_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: evolution primary checkout is detached"; exit 1;
+}
+test -n "$intended_source_branch" || { echo "HARD STOP: evolution primary branch is empty"; exit 1; }
+branch_state_path="$attempt_root/consumer-primary-branch-evolution.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+approval_record_digest=$(sha256sum "$approval_record" | awk '{print $1}')
+expected_branch_state=$(printf 'consumer\tevolution\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$approval_record_digest" "$source_root" "$intended_source_branch")
+if [[ -e "$branch_state_path" || -L "$branch_state_path" || -e "$branch_state_digest_path" || -L "$branch_state_digest_path" ]]; then
+  test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+    test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+      echo "HARD STOP: evolution branch-state collision is incomplete or not a regular file"; exit 1;
+    }
+  test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+    echo "HARD STOP: evolution branch-state digest drift"; exit 1;
+  }
+  test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+    echo "HARD STOP: evolution branch-state collision differs from current approved state"; exit 1;
+  }
+else
+  (set -o noclobber; printf '%s\n' "$expected_branch_state" > "$branch_state_path") || {
+    echo "HARD STOP: evolution branch-state creation collision"; exit 1;
+  }
+  (set -o noclobber; sha256sum "$branch_state_path" > "$branch_state_digest_path") || {
+    echo "HARD STOP: evolution branch-state digest creation collision"; exit 1;
+  }
+fi
 ```
 
 Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50dc`.
@@ -2655,7 +2779,10 @@ The repository root is `~/d/cancer/mechanisms/evolution`, **not** `~/d/cancer` �
 ```bash
 cd ~/d/cancer/mechanisms/evolution && git rev-parse --show-toplevel   # confirm
 git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
-cd .worktrees/sidecar-retirement && git branch --show-current
+cd .worktrees/sidecar-retirement
+test "$(git branch --show-current)" = sidecar-retirement || {
+  echo "HARD STOP: evolution migration worktree is on the wrong branch"; exit 1;
+}
 ```
 
 - [ ] **Step 2: Relock to the Task 7 SHA**
@@ -2706,10 +2833,40 @@ Expected: a match — all 15 papers are active, so a notice and zero warnings.
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
 ```bash
+set -euo pipefail
 git add -A && git commit -m "chore: adopt toolkit background-review check and drop the validation sidecar"
-cd ~/d/cancer/mechanisms/evolution && git branch --show-current   # Dropbox-synced; verify
-git merge --no-ff sidecar-retirement
-git worktree remove .worktrees/sidecar-retirement
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+test -n "$attempt_root" || { echo "HARD STOP: approval attempt root missing"; exit 1; }
+source_root=~/d/cancer/mechanisms/evolution
+branch_state_path="$attempt_root/consumer-primary-branch-evolution.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+  test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+    echo "HARD STOP: approved evolution branch state is missing or not a regular file"; exit 1;
+  }
+test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+  echo "HARD STOP: approved evolution branch-state digest drift"; exit 1;
+}
+intended_source_branch=$(awk -F '\t' '$1 == "branch" {print $2}' "$branch_state_path")
+test -n "$intended_source_branch" || { echo "HARD STOP: saved evolution primary branch is empty"; exit 1; }
+expected_branch_state=$(printf 'consumer\tevolution\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$(sha256sum "$approval_record" | awk '{print $1}')" "$source_root" "$intended_source_branch")
+test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+  echo "HARD STOP: saved evolution branch state is malformed or belongs to another task"; exit 1;
+}
+current_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: evolution primary checkout is detached before merge"; exit 1;
+}
+test "$current_source_branch" = "$intended_source_branch" || {
+  echo "HARD STOP: evolution primary branch changed from $intended_source_branch to $current_source_branch"; exit 1;
+}
+test -z "$(git -C "$source_root" status --porcelain)" || {
+  echo "HARD STOP: evolution primary checkout is dirty before merge"; exit 1;
+}
+git -C "$source_root" merge --no-ff sidecar-retirement
+git -C "$source_root" worktree remove .worktrees/sidecar-retirement
 ```
 
 ---
@@ -2721,7 +2878,9 @@ git worktree remove .worktrees/sidecar-retirement
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
 baseline, feature, published SHA, manifest digest, and exact clean consumer
-snapshot from that record. No migration is authorized after drift.
+snapshot from that record. No migration is authorized after drift. Capture the
+primary checkout's exact nonempty branch in the approved attempt before
+creating the migration worktree.
 
 ```bash
 set -euo pipefail
@@ -2744,6 +2903,34 @@ test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_m
 test "$required_head" = 6796628c06a562ff45029f317a0f0fdf1a2fec9e || { echo "HARD STOP: protein-landscape missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: protein-landscape source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: protein-landscape HEAD drift; recapture Task 6"; exit 1; }
+intended_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: protein-landscape primary checkout is detached"; exit 1;
+}
+test -n "$intended_source_branch" || { echo "HARD STOP: protein-landscape primary branch is empty"; exit 1; }
+branch_state_path="$attempt_root/consumer-primary-branch-protein-landscape.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+approval_record_digest=$(sha256sum "$approval_record" | awk '{print $1}')
+expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$approval_record_digest" "$source_root" "$intended_source_branch")
+if [[ -e "$branch_state_path" || -L "$branch_state_path" || -e "$branch_state_digest_path" || -L "$branch_state_digest_path" ]]; then
+  test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+    test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+      echo "HARD STOP: protein-landscape branch-state collision is incomplete or not a regular file"; exit 1;
+    }
+  test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+    echo "HARD STOP: protein-landscape branch-state digest drift"; exit 1;
+  }
+  test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+    echo "HARD STOP: protein-landscape branch-state collision differs from current approved state"; exit 1;
+  }
+else
+  (set -o noclobber; printf '%s\n' "$expected_branch_state" > "$branch_state_path") || {
+    echo "HARD STOP: protein-landscape branch-state creation collision"; exit 1;
+  }
+  (set -o noclobber; sha256sum "$branch_state_path" > "$branch_state_digest_path") || {
+    echo "HARD STOP: protein-landscape branch-state digest creation collision"; exit 1;
+  }
+fi
 ```
 
 Its check is **not** promoted — the expensive-artifact check becomes a project-owned command with nothing enforcing it (design §4).
@@ -2753,6 +2940,9 @@ Its check is **not** promoted — the expensive-artifact check becomes a project
 ```bash
 cd ~/d/protein-landscape && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
 cd .worktrees/sidecar-retirement
+test "$(git branch --show-current)" = sidecar-retirement || {
+  echo "HARD STOP: protein-landscape migration worktree is on the wrong branch"; exit 1;
+}
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
@@ -2803,10 +2993,40 @@ Expected: no `FAIL` line, `OK`, no traceback — the crash in the method-slice i
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
 ```bash
+set -euo pipefail
 git add -A && git commit -m "chore: drop the validation sidecar; run artifact checks standalone"
-cd ~/d/protein-landscape && git branch --show-current
-git merge --no-ff sidecar-retirement
-git worktree remove .worktrees/sidecar-retirement
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+test -n "$attempt_root" || { echo "HARD STOP: approval attempt root missing"; exit 1; }
+source_root=~/d/protein-landscape
+branch_state_path="$attempt_root/consumer-primary-branch-protein-landscape.tsv"
+branch_state_digest_path="$branch_state_path.sha256"
+test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
+  test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
+    echo "HARD STOP: approved protein-landscape branch state is missing or not a regular file"; exit 1;
+  }
+test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" || {
+  echo "HARD STOP: approved protein-landscape branch-state digest drift"; exit 1;
+}
+intended_source_branch=$(awk -F '\t' '$1 == "branch" {print $2}' "$branch_state_path")
+test -n "$intended_source_branch" || { echo "HARD STOP: saved protein-landscape primary branch is empty"; exit 1; }
+expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
+  "$attempt_root" "$(sha256sum "$approval_record" | awk '{print $1}')" "$source_root" "$intended_source_branch")
+test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
+  echo "HARD STOP: saved protein-landscape branch state is malformed or belongs to another task"; exit 1;
+}
+current_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
+  echo "HARD STOP: protein-landscape primary checkout is detached before merge"; exit 1;
+}
+test "$current_source_branch" = "$intended_source_branch" || {
+  echo "HARD STOP: protein-landscape primary branch changed from $intended_source_branch to $current_source_branch"; exit 1;
+}
+test -z "$(git -C "$source_root" status --porcelain)" || {
+  echo "HARD STOP: protein-landscape primary checkout is dirty before merge"; exit 1;
+}
+git -C "$source_root" merge --no-ff sidecar-retirement
+git -C "$source_root" worktree remove .worktrees/sidecar-retirement
 ```
 
 ---
