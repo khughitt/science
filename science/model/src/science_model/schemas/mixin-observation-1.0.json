@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-observation-1.0.json",
+  "title": "science entity observation mixin",
+  "$comment": "Field set frozen by docs/plans/2026-07-30-schema-closure-observation-slice-inventory.md over 21 authored records, ALL in ~/d/health/processes/cycles -- the only single-project-root kind in the tranche, so its corpus can vary nothing and almost nothing here is decided by measuring it. Two omissions are decisions rather than absences: `profile` (0 of 21 authored, 0 of that project's 539 entity records authored, and NOT injected -- see the correction in the inventory doc) and `consolidated_into` (written onto a member's frontmatter by consolidate.py:183 and restored to a live path by unarchive; ruled a writer defect and fixed there, since the archive index is the only thing that reads it).",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^observation:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity. All 21 ids also satisfy `^observation:[a-z0-9][a-z0-9-]*$`, matching the descriptor's `strategy=\"slug\"` -- measured, not assumed -- and that is still not a reason to pin the slug here; the ruling is about the ids nobody has written yet."
+    },
+    "kind": {"const": "observation"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum. The descriptor (profiles/core.py:150) declares [active, retired, archived], but `observation` is not in _CERTIFIED_KINDS (validate/kind_severity.py:24), and status_vocabulary.py rules that an uncertified instrument may not fail anyone's build -- a schema enum fails it HARDER than a validate ERROR, refusing the record at load with no warning stage. Independently, status_vocabulary.py:20-22 rules there is deliberately no second per-kind vocabulary table because the two would drift; a JSON enum here is exactly that table, versioned on a different axis. All 21 records are `active`, which is precisely the uniform-corpus condition that let mixin-concept-1.0's premature enum survive its own certification -- so the corpus is not consulted for this field. REQUIRED, though: templates/observation.md prescribes `status`, so a record without one is a record the toolkit never produces."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "schema_profile": false
+  }
+}

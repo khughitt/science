@@ -288,6 +288,70 @@ UNHELD[("search", "version")] = (
     ),
 )
 
+# `observation` (schema-closure slice, 2026-07-30). Untyped, like `concept` and `search`, so the
+# gap is computed against `ProjectEntity`. SIX names, back to the `concept`/`method` count rather
+# than `search`'s five: this mixin admits `promoted_from` (14 of the 21 records carry it), so it
+# IS admitted-but-undeclared here. The count is derived per kind; copying the neighbouring block
+# in either direction would have been wrong, in opposite ways.
+#
+# Swept for again rather than copied. Two results worth recording because they differ from a
+# neighbour's entry: `iter_entity_markdown` was re-confirmed to reach `entities/observations/`
+# (labnote_export._discover_entities applies no kind filter at all -- entity_scan.py:44 rglobs the
+# whole tree), and `entities_inventory.py:144`, which looks like a second `tags` reader, reads
+# `science.yaml`'s project config rather than any entity's frontmatter.
+UNHELD[("observation", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter (`frontmatter.get('tags')`, labnote_export.py:861), kind-agnostic: "
+        "it walks every markdown under entities/ via iter_entity_markdown with no kind filter, "
+        "so entities/observations/*.md is in scope",
+    ),
+)
+UNHELD[("observation", "promoted_from")] = (
+    _BOTH,
+    PendingRuling(
+        "14 of the 21 observations author it and NOTHING reads it -- the same standing as "
+        "`concept`, reached differently. The only occurrence in the tree is a WRITE "
+        "(graph/decision_log.py:157) which stamps it onto `type: decision` owners, a different "
+        "kind, so it is not this population's writer either. The command that DID write these "
+        "(`science entities triage-aggregate --promote-coined`, used by health/processes/cycles "
+        "commit 433ad02) no longer exists in the toolkit, and all 14 values name "
+        "doc/observations/observations.yaml -- a file that same commit deliberately deleted. "
+        "Absent from the project's materialized graph (measured: 0 occurrences in both "
+        "graph.trig and composite.trig). Real provenance with no consumer and no live writer, "
+        "not a gap to close by deleting the field"
+    ),
+)
+UNHELD[("observation", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("observation", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("observation", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "the same finding as concept/paper/theme/topic: keyed `sources` reads exist across the "
+        "tree (uv config at tooling_dependency:73, a dataset proxy at datasets_register:381, "
+        "prose manifests at prose_epistemics:224, provenance-derived row dicts in "
+        "graph.store.queries), but none reads an observation entity's frontmatter `sources`"
+    ),
+)
+UNHELD[("observation", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- a fetched API record "
+        "(paper_fetch:494), the project config (labnote_export:876, project_package.serialize:102), "
+        "a migration journal (tasks_migrate:650), or a derived row dict (managed_artifacts:96). "
+        "None is observation frontmatter. The commons `version` reader does not apply: it "
+        "resolves a commons canonical by id, and no observation id resolves to one"
+    ),
+)
+
 for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,
