@@ -11,14 +11,21 @@ subclass -- `CORE_KIND_MODELS` has no entry, so it projects onto the generic
 `benchmark`) is unreachable for this kind: dead weight in a shared model, not an
 unvouched field. See "Untyped Kinds" in the slice procedure.
 
-Five admitted fields survive only because `ProjectEntity` is `extra="allow"`:
+Five admitted fields are declared by no model field and survive on `extra="allow"`:
 `contributors`, `licenses`, `sources`, `tags` and `version`. **No search record carries
 any of them today**, which is the difference from the concept slice -- there,
 `promoted_from` had 132 live records and the preservation was load-bearing immediately.
-Here it is latent: the fields are reachable through the schema and would be preserved
-only by the `extra="allow"` accident. `Entity` itself is `extra="ignore"`, so a typed
-`SearchEntity` added later without `extra="allow"` would silently start dropping them.
-These tests are what makes that fail loudly rather than quietly.
+Here it is latent.
+
+That preservation is a RULING, not an accident. `Entity` sets
+`model_config = ConfigDict(extra="allow")` (entities.py:325) and its docstring cites
+D3.3: *"Projections MUST preserve schema-valid extension fields. Never return to
+`extra='ignore'` -- that is the original defect."* `ProjectEntity` inherits it.
+
+So the risk these tests guard is narrower than "a subclass forgets": it is a subclass
+that explicitly overrides `model_config`, which D3.3 forbids. Mutating `Entity` to
+`extra="ignore"` turns ten assertions here red, which is what makes the ruling enforced
+rather than merely written down.
 
 This file runs while the mixin is DORMANT: it reads the packaged schema JSON and the
 registry's resolved class directly, neither of which needs `search` armed. The step-5
@@ -134,8 +141,9 @@ def test_each_undeclared_field_is_preserved_as_an_extra(field):
 def test_the_projection_still_allows_extras():
     """The mechanism the five undeclared-but-admitted fields depend on.
 
-    If `search` gains a typed subclass, this is the line that must be kept true -- or
-    those five fields need declaring on it.
+    Inherited from `Entity` (entities.py:325), where D3.3 rules it may never revert to
+    `extra="ignore"`. If `search` gains a typed subclass, this is the line that must be
+    kept true -- or those five fields need declaring on it.
     """
     assert _search_class().model_config.get("extra") == "allow"
 
