@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 7)
+**Status:** proposed (revision 8)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -14,6 +14,11 @@ serving — revisions 1–6 numbered it "sub-project A of three", independently 
 specs, and two of those three sub-projects were audit-program slices under other names. §0 fixes one
 vocabulary and records the boundaries the two schemes left unowned. It also closes the one defect that
 only became visible once the two were read together, which is the fourth pattern below.
+
+Revision 8 corrects one mechanism citation found while checking what an implementation plan would
+build on: the journal was to be created through `findings/paths.py`, whose every primitive anchors
+*inside* a project root, while the journal is deliberately outside one (§3.4.1). A fifth instance of
+the fourth pattern — the named component was real, and guaranteed the opposite of what was wanted.
 
 Four patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
@@ -396,9 +401,18 @@ cross-process and needs a contract rather than an object.
   checking what it opened would leave a directory that merely looks like a run id resolving to another
   run's baseline, which is the same class of defect as revision 4's unscoped project key: a name checked
   for shape and never for what it refers to.
-- **Open.** `science evidence open` writes the journal with `O_EXCL` through the anchored-descriptor
-  primitives in `findings/paths.py`, for the same reason `write_baseline` uses exclusive creation:
-  reusing a journal path discards the exposure record of whatever run already owns it.
+- **Open.** `science evidence open` creates the journal exclusively, for the same reason
+  `write_baseline` does: reusing a journal path discards the exposure record of whatever run already
+  owns it.
+
+  **Not through `findings/paths.py`.** Revisions 1–6 named those primitives, and they are the wrong
+  ones: every function there anchors to a project root — `open_dir_inside(project_root, …)`,
+  `resolve_inside(project_root, …)` — and guarantees the result is *inside* it. The journal is
+  deliberately outside the project tree (§3.3), so the guarantee those primitives exist to provide is
+  the negation of the one this path needs. The applicable precedent is `autonomy/baseline.py`:
+  exclusive `open("x")` plus `reject_baseline_inside_project`, which is containment in the direction
+  that is actually wanted. The same pairing covers the `served/` directory (§3.5). Citing a mechanism
+  by resemblance to its purpose rather than by what it guarantees is how the wrong one gets adopted.
 - **Append.** One line, `O_APPEND`, under a lock file held for the duration of the serve, so
   concurrent reviewers in one run cannot interleave a partial line. Appends never rewrite.
 - **Spend.** `requests_used` is **derived by counting `request` events**, not stored as mutable state.
