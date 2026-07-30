@@ -39,11 +39,18 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   `pager.grep` -- all INERT, under `grep`. `grep` never invokes a textconv filter and,
   like every other call in this module, always runs with captured output, so no pager is
   ever spawned.
-* `grep.column=true`, `color.grep=always`, `color.ui=always`, `log.showSignature=true`
-  alone -- RENDER, under `grep` or `log` respectively: they change output but spawn
-  nothing. The broker pins the argv keys this shapes (`--no-color`, explicit
-  `--pretty=format:`, etc.) rather than neutralizing them here, since there is nothing
-  here to neutralize.
+* `grep.column=true`, `color.grep=always`, `color.ui=always` -- RENDER, under `grep`:
+  they change output but spawn nothing. The broker pins the argv keys this shapes
+  (`--no-color`, etc.) rather than neutralizing them here, since there is nothing here
+  to neutralize.
+* `log.showSignature=true` alone -- also reads RENDERS, but not for the same reason.
+  Against the signed commit it still reaches the default `gpg` on `PATH`; with no
+  `gpg.program` configured that is a real signature-verification attempt, and the
+  program's own complaint (`gpg: no valid OpenPGP data found.`, etc.) lands in the same
+  stdout the probe compares -- the probe's marker only watches `./spawn.sh`, so it cannot
+  see a *default* binary run. This row is why `_HARDENING` carries
+  `log.showSignature=false` rather than leaving verification enabled and hoping no
+  `gpg.program` is ever configured.
 * `grep.patternType`, `grep.extendedRegexp`, `grep.lineNumber`, `grep.fullName`,
   `grep.threads`, `core.quotePath`, `log.date`, `log.decorate`, `log.abbrevCommit`,
   `log.mailmap`, `format.pretty` -- INERT under the canonical argv the broker builds:
