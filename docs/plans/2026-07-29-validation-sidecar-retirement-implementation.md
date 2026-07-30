@@ -2900,16 +2900,20 @@ findings. The first command is the exact Task 1 Step 2 reproduction.
 
 ```bash
 set +e
-uv run --frozen science validate --all --strict --verbose > /tmp/evo-after-verbose.txt
+uv run --frozen science validate --all --strict --verbose \
+  --output /tmp/evo-after-verbose-complete.txt > /tmp/evo-after-verbose-rendered.txt
 verbose_status=$?
 set -e
 test "$verbose_status" -eq 1 || {
   echo "FAIL: validator exited $verbose_status, expected approved baseline status 1"; exit 1;
 }
-rg 'no status:background papers' /tmp/evo-after-verbose.txt
+rg 'no status:background papers' /tmp/evo-after-verbose-complete.txt
 ```
 
 Expected: a match — all 15 papers are active, so a notice and zero warnings.
+`--output` is required because the verbose report exceeds the 30,000-visible-
+character rendered-output ceiling; without a complete output destination, the
+validator prints no report and only instructs the caller to use `--output`.
 
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
