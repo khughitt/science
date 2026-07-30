@@ -186,9 +186,18 @@ authored ISO string where there is none.
    subclass (`MethodEntity`), so step 5 was the two-directional check as originally
    written. See
    [`../plans/2026-07-29-schema-closure-method-slice-inventory.md`](../plans/2026-07-29-schema-closure-method-slice-inventory.md).
-3. `search` — **NEXT**.
-4. `observation`.
-5. `finding` last, because it alone carries a source migration.
+3. `search` — **DONE** (2026-07-30). 36 documents across **seven** project roots, no typed
+   subclass, no template, markdown-only. The first slice to carry a CORPUS migration. See
+   [`../plans/2026-07-30-schema-closure-search-slice-inventory.md`](../plans/2026-07-30-schema-closure-search-slice-inventory.md).
+4. `observation` — **NEXT**.
+5. `finding` last, because it alone carries a **source** migration.
+
+> **Corrected by slice 3:** this list used to say `finding` "alone carries a migration".
+> `finding` alone carries a *source* migration (`updated = created` over structured rows).
+> `search` carried a *corpus* migration — 7 records in 2 repos authored `task`/`task_ref`,
+> keys no production code read — and any slice can turn out to need one. The question step 1
+> must ask is not "is this the `finding` slice?" but "does any authored field have to move
+> before the mixin can refuse it?"
 
 Rough populations for the three remaining kinds, measured 2026-07-30 by scanning `kind:`
 declarations across the 7 projects. **These are scoping estimates, not inventories** — step
@@ -319,6 +328,40 @@ is kind-agnostic and belongs in its own branch, not inside a kind's slice.
   `adapter.load_raw(ref)` and cannot separate authored from injected keys; fixing it means
   the adapter reports what it injected per record — a `StorageAdapter` protocol change.
 
+### What the third slice added
+
+- **Certify per PROJECT ROOT, not per repo.** A repo-level scan reported "cancer 19" for
+  `search`; that is four projects (`multiple-myeloma` 8, `cbioportal` 8,
+  `mechanisms/evolution` 2, `meta` 1). The project root is the unit that owns a
+  `science.yaml` and therefore the unit whose extensions compose, so a repo-level count
+  can hide a project whose extensions were never checked.
+- **A migration target must be verified by RESOLUTION, not by grep.** Step 1 read
+  `t01`/`t02`/`t03` in mm30's `tasks/archive.md` — a file whose stated purpose is to
+  "preserve reference integrity" — and concluded `task:t01` was a valid ref. It is not:
+  `archive.md` declares aliases in prose and the resolver loads *entities*, so the
+  migration produced three `unresolved_reference` errors. The contrast made it visible —
+  `task:t828`, `task:t021`, `task:t761`, `task:t072` all resolve, because those name real
+  task records. The plausible-sounding file was what made the wrong answer attractive.
+- **`science validate` MUTATES the project it validates.** Repeated runs created ten
+  untracked topic entities (each a local copy of an existing commons overlay, each then
+  producing `overlay-local-duplicate` plus a cascade of `ambiguous_reference`), so the
+  reported error count climbed 3 → 24 → 109 → 168 across *identical* runs. A run also
+  modified a tracked task file, which then flipped that task's status in a rebuilt
+  `graph.trig`. Consequences: a before/after `validate` comparison is only valid between
+  restored-identical tree states, and a certification run's `knowledge/*.trig` must never
+  be committed — it absorbs unrelated mutations. Tracked as F6.
+- **Count the UNHELD entries, do not copy the block.** `search` needs FIVE, where
+  `concept` and `method` each need six: `promoted_from` is absent because the mixin never
+  admits it, so it cannot be admitted-but-undeclared. Copying the neighbouring block
+  would have added a sixth entry, and the manifest's two-way equality would have failed —
+  loudly, this time, but only because that guard exists.
+- **A mutation that does not apply looks exactly like a guard that does not fire.**
+  Mutating `extra="allow"` "on `ProjectEntity`" was a no-op — `ProjectEntity` does not
+  declare it, it inherits from `Entity` — and the clean run read as a blind guard. It also
+  exposed a false claim that both this slice and the shipped `concept` slice carried:
+  `Entity` is `extra="allow"` by D3.3, not `extra="ignore"`. **Verify that a mutation
+  changed what you think it changed before concluding anything from the result.**
+
 ### What the first slice cost that the procedure did not predict
 
 Arming broke four guards outside the schema layer, none of them in the graph:
@@ -357,6 +400,7 @@ is why the shape is recorded rather than just the title.
 | F3 | Unquoted YAML dates | 166 entity records + 21 kind-less process files. Either a corpus repair or normalizing dates before `validate_against_schema`. Kind-agnostic; needs its own branch and a design call between the two. | **No** — zero tranche-kind records affected (measured both markdown and YAML) |
 | F4 | `render_update`'s stale-owned-key hole | `final.pop(key, None)`, but that also drops the `legacy_*` triple, so it needs its own pass rather than a one-liner. | No |
 | F5 | Six unclosed core kinds carrying `promoted_from` | Resolved by their own slices; no separate work. | No |
+| F6 | `science validate` writes to the project it validates | Creates local topic entities duplicating commons overlays (one per run) and appends to tracked task files. Needs the topic-materialisation path traced to its writer; `validate` should be read-only. | Not a blocker, but it makes step-4/6 measurement untrustworthy unless the tree is restored between runs |
 
 **What the two corrections to shipped work taught, stated once here because both were
 the same failure:** a slice certifies its mixin against the corpus, and the corpus cannot
