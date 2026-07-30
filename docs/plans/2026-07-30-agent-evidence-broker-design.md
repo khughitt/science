@@ -323,6 +323,38 @@ the argv the broker builds, so that determinism does not depend on a config file
 | `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
 | all three | `LC_ALL=C`, `LANG=C` in the child environment |
 
+**What was probed, and what actually executes.** Against git 2.55.0 in a scratch
+repository, under exactly the argv the broker builds:
+
+| keys | op | verdict |
+|---|---|---|
+| `grep.patternType=fixed` | `grep` | **INERT** |
+| `grep.extendedRegexp=true` | `grep` | **INERT** |
+| `grep.lineNumber=false` | `grep` | **INERT** |
+| `grep.fullName=true` | `grep` | **INERT** |
+| `grep.column=true` | `grep` | **RENDERS** |
+| `grep.threads=1` | `grep` | **INERT** |
+| `color.grep=always` | `grep` | **RENDERS** |
+| `color.ui=always` | `grep` | **RENDERS** |
+| `core.quotePath=true` | `grep` | **INERT** |
+| `diff.probe.textconv=./spawn.sh` | `grep` | **INERT** |
+| `core.pager=./spawn.sh` | `grep` | **INERT** |
+| `pager.grep=./spawn.sh` | `grep` | **INERT** |
+| `log.date=rfc` | `log` | **INERT** |
+| `log.decorate=full` | `log` | **INERT** |
+| `log.abbrevCommit=true` | `log` | **INERT** |
+| `log.mailmap=true` | `log` | **INERT** |
+| `format.pretty=oneline` | `log` | **INERT** |
+| `log.showSignature=true` | `log` | **RENDERS** |
+| `gpg.program=./spawn.sh` | `log` | **INERT** |
+| `log.showSignature=true` + `gpg.program=./spawn.sh` | `log` | **EXECUTES** |
+| `core.pager=./spawn.sh` | `log` | **INERT** |
+
+Keys that EXECUTE are neutralized by `-c` in `_HARDENING`. Keys that only RENDER are
+pinned in argv, or by the environment where argv cannot reach them. Keys recorded
+INERT are left alone, per this module's standing rule: blanking them would assert a
+defense against behaviour this code has been shown not to have.
+
 **Argv is not the whole invocation; the environment is part of it.** `run_git` passes no `env` today,
 so git inherits the supervisor's locale, and a POSIX class such as `[[:alpha:]]` matches a different
 character set under `C` than under a UTF-8 locale. Two honest replays of the same pattern against the
