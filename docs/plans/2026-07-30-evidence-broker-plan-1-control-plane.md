@@ -1404,21 +1404,64 @@ was.
    This is recorded alongside the two defects above so the record does not read as though
    everything in the plan was wrong.
 
+### The whole-branch review, and what it changed
+
+A final review over the implementation range (`8989504f..b291a931`) returned **no Critical and
+no Important findings**. It verified rather than inspected: it hashed every production argv
+under `LC_ALL=C` against `en_US.UTF-8` at all three real `run_git` call sites
+(`autonomy/extract.py`, `autonomy/toolkit.py`, `validate/checks/autonomous_runs.py`) and found
+the output byte-identical, which is the evidence that the environment pin changes no existing
+caller's parse; and it put ten root-relocation shapes and eighteen hostile handles through
+`control_plane.py`, all refused.
+
+Its findings were closed in one wave (`2d69c109`), and two of them corrected text that this
+record, written earlier, still listed as deferred:
+
+- **`--no-column` was missing from §3.2.1's `grep` argv table.** Not cosmetic: measured on git
+  2.55.0, `grep.column=true` under `-z` inserts an extra NUL-separated field
+  (`HEAD:z.txt\0 1 \0 1 \0 x` against `HEAD:z.txt\0 1 \0 x`), so a positional parser misreads
+  every line. `git.py`'s docstring already claimed the broker pinned these keys, while the
+  table plan 2 implements from did not supply the pin. Now pinned.
+- **The `git.py` composite-EXECUTES bullet's explanatory clause** — deferred above as merely
+  imprecise — was a third recurrence of a defect this branch had already fixed twice: text
+  implying a signature key is harmless. Corrected so `gpg.program`-alone's inertness is
+  explained by there being no reason to verify, not by an unsigned commit.
+- Two further design defects the task-scoped reviews could not see: §3.2.1 still described
+  `grep` as unprobed and `run_git` as passing no `env`, both invalidated by this branch's own
+  work; and §3.4.2's sketch declared `control_plane_root()` with no argument while asserting,
+  nine lines later, that it is put through `reject_baseline_inside_project` — impossible
+  without a project root, and sitting on the line that states the containment guarantee.
+
 ### Deferred minors
 
-Four, carried forward from the ledger rather than dropped. None were addressed in this plan;
-they are noted here for whoever picks up plan 2 or a later cleanup pass.
+Carried forward rather than dropped, for whoever picks up plan 2 or a later cleanup pass.
 
-1. **Task 1** — `grep.column=true` measured RENDERS but is not named in the design's §3.2.1
-   argv-pinning table. It belongs to plan 2's `serve.py` argv construction, not to this plan.
-2. **Task 1** — the plan's probe script (scratch-only, never committed or linted) imports
-   `os` and `shutil` without using them, flagged by pyright in scratch. No repo impact.
-3. **Task 2** — the `git.py` docstring's composite-EXECUTES bullet phrase "neither key alone
-   fires: with no signed commit in view there is nothing to verify" is imprecise — all three
-   signature rows in Task 1's probe were measured *against* the crafted signed commit, not
-   against an unsigned one.
-4. **Task 3** — `_DATE_SHAPE_RE` uses `\d`, which is Unicode-aware (matches non-ASCII decimal
-   digits), while `date.fromisoformat` is ASCII-only. Not currently exploitable because the
-   two gates are coupled — a non-ASCII "digit" that passes the shape check still fails
-   `fromisoformat` — but the coupling is implicit rather than enforced, and is worth tightening
-   if either gate changes independently.
+1. **`reject_baseline_inside_project`'s diagnostic names the wrong thing.** An operator who
+   missets `SCIENCE_CONTROL_PLANE` is told "baseline path ... is inside the project root",
+   naming a variable they never set. The reuse itself is sound — the function answers exactly
+   the containment question the control-plane root asks — but the message should follow the
+   rename this plan deliberately deferred.
+2. **`run_slug` bounds the handle's alphabet but not its length.** `_AGENT_RE` and
+   `_SHORT_ID_RE` have no upper bound, so a very long handle resolves to one safe component
+   that plan 2's exclusive-create would reject with `ENAMETOOLONG`. No escape and no forgery;
+   noted because the module's own docstring cites path-limit exhaustion as a hazard it designed
+   the digest to avoid for `ProjectConfig.name`, and leaves it open for the component the actor
+   supplies.
+3. **Both locale guards are environment-conditional.** They ran unskipped here, but on an image
+   without `en_US.UTF-8` or git's French catalogue both skip, and the environment pin then has
+   no coverage at all — it could be dropped silently. Skipping rather than passing vacuously is
+   the right design; the coverage claim is conditional and should be read that way.
+4. **`_DATE_SHAPE_RE` uses `\d`, which is Unicode-aware** (it matches non-ASCII decimal digits),
+   while `date.fromisoformat` is ASCII-only. Not exploitable, because the two gates are coupled
+   — a fullwidth digit that passes the shape check still fails `fromisoformat` — but the
+   coupling is implicit. `[0-9]` is a strictly better one-character change whenever the line is
+   next touched.
+5. **The plan's probe script** (scratch-only, never committed or linted) imports `os` and
+   `shutil` without using them. No repo impact.
+
+### Verification at the final commit
+
+The full toolkit suite was re-run from `science/` at `2d69c109`, after the fix wave:
+`uv run --frozen pytest -q` → exit 0. This repository's pytest configuration suppresses the
+`N passed` summary line, so exit status is the available evidence; the per-module counts above
+come from scoped runs where they were observed directly.
