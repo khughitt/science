@@ -15,7 +15,7 @@
 - **No compatibility layer.** No shim for `hook`, no deprecation wrapper, no re-export. Deliberate breaking change.
 - **Run from the package directory.** `cd science` before any `uv run`. There is no root `pyproject.toml`.
 - **Test commands:** `cd science && uv run --frozen pytest`. Default runs exclude `snapshot` and `real_projects` markers; opt in with `-m snapshot` / `-m real_projects`.
-- **Full suite is ~10k tests / 2-3 min** — longer than the default 120s timeout. Run scoped selections per task; reserve the full run for Task 8 with an explicit long timeout.
+- **Full suite is ~10k tests / 2-3 min** — longer than the default 120s timeout. Run scoped selections per task; reserve the full run for Task 6 with an explicit long timeout.
 - **Never run two suites concurrently in the same worktree** — they race on shared test-output paths.
 - **Lint/types from `science/`:** `uv run ruff check` and `uv run pyright`. Pyright is configured once by the repo-root `pyrightconfig.json`; test directories are not type-checked.
 - **Every check fixture must contain a `science.yaml`.** `ValidateContext.from_project_root` raises `ValidateContextError` without it, before any check runs.
@@ -30,17 +30,51 @@
 
 ## Preconditions
 
-Both must hold before Task 1. Neither is optional.
+Both must hold before any further verification. Neither is optional. The
+recorded reconciliation target is
+`a7f3337e98515bc289781ef0a1eae7b9c2fe73a5`; a different remote value is a
+hard stop for a fresh reassessment, not permission to proceed against a moving
+target.
 
-- [ ] **P1: Plan 3 is merged to `main`.** `finding-convergence-plan-3` changes `validate/findings.py`, `validate/acceptance.py`, and `findings/acceptance_migration.py` — the finding and acceptance interfaces this work declares new rules against.
-- [ ] **P2: This branch is rebased onto post–Plan 3 `main`.**
+- [ ] **P1: Freshly fetch and record the reconciled `origin/main` SHA.**
 
 ```bash
-git -C ~/d/science/.worktrees/sidecar-retirement fetch origin && git -C ~/d/science/.worktrees/sidecar-retirement rebase origin/main
-( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest tests/validate -q )
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+recorded_origin_main_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+git -C "$toolkit_root" fetch --prune origin
+actual_origin_main_sha=$(git -C "$toolkit_root" rev-parse origin/main)
+test "$actual_origin_main_sha" = "$recorded_origin_main_sha" || {
+  echo "HARD STOP: origin/main is $actual_origin_main_sha; reassess before continuing"
+  exit 1
+}
+printf '%s\n' "$recorded_origin_main_sha" > "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha"
 ```
 
-Expected: rebase clean, validate tests green.
+- [ ] **P2: Rebase `sidecar-retirement` onto that exact remote commit before verification.**
+
+During conflict resolution, retain current main's deferred classification and
+tests for `findings migrate-acceptances`, and retain this feature's removal of
+`project artifacts port-validate-sidecar` plus the audited partition of
+`69 budgeted / 121 exempt / 102 deferred`. The only expected overlapping files
+are `science/src/science_tool/budget/registry.py` and
+`science/tests/test_budget_boundary.py`.
+
+```bash
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+recorded_origin_main_sha=$(cat "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha")
+test "$recorded_origin_main_sha" = a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 || {
+  echo "HARD STOP: recorded origin/main requires reassessment"
+  exit 1
+}
+git -C "$toolkit_root" rebase "$recorded_origin_main_sha"
+( cd "$toolkit_root/science" && uv run --frozen pytest -q tests/test_budget_boundary.py )
+```
+
+Expected: the rebase is clean after the explicit two-file resolution, the
+affected budget tests pass, and their audited partition remains
+`69 budgeted / 121 exempt / 102 deferred`.
 
 ---
 
@@ -69,12 +103,20 @@ Expected: rebase clean, validate tests green.
 
 ---
 
-### Task 1: Capture all baselines with one pinned toolkit revision
+### Task 1: Capture all baselines with one pinned toolkit revision (historical evidence)
 
 **Files:** none in-repo. Baselines land in `~/scratch/sidecar-baselines/`.
 
 **Interfaces:**
-- Produces: five baseline JSON files that Task 8 diffs against.
+- Produces: five historical baseline JSON files. The `b4af2a16` artifacts are
+  preserved as evidence of completed Task 1, but are superseded as parity
+  targets after the required rebase; Task 6 recaptures the four canonical
+  reports from `a7f3337e` and identical pinned consumer snapshots.
+
+**Historical record — do not rerun this completed task.** Its original
+`~/scratch/sidecar-baselines/` files must never be overwritten. The separate
+health/meta own-revision report remains informational and is not a parity
+target.
 
 Design §5.1: the four projects sit in three different states, and their installed revisions differ (`3b72db60` vs `ed6b50dc`). Comparing each project's own installed revision to a post-retirement toolkit would conflate this change with everything between those revisions. **All canonical baselines use one revision: post–Plan 3 `main`, pre-retirement.**
 
@@ -1286,200 +1328,336 @@ git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly
 
 ---
 
-### Task 6: Full-suite and canonical parity verification
+### Task 6: Rebase, full-suite, and immutable canonical parity verification
 
-**Files:** none modified.
+**Files:** none modified. Every prior Task 6 result, including the
+`af031823` suite and parity evidence, is superseded by this rebase. Preserve
+the old files; do not overwrite them or describe them as approval evidence.
 
-- [ ] **Step 1: Full toolkit suite**
+- [ ] **Step 1: Rebase on the recorded current main, resolve the two budget overlaps, and run focused budget tests first**
+
+Run Preconditions P1 and P2. Resolve only
+`science/src/science_tool/budget/registry.py` and
+`science/tests/test_budget_boundary.py` by retaining both current main's
+`findings migrate-acceptances` deferral and tests, and this feature's removal
+of `project artifacts port-validate-sidecar`. Confirm the resulting audited
+partition before any broader verification.
 
 ```bash
-( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest )
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+( cd "$toolkit_root/science" && uv run --frozen pytest -q tests/test_budget_boundary.py )
+rg -n 'findings migrate-acceptances|port-validate-sidecar|69 budgeted|121 exempt|102 deferred' \
+  "$toolkit_root/science/src/science_tool/budget/registry.py" \
+  "$toolkit_root/science/tests/test_budget_boundary.py"
 ```
 
-Run with a 600000 ms tool timeout. Expected: all pass.
+Expected: focused budget tests pass and the inspected registry/test evidence
+states `69 budgeted / 121 exempt / 102 deferred`.
 
-- [ ] **Step 2: Model suite and opt-in markers**
+- [ ] **Step 2: Create immutable, clean consumer snapshots and initialize the Task 6 manifest**
 
-```bash
-( cd ~/d/science/.worktrees/sidecar-retirement/science/model && uv run --frozen pytest )
-( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest -m snapshot )
-( cd ~/d/science/.worktrees/sidecar-retirement/science && uv run --frozen pytest -m real_projects )
-```
-
-- [ ] **Step 3: Build the after-toolkit environment and capture after-states**
-
-Task 1 never produced these; they must be created here.
-
-**No `set -e` here.** The three unmigrated external consumers still carry `validate_local.py`, so the new rule emits an ERROR and the CLI exits 1 (`cli.py` `ctx.exit(1)`). That exit is the *expected* result, not a failure — `set -e` would abort on the first project. Science/meta migrated in Task 5, so it must exit 0 with zero retirement findings.
+The historical `~/scratch/sidecar-baselines/` directory is read-only evidence.
+Create a new revision-labelled directory; a pre-existing target is a hard stop
+so no historical report can be overwritten. Use the exact same consumer
+snapshots for before and after reports. Do not use the floating primary
+`~/d/science/meta` checkout: science/meta is the clean migrated `meta/` tree
+in this rebased feature worktree.
 
 ```bash
-uv venv ~/scratch/sidecar-baselines/after-venv
-uv pip install --python ~/scratch/sidecar-baselines/after-venv/bin/python \
-  -e ~/d/science/.worktrees/sidecar-retirement/science
-BIN=~/scratch/sidecar-baselines/after-venv/bin/science
-OUT=~/scratch/sidecar-baselines
-declare -A ROOTS=(
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+baseline_toolkit_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+feature_branch_sha=$(git -C "$toolkit_root" rev-parse HEAD)
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+test ! -e "$baseline_root" || { echo "HARD STOP: preserve existing $baseline_root"; exit 1; }
+mkdir -p "$baseline_root/snapshots"
+declare -A source_root=(
+  [health-meta]=~/d/health/meta
   [evolution]=~/d/cancer/mechanisms/evolution
   [protein-landscape]=~/d/protein-landscape
-  [science-meta]=~/d/science/.worktrees/sidecar-retirement/meta
-  [health-meta]=~/d/health/meta
 )
-declare -A EXPECT=( [evolution]=1 [protein-landscape]=1 [health-meta]=1 [science-meta]=0 )
-fail=0
-for name in "${!ROOTS[@]}"; do
-  ( cd "${ROOTS[$name]}" && "$BIN" validate --all --strict --format json \
-      --output "$OUT/$name-after.json" )
-  status=$?
-  if [ "$status" -ne "${EXPECT[$name]}" ]; then
-    echo "FAIL $name: exit $status, expected ${EXPECT[$name]}"; fail=1
-  fi
-  test -s "$OUT/$name-after.json" || { echo "FAIL $name: empty report"; fail=1; }
+declare -A required_head=(
+  [health-meta]=36ba8ec83f91d35ba82961836bfc1731b00d9e8b
+  [evolution]=25fd2cb475807c8f5af0d2553244368c55fd3ad2
+  [protein-landscape]=6796628c06a562ff45029f317a0f0fdf1a2fec9e
+)
+for consumer_name in health-meta evolution protein-landscape; do
+  test -z "$(git -C "${source_root[$consumer_name]}" status --porcelain)" || {
+    echo "HARD STOP: $consumer_name source checkout is dirty"; exit 1;
+  }
+  actual_head=$(git -C "${source_root[$consumer_name]}" rev-parse HEAD)
+  test "$actual_head" = "${required_head[$consumer_name]}" || {
+    echo "HARD STOP: $consumer_name is $actual_head, expected ${required_head[$consumer_name]}"; exit 1;
+  }
+  git -C "${source_root[$consumer_name]}" worktree add --detach \
+    "$baseline_root/snapshots/$consumer_name" "$actual_head"
 done
-test "$fail" -eq 0 || { echo "after-state capture failed"; exit 1; }
+test -z "$(git -C "$toolkit_root" status --porcelain -- meta)" || {
+  echo "HARD STOP: rebased feature meta tree is dirty"; exit 1;
+}
+science_meta_tree=$(git -C "$toolkit_root" rev-parse "$feature_branch_sha:meta")
+printf 'toolkit-before\t%s\nfeature-branch\t%s\nconsumer\thealth-meta\t%s\t%s\tclean\nconsumer\tevolution\t%s\t%s\tclean\nconsumer\tprotein-landscape\t%s\t%s\tclean\nconsumer\tscience-meta\t%s\t%s\tclean\n' \
+  "$baseline_toolkit_sha" "$feature_branch_sha" "${source_root[health-meta]}" "${required_head[health-meta]}" \
+  "${source_root[evolution]}" "${required_head[evolution]}" "${source_root[protein-landscape]}" "${required_head[protein-landscape]}" \
+  "$toolkit_root/meta" "$science_meta_tree" \
+  > "$baseline_root/task-6-manifest.tsv"
 ```
 
-- [ ] **Step 3b: Assert the retirement finding count per project**
+- [ ] **Step 3: Run broader verification sequentially and explicitly compare known real-project failures with current main**
+
+Run no suites concurrently. The toolkit suite, model suite, snapshot marker,
+and real-project marker must all be rerun from the rebased feature worktree.
+The three known real-project failures are not waived: capture the complete
+output, then run their exact node IDs against both the `a7f3337e` toolkit
+worktree and the rebased feature worktree. Any changed result, or any
+additional failed node in the rebased marker, is a hard failure.
 
 ```bash
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+git -C "$toolkit_root" worktree add --detach "$baseline_root/toolkit-before" a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+( cd "$toolkit_root/science" && uv run --frozen pytest )
+printf 'command\ttoolkit-suite\tcd %s/science && uv run --frozen pytest\texit\t0\n' "$toolkit_root" >> "$baseline_root/task-6-manifest.tsv"
+( cd "$toolkit_root/science/model" && uv run --frozen pytest )
+printf 'command\tmodel-suite\tcd %s/science/model && uv run --frozen pytest\texit\t0\n' "$toolkit_root" >> "$baseline_root/task-6-manifest.tsv"
+( cd "$toolkit_root/science" && uv run --frozen pytest -m snapshot )
+printf 'command\tsnapshot-marker\tcd %s/science && uv run --frozen pytest -m snapshot\texit\t0\n' "$toolkit_root" >> "$baseline_root/task-6-manifest.tsv"
+set +e
+( cd "$toolkit_root/science" && uv run --frozen pytest -m real_projects ) > "$baseline_root/rebased-real-projects.txt" 2>&1
+rebased_real_status=$?
+set -e
+printf 'command\trebased-real-project-marker\texit\t%s\n' "$rebased_real_status" >> "$baseline_root/task-6-manifest.tsv"
+test "$(rg -c '^FAILED ' "$baseline_root/rebased-real-projects.txt")" -eq 3 || {
+  echo "HARD STOP: rebased real-project marker did not have exactly the three recorded failures"; exit 1;
+}
+run_case() {
+  local label=$1
+  local case_toolkit_root=$2
+  local node_id=$3
+  set +e
+  ( cd "$case_toolkit_root/science" && uv run --frozen pytest -q -m real_projects "$node_id" ) \
+    > "$baseline_root/$label-$(basename "$node_id").txt" 2>&1
+  local case_status=$?
+  set -e
+  printf '%s\t%s\t%s\n' "$label" "$node_id" "$case_status" >> "$baseline_root/known-real-project-statuses.tsv"
+}
+for node_id in \
+  tests/skills_coverage/test_coverage_real_projects.py::test_health_meta_commons_datasets_are_grounded_and_not_owned \
+  tests/test_correspondence_drift_real_projects.py::test_detector_fires_on_multiple_myeloma \
+  tests/validate/test_parity_canonical_body.py::test_real_downstream_projects_match_bash_validate_semantics; do
+  run_case current-main "$baseline_root/toolkit-before" "$node_id"
+  run_case rebased-feature "$toolkit_root" "$node_id"
+done
+awk -F '\t' '$1 == "current-main" { before[$2] = $3 } $1 == "rebased-feature" { if (!($2 in before) || before[$2] != $3) { print "HARD STOP: real-project behavior changed for " $2; failed = 1 } } END { exit failed }' \
+  "$baseline_root/known-real-project-statuses.tsv"
+```
+
+Record the three matched nonzero statuses as known external-state failures in
+the manifest and final parity table. They remain visible evidence, not a
+green result or an implicit exception.
+
+- [ ] **Step 4: Recapture four canonical before reports from `a7f3337e` and the pinned snapshots**
+
+Build the before environment from the exact old toolkit worktree, then write
+only into the new revision-labelled directory. The source path for science/meta
+is the rebased feature worktree's migrated tree for both before and after.
+
+```bash
+set -euo pipefail
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+uv venv "$baseline_root/before-venv"
+uv pip install --python "$baseline_root/before-venv/bin/python" -e "$baseline_root/toolkit-before/science"
+before_bin="$baseline_root/before-venv/bin/science"
+declare -A project_root=(
+  [health-meta]="$baseline_root/snapshots/health-meta"
+  [evolution]="$baseline_root/snapshots/evolution"
+  [protein-landscape]="$baseline_root/snapshots/protein-landscape"
+  [science-meta]=~/d/science/.worktrees/sidecar-retirement/meta
+)
+for consumer_name in health-meta evolution protein-landscape science-meta; do
+  set +e
+  ( cd "${project_root[$consumer_name]}" && SCIENCE_VALIDATE_DISABLE_SIDECAR=1 "$before_bin" validate --all --strict --format json \
+      --output "$baseline_root/$consumer_name-canonical.json" )
+  command_status=$?
+  set -e
+  test "$command_status" -le 1 || { echo "HARD STOP: before capture crashed for $consumer_name"; exit 1; }
+  test -s "$baseline_root/$consumer_name-canonical.json" || { echo "HARD STOP: missing before report for $consumer_name"; exit 1; }
+  printf 'command\tbefore-%s\texit\t%s\n' "$consumer_name" "$command_status" >> "$baseline_root/task-6-manifest.tsv"
+done
+```
+
+- [ ] **Step 5: Build the after environment from the rebased feature worktree and capture the same snapshots**
+
+```bash
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+feature_branch_sha=$(git -C "$toolkit_root" rev-parse HEAD)
+uv venv "$baseline_root/after-venv"
+uv pip install --python "$baseline_root/after-venv/bin/python" -e "$toolkit_root/science"
+after_bin="$baseline_root/after-venv/bin/science"
+declare -A project_root=(
+  [health-meta]="$baseline_root/snapshots/health-meta"
+  [evolution]="$baseline_root/snapshots/evolution"
+  [protein-landscape]="$baseline_root/snapshots/protein-landscape"
+  [science-meta]="$toolkit_root/meta"
+)
+declare -A expected_exit=( [health-meta]=1 [evolution]=1 [protein-landscape]=1 [science-meta]=0 )
+for consumer_name in health-meta evolution protein-landscape science-meta; do
+  set +e
+  ( cd "${project_root[$consumer_name]}" && "$after_bin" validate --all --strict --format json \
+      --output "$baseline_root/$consumer_name-after.json" )
+  command_status=$?
+  set -e
+  test "$command_status" = "${expected_exit[$consumer_name]}" || {
+    echo "HARD STOP: after capture for $consumer_name exited $command_status"; exit 1;
+  }
+  test -s "$baseline_root/$consumer_name-after.json" || { echo "HARD STOP: missing after report for $consumer_name"; exit 1; }
+  printf 'command\tafter-%s\texit\t%s\n' "$consumer_name" "$command_status" >> "$baseline_root/task-6-manifest.tsv"
+done
+printf 'toolkit-after\t%s\n' "$feature_branch_sha" >> "$baseline_root/task-6-manifest.tsv"
+```
+
+- [ ] **Step 6: Assert counts, complete-public-result parity, warnings, notices, and publish the auditable record**
+
+Use the existing complete-public-result projection: exclude only the two new
+rule prefixes, retain duplicate rows, and compare the resulting complete public
+dicts. Missing reports, dirty/mismatched consumer state, a new background
+review warning, or a parity mismatch are hard failures. Capture the report
+paths and SHA-256 checksums, both toolkit SHAs, branch SHA, every consumer
+path/HEAD-or-tree/clean state, each command and exit status in the manifest;
+missing data is a hard failure.
+
+```bash
+set -euo pipefail
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 python3 - <<'PY'
-import json, sys
-from pathlib import Path
-base = Path.home() / "scratch/sidecar-baselines"
-RULE = "validate.python-sidecar-removed"
-expect = {"evolution": 1, "protein-landscape": 1, "health-meta": 1, "science-meta": 0}
-bad = []
-for name, n in expect.items():
-    p = base / f"{name}-after.json"
-    if not p.exists():
-        sys.exit(f"FAIL missing {p}")
-    got = [r for r in json.loads(p.read_text())["results"] if r.get("rule") == RULE]
-    print(f"{name}: {len(got)} retirement finding(s), expected {n}")
-    if len(got) != n:
-        bad.append(name)
-sys.exit(f"FAIL {bad}" if bad else 0)
-PY
-```
-
-Expected: the three unmigrated consumers report exactly 1; science-meta reports 0.
-
-- [ ] **Step 4: Diff finding-by-finding, failing on any missing file**
-
-```bash
-python3 - <<'PY'
-import json, sys
+import json
+import sys
 from pathlib import Path
 
-base = Path.home() / "scratch/sidecar-baselines"
-names = ["evolution", "protein-landscape", "science-meta", "health-meta"]
-NEW_PREFIXES = ("papers.background-review", "validate.python-sidecar-removed")
-failed = False
-
-def rows(p: Path):
-    if not p.exists():
-        sys.exit(f"FAIL missing required file: {p}")   # never SKIP
-    return json.loads(p.read_text())["results"]
-
-def ident(rs):
-    # Compare COMPLETE public result dicts. `_legacy_result_projection` in
-    # validate/cli.py emits exactly six keys — severity, path, line, message,
-    # rule, task — so this detects severity, line, task, message, and duplicate
-    # changes. It does NOT see qualifiers beyond `task`, nor evidence beyond the
-    # first LocationEvidence line; those are not projected into public JSON.
-    # Qualifier-level parity for the two new rules is covered by their unit
-    # tests in Tasks 2 and 3, not here.
-    return sorted(
-        json.dumps(r, sort_keys=True)
-        for r in rs
-        if not str(r.get("rule") or "").startswith(NEW_PREFIXES)
-    )
-
-for n in names:
-    before = ident(rows(base / f"{n}-canonical.json"))
-    after = ident(rows(base / f"{n}-after.json"))
-    if before == after:
-        print(f"{n}: MATCH ({len(before)} rows)")
-    else:
-        failed = True
-        print(f"{n}: DIFF")
-        for row in set(before) ^ set(after):
-            print("   ", row)
-
-sys.exit(1 if failed else 0)
+base = Path.home() / "scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5"
+names = ("health-meta", "evolution", "protein-landscape", "science-meta")
+new_prefixes = ("papers.background-review", "validate.python-sidecar-removed")
+expected_retirement = {"health-meta": 1, "evolution": 1, "protein-landscape": 1, "science-meta": 0}
+table = ["| Consumer | Before rows | After rows | Retirement | Parity |", "| --- | ---: | ---: | ---: | --- |"]
+for name in names:
+    before_path = base / f"{name}-canonical.json"
+    after_path = base / f"{name}-after.json"
+    if not before_path.is_file() or not after_path.is_file():
+        sys.exit(f"HARD STOP: missing report for {name}")
+    before = json.loads(before_path.read_text())["results"]
+    after = json.loads(after_path.read_text())["results"]
+    before_public = sorted(json.dumps(row, sort_keys=True) for row in before if not str(row.get("rule") or "").startswith(new_prefixes))
+    after_public = sorted(json.dumps(row, sort_keys=True) for row in after if not str(row.get("rule") or "").startswith(new_prefixes))
+    retirement = sum(row.get("rule") == "validate.python-sidecar-removed" for row in after)
+    warnings = [row for row in after if str(row.get("rule") or "").startswith("papers.background-review")]
+    if before_public != after_public or retirement != expected_retirement[name] or warnings:
+        sys.exit(f"HARD STOP: parity/count/warning failure for {name}")
+    table.append(f"| {name} | {len(before)} | {len(after)} | {retirement} | MATCH |")
+(base / "parity-table.md").write_text("\n".join(table) + "\n")
 PY
+after_bin="$baseline_root/after-venv/bin/science"
+( cd "$baseline_root/snapshots/evolution" && "$after_bin" validate --all --strict --verbose ) | rg 'no status:background papers'
+( cd "$baseline_root/snapshots/health-meta" && "$after_bin" validate --all --strict --verbose ) | rg '9 status:background paper'
+sha256sum "$baseline_root"/*-canonical.json "$baseline_root"/*-after.json >> "$baseline_root/task-6-manifest.tsv"
+printf 'report\t%s\t%s\n' "$baseline_root/parity-table.md" "$(sha256sum "$baseline_root/parity-table.md" | awk '{print $1}')" >> "$baseline_root/task-6-manifest.tsv"
+test "$(rg -c '^toolkit-before|^toolkit-after|^feature-branch|^consumer|^command|^[0-9a-f]{64}  |^report' "$baseline_root/task-6-manifest.tsv")" -ge 22 || {
+  echo "HARD STOP: incomplete Task 6 manifest"; exit 1;
+}
+sha256sum "$baseline_root/task-6-manifest.tsv" > "$baseline_root/task-6-manifest.sha256"
+{
+  printf '# Task 6 parity — toolkit before %s; toolkit after %s; branch %s\n\n' \
+    a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$baseline_root/task-6-manifest.tsv")" "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$baseline_root/task-6-manifest.tsv")"
+  printf 'Pinned consumers: health/meta `36ba8ec83f91d35ba82961836bfc1731b00d9e8b`; evolution `25fd2cb475807c8f5af0d2553244368c55fd3ad2`; protein-landscape `6796628c06a562ff45029f317a0f0fdf1a2fec9e`; science/meta tree `%s`.\n\n' "$(awk -F '\t' '$1 == "consumer" && $2 == "science-meta" {print $4}' "$baseline_root/task-6-manifest.tsv")"
+  cat "$baseline_root/parity-table.md"
+} > "$baseline_root/final-parity-table.md"
 ```
 
-Expected: `MATCH` for all four, exit 0. Any missing file is a hard failure, never a skip.
-
-- [ ] **Step 5: Confirm zero new warnings, and check notices out-of-band**
-
-Per design §5.2 the corpus is compliant.
-
-```bash
-python3 - <<'PY'
-import json, sys
-from pathlib import Path
-base = Path.home() / "scratch/sidecar-baselines"
-for n in ("evolution", "health-meta"):
-    rs = json.loads((base / f"{n}-after.json").read_text())["results"]
-    warns = [r for r in rs if str(r.get("rule") or "").startswith("papers.background-review")]
-    print(n, "background-review warnings:", len(warns))
-    if warns:
-        sys.exit(f"FAIL {n}: expected zero; corpus changed or roots are wrong")
-PY
-```
-
-**Notices are not carried in `--format json`.** Verify them through verbose text instead:
-
-```bash
-BIN=~/scratch/sidecar-baselines/after-venv/bin/science
-( cd ~/d/cancer/mechanisms/evolution && "$BIN" validate --all --strict --verbose ) \
-  | rg 'no status:background papers'
-( cd ~/d/health/meta && "$BIN" validate --all --strict --verbose ) \
-  | rg '9 status:background paper'
-```
-
-Expected: evolution matches the no-background notice (all 15 papers are active); health/meta matches the 9-paper, 0-violation notice.
-
-If either produces a **warning**, stop. Either the corpus changed since 2026-07-29 or the roots are wrong. Do not adjust the expectation to match the output.
-
-- [ ] **Step 6: Record results — no code change**
+The manifest, its detached SHA-256 file, `final-parity-table.md`, four before
+reports, four after reports, verbose-notice evidence, and the explicit
+current-main comparison are the Task 6 result. Re-run this entire task after
+any rebase, merge-resolution change, or consumer snapshot drift.
 
 ---
 
-### Task 7: Approval gate, then publish
+### Task 7: Approval gate, then publish from a verified integration worktree
 
 **Files:** none.
 
-A consumer cannot resolve an unpushed revision, so this must precede Tasks 8–10. It is also the one irreversible step in the plan.
+A consumer cannot resolve an unpushed revision, so this must precede Tasks 8–10. It is the one irreversible step in the plan. Never merge or publish from
+the divergent local `main` checkout at `395f3af22425ac30926fc6c46b71d76366e70902`.
 
 - [ ] **Step 1: Obtain explicit approval to merge and push**
 
-Present the Task 6 parity table and ask for a go/no-go on pushing `origin/main`. **Do not proceed without an explicit yes.** Prior approval of the design is not approval of the push.
+Present Task 6's final parity table, manifest SHA-256, and explicitly recorded
+real-project comparison; ask for a go/no-go on pushing `origin/main`. **Do not
+proceed without an explicit yes.** Prior approval of the design is not approval
+of the push.
 
-- [ ] **Step 2: Merge on a verified branch**
-
-This repo's `main` checkout floats because it is Dropbox-synced.
-
-```bash
-cd ~/d/science
-git branch --show-current   # must print: main — stop if it does not
-git merge --no-ff sidecar-retirement
-```
-
-- [ ] **Step 3: Push and confirm reachability**
+- [ ] **Step 2: Refetch, require the recorded remote SHA, and merge only in a temporary integration worktree**
 
 ```bash
-git push origin main
-git ls-remote origin main
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+recorded_origin_main_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+integration_root=~/scratch/sidecar-publish-a7f3337e
+git -C "$toolkit_root" fetch --prune origin
+actual_origin_main_sha=$(git -C "$toolkit_root" rev-parse origin/main)
+test "$actual_origin_main_sha" = "$recorded_origin_main_sha" || {
+  echo "HARD STOP: origin/main changed; reassess and recapture Task 6"; exit 1;
+}
+test ! -e "$integration_root" || { echo "HARD STOP: preserve existing $integration_root"; exit 1; }
+git -C "$toolkit_root" worktree add -b sidecar-retirement-publish "$integration_root" "$recorded_origin_main_sha"
+git -C "$integration_root" merge --no-ff sidecar-retirement -m "merge: retire validation sidecar"
+merge_sha=$(git -C "$integration_root" rev-parse HEAD)
+first_parent_sha=$(git -C "$integration_root" rev-parse HEAD^1)
+test "$first_parent_sha" = "$recorded_origin_main_sha" || {
+  echo "HARD STOP: merge first parent is $first_parent_sha"; exit 1;
+}
 ```
 
-Expected: remote SHA matches local `main`. Record it — Tasks 8–10 pin to it.
+- [ ] **Step 3: Reconfirm the approved Task 6 gate, push the integration HEAD, and verify the remote**
+
+```bash
+set -euo pipefail
+integration_root=~/scratch/sidecar-publish-a7f3337e
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+test -s "$baseline_root/task-6-manifest.sha256" || { echo "HARD STOP: missing Task 6 manifest SHA"; exit 1; }
+test "$(sha256sum "$baseline_root/task-6-manifest.tsv")" = "$(cat "$baseline_root/task-6-manifest.sha256")" || {
+  echo "HARD STOP: Task 6 manifest changed after approval"; exit 1;
+}
+merge_sha=$(git -C "$integration_root" rev-parse HEAD)
+git -C "$integration_root" push origin HEAD:main
+remote_main_sha=$(git -C "$integration_root" ls-remote origin refs/heads/main | awk '{print $1}')
+test "$remote_main_sha" = "$merge_sha" || { echo "HARD STOP: remote main is $remote_main_sha"; exit 1; }
+printf '%s\n' "$merge_sha" > "$baseline_root/published-main.sha"
+```
+
+Expected: the merge commit's first parent is the recorded remote SHA and
+`git ls-remote` confirms that exact merge commit on `origin/main`.
 
 ---
 
 ### Task 8: Migrate `~/d/health/meta` atomically
 
 **Files:** `pyproject.toml:13`, `uv.lock`, `AGENTS.md`; delete `validate_local.py`
+
+**Entry gate:** Before creating a worktree, require the recorded Task 6
+manifest SHA and the exact clean source snapshot. Drift means recapturing and
+reverifying Task 6 before editing.
+
+```bash
+set -euo pipefail
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+source_root=~/d/health/meta
+required_head=36ba8ec83f91d35ba82961836bfc1731b00d9e8b
+test "$(sha256sum "$baseline_root/task-6-manifest.tsv")" = "$(cat "$baseline_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: health/meta source drift"; exit 1; }
+test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: health/meta HEAD drift; recapture Task 6"; exit 1; }
+```
 
 - [ ] **Step 1: Work in an isolated worktree**
 
@@ -1545,6 +1723,19 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 ### Task 9: Migrate `~/d/cancer/mechanisms/evolution` atomically
 
 **Files:** `uv.lock:3062`, `AGENTS.md`; delete `validate_local.py`
+
+**Entry gate:** Run the same manifest integrity and clean-snapshot gate before
+editing; no migration is authorized after drift.
+
+```bash
+set -euo pipefail
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+source_root=~/d/cancer/mechanisms/evolution
+required_head=25fd2cb475807c8f5af0d2553244368c55fd3ad2
+test "$(sha256sum "$baseline_root/task-6-manifest.tsv")" = "$(cat "$baseline_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: evolution source drift"; exit 1; }
+test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: evolution HEAD drift; recapture Task 6"; exit 1; }
+```
 
 Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50dc`.
 
@@ -1612,6 +1803,19 @@ git worktree remove .worktrees/sidecar-retirement
 ### Task 10: Migrate `~/d/protein-landscape` atomically
 
 **Files:** `uv.lock:4412`, `AGENTS.md`; delete `validate_local.py`
+
+**Entry gate:** Run the same manifest integrity and clean-snapshot gate before
+editing; no migration is authorized after drift.
+
+```bash
+set -euo pipefail
+baseline_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+source_root=~/d/protein-landscape
+required_head=6796628c06a562ff45029f317a0f0fdf1a2fec9e
+test "$(sha256sum "$baseline_root/task-6-manifest.tsv")" = "$(cat "$baseline_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: protein-landscape source drift"; exit 1; }
+test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: protein-landscape HEAD drift; recapture Task 6"; exit 1; }
+```
 
 Its check is **not** promoted — the expensive-artifact check becomes a project-owned command with nothing enforcing it (design §4).
 
