@@ -7,10 +7,10 @@ under `doc/plans/historical/`; this page records the rules enforced by
 
 ## Validation entry points
 
-- `validate.sh` runs `python -m t034_validator evidence/` through
-  `validate_local.py`.
-- `python -m t034_validator evidence/` validates every top-level `.yaml` or
-  `.yml` payload in `meta/evidence/`.
+- Run t034 validation directly: `uv run python -m t034_validator evidence/`.
+  It is no longer part of `science validate`; nothing enforces that it runs.
+  The command validates every top-level `.yaml` or `.yml` payload in
+  `meta/evidence/`.
 - `tests/test_t034_validator.py` is the durable test suite extracted from the
   three t034 prototype slices: causal-graph structure, MR graph-model role and
   field rules, and cross-payload effective-code propagation.

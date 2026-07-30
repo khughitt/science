@@ -71,7 +71,9 @@ This question asks which of those stages should become explicit Science graph ar
 
 Task `[t034]` resolved the first implemented slice of this question. The durable
 contract is `meta/evidence/t034-causal-graph-contract.md`; production validation
-lives in `meta/src/t034_validator/` and runs through `meta/validate_local.py`.
+lies in `meta/src/t034_validator/`. Run t034 validation directly: `uv run
+python -m t034_validator evidence/`. It is no longer part of `science validate`;
+nothing enforces that it runs.
 The contract covers the graph-object taxonomy, edge-role guardrails, MR
 graph-model authoring rules, effective-code propagation/retirement, and the
 `causal-effect-estimate` `strengthen-belief` consumer rule.
