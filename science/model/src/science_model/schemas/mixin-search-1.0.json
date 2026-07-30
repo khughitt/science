@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-search-1.0.json",
+  "title": "science entity search mixin",
+  "$comment": "DORMANT until the search slice's final step arms it. Composes over base 2.0. Field set frozen by docs/plans/2026-07-30-schema-closure-search-slice-inventory.md, measured over 36 authored records in cancer/multiple-myeloma (19), health (10) and natural-systems (7). Markdown-only: no project authors a `search` row in knowledge/sources/**.yaml, so unlike `finding` this kind carries no source migration -- but see `task_ref` below for the corpus migration it does carry.",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^search:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity. All 36 ids satisfy `^search:\\d{4}-[a-z0-9-]+$` today -- the numeric `strategy` on the descriptor produces that -- and that is still not a reason to pin it here; the ruling is about the ids nobody has written yet."
+    },
+    "kind": {"const": "search"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum, per the standing ruling: a mixin may not enum-lock `status` before its kind joins _CERTIFIED_KINDS (validate/kind_severity.py:24), and `search` is not in it. The descriptor (profiles/core.py:569) declares active/complete/retired/archived. ALL 36 records are `active` -- which is precisely the uniform-corpus condition that let mixin-concept-1.0's premature enum survive its own certification, so the corpus is not consulted for this field at all. A corpus that never exercises a value is no evidence about that value in either direction."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "ADMITTED AT ZERO OCCURRENCES, and load-bearing for exactly that reason. No search record authors `profile`, but graph/sources.py:1041 defaults it INTO `raw` whenever the author omits it, and MarkdownAdapter.INJECTED_KEYS is {content, file_path, canonical_id} -- `profile` is not hidden from validation. Omitting it here would pass every corpus check and then refuse every record at load. The precedent is empirical rather than assumed: mixin-concept-1.1 admits exactly `profile` and none of the other keys mutated into `raw` nearby (`type`, `content_preview`, `canonical_id`, `file_path`, `content`), and `concept` is armed with 329 records loading today."
+    },
+    "related": {
+      "type": "array",
+      "items": {"type": "string"},
+      "$comment": "25 of 36 records. Also the migration target for the retired `task`/`task_ref` keys -- consolidation_candidates.py:92 `_task_refs()` reads THIS field and selects `task:`-prefixed items, so a task association expressed here is the only one production actually sees."
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "schema_profile": false
+  }
+}
