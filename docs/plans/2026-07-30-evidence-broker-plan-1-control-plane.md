@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make an autonomous run addressable from its id, and make `git grep` / `git log` produce byte-identical output regardless of repository configuration or parent locale.
+**Goal:** Make an autonomous run addressable from its id, and close the two determinism hazards that live *below* argv — the parent locale, and any git config key that executes a program under `grep` or `log`.
 
-**Architecture:** Two independent modules under `science/src/science_tool/autonomy/`, neither of which mentions evidence. `control_plane.py` is a pure path calculator: a project-scoped, digest-keyed root under which a run id resolves to exactly one directory. `git.py` gains a probed hardening set for two subcommands it has never run, plus an environment pin, so that a later replay comparing two hashes of the same query is comparing the same query.
+**Architecture:** Two independent modules under `science/src/science_tool/autonomy/`, neither of which mentions evidence. `control_plane.py` is a pure path calculator: a project-scoped, digest-keyed root under which a run id resolves to exactly one directory. `git.py` gains a probed hardening set for two subcommands it has never run, plus an environment pin.
+
+**What this does not claim.** Byte-identical output *regardless of repository configuration* is a two-part property, and this plan delivers one part. The per-operation argv pins of §3.2.1's table — explicit pattern type, `--no-color`, `-n`, `-z`, `--no-decorate`, an explicit `--pretty` — are built by `evidence_broker/serve.py` and land with it in plan 2, along with the §7 tests that compare served bytes across configurations. Plan 1 owns the half `run_git` can be held to on its own: the environment, and the `-c` hardening for keys that execute.
 
 **Tech Stack:** Python 3.12+, Pydantic v2 (already present; this plan adds no models), `click`, `pytest`. No new dependencies.
 
@@ -50,22 +52,19 @@ control-plane root, and handle refusal before any path join.
 
 ## Design deviations recorded here
 
-**One, and it is a narrowing.** §3.4.1 says the `--session` handle is "parsed as a
-*generated run id* — the same constructive check `AutonomousRunRecord._validate_identity`
-performs, rebuilding `<date>-<agent>-<short-id>` and comparing". That check is constructive
-*because the record names its own agent* (`autonomous_runs.py:195-228`, "the agent slug
-contains hyphens, so `<date>-<agent>-<short>` has more than one reading"). A bare handle
-names no agent, so nothing can be rebuilt from it and compared.
+**None.** §3.4.1's two-part rule is implemented as written, and its first half is stronger
+than it might read. The handle *is* validated as a generated run id, not merely as a safe
+path component: `_SHORT_ID_RE` is `[a-z0-9]{4,}` (`autonomous_runs.py:30`), so a short id
+can never contain a hyphen, which makes `rpartition("-")` an unambiguous split of
+`<agent>-<short-id>` even though the agent slug may contain hyphens. Task 3 splits that way
+and hands both parts to the shipped `validate_run_identity`, so a handle no `generate_run_id`
+call could ever have produced — `2026-07-30-a`, a three-character suffix, an agent with an
+underscore — is refused before any path join.
 
-What a bare handle can be checked for is structure — a real ISO date, then a kebab-case
-remainder with no path separator, no `..`, no NUL — which is sufficient for the property the
-check exists to provide: the handle cannot escape the control plane when joined to a path.
-The *identity* guarantee comes from the second half of the same design bullet, which is
-unchanged and is what actually carries it: after loading, the baseline's own `run_id` must
-equal the handle. Task 3 implements both halves and Task 3's tests assert both.
-
-This plan implements the narrowed rule. Amending §3.4.1's wording is a one-line design
-follow-up, not a blocker.
+The second half — after loading, the baseline's own `run_id` must equal the handle — is
+plan 2's, because it needs a baseline in the control plane to load, and only a
+`--broker-spec` run places one there. It appears in the deferred table above; the two halves
+are not both in Task 3.
 
 ## Global Constraints
 
@@ -144,6 +143,44 @@ from pathlib import Path
 
 GREP_ARGV = ("grep", "-n", "-e", "alpha", "HEAD")
 LOG_ARGV = ("log", "--pretty=format:%H %aI", "HEAD", "--", "sample.txt")
+SIGNED_LOG_ARGV = ("log", "--pretty=format:%H %aI", "SIGNED")
+
+FAKE_SIGNATURE = """-----BEGIN PGP SIGNATURE-----
+
+ not a real signature; git must still hand it to the configured program
+ -----END PGP SIGNATURE-----"""
+
+
+def make_signed_commit(root: Path) -> None:
+    """A commit carrying a `gpgsig` header, built WITHOUT a signing key.
+
+    Signature verification is the one execution path here that needs an object to verify:
+    `log.showSignature` alone against unsigned history spawns nothing, and `gpg.program`
+    alone is never consulted. Probing them separately reports INERT twice and concludes,
+    falsely, that git log executes nothing. git does not validate the header's contents
+    before handing it to the program, so a fabricated block is enough to trigger the call.
+    """
+    tree = run(root, "rev-parse", "HEAD^{tree}").stdout.decode().strip()
+    parent = run(root, "rev-parse", "HEAD").stdout.decode().strip()
+    ident = "Probe <probe@example.invalid> 0 +0000"
+    body = (
+        f"tree {tree}\n"
+        f"parent {parent}\n"
+        f"author {ident}\n"
+        f"committer {ident}\n"
+        f"gpgsig {FAKE_SIGNATURE}\n"
+        "\n"
+        "signed\n"
+    )
+    completed = subprocess.run(
+        ["git", "-C", str(root), "hash-object", "-t", "commit", "-w", "--stdin"],
+        input=body.encode("utf-8"),
+        capture_output=True,
+    )
+    sha = completed.stdout.decode().strip()
+    if not sha:
+        raise SystemExit(f"could not write the signed commit: {completed.stderr.decode()}")
+    run(root, "update-ref", "refs/heads/SIGNED", sha)
 
 
 def build_repo(root: Path, marker: Path) -> None:
@@ -167,19 +204,37 @@ def run(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
-def probe(key: str, value: str, argv: tuple[str, ...], *, attribute: str | None = None) -> str:
+def probe(
+    config: tuple[tuple[str, str], ...],
+    argv: tuple[str, ...],
+    *,
+    attribute: str | None = None,
+    signed: bool = False,
+) -> str:
+    """`config` is a TUPLE of key/value pairs, not one pair.
+
+    Some execution paths need two keys set together and neither alone demonstrates
+    anything -- `log.showSignature` plus `gpg.program` is the case that motivated the
+    shape. Probing key-at-a-time would report both INERT and harden neither.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "repo"
         marker = Path(tmp) / "EXECUTED"
         build_repo(root, marker)
+        if signed:
+            make_signed_commit(root)
         baseline = run(root, *argv).stdout
 
-        run(root, "config", key, value)
+        for key, value in config:
+            run(root, "config", key, value)
         if attribute is not None:
             (root / ".gitattributes").write_text(attribute, encoding="utf-8")
             run(root, "add", "-A")
             run(root, "commit", "-q", "-m", "attr")
-            baseline = run(root, "-c", f"{key}=", *argv).stdout
+            # Re-baseline with every configured key blanked, so the comparison isolates the
+            # keys rather than the attribute commit that had to be added alongside them.
+            blanked = [arg for key, _ in config for arg in ("-c", f"{key}=")]
+            baseline = run(root, *blanked, *argv).stdout
 
         after = run(root, *argv).stdout
         if marker.exists():
@@ -187,42 +242,52 @@ def probe(key: str, value: str, argv: tuple[str, ...], *, attribute: str | None 
         return "RENDERS" if after != baseline else "INERT"
 
 
-CANDIDATES: list[tuple[str, str, tuple[str, ...], str | None]] = [
+Candidate = tuple[tuple[tuple[str, str], ...], tuple[str, ...], str | None, bool]
+
+CANDIDATES: list[Candidate] = [
     # grep -- rendering and meaning
-    ("grep.patternType", "fixed", GREP_ARGV, None),
-    ("grep.extendedRegexp", "true", GREP_ARGV, None),
-    ("grep.lineNumber", "false", GREP_ARGV, None),
-    ("grep.fullName", "true", GREP_ARGV, None),
-    ("grep.column", "true", GREP_ARGV, None),
-    ("grep.threads", "1", GREP_ARGV, None),
-    ("color.grep", "always", GREP_ARGV, None),
-    ("color.ui", "always", GREP_ARGV, None),
-    ("core.quotePath", "true", GREP_ARGV, None),
+    ((("grep.patternType", "fixed"),), GREP_ARGV, None, False),
+    ((("grep.extendedRegexp", "true"),), GREP_ARGV, None, False),
+    ((("grep.lineNumber", "false"),), GREP_ARGV, None, False),
+    ((("grep.fullName", "true"),), GREP_ARGV, None, False),
+    ((("grep.column", "true"),), GREP_ARGV, None, False),
+    ((("grep.threads", "1"),), GREP_ARGV, None, False),
+    ((("color.grep", "always"),), GREP_ARGV, None, False),
+    ((("color.ui", "always"),), GREP_ARGV, None, False),
+    ((("core.quotePath", "true"),), GREP_ARGV, None, False),
     # grep -- execution
-    ("diff.probe.textconv", "./spawn.sh", GREP_ARGV, "*.txt diff=probe\n"),
-    ("core.pager", "./spawn.sh", GREP_ARGV, None),
-    ("pager.grep", "./spawn.sh", GREP_ARGV, None),
+    ((("diff.probe.textconv", "./spawn.sh"),), GREP_ARGV, "*.txt diff=probe\n", False),
+    ((("core.pager", "./spawn.sh"),), GREP_ARGV, None, False),
+    ((("pager.grep", "./spawn.sh"),), GREP_ARGV, None, False),
     # log -- rendering
-    ("log.date", "rfc", LOG_ARGV, None),
-    ("log.decorate", "full", LOG_ARGV, None),
-    ("log.abbrevCommit", "true", LOG_ARGV, None),
-    ("log.mailmap", "true", LOG_ARGV, None),
-    ("format.pretty", "oneline", LOG_ARGV, None),
-    # log -- execution
-    ("log.showSignature", "true", LOG_ARGV, None),
-    ("gpg.program", "./spawn.sh", LOG_ARGV, None),
-    ("core.pager", "./spawn.sh", LOG_ARGV, None),
+    ((("log.date", "rfc"),), LOG_ARGV, None, False),
+    ((("log.decorate", "full"),), LOG_ARGV, None, False),
+    ((("log.abbrevCommit", "true"),), LOG_ARGV, None, False),
+    ((("log.mailmap", "true"),), LOG_ARGV, None, False),
+    ((("format.pretty", "oneline"),), LOG_ARGV, None, False),
+    # log -- execution. The signature rows run against the CRAFTED signed commit, and the
+    # combined row is the one that can fire: neither key alone consults a program.
+    ((("log.showSignature", "true"),), SIGNED_LOG_ARGV, None, True),
+    ((("gpg.program", "./spawn.sh"),), SIGNED_LOG_ARGV, None, True),
+    (
+        (("log.showSignature", "true"), ("gpg.program", "./spawn.sh")),
+        SIGNED_LOG_ARGV,
+        None,
+        True,
+    ),
+    ((("core.pager", "./spawn.sh"),), LOG_ARGV, None, False),
 ]
 
 
 def main() -> int:
     version = subprocess.run(["git", "--version"], capture_output=True, text=True).stdout.strip()
     print(f"# {version}\n")
-    print("| key | value | op | verdict |")
-    print("|---|---|---|---|")
-    for key, value, argv, attribute in CANDIDATES:
-        verdict = probe(key, value, argv, attribute=attribute)
-        print(f"| `{key}` | `{value}` | `{argv[0]}` | **{verdict}** |")
+    print("| keys | op | verdict |")
+    print("|---|---|---|")
+    for config, argv, attribute, signed in CANDIDATES:
+        verdict = probe(config, argv, attribute=attribute, signed=signed)
+        spelled = " + ".join(f"`{key}={value}`" for key, value in config)
+        print(f"| {spelled} | `{argv[0]}` | **{verdict}** |")
     return 0
 
 
@@ -235,10 +300,18 @@ if __name__ == "__main__":
 Run: `python3 $SCRATCH/probe_git_ops.py | tee $SCRATCH/probe-results.md`
 
 Expected: a table, one row per candidate. Every row must read `EXECUTES`, `RENDERS`, or
-`INERT` — no crashes, no blank verdicts. If `log.showSignature=true` reports `INERT`, that
-is a red flag that the repo has no signed commits to verify: re-run that row against a
-commit created with `-S` if a signing key is available, and if none is, record the row as
-`UNDETERMINED` rather than `INERT`. An untested key must not be recorded as safe.
+`INERT` — no crashes, no blank verdicts.
+
+**The signature rows are the ones to read carefully.** The two single-key rows are expected
+to report `INERT`, and that is not a finding — it is the control that proves why the
+combined row exists. The combined `log.showSignature=true` + `gpg.program=./spawn.sh` row
+against `SIGNED` is expected to report `EXECUTES`. If it does not, stop and diagnose before
+continuing: either `make_signed_commit` failed to produce an object git treats as signed
+(check `git -C <repo> cat-file commit SIGNED` for the `gpgsig` header), or this git version
+takes a path this probe does not model. Record it `UNDETERMINED` rather than `INERT` and say
+so in the design. **An untested key must not be recorded as safe** — and this one is not
+hypothetical: `verify_marks` (`autonomy/marks.py:31-39`) already runs `git log` on every
+`finish`, with no signature control of any kind.
 
 - [ ] **Step 3: Record the findings in the design**
 
@@ -316,19 +389,46 @@ def _repo(tmp_path: Path) -> Path:
     return root
 
 
+UTF8_LOCALE = "en_US.UTF-8"
+FRENCH_LOCALE = "fr_FR.UTF-8"
+GREP_ARGV = ("grep", "-n", "-e", "[[:alpha:]]alpha", "HEAD")
+
+
+def _bare_git(root: Path, overrides: dict[str, str], *args: str) -> subprocess.CompletedProcess:
+    """git WITHOUT this module's hardening, for negative controls."""
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, env={**os.environ, **overrides}
+    )
+
+
 def test_grep_output_does_not_depend_on_the_parent_locale(tmp_path: Path, monkeypatch):
     """A POSIX class means different things under C and under UTF-8, so an unpinned
     locale makes two honest replays of one query disagree -- and correspondence refuses
-    on disagreement."""
+    on disagreement.
+
+    The negative control comes FIRST. Locale data is not guaranteed to be installed, and
+    when it is missing the C library falls back to C -- so the two outputs would be equal
+    for a reason that has nothing to do with the fix, and this test would pass green
+    against unpatched code. Skipping is honest; passing would be a lie.
+    """
     root = _repo(tmp_path)
-    argv = ("grep", "-n", "-e", "[[:alpha:]]alpha", "HEAD")
+    control_c = _bare_git(root, {"LC_ALL": "C", "LANG": "C"}, *GREP_ARGV).stdout
+    control_utf8 = _bare_git(
+        root, {"LC_ALL": UTF8_LOCALE, "LANG": UTF8_LOCALE}, *GREP_ARGV
+    ).stdout
+    if control_c == control_utf8:
+        pytest.skip(
+            f"{UTF8_LOCALE} data is unavailable here, so the hazard does not reproduce and "
+            "the guard would pass vacuously"
+        )
 
     monkeypatch.setenv("LC_ALL", "C")
-    under_c = run_git(root, *argv).stdout
+    monkeypatch.setenv("LANG", "C")
+    under_c = run_git(root, *GREP_ARGV).stdout
 
-    monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
-    monkeypatch.setenv("LANG", "en_US.UTF-8")
-    under_utf8 = run_git(root, *argv).stdout
+    monkeypatch.setenv("LC_ALL", UTF8_LOCALE)
+    monkeypatch.setenv("LANG", UTF8_LOCALE)
+    under_utf8 = run_git(root, *GREP_ARGV).stdout
 
     assert under_c == under_utf8
 
@@ -337,24 +437,42 @@ def test_a_missing_path_is_reported_in_a_pinned_locale(tmp_path: Path, monkeypat
     """The defined-miss classifier reads git's stderr. Localized text would not match,
     and an ordinary absent path would halt the run instead of answering."""
     root = _repo(tmp_path)
-    monkeypatch.setenv("LC_ALL", "fr_FR.UTF-8")
-    monkeypatch.setenv("LANGUAGE", "fr")
+    missing = ("show", "HEAD:no-such-file.txt")
+    english = _bare_git(root, {"LC_ALL": "C", "LANGUAGE": ""}, *missing).stderr
+    translated = _bare_git(
+        root, {"LC_ALL": FRENCH_LOCALE, "LANGUAGE": "fr"}, *missing
+    ).stderr
+    if english == translated:
+        pytest.skip(
+            f"{FRENCH_LOCALE} message catalogues are unavailable here, so git's diagnostics "
+            "do not translate and the guard would pass vacuously"
+        )
 
-    completed = run_git(root, "show", "HEAD:no-such-file.txt")
+    monkeypatch.setenv("LC_ALL", FRENCH_LOCALE)
+    monkeypatch.setenv("LANGUAGE", "fr")
+    completed = run_git(root, *missing)
 
     assert completed.returncode != 0
-    assert b"exists on disk" in completed.stderr or b"does not exist" in completed.stderr
+    assert completed.stderr == english
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd science && uv run --frozen pytest tests/test_autonomy_git_canonical.py -v`
 
-Expected: `test_grep_output_does_not_depend_on_the_parent_locale` FAILS — the two byte
-strings differ, because `run_git` passes no `env` and git inherits the parent locale.
-`test_a_missing_path_is_reported_in_a_pinned_locale` FAILS on a system with French
-locale data and passes vacuously on one without; treat a pass here as inconclusive until
-the implementation lands, and rely on the first test as the gate.
+Expected: both tests either FAIL or SKIP — never pass.
+
+- FAIL means the negative control reproduced the hazard and `run_git` did not defend
+  against it, which is the state this task fixes.
+- SKIP means the locale data is not installed on this machine. That is an honest
+  inconclusive, not a pass.
+- **A PASS at this step is a bug in the test**, not good news: nothing has been
+  implemented yet, so a green assertion means it is asserting something other than what it
+  claims. Investigate before proceeding.
+
+If both tests skip, the locale work cannot be verified on this machine. Install the locale
+data (`locale-gen en_US.UTF-8 fr_FR.UTF-8`, or the distribution's equivalent) rather than
+implementing blind — a pin nobody has watched fail is a pin nobody has tested.
 
 - [ ] **Step 3: Pin the child environment**
 
@@ -418,9 +536,18 @@ surfaces here rather than in plan 2.
 
 - [ ] **Step 6: Add the probe's `EXECUTES` rows to the hardening**
 
-For each key Task 1 recorded `EXECUTES`, add it to `_HARDENING` in the blanking spelling
-(`key=`, or `key=/dev/null` where a blank value is not accepted — match what the probe
-showed disarms it). **Add nothing for `RENDERS` or `INERT` rows.**
+For each key Task 1 recorded `EXECUTES`, add it to `_HARDENING` in the spelling the probe
+showed disarms it. **Add nothing for `RENDERS` or `INERT` rows.**
+
+For the signature path this is expected to be `log.showSignature=false` rather than a
+blanked `gpg.program=`: the goal is that git never reaches verification at all, and blanking
+the program name while leaving verification on invites git to fall back to a default `gpg`
+on `PATH`. Confirm against the probe rather than assuming — if blanking `gpg.program` alone
+also disarms it, the probe will have shown that too.
+
+This one also has a caller today. `verify_marks` (`autonomy/marks.py:31-39`) runs
+`git log` on every `finish` through this module, so the hardening takes effect there
+immediately; Task 4's scoped run includes `tests/test_autonomy_marks.py` for that reason.
 
 If Task 1 found no new `EXECUTES` key, change `_HARDENING` not at all and say so in the
 commit message. An empty result is a finding.
@@ -652,6 +779,70 @@ def test_a_hostile_handle_is_refused_before_any_join(tmp_path, monkeypatch, host
         run_dir(_project(tmp_path, "alpha"), hostile)
 
 
+@pytest.mark.parametrize(
+    "ungenerated",
+    [
+        "2026-07-30-a",            # no agent at all; the whole remainder is one token
+        "2026-07-30-lens-a3f",     # short id is 3 characters; _SHORT_ID_RE demands 4+
+        "2026-07-30-lens-A3F1",    # short id is not lowercase
+        "2026-07-30-Lens-a3f1",    # agent is not a kebab-case slug
+        "2026-07-30-lens_x-a3f1",  # underscore is not in the agent alphabet
+        "2026-07-30--a3f1",        # empty agent
+    ],
+)
+def test_a_handle_no_generate_run_id_call_could_produce_is_refused(
+    tmp_path, monkeypatch, ungenerated
+):
+    """Structure is not enough. A handle that is a safe path component but that
+    `generate_run_id` could never have emitted names no run, and resolving it would
+    silently create an addressable directory for a run that does not exist.
+
+    The split works despite hyphenated agent slugs because a short id cannot contain a
+    hyphen, so the last hyphen is always the boundary."""
+    monkeypatch.setenv(CONTROL_PLANE_ENV, str(tmp_path / "cp"))
+
+    with pytest.raises(ControlPlaneError):
+        run_dir(_project(tmp_path, "alpha"), ungenerated)
+
+
+def test_a_hyphenated_agent_slug_still_resolves(tmp_path, monkeypatch):
+    """The regression guard for the split: `review-plans` must survive rpartition."""
+    monkeypatch.setenv(CONTROL_PLANE_ENV, str(tmp_path / "cp"))
+
+    assert run_slug("run:2026-07-30-review-plans-a3f1") == "2026-07-30-review-plans-a3f1"
+
+
+@pytest.mark.parametrize("variable", [CONTROL_PLANE_ENV, "XDG_STATE_HOME"])
+def test_a_relative_control_plane_root_is_refused(tmp_path, monkeypatch, variable):
+    monkeypatch.delenv(CONTROL_PLANE_ENV, raising=False)
+    monkeypatch.setenv(variable, "relative/state")
+
+    with pytest.raises(ControlPlaneError):
+        control_plane_root(_project(tmp_path, "alpha"))
+
+
+def test_the_working_directory_does_not_change_where_a_run_resolves(tmp_path, monkeypatch):
+    """The companion guard to the rejection above, and it is deliberately trivial TODAY.
+
+    It holds only because a relative root is refused outright; it is here so that softening
+    that rejection into a "helpful" resolve-against-cwd fails this test rather than shipping.
+    `start` and `finish` are separate processes and need not share a working directory, so a
+    control plane that moved with the cwd would send `finish` to a different baseline, find
+    no journal, and report every citation unserved -- a configuration error wearing the
+    costume of actor misbehaviour."""
+    monkeypatch.setenv(CONTROL_PLANE_ENV, str(tmp_path / "cp"))
+    project = _project(tmp_path, "alpha")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    monkeypatch.chdir(tmp_path)
+    from_here = run_dir(project, HANDLE)
+    monkeypatch.chdir(elsewhere)
+    from_there = run_dir(project, HANDLE)
+
+    assert from_here == from_there
+
+
 def test_both_handle_spellings_resolve_to_one_directory(tmp_path, monkeypatch):
     monkeypatch.setenv(CONTROL_PLANE_ENV, str(tmp_path / "cp"))
     project = _project(tmp_path, "alpha")
@@ -710,11 +901,14 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 from datetime import date
 from pathlib import Path
 
-from science_model.autonomous_runs import RUN_ID_PREFIX
+from science_model.autonomous_runs import (
+    RUN_ID_PREFIX,
+    RunRecordError,
+    validate_run_identity,
+)
 
 from science_tool.autonomy.baseline import reject_baseline_inside_project
 
@@ -723,16 +917,30 @@ from science_tool.autonomy.baseline import reject_baseline_inside_project
 CONTROL_PLANE_ENV = "SCIENCE_CONTROL_PLANE"
 
 _DATE_LENGTH = len("YYYY-MM-DD")
-#: The remainder after the date: `<agent>-<short-id>` jointly. NOT split into its two parts --
-#: the agent slug contains hyphens, so the split has more than one reading, and a bare handle
-#: names no agent to rebuild against. What this guarantees is what a path component needs:
-#: no separator, no `..`, no NUL, no newline. IDENTITY is established by the caller, which
-#: must compare the loaded baseline's own `run_id` against the handle (design §3.4.1).
-_REMAINDER_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 class ControlPlaneError(ValueError):
     """A handle or root that cannot address a run."""
+
+
+def _absolute_or_refuse(value: str, variable: str) -> Path:
+    """A relative control-plane root is refused, not resolved.
+
+    Resolving it would bind the control plane to the current directory AT THE MOMENT OF
+    THE CALL. `science autonomy start` and `science autonomy finish` are separate processes
+    run by a supervisor that need not share a working directory, so the same run id would
+    address two different baselines -- `finish` would find no journal, and every citation
+    against that run would come back unserved. The failure is silent and looks like actor
+    misbehaviour, which is the worst possible disguise for a configuration error.
+    """
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise ControlPlaneError(
+            f"{variable} must be an absolute path, got {value!r}: a relative control plane "
+            "resolves against the current directory, so a run opened from one directory "
+            "would not be found from another"
+        )
+    return path
 
 
 def control_plane_root(project_root: Path) -> Path:
@@ -744,10 +952,14 @@ def control_plane_root(project_root: Path) -> Path:
     """
     configured = os.environ.get(CONTROL_PLANE_ENV)
     if configured:
-        root = Path(configured).expanduser()
+        root = _absolute_or_refuse(configured, CONTROL_PLANE_ENV)
     else:
         xdg_state_home = os.environ.get("XDG_STATE_HOME")
-        base = Path(xdg_state_home).expanduser() if xdg_state_home else Path.home() / ".local" / "state"
+        base = (
+            _absolute_or_refuse(xdg_state_home, "XDG_STATE_HOME")
+            if xdg_state_home
+            else Path.home() / ".local" / "state"
+        )
         root = base / "science" / "runs"
     reject_baseline_inside_project(root, project_root)
     return root
@@ -764,12 +976,19 @@ def project_key(project_root: Path) -> str:
 
 
 def run_slug(handle: str) -> str:
-    """The bare `<date>-<agent>-<short-id>` form, refusing anything that is not one.
+    """The bare `<date>-<agent>-<short-id>` form, refusing anything no run could carry.
 
-    Validated BEFORE it is joined to anything. A check applied to the joined path has
-    already lost: `run_dir(project, "../../elsewhere")` would have produced a real
-    directory belonging to another project, and a containment check on the result would
-    then be arguing with a path that should never have been built.
+    Validated as a GENERATED RUN ID, not merely as a safe path component, and validated
+    BEFORE it is joined to anything. A check applied to the joined path has already lost:
+    `run_dir(project, "../../elsewhere")` would have produced a real directory belonging to
+    another project, and a containment check on the result would then be arguing with a path
+    that should never have been built.
+
+    The split is unambiguous despite the agent slug containing hyphens, because
+    `_SHORT_ID_RE` forbids them in the short id: the LAST hyphen is always the one between
+    agent and suffix. That is what lets a bare handle -- which names no agent of its own --
+    still be checked by the same `validate_run_identity` that guards `generate_run_id`,
+    rather than by a looser shape test that would admit `2026-07-30-a`.
     """
     slug = handle.removeprefix(RUN_ID_PREFIX)
     if len(slug) <= _DATE_LENGTH or slug[_DATE_LENGTH] != "-":
@@ -780,11 +999,15 @@ def run_slug(handle: str) -> str:
         raise ControlPlaneError(
             f"run handle must begin with a real YYYY-MM-DD date, got {slug[:_DATE_LENGTH]!r}"
         ) from exc
-    remainder = slug[_DATE_LENGTH + 1 :]
-    if not _REMAINDER_RE.fullmatch(remainder):
+    agent, separator, short_id = slug[_DATE_LENGTH + 1 :].rpartition("-")
+    if not separator:
         raise ControlPlaneError(
-            f"run handle must be <date>-<agent>-<short-id> in lowercase kebab-case, got {handle!r}"
+            f"run handle must be <date>-<agent>-<short-id>; {handle!r} carries no short id"
         )
+    try:
+        validate_run_identity(agent=agent, short_id=short_id)
+    except RunRecordError as exc:
+        raise ControlPlaneError(f"{handle!r} is not a run id that could have been generated: {exc}") from exc
     return slug
 
 
@@ -810,8 +1033,11 @@ Run: `cd science && uv run --frozen pytest tests/test_autonomy_control_plane.py 
 Expected: PASS, all cases.
 
 If `test_a_hostile_handle_is_refused_before_any_join` fails on the `"..."`-free case
-`"not-a-run-id"`, check that `_REMAINDER_RE` is being reached: a handle shorter than the
-date length must fail at the first branch, not the regex.
+`"not-a-run-id"`, check which branch rejected it: a handle shorter than the date length must
+fail at the length check, not reach `rpartition`. If a case in
+`test_a_handle_no_generate_run_id_call_could_produce_is_refused` passes when it should fail,
+confirm `validate_run_identity` is being called rather than the split being trusted on its
+own — the split establishes *where* the boundary is, never that either side is valid.
 
 - [ ] **Step 5: Verify no directory is created as a side effect**
 
