@@ -1,13 +1,16 @@
 # Agent evidence broker — design
 
-**Status:** proposed (revision 2)
+**Status:** proposed (revision 3)
 **Sub-project A** of three. B is the multi-assignment dispatch harness; C is
 `/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
 defers to and never built. A is independently landable and useful without either.
 
-Revision 2 responds to a design review that found six production-boundary defects in revision 1.
-Each is closed below and named at the point it is closed, because the reasoning that produced the
-defect is more useful to a reader than the corrected text alone.
+Revisions 2 and 3 respond to design review: six production-boundary defects found in revision 1, six
+more in revision 2. Each is closed below and named at the point it is closed, because the reasoning
+that produced the defect is more useful to a reader than the corrected text alone. Two of revision 2's
+defects were introduced *by* revision 2 — a new eligibility rule that dropped deterministic reviewers,
+and a spend counter that could not represent its own budget — which is the argument for §7's rule that
+a guard nobody has watched fail is a guard nobody has tested.
 
 ## 1. The problem
 
@@ -81,6 +84,7 @@ science/model/src/science_model/
 
 science/src/science_tool/
     autonomy/baseline.py    + EvidenceSession on RunBaseline; journal path containment-checked
+    autonomy/control_plane.py  # NEW — the run-id-keyed canonical root
     autonomy/git.py         + a probed, canonical invocation for `grep` and `log`
     autonomy/lifecycle.py   start_run opens the session; finish_run seals it
     findings/reviews.py     # NEW — the trusted review-append boundary
@@ -129,6 +133,14 @@ correct for a caller, so it does not.
 *honoured*. Proving a policy is *complete* — that it covers every artifact a study must withhold —
 remains the caller's obligation.
 
+**The policy is supplied once, to the baseline, and never again.** Revision 2 left it caller-supplied
+per call, which is two defects at once. Deny prefixes are applied as `:(exclude)` pathspecs on every
+search (§3.2), so they shape served bytes: a policy that differs between serving and replay makes an
+honest run fail to reproduce. Worse in the other direction, a weaker policy at replay time
+re-serves hits that were denied when the reviewer was actually working, and validates citations to
+material the study withheld. `EvidenceSession.surface_policy` (§4.3) holds the canonical value; the
+CLI has no flag for it.
+
 ### 3.2 Serving
 
 Three operations, all resolved at a pinned commit: `read` (`git show <commit>:<path>`), `search`
@@ -144,6 +156,13 @@ only once the revision is known good.
 are each served with an explicit marker, and each is distinguishable from its degenerate neighbour:
 a missing file reads differently from a file that is genuinely empty at the commit — "never shipped"
 versus "shipped as a stub". Anything else git reports raises and halts the run.
+
+**The three misses are answers about three different things**, and only one of them is about a path.
+A failed `read` establishes that the path is not at the commit. A search with no matches establishes
+that a *pattern* did not appear — the path may exist and be full of other content. An empty `log`
+establishes that the *query* returned no commits. §5.1 therefore admits only the read miss into the
+served map. The other two are journaled, spend rounds, and must replay, but they cite nothing,
+because the `Evidence` union has no pattern-bearing variant to cite them with.
 
 **A malformed search pattern is a third case**: it is the requester's own input, carries no
 repository fact, and is refused as retryable rather than treated as instrument failure.
@@ -186,8 +205,20 @@ the pin") was too strong. It comes free from the pin *plus* a canonical invocati
 
 ### 3.3 Journal
 
-Append-only, one line per served response: `{op, target, pathspec, commit, sha256, outcome}`. It
-lives **outside the project tree**, for the reason `RunBaseline` does: a log inside the tree the
+Append-only, one line per event, and the events are **discriminated** rather than uniform:
+
+```jsonc
+{"event": "inline",  "target": "...", "sha256": "...", "lines": 120}
+{"event": "request", "op": "read", "target": "...", "pathspec": null,
+ "commit": "...", "sha256": "...", "outcome": "served"}   // served | miss | denied | invalid
+```
+
+Revision 2 counted raw lines to derive spend, which cannot express the budget it claimed to enforce:
+inline seeds are lines but not requests, so seeding charged the reviewer for evidence it never asked
+for, and a denial is a request that produced no served response. `requests_used` counts `request`
+events; `inline` events are the supervisor's own seeding and cost nothing.
+
+It lives **outside the project tree**, for the reason `RunBaseline` does: a log inside the tree the
 actor can write is not a record of what the actor was shown.
 
 It cannot live in the run record, because that record deliberately has no in-flight shape — "a
@@ -221,15 +252,15 @@ A reviewer runs as its own process and reaches the broker through the CLI, so th
 cross-process and needs a contract rather than an object.
 
 - **Handle.** `--session <run-id>`. It names a baseline, not a file. Journal path, budget, evidence
-  commit, instrument identity, and the inline manifest are all read from `RunBaseline`. **None of them
-  is settable on the command line.** A caller cannot lower a budget it did not set, raise one it did,
-  or point the session at a different journal.
+  commit, surface policy, instrument identity, and the inline manifest are all read from `RunBaseline`.
+  **None of them is settable on the command line.** A caller cannot lower a budget it did not set,
+  raise one it did, weaken the deny policy, or point the session at a different journal.
 - **Open.** `science evidence open` writes the journal with `O_EXCL` through the anchored-descriptor
   primitives in `findings/paths.py`, for the same reason `write_baseline` uses exclusive creation:
   reusing a journal path discards the exposure record of whatever run already owns it.
 - **Append.** One line, `O_APPEND`, under a lock file held for the duration of the serve, so
   concurrent reviewers in one run cannot interleave a partial line. Appends never rewrite.
-- **Spend.** `requests_used` is **derived by counting journal lines**, not stored as mutable state.
+- **Spend.** `requests_used` is **derived by counting `request` events**, not stored as mutable state.
   There is no counter to reset. Truncating the journal to buy rounds destroys the entries that make
   the truncator's own citations correspond, so the move is self-defeating rather than merely detected.
 - **Seal.** `finish_run` reads the journal, replays it, and copies it into the run record as
@@ -238,7 +269,36 @@ cross-process and needs a contract rather than an object.
 
 `Session` is also usable in-process, without the CLI, so B can hold sessions in the supervisor where
 its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
-CLI mode does not, per the threat model.
+CLI mode does not, per the threat model — it is an audit aid against confabulation, not proof against
+forgery.
+
+### 3.4.2 The control plane must be locatable from a run id
+
+A handle that names a baseline requires that a run id determine where its baseline is. Today it does
+not: `science autonomy start --baseline-out` is `required=True` and takes an arbitrary path, chosen
+by whatever supervisor invoked it. `--session <run-id>` would have had nothing to resolve against.
+
+`autonomy/control_plane.py` supplies the missing function:
+
+```python
+def control_plane_root() -> Path          # $SCIENCE_CONTROL_PLANE, else the XDG state dir
+def run_dir(run_id: str) -> Path          # <root>/<run-slug>/
+#   baseline.json, journal.jsonl
+```
+
+`--baseline-out` and a new `--broker` flag on `science autonomy start` are **mutually exclusive**.
+`--broker` derives both paths and refuses an explicit one; without it, nothing changes for runs that
+do not broker evidence. No silent fallback: a brokered run whose baseline was written somewhere else
+is refused rather than searched for.
+
+`control_plane_root()` is still put through `reject_baseline_inside_project`, so an environment
+variable cannot relocate the control plane into the tree the actor writes.
+
+An actor that sets `SCIENCE_CONTROL_PLANE` when it invokes the CLI redirects its own serving to a
+baseline it forged. Consistent with the threat model, and self-limiting: `finish_run` resolves the
+control plane from the *supervisor's* environment, finds the real journal without the redirected
+run's entries, and every citation made against the forged session comes back `CITATION_UNSERVED`.
+Redirection costs the actor its support rather than buying it any.
 
 ### 3.5 CLI
 
@@ -372,16 +432,19 @@ toolkit is still rejected by an older one, since `_Base` is `extra="forbid"`; ru
 def confirmation_count(self) -> int:
     """Distinct confirming reviews that COUNT AS SUPPORT.
 
-    An agent confirmation counts only when its citations were checked against
-    what the agent was shown. `unwired` is not a weaker `verified`: a guard that
-    cannot see must not report clean, and free support is what it would be.
+    An agent confirmation counts only when it cited something mechanically
+    checkable AND that citation was checked against what the agent was shown.
+    `unwired` is not a weaker `verified`: a guard that cannot see must not
+    report clean, and free support is what it would be. A vacuous `verified` --
+    a review that cited no path at all -- is not evidence of anything either.
     """
     return len({
         r.review_id for r in self.reviews
         if r.outcome == "confirms" and (
-            r.reviewer_kind == "human"
+            r.reviewer_kind != "agent"
             or (r.correspondence is not None
-                and r.correspondence.status == "verified")
+                and r.correspondence.status == "verified"
+                and any(e.type == "location" for e in r.evidence))
         )
     })
 ```
@@ -395,9 +458,27 @@ The alternative — refusing to store a cited-but-unverified agent review — wa
 incentive runs backwards: a producer whose review is refused for citing paths gets it accepted by
 deleting its citations.
 
-Human reviews are unaffected: humans are not brokered, their `correspondence` is `None`, and they
-count as they do today. The blast radius is one non-test consumer, the display column at
-`findings/cli.py:317`; `PERMITTED_TRANSITIONS` does not gate on this count.
+**`!= "agent"`, not `== "human"`.** `ReviewerKind` is `Literal["human", "agent", "deterministic"]`,
+and revision 2's spelling silently dropped every deterministic confirmation to zero support — a
+regression introduced by this design, not a gap it inherited. The rule is that brokering is required
+of the reviewer kind that can confabulate; the exclusion list is one entry long and is spelled that
+way.
+
+**The `any(location)` term closes the vacuous `verified`.** `evidence` defaults to empty and
+`TextEvidence` bears no path, so an agent review citing nothing — or citing only prose — corresponds
+trivially and, under revision 2, counted in full. That is the cheapest possible fabrication:
+"I confirm this" with nothing attached, scoring the same as a checked citation. Because `verified`
+means every `LocationEvidence` corresponded, the presence of one is sufficient to know at least one
+mechanically covered item exists, so the test is exact and needs no stored count.
+
+This keeps the vacuous case `verified` at §5.3 rather than reclassifying it. The check genuinely ran
+and genuinely found no violation; what it did not do is establish support. Collapsing "no violation"
+into "no support" would put the empty/unwired confusion back one level up, which §5.3 exists to
+prevent.
+
+Human and deterministic reviews are unaffected: neither is brokered, their `correspondence` is
+`None`, and they count as they do today. The blast radius is one non-test consumer, the display column
+at `findings/cli.py:317`; `PERMITTED_TRANSITIONS` does not gate on this count.
 
 ### 4.3 Baseline
 
@@ -407,11 +488,16 @@ class InlineInput(_Frozen):
     sha256: str
     lines: int
 
+class SurfacePolicy(_Frozen):
+    deny_prefixes: tuple[str, ...] = ()
+    notice: str                        # what every denial tells the requester
+
 class EvidenceSession(_Frozen):
     session_id: str                    # the run slug
     journal_path: Path
     commit: str                        # == RunBaseline.base_commit
     budget: int
+    surface_policy: SurfacePolicy
     instrument: InstrumentIdentity
     inline: tuple[InlineInput, ...] = ()
 
@@ -429,7 +515,14 @@ journal's `sha256` matches the manifest's.
 `lines` is carried so a line or span citation into an inline input can be checked the same way as one
 into a read file. Inline bytes are not in the tree, so a line count cannot be re-derived later.
 
-`journal_path` is containment-checked by `reject_baseline_inside_project`, like the baseline itself.
+`surface_policy` is here for the reason given in §3.1: the deny prefixes are `:(exclude)` pathspecs on
+every search, so they are part of the query, and a query whose text is not fixed does not replay.
+Naming it `surface_policy` rather than reusing `policy_identity` is deliberate — that field is the
+autonomy write-surface policy, a different thing about a different boundary, and one field standing
+for two policies is how they end up enforced as one.
+
+`journal_path` is containment-checked by `reject_baseline_inside_project`, like the baseline itself,
+and under `--broker` it is derived from `control_plane.run_dir()` rather than supplied at all.
 
 ## 5. Correspondence
 
@@ -447,9 +540,23 @@ fields that makes such a citation expressible. The served set is therefore a map
 | Contributed by | Coverage | Meaning |
 |---|---|---|
 | `read`, `inline` | `FULL` + line count | every line `1..n` was in front of the reviewer |
-| `search` | `LINES` + the matched line numbers | only the hit lines were shown |
+| `search` hit | `LINES` + the matched line numbers | only the hit lines were shown |
 | `history` | `PATH_ONLY` | the path's commits were shown; its contents were not |
-| defined miss | `ABSENT` | the path is not at the commit, and that was served as the answer |
+| `read` miss | `ABSENT` | the path is not at the commit, and that was served as the answer |
+| `search` miss, `history` miss | *nothing* | see below |
+
+**Only a read miss proves a path is absent.** Revision 2 mapped all three defined misses onto
+`ABSENT`, which asserted three different facts as one. A search that matched nothing establishes that
+a pattern did not appear, not that any path is missing — the pattern may be wrong and the file may be
+full of relevant content. An empty `log` establishes that a query returned no commits. Neither is
+citable through the `Evidence` union at all, which has no pattern-bearing variant, so they contribute
+nothing to the served map rather than contributing something false. They are still journaled, still
+spend a round, and still must replay.
+
+The cost is real and worth naming: "I searched for `X` across the corpus and found nothing" is a
+legitimate and often decisive review finding that this design cannot mechanically check. Making it
+checkable needs a `SearchEvidence` variant carrying the pattern and pathspec, which belongs with the
+consumer that needs it (C) rather than being speculatively added here.
 
 `git grep -n <pattern> <commit>` prefixes every hit with `<commit>:<path>:<line>:`, so the matched
 lines are recoverable from the served bytes — which is a second reason replay is not optional, since
@@ -472,8 +579,8 @@ reviewer genuinely opened — a case revision 1 did not consider at all.
 format, which the broker does not parse. `TextEvidence` bears no path and contributes nothing.
 
 Two cases must count as served, or the check punishes correct behaviour: a **search hit**, and a
-**defined miss** — a path absent at the commit is frequently the decisive finding, and any rubric
-worth using asks for absence to be recorded with the same care as presence.
+**read miss** — a path absent at the commit is frequently the decisive finding, and any rubric worth
+using asks for absence to be recorded with the same care as presence.
 
 ### 5.2 The replay
 
@@ -507,9 +614,10 @@ found false*. A journal that fails to reproduce at a pinned commit under a canon
 ambiguous — nothing legitimate produces that — so the review is refused. A journal that cannot be
 reached genuinely could not be checked, so the review is stored, says so, and earns nothing.
 
-An exposure log with no path-bearing citations is `verified` with a reason: the check ran and found
-no violation. A consumer asking whether a review cited anything reads `len(evidence)`. Conflating
-that into correspondence would be the empty/unwired confusion one level up.
+A review with no path-bearing citations is `verified` with a reason: the check ran and found no
+violation. It earns no support, but that is §4.2.1's rule, not this one — correspondence answers
+whether citations held up, and a review that cited nothing has nothing that failed. Conflating the
+two would be the empty/unwired confusion one level up.
 
 ### 5.4 The append boundary
 
@@ -563,18 +671,27 @@ downgrade is a lie about what was checked.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused; the dual
   as-spelled/resolved check catches a symlink escape.
 - **`session.py`** — a denial spends a round; exhaustion refuses without further spend; no unbudgeted
-  path to `serve` is exported; `--session` cannot override the baseline's journal path or budget;
-  `open` on an existing journal refuses; `requests_used` tracks journal lines rather than a counter.
+  path to `serve` is exported; `--session` cannot override the baseline's journal path, budget, or
+  surface policy; `open` on an existing journal refuses; **seeding N inline inputs leaves
+  `requests_used` at zero**; a denied request and a malformed pattern each raise it by one.
+- **`control_plane.py`** — `run_dir` is a pure function of the run id; `--broker` and `--baseline-out`
+  together are refused; a brokered run whose baseline is elsewhere is refused rather than searched for;
+  a control-plane root inside the project is refused.
 - **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
   rejects a `correspondence` key outright; `requests_used > budget` rejected; entries disagreeing on
   commit rejected; `EvidenceExposure.commit != base_commit` rejected; `unwired` without a code rejected.
-- **Eligibility** — an agent `confirms` with `unwired` correspondence does not count; the same review
-  with `verified` does; a human `confirms` counts either way.
+- **Eligibility** — one test per `ReviewerKind`, asserted against the `Literal` rather than a hand-written
+  list, so a kind added later fails loudly instead of silently landing on the wrong side: an agent
+  `confirms` counts only when `verified` **and** carrying a `LocationEvidence`; `human` and
+  `deterministic` count regardless; an agent `confirms` with only `TextEvidence` does not count; the
+  same review with one location citation does.
 - **Correspondence** — one test per row of §5.3, plus: a grep hit on line 1 does **not** validate a
   citation to line 900; a span exceeding the matched lines does not correspond; a line beyond a read
-  file's length does not correspond; a `history` entry does not validate a line citation; a defined
-  miss validates a path-only citation and refuses a lined one; an inline target absent from the
-  baseline manifest does not correspond; the vacuous `verified`.
+  file's length does not correspond; a `history` entry does not validate a line citation; a read miss
+  validates a path-only citation and refuses a lined one; **a search miss and an empty history
+  contribute no coverage at all**; an inline target absent from the baseline manifest does not
+  correspond; a policy narrowed between serving and replay does not silently re-serve denied hits;
+  the vacuous `verified`.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
@@ -588,15 +705,19 @@ is a guard nobody has tested.
 ## 8. Consequences
 
 **Gained.** An agent review's citations become checkable against what the agent was shown, at line
-granularity. An unverifiable agent confirmation stops counting as support. The toolkit's first
-enforced budget, and its first review-append boundary. Instrument identity as a run-record term. A
-per-judgement uncertainty channel. `unwired` extended from instruments to agent testimony.
+granularity. An agent confirmation that cited nothing, or whose citations could not be checked, stops
+counting as support. The toolkit's first enforced budget, its first review-append boundary, and its
+first run-id-addressable control plane. Instrument identity as a run-record term. A per-judgement
+uncertainty channel. `unwired` extended from instruments to agent testimony.
 
 **Costs.** A model migration that must land with its consumers. A probe of `git grep` and `git log`
-owed to `autonomy/git.py` before either op ships. Roughly one git call per journal entry at ingestion,
-memoised. A new package to maintain.
+owed to `autonomy/git.py` before either op ships. A new mutually-exclusive flag pair on
+`science autonomy start`. Roughly one git call per journal entry at ingestion, memoised. A new package
+to maintain.
 
 **Deliberately not addressed.** Whether a supplied deny policy is complete; whether a non-brokered
-agent should be permitted at all (it is, at zero support rather than at full support); an authentic
-journal against a same-uid adversary, which the threat model excludes and which the in-process session
-mode sidesteps rather than solves; token and wall-clock caps, which remain deferred.
+agent should be permitted at all (it is, at zero support rather than at full support); mechanically
+citable search and history misses, which need an `Evidence` variant this design declines to add
+speculatively; an authentic journal against a same-uid adversary, which the threat model excludes and
+which the in-process session mode sidesteps rather than solves; token and wall-clock caps, which
+remain deferred.
