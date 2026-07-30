@@ -8,24 +8,26 @@ from pathlib import Path
 from typing import Any
 
 from science_model.audit import FindingRule
-from science_model.audit.fingerprint import canonical_json
 
+from science_tool.labnote_view_contract import descriptor_errors
 from science_tool.validate.findings import validation_observation
 from science_tool.validate.findings import declare_validation_rules
 from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
 
-_BROWSE_SURFACES = {"explore", "findings"}
-
-
 SECTION, RULES = declare_validation_rules(
     section_id="labnote-export",
     section_title="labnote export",
     section_order=145,
     rule_ids=(
+        "labnote-export.hidden-kinds-malformed",
+        "labnote-export.kind-visible-and-hidden",
         "labnote-export.view-entity-types-missing",
+        "labnote-export.view-id-invalid",
         "labnote-export.view-malformed",
+        "labnote-export.view-route-mismatch",
+        "labnote-export.view-surface-invalid",
         "labnote-export.views-json-invalid",
     ),
     severities=frozenset({"error", "warn", "info"}),
@@ -50,43 +52,25 @@ def _result(
     )
 
 
-def _valid_entity_types(value: object) -> bool:
-    return isinstance(value, list) and len(value) > 0 and all(isinstance(item, str) and item.strip() for item in value)
-
-
 def evaluate_labnote_export_views(views: dict[str, Any], path: str | Path | None) -> Iterator[CheckObservation]:
-    emitted: set[tuple[str, str]] = set()
-    for index, view in enumerate(views.get("views") or []):
-        view_key = canonical_json(view).decode("utf-8")
-        if not isinstance(view, dict):
-            identity = ("view-malformed", view_key)
-            if identity in emitted:
-                continue
-            emitted.add(identity)
-            yield _result(
-                path,
-                f"views[{index}]: view must be a mapping",
-                RULES["labnote-export.view-malformed"],
-                key=list(identity),
-            )
-            continue
+    """Report every structural defect the shared descriptor contract finds.
 
-        surface = view.get("surface")
-        if surface not in _BROWSE_SURFACES:
+    Route derivation and surface legality live in `labnote_view_contract`, so the
+    exporter and this check can never drift. Deduplication keys on the error's own
+    canonical identity, which is descriptor content rather than a view ID — two
+    different malformed views that share an ID must both be reported.
+    """
+    emitted: set[tuple[str, str, str | None]] = set()
+    for error in descriptor_errors(views):
+        key = (error.code, error.field, error.identity)
+        if key in emitted:
             continue
-        if _valid_entity_types(view.get("entity_types")):
-            continue
-
-        identity = ("view-entity-types-missing", view_key)
-        if identity in emitted:
-            continue
-        emitted.add(identity)
-        view_id = view.get("id") or index
+        emitted.add(key)
         yield _result(
             path,
-            f"view {view_id}: {surface} views must declare non-empty entity_types",
-            RULES["labnote-export.view-entity-types-missing"],
-            key=list(identity),
+            error.message,
+            RULES[f"labnote-export.{error.code}"],
+            key=[error.code, error.identity if error.identity is not None else error.field],
         )
 
 

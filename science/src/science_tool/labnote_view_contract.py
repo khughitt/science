@@ -82,6 +82,8 @@ def _view_errors(index: int, view: object) -> list[DescriptorError]:
     errors: list[DescriptorError] = []
     view_id = view.get("id")
     surface = view.get("surface")
+    # Name the view when it has a usable id; fall back to its position otherwise.
+    label = f"view {view_id}" if isinstance(view_id, str) and view_id.strip() else field
 
     id_ok = isinstance(view_id, str) and bool(VIEW_ID_RE.match(view_id))
     surface_ok = surface in PRODUCER_VIEW_SURFACES
@@ -92,7 +94,7 @@ def _view_errors(index: int, view: object) -> list[DescriptorError]:
             DescriptorError(
                 code="view-surface-invalid",
                 field=f"{field}.surface",
-                message=f"{field}: surface {surface!r} must be one of {legal}",
+                message=f"{label}: surface {surface!r} must be one of {legal}",
                 identity=identity,
             )
         )
@@ -123,7 +125,7 @@ def _view_errors(index: int, view: object) -> list[DescriptorError]:
             DescriptorError(
                 code="view-entity-types-missing",
                 field=f"{field}.entity_types",
-                message=f"{field}: views must declare non-empty entity_types of strings",
+                message=f"{label}: views must declare non-empty entity_types of strings",
                 identity=identity,
             )
         )

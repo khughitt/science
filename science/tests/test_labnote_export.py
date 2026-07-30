@@ -13,7 +13,14 @@ from science_tool.references import UnresolvedSemanticRefError
 from science_tool.labnote_export import (
     _content_prose_semantic_records,
     _graph_semantic_records,
+    _view_config_for_type,
     export_labnote_package,
+)
+from science_tool.labnote_view_contract import (
+    PRODUCER_VIEW_SURFACES,
+    VIEW_ID_RE,
+    descriptor_errors,
+    route_for_view,
 )
 
 
@@ -1708,7 +1715,9 @@ def test_data_version_is_stable_golden(tmp_path: Path):
     export_labnote_package(project_root=tmp_path, out_dir=out)
     project = json.loads((out / "project.json").read_text())
     # Golden: exact digest must survive the project_package.core extraction byte-for-byte.
-    assert project["package"]["data_version"] == "2026-06-28+6cd94bebe752"
+    # Re-pinned in Phase 1: the hidden-kind signature is now a version input, so this
+    # fixture's declared-hidden `paper` moved the digest from 6cd94bebe752 exactly once.
+    assert project["package"]["data_version"] == "2026-06-28+2785e828e187"
 
 
 def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Path) -> None:
@@ -1728,3 +1737,529 @@ def test_science_labnote_export_cli_reports_expected_export_errors(tmp_path: Pat
     assert "Error:" in result.output
     assert "missing science.yaml" in result.output
     assert "Traceback" not in result.output
+
+
+PROMOTED_FALLBACK_KINDS = [
+    "book",
+    "citation",
+    "concept",
+    "discussion",
+    "evidence_line",
+    "finding",
+    "inquiry",
+    "interpretation",
+    "meta",
+    "observation",
+    "paper_review",
+    "patch_definition",
+    "plan",
+    "pre_registration",
+    "prose_source",
+    "report",
+    "research_question",
+    "spec",
+    "theme",
+    "topic",
+]
+
+RETAINED_EXPLICIT_KINDS = [
+    "hypothesis",
+    "proposition",
+    "synthesis",
+    "question",
+    "dataset",
+    "method",
+    "search",
+    "workflow",
+    "workflow_run",
+    "paper",
+]
+
+
+@pytest.mark.parametrize("entity_type", PROMOTED_FALLBACK_KINDS)
+def test_promoted_fallback_kinds_are_permanent_visible_vocabulary(entity_type: str) -> None:
+    assert entity_type in labnote_export_module.VIEW_VOCABULARY_BY_TYPE
+
+    config = _view_config_for_type(entity_type, {})
+
+    assert config["surface"] == "explore"
+    assert config["label"] == entity_type.replace("_", " ").title()
+    assert config["order"] == 500
+    assert not config.get("hidden")
+    assert route_for_view(entity_type, config["surface"]) == f"/explore/{entity_type.replace('_', '-')}"
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "label", "order"),
+    [("mechanism", "Mechanisms", 40), ("lead", "Leads", 50)],
+)
+def test_additional_finding_kinds_are_declared_on_the_findings_surface(
+    entity_type: str, label: str, order: int
+) -> None:
+    config = _view_config_for_type(entity_type, {})
+
+    assert config["surface"] == "findings"
+    assert config["label"] == label
+    assert config["order"] == order
+    assert not config.get("hidden")
+    assert route_for_view(entity_type, config["surface"]) == f"/findings/{entity_type}"
+
+
+@pytest.mark.parametrize("entity_type", RETAINED_EXPLICIT_KINDS)
+def test_existing_explicit_vocabulary_entries_are_retained(entity_type: str) -> None:
+    assert entity_type in labnote_export_module.VIEW_VOCABULARY_BY_TYPE
+
+
+def test_paper_stays_hidden_at_order_100() -> None:
+    config = _view_config_for_type("paper", {})
+
+    assert config["surface"] == "explore"
+    assert config["label"] == "Papers"
+    assert config["order"] == 100
+    assert config["hidden"] is True
+
+
+def test_vocabulary_declares_no_literal_routes() -> None:
+    # Routes are derived output; a literal would let the vocabulary drift from the contract.
+    for entity_type, entry in labnote_export_module.VIEW_VOCABULARY_BY_TYPE.items():
+        assert "route" not in entry, entity_type
+
+
+def test_vocabulary_ids_and_surfaces_satisfy_the_shared_contract() -> None:
+    for entity_type, entry in labnote_export_module.VIEW_VOCABULARY_BY_TYPE.items():
+        assert VIEW_ID_RE.match(entity_type), entity_type
+        assert entry["surface"] in PRODUCER_VIEW_SURFACES, entity_type
+
+
+def test_finding_types_include_mechanism_and_lead() -> None:
+    assert labnote_export_module.FINDING_TYPES == {
+        "hypothesis",
+        "proposition",
+        "synthesis",
+        "mechanism",
+        "lead",
+    }
+
+
+@pytest.mark.parametrize("entity_type", ["mechanism", "lead"])
+def test_entity_class_map_declares_the_new_finding_kinds_explicitly(entity_type: str) -> None:
+    # Explicit entries prevent vocabulary drift even though FINDING_TYPES currently
+    # short-circuits these kinds before the class-map lookup.
+    assert labnote_export_module.ENTITY_CLASS_BY_TYPE[entity_type] == "epistemic"
+
+
+@pytest.mark.parametrize("entity_type", ["mechanism", "lead"])
+def test_project_with_only_a_new_finding_kind_advertises_findings(
+    tmp_path: Path, entity_type: str
+) -> None:
+    project_root = tmp_path / entity_type
+    write_text(
+        project_root / "science.yaml",
+        f"""
+        name: Only {entity_type}
+        id: only-{entity_type}
+        last_modified: 2026-06-28
+        """,
+    )
+    write_text(
+        project_root / "entities" / f"{entity_type}s" / f"0001-example-{entity_type}.md",
+        f"""
+        ---
+        id: {entity_type}:0001-example-{entity_type}
+        kind: {entity_type}
+        title: Example {entity_type}
+        sensitivity: public
+        ---
+        Body text.
+        """,
+    )
+    out = tmp_path / "out"
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    project = read_json(out / "project.json")
+    entities = read_json(out / "entities" / "index.json")["entities"]
+    views = read_json(out / "views.json")["views"]
+
+    assert project["capabilities"]["findings"] is True
+    assert [record["class"] for record in entities] == ["epistemic"]
+    assert [view["route"] for view in views] == [f"/findings/{entity_type}"]
+
+
+@pytest.mark.parametrize("entity_type", ["mechanism", "lead"])
+def test_backlink_classification_treats_new_finding_kinds_as_findings(entity_type: str) -> None:
+    type_by_id = {
+        "finding:a": entity_type,
+        "question:b": "question",
+        "workflow:c": "workflow",
+    }
+
+    assert labnote_export_module._finding_backlink(
+        source_id="question:b", target_id="finding:a", backlink=True, type_by_id=type_by_id
+    )
+    assert labnote_export_module._finding_backlink(
+        source_id="finding:a", target_id="question:b", backlink=True, type_by_id=type_by_id
+    )
+    assert not labnote_export_module._finding_backlink(
+        source_id="finding:a", target_id="workflow:c", backlink=True, type_by_id=type_by_id
+    )
+
+
+def test_project_label_override_still_applies_to_a_known_kind() -> None:
+    raw_config = {"labnote": {"views": {"question": {"label": "Open Questions", "order": 5}}}}
+
+    config = _view_config_for_type("question", raw_config)
+
+    assert config["label"] == "Open Questions"
+    assert config["order"] == 5
+    assert config["surface"] == "explore"
+
+
+@pytest.mark.parametrize("key", ["surface", "route"])
+def test_project_surface_and_route_overrides_are_rejected(key: str) -> None:
+    raw_config = {"labnote": {"views": {"question": {key: "findings"}}}}
+
+    with pytest.raises(ValueError, match=key):
+        _view_config_for_type("question", raw_config)
+
+
+def test_unknown_kind_may_only_be_declared_hidden() -> None:
+    raw_config = {"labnote": {"views": {"talk": {"hidden": True}}}}
+
+    config = _view_config_for_type("talk", raw_config)
+
+    assert config["hidden"] is True
+
+
+@pytest.mark.parametrize(
+    "override",
+    [{"hidden": False}, {"label": "Talks"}, {"order": 10}, {"hidden": True, "label": "Talks"}],
+)
+def test_unknown_kind_rejects_every_other_override(override: dict) -> None:
+    raw_config = {"labnote": {"views": {"talk": override}}}
+
+    with pytest.raises(ValueError, match="talk"):
+        _view_config_for_type("talk", raw_config)
+
+
+def _write_public_entity(project_root: Path, entity_type: str, slug: str, *, sensitivity: str = "public") -> None:
+    write_text(
+        project_root / "entities" / f"{entity_type}s" / f"{slug}.md",
+        f"""
+        ---
+        id: {entity_type}:{slug}
+        kind: {entity_type}
+        title: {slug.replace('-', ' ').title()}
+        sensitivity: {sensitivity}
+        ---
+        Body text for {slug}.
+        """,
+    )
+
+
+def _hidden_kind_project(tmp_path: Path, name: str, extra_yaml: str = "") -> Path:
+    project_root = tmp_path / name
+    write_text(
+        project_root / "science.yaml",
+        f"""
+        name: Hidden Kind Fixture
+        id: {name}
+        last_modified: 2026-06-28
+        {extra_yaml}
+        """,
+    )
+    return project_root
+
+
+def test_unknown_kind_is_hidden_inventoried_and_warned(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "unknown-kind")
+    for index in range(1, 4):
+        _write_public_entity(project_root, "talk", f"000{index}-example-talk")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    entities = read_json(out / "entities" / "index.json")["entities"]
+    views = read_json(out / "views.json")
+
+    assert [record["type"] for record in entities] == ["question"]
+    assert [view["id"] for view in views["views"]] == ["question"]
+    assert views["hidden_kinds"] == [
+        {"entity_type": "talk", "entity_count": 3, "reason": "fallback_hidden"}
+    ]
+
+    talk_warnings = [warning for warning in diagnostics["warnings"] if "talk" in warning["message"]]
+    assert len(talk_warnings) == 1
+    assert "fallback_hidden" in talk_warnings[0]["message"]
+    assert "3" in talk_warnings[0]["message"]
+
+
+def test_declared_hidden_kinds_are_inventoried_without_a_fallback_warning(tmp_path: Path) -> None:
+    project_root = tmp_path / "declared-hidden"
+    write_minimal_project(project_root)
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    views = read_json(out / "views.json")
+
+    assert {"entity_type": "paper", "entity_count": 1, "reason": "declared_hidden"} in views["hidden_kinds"]
+    assert all(entry["reason"] != "fallback_hidden" for entry in views["hidden_kinds"])
+    assert not [warning for warning in diagnostics["warnings"] if "paper" in warning["message"]]
+
+
+def test_project_override_hiding_a_known_kind_is_declared_hidden(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(
+        tmp_path,
+        "override-hidden",
+        extra_yaml="labnote:\n          views:\n            question:\n              hidden: true",
+    )
+    _write_public_entity(project_root, "question", "0001-example-question")
+    _write_public_entity(project_root, "synthesis", "0001-example-synthesis")
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    views = read_json(out / "views.json")
+
+    assert views["hidden_kinds"] == [
+        {"entity_type": "question", "entity_count": 1, "reason": "declared_hidden"}
+    ]
+    assert [view["id"] for view in views["views"]] == ["synthesis"]
+    assert not [warning for warning in diagnostics["warnings"] if "question" in warning["message"]]
+
+
+def test_unknown_kind_declared_hidden_by_the_project_is_not_fallback(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(
+        tmp_path,
+        "unknown-declared-hidden",
+        extra_yaml="labnote:\n          views:\n            talk:\n              hidden: true",
+    )
+    _write_public_entity(project_root, "talk", "0001-example-talk")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    views = read_json(out / "views.json")
+
+    assert views["hidden_kinds"] == [
+        {"entity_type": "talk", "entity_count": 1, "reason": "declared_hidden"}
+    ]
+    assert not [warning for warning in diagnostics["warnings"] if "talk" in warning["message"]]
+
+
+def test_hidden_inventory_respects_the_public_boundary(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "restricted-boundary")
+    _write_public_entity(project_root, "talk", "0001-restricted-talk", sensitivity="internal")
+    _write_public_entity(project_root, "future_kind", "0001-public-future")
+    _write_public_entity(project_root, "future_kind", "0002-restricted-future", sensitivity="internal")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    views = read_json(out / "views.json")
+    descriptor_text = (out / "views.json").read_text(encoding="utf-8")
+    warning_text = json.dumps(diagnostics["warnings"])
+
+    assert views["hidden_kinds"] == [
+        {"entity_type": "future_kind", "entity_count": 1, "reason": "fallback_hidden"}
+    ]
+    assert "0001-restricted-talk" not in descriptor_text
+    assert "0002-restricted-future" not in descriptor_text
+    assert "0001-restricted-talk" not in warning_text
+    assert "0002-restricted-future" not in warning_text
+
+
+def test_hidden_kinds_are_sorted_and_unique(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(
+        tmp_path,
+        "sorted-hidden",
+        extra_yaml="labnote:\n          views:\n            zeta_kind:\n              hidden: true",
+    )
+    for entity_type in ("talk", "alpha_kind", "zeta_kind"):
+        _write_public_entity(project_root, entity_type, f"0001-example-{entity_type}")
+        _write_public_entity(project_root, entity_type, f"0002-example-{entity_type}")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    out = tmp_path / "out"
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    hidden = read_json(out / "views.json")["hidden_kinds"]
+
+    assert hidden == [
+        {"entity_type": "alpha_kind", "entity_count": 2, "reason": "fallback_hidden"},
+        {"entity_type": "talk", "entity_count": 2, "reason": "fallback_hidden"},
+        {"entity_type": "zeta_kind", "entity_count": 2, "reason": "declared_hidden"},
+    ]
+    assert len({entry["entity_type"] for entry in hidden}) == len(hidden)
+
+
+def test_exported_descriptor_satisfies_the_shared_structural_contract(tmp_path: Path) -> None:
+    project_root = tmp_path / "contract-clean"
+    write_minimal_project(project_root)
+    out = tmp_path / "out"
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert descriptor_errors(read_json(out / "views.json")) == []
+
+
+def test_structurally_invalid_descriptor_fails_the_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project_root = tmp_path / "contract-broken"
+    write_minimal_project(project_root)
+    out = tmp_path / "out"
+    monkeypatch.setitem(
+        labnote_export_module.VIEW_VOCABULARY_BY_TYPE, "synthesis", {"surface": "analysis", "label": "S", "order": 30}
+    )
+
+    with pytest.raises(ValueError, match="surface"):
+        export_labnote_package(project_root=project_root, out_dir=out)
+
+
+def test_filter_hidden_entities_helper_is_gone() -> None:
+    assert not hasattr(labnote_export_module, "_filter_hidden_entities")
+
+
+def _export_data_version(project_root: Path, out: Path) -> str:
+    export_labnote_package(project_root=project_root, out_dir=out, force=True)
+    return read_json(out / "project.json")["package"]["data_version"]
+
+
+def test_data_version_changes_when_a_new_hidden_kind_appears(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "hidden-version-a")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    _write_public_entity(project_root, "talk", "0001-example-talk")
+
+    first = _export_data_version(project_root, tmp_path / "out-1")
+    _write_public_entity(project_root, "future_kind", "0001-example-future")
+    second = _export_data_version(project_root, tmp_path / "out-2")
+
+    assert first != second
+
+
+def test_data_version_ignores_hidden_count_and_content_churn(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "hidden-version-b")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    _write_public_entity(project_root, "talk", "0001-example-talk")
+
+    first = _export_data_version(project_root, tmp_path / "out-1")
+    write_text(
+        project_root / "entities" / "talks" / "0001-example-talk.md",
+        """
+        ---
+        id: talk:0001-example-talk
+        kind: talk
+        title: Edited talk title
+        sensitivity: public
+        ---
+        Rewritten body text.
+        """,
+    )
+    _write_public_entity(project_root, "talk", "0002-second-talk")
+    second = _export_data_version(project_root, tmp_path / "out-2")
+
+    assert first == second
+
+
+def test_data_version_ignores_restricted_entities_of_a_new_kind(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "hidden-version-c")
+    _write_public_entity(project_root, "question", "0001-example-question")
+
+    first = _export_data_version(project_root, tmp_path / "out-1")
+    _write_public_entity(project_root, "talk", "0001-restricted-talk", sensitivity="internal")
+    second = _export_data_version(project_root, tmp_path / "out-2")
+
+    assert first == second
+
+
+def test_data_version_still_changes_when_a_visible_entity_changes(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "hidden-version-d")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    _write_public_entity(project_root, "talk", "0001-example-talk")
+
+    first = _export_data_version(project_root, tmp_path / "out-1")
+    write_text(
+        project_root / "entities" / "questions" / "0001-example-question.md",
+        """
+        ---
+        id: question:0001-example-question
+        kind: question
+        title: Edited question title
+        sensitivity: public
+        ---
+        Rewritten visible body.
+        """,
+    )
+    second = _export_data_version(project_root, tmp_path / "out-2")
+
+    assert first != second
+
+
+def test_hidden_kind_signature_hashes_only_type_and_reason(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "hidden-version-e")
+    _write_public_entity(project_root, "question", "0001-example-question")
+    _write_public_entity(project_root, "talk", "0001-example-talk")
+    export_labnote_package(project_root=project_root, out_dir=tmp_path / "out-1", force=True)
+
+    baseline = read_json(tmp_path / "out-1" / "project.json")["package"]["data_version"]
+    raw_config = labnote_export_module._load_raw_project_yaml(project_root)
+    entities, _, _ = labnote_export_module._discover_entities(project_root, set())
+    partition = labnote_export_module._partition_entities_for_views(entities, raw_config)
+
+    # Same (entity_type, reason) pairs, different counts -> identical version.
+    inflated = [dict(entry, entity_count=entry["entity_count"] + 99) for entry in partition.hidden_kinds]
+    assert labnote_export_module._data_version(
+        project_root,
+        raw_config,
+        partition.visible_entities,
+        None,
+        None,
+        [(entry["entity_type"], entry["reason"]) for entry in inflated],
+    ) == baseline
+
+    # A different reason for the same kind -> different version.
+    assert labnote_export_module._data_version(
+        project_root,
+        raw_config,
+        partition.visible_entities,
+        None,
+        None,
+        [(entry["entity_type"], "declared_hidden") for entry in partition.hidden_kinds],
+    ) != baseline
+
+
+def test_exporter_version_is_two() -> None:
+    assert labnote_export_module.EXPORTER_VERSION == "2"
+
+
+def test_export_stamped_by_the_previous_exporter_version_is_rebuilt(tmp_path: Path) -> None:
+    # Nothing else in the stamp covers the Phase 1 descriptor change, so without the
+    # version bump every existing .labnote/app_export would be skipped and keep
+    # pre-Phase-1 output forever.
+    project_root = tmp_path / "stale-stamp"
+    write_minimal_project(project_root)
+    out = tmp_path / ".labnote" / "app_export"
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    stale = read_json(out / "export_stamp.json")
+    stale["exporter"]["version"] = "1"
+    (out / "export_stamp.json").write_text(json.dumps(stale), encoding="utf-8")
+    (out / "views.json").write_text(json.dumps({"views": []}), encoding="utf-8")
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert diagnostics["skipped"] is False
+    assert read_json(out / "export_stamp.json")["exporter"]["version"] == "2"
+    assert "hidden_kinds" in read_json(out / "views.json")
+
+
+def test_export_stamped_by_the_current_exporter_version_is_skipped(tmp_path: Path) -> None:
+    project_root = tmp_path / "current-stamp"
+    write_minimal_project(project_root)
+    out = tmp_path / ".labnote" / "app_export"
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    assert export_labnote_package(project_root=project_root, out_dir=out)["skipped"] is True

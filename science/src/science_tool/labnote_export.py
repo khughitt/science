@@ -21,6 +21,7 @@ from science_tool.project_package.core import content_version, file_resource
 from science_tool.graph.store import canonical_id_from_entity_uri, export_graph_payload, shorten_uri
 from science_tool.graph.store.dataset import _load_dataset
 from science_tool.graph.store.identity import _graph_uri
+from science_tool.labnote_view_contract import descriptor_errors, route_for_view
 from science_tool.markdown_utils import frontmatter_span, strip_html_comments_preserving_code
 from science_tool.project_config import load_project_config
 from science_tool.references import (
@@ -40,7 +41,7 @@ SEMANTIC_REFS_CONTRACT = "science.semantic_refs"
 BUNDLE_SCHEMA_VERSION = "1"
 EXPORT_STAMP_SCHEMA_VERSION = "science.labnote_export_stamp.v1"
 EXPORTER_NAME = "science.labnote_export"
-EXPORTER_VERSION = "1"
+EXPORTER_VERSION = "2"
 REQUIRED_EXPORT_FILES = (
     "project.json",
     "views.json",
@@ -68,11 +69,39 @@ INTERNAL_PUBLIC_PROSE_PATH_RE = re.compile(
     r"|~/\.claude/projects/[^\s`'\"<>)\]]*"
 )
 
-FINDING_TYPES = {"hypothesis", "proposition", "synthesis"}
+# Measured from the four Science projects in the Phase 0 audit: every kind the
+# generic fallback served publicly. Promoting them keeps working content visible
+# when the fallback stops emitting views.
+PROMOTED_FALLBACK_TYPES = (
+    "book",
+    "citation",
+    "concept",
+    "discussion",
+    "evidence_line",
+    "finding",
+    "inquiry",
+    "interpretation",
+    "meta",
+    "observation",
+    "paper_review",
+    "patch_definition",
+    "plan",
+    "pre_registration",
+    "prose_source",
+    "report",
+    "research_question",
+    "spec",
+    "theme",
+    "topic",
+)
+
+FINDING_TYPES = {"hypothesis", "proposition", "synthesis", "mechanism", "lead"}
 ENTITY_CLASS_BY_TYPE = {
     "hypothesis": "epistemic",
     "proposition": "epistemic",
     "synthesis": "epistemic",
+    "mechanism": "epistemic",
+    "lead": "epistemic",
     "question": "epistemic",
     "dataset": "source",
     "method": "workflow",
@@ -81,48 +110,41 @@ ENTITY_CLASS_BY_TYPE = {
     "workflow_run": "workflow",
     "paper": "reference",
 }
-DEFAULT_VIEW_BY_TYPE = {
-    "hypothesis": {
-        "surface": "findings",
-        "route": "/findings/hypothesis",
-        "label": "Hypotheses",
-        "order": 10,
-    },
-    "proposition": {
-        "surface": "findings",
-        "route": "/findings/proposition",
-        "label": "Propositions",
-        "order": 20,
-    },
-    "synthesis": {
-        "surface": "findings",
-        "route": "/findings/synthesis",
-        "label": "Synthesis",
-        "order": 30,
-    },
-    "question": {"surface": "explore", "route": "/explore/question", "label": "Questions", "order": 40},
-    "dataset": {"surface": "explore", "route": "/explore/dataset", "label": "Datasets", "order": 50},
-    "method": {"surface": "explore", "route": "/explore/method", "label": "Methods", "order": 60},
-    "search": {"surface": "explore", "route": "/explore/search", "label": "Searches", "order": 70},
-    "workflow": {
+
+
+def _promoted_explore_view(entity_type: str) -> dict[str, Any]:
+    """A kind promoted from the former generic fallback, at its historical order."""
+    return {
         "surface": "explore",
-        "route": "/explore/workflow",
-        "label": "Workflows",
-        "order": 80,
-    },
-    "workflow_run": {
-        "surface": "explore",
-        "route": "/explore/workflow-run",
-        "label": "Workflow Runs",
-        "order": 90,
-    },
+        "label": entity_type.replace("_", " ").title(),
+        "order": 500,
+    }
+
+
+# The permanent producer vocabulary. Every kind Science exports must appear here;
+# anything absent is hidden and inventoried rather than given a generic view.
+# Routes are never declared — they are derived from surface and view ID.
+VIEW_VOCABULARY_BY_TYPE: dict[str, dict[str, Any]] = {
+    "hypothesis": {"surface": "findings", "label": "Hypotheses", "order": 10},
+    "proposition": {"surface": "findings", "label": "Propositions", "order": 20},
+    "synthesis": {"surface": "findings", "label": "Synthesis", "order": 30},
+    "mechanism": {"surface": "findings", "label": "Mechanisms", "order": 40},
+    "lead": {"surface": "findings", "label": "Leads", "order": 50},
+    "question": {"surface": "explore", "label": "Questions", "order": 40},
+    "dataset": {"surface": "explore", "label": "Datasets", "order": 50},
+    "method": {"surface": "explore", "label": "Methods", "order": 60},
+    "search": {"surface": "explore", "label": "Searches", "order": 70},
+    "workflow": {"surface": "explore", "label": "Workflows", "order": 80},
+    "workflow_run": {"surface": "explore", "label": "Workflow Runs", "order": 90},
     "paper": {
         "surface": "explore",
-        "route": "/explore/paper",
         "label": "Papers",
         "order": 100,
         "hidden": True,
     },
+    # Kinds the generic fallback served in production before Phase 1. They keep
+    # order 500 so their existing secondary sort by ID is unchanged.
+    **{entity_type: _promoted_explore_view(entity_type) for entity_type in PROMOTED_FALLBACK_TYPES},
 }
 
 
@@ -849,11 +871,20 @@ def _data_version(
     entities: list[ExportedEntity],
     source_records: dict[str, SourceSemanticRecord] | None = None,
     link_bundle: dict[str, Any] | None = None,
+    hidden_kind_signature: list[tuple[str, str]] | None = None,
 ) -> str:
     base = str(raw_config.get("last_modified") or raw_config.get("version") or "0")
 
     def chunks() -> Iterator[bytes]:
         yield project_config_path(project_root).read_bytes()
+        # Only which kinds are hidden and why is semantic. Counts and hidden content
+        # are deliberately excluded: churn behind the public boundary must not
+        # invalidate every downstream consumer's cache.
+        if hidden_kind_signature:
+            yield json.dumps(
+                {"hidden_kinds": sorted(list(pair) for pair in hidden_kind_signature)},
+                sort_keys=True,
+            ).encode("utf-8")
         bib = resolve_bib_path(project_root)
         if bib.exists():
             yield bib.read_bytes()
@@ -893,35 +924,105 @@ def _data_version(
     return content_version(base, chunks())
 
 
+ALLOWED_VIEW_OVERRIDE_KEYS = frozenset({"label", "order", "hidden"})
+
+
+def _view_overrides(raw_config: dict[str, Any]) -> dict[str, Any]:
+    return (raw_config.get("labnote") or {}).get("views") or {}
+
+
+def _declared_hidden_by_project(entity_type: str, raw_config: dict[str, Any]) -> bool:
+    """Whether the project itself declares this kind hidden.
+
+    Checked before the vocabulary so a deliberate suppression of an unknown kind is
+    recorded as stated intent rather than entering the fallback backlog every export.
+    """
+    return bool((_view_overrides(raw_config).get(entity_type) or {}).get("hidden"))
+
+
 def _view_config_for_type(entity_type: str, raw_config: dict[str, Any]) -> dict[str, Any]:
-    overrides = (raw_config.get("labnote") or {}).get("views") or {}
-    base = dict(
-        DEFAULT_VIEW_BY_TYPE.get(
-            entity_type,
-            {
-                "surface": "explore",
-                "route": f"/explore/{entity_type.replace('_', '-')}",
-                "label": entity_type.replace("_", " ").title(),
-                "order": 500,
-            },
+    override = _view_overrides(raw_config).get(entity_type) or {}
+    rejected = set(override) - ALLOWED_VIEW_OVERRIDE_KEYS
+    if rejected:
+        raise ValueError(
+            f"invalid labnote view override for {entity_type}: {sorted(rejected)}; "
+            f"only {sorted(ALLOWED_VIEW_OVERRIDE_KEYS)} may be overridden and surface "
+            "and route are producer-owned"
         )
-    )
-    override = overrides.get(entity_type) or {}
-    unknown = set(override) - {"label", "order", "surface", "hidden"}
-    if unknown:
-        raise ValueError(f"invalid labnote view override for {entity_type}: {sorted(unknown)}")
-    base.update(override)
-    return base
+
+    base = VIEW_VOCABULARY_BY_TYPE.get(entity_type)
+    if base is None:
+        # An unknown kind may only be suppressed. Allowing a project-local visible
+        # opt-in would let it bypass the producer vocabulary entirely.
+        if override != {"hidden": True}:
+            raise ValueError(
+                f"invalid labnote view override for {entity_type}: {entity_type} has no producer "
+                "vocabulary entry, so the only legal override is hidden: true; add a "
+                "VIEW_VOCABULARY_BY_TYPE entry to make it visible"
+            )
+        return {"hidden": True}
+
+    resolved = dict(base)
+    resolved.update(override)
+    return resolved
 
 
-def _filter_hidden_entities(
+@dataclass(frozen=True)
+class ViewPartition:
+    visible_entities: list[ExportedEntity]
+    hidden_kinds: list[dict[str, Any]]
+
+
+def _partition_entities_for_views(
     entities: list[ExportedEntity],
     raw_config: dict[str, Any],
-) -> list[ExportedEntity]:
-    return [entity for entity in entities if not _view_config_for_type(entity.record["type"], raw_config).get("hidden")]
+) -> ViewPartition:
+    """Split public entities into the visible set and a hidden-kind inventory.
+
+    `_discover_entities` remains the public-boundary owner; only entities it has
+    already cleared reach this function, so restricted content can never appear in
+    the inventory, its counts, or the warnings derived from it.
+    """
+    visible_entities: list[ExportedEntity] = []
+    counts: dict[str, int] = {}
+    reasons: dict[str, str] = {}
+
+    for entity in entities:
+        entity_type = entity.record["type"]
+        if _declared_hidden_by_project(entity_type, raw_config):
+            # Stated project intent, checked first so a deliberate suppression never
+            # enters the fallback backlog on every export.
+            reason = "declared_hidden"
+        elif entity_type not in VIEW_VOCABULARY_BY_TYPE:
+            reason = "fallback_hidden"
+        elif _view_config_for_type(entity_type, raw_config).get("hidden"):
+            reason = "declared_hidden"
+        else:
+            visible_entities.append(entity)
+            continue
+        counts[entity_type] = counts.get(entity_type, 0) + 1
+        reasons[entity_type] = reason
+
+    hidden_kinds = [
+        {"entity_type": entity_type, "entity_count": counts[entity_type], "reason": reasons[entity_type]}
+        for entity_type in sorted(counts, key=lambda kind: (kind, reasons[kind]))
+    ]
+    return ViewPartition(visible_entities=visible_entities, hidden_kinds=hidden_kinds)
 
 
-def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> dict[str, Any]:
+def _hidden_kind_warnings(hidden_kinds: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        _warning(
+            f"kind {entry['entity_type']} has no producer view vocabulary entry: "
+            f"{entry['entity_count']} public entities hidden as fallback_hidden",
+            None,
+        )
+        for entry in hidden_kinds
+        if entry["reason"] == "fallback_hidden"
+    ]
+
+
+def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, Any]) -> list[dict[str, Any]]:
     seen_types = sorted({entity.record["type"] for entity in entities})
     views = []
     for entity_type in seen_types:
@@ -934,15 +1035,19 @@ def _views_for_entities(entities: list[ExportedEntity], raw_config: dict[str, An
                 "label": base["label"],
                 "surface": base["surface"],
                 "entity_types": [entity_type],
-                "route": base["route"],
+                "route": route_for_view(entity_type, base["surface"]),
                 "order": base["order"],
                 "modules": [],
             }
         )
-    return {"views": sorted(views, key=lambda view: (view["order"], view["id"]))}
+    return sorted(views, key=lambda view: (view["order"], view["id"]))
 
 
 def _validate_capabilities(project: dict[str, Any], views: dict[str, Any]) -> None:
+    errors = descriptor_errors(views)
+    if errors:
+        detail = "; ".join(f"{error.field}: {error.message}" for error in errors)
+        raise ValueError(f"invalid Labnote view descriptor: {detail}")
     has_graph_module = any(
         module.get("id") == "graph" or module.get("type") == "graph"
         for view in views["views"]
@@ -1029,7 +1134,7 @@ def _semantic_ref_bundle_source_records(
 
 
 def _semantic_route_for_entity(entity_id: str, entity_type: str, raw_config: dict[str, Any]) -> str:
-    route_base = _view_config_for_type(entity_type, raw_config)["route"]
+    route_base = route_for_view(entity_type, _view_config_for_type(entity_type, raw_config)["surface"])
     return f"{route_base}?id={quote(entity_id, safe='')}"
 
 
@@ -1427,14 +1532,19 @@ def export_labnote_package(project_root: Path, out_dir: Path, *, force: bool = F
         raise ValueError("science.yaml must declare a non-empty project id")
     known_citekeys = set(load_bib_entries(project_root))
     entities, restricted_present, restricted_ids = _discover_entities(project_root, known_citekeys)
-    entities = _filter_hidden_entities(entities, raw_config)
+    partition = _partition_entities_for_views(entities, raw_config)
+    entities = partition.visible_entities
     exported_records = _exported_semantic_records(entities)
     source_records = {
         **_graph_semantic_records(project_root),
         **_content_prose_semantic_records(project_root),
     }
     label = str(((raw_config.get("labnote") or {}).get("label")) or raw_config.get("name") or config.id)
-    diagnostics = {"errors": [], "warnings": [], "semantic_refs": _empty_semantic_ref_diagnostics()}
+    diagnostics = {
+        "errors": [],
+        "warnings": _hidden_kind_warnings(partition.hidden_kinds),
+        "semantic_refs": _empty_semantic_ref_diagnostics(),
+    }
     prose_bundle = _prose_bundle(
         entities,
         known_citekeys=known_citekeys,
@@ -1455,6 +1565,7 @@ def export_labnote_package(project_root: Path, out_dir: Path, *, force: bool = F
         entities,
         semantic_bundle_source_records,
         link_bundle,
+        [(entry["entity_type"], entry["reason"]) for entry in partition.hidden_kinds],
     )
     project = {
         "schema_version": PROJECT_SCHEMA_VERSION,
@@ -1477,7 +1588,10 @@ def export_labnote_package(project_root: Path, out_dir: Path, *, force: bool = F
             "restricted_resources_present": restricted_present,
         },
     }
-    views = _views_for_entities(entities, raw_config)
+    views = {
+        "views": _views_for_entities(entities, raw_config),
+        "hidden_kinds": partition.hidden_kinds,
+    }
     _validate_capabilities(project, views)
     semantic_ref_bundle = _semantic_ref_bundle(
         data_version,
