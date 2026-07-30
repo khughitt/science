@@ -77,6 +77,32 @@ baseline_budget_test=$(git -C "$toolkit_root" show "$recorded_origin_main_sha:sc
 rg -q '"budgeted": 69' <<< "$baseline_budget_test"
 rg -q '"exempt": 122' <<< "$baseline_budget_test"
 rg -q '"deferred": 102' <<< "$baseline_budget_test"
+pre_rebase_head=$(git -C "$toolkit_root" rev-parse HEAD)
+cherry_output=$(git -C "$toolkit_root" cherry "$recorded_origin_main_sha" "$pre_rebase_head")
+mapfile -t actual_patch_equivalent_shas < <(
+  awk '$1 == "-" {print $2}' <<< "$cherry_output" | LC_ALL=C sort
+)
+mapfile -t expected_patch_equivalent_shas < <(
+  printf '%s\n' \
+    "$(git -C "$toolkit_root" rev-parse 'b9eecc7a^{commit}')" \
+    "$(git -C "$toolkit_root" rev-parse '3f6ecafa^{commit}')" |
+    LC_ALL=C sort
+)
+test "${actual_patch_equivalent_shas[*]}" = "${expected_patch_equivalent_shas[*]}" || {
+  printf 'HARD STOP: unexpected patch-equivalent set before rebase\nexpected: %s\nactual: %s\n' \
+    "${expected_patch_equivalent_shas[*]}" "${actual_patch_equivalent_shas[*]}"
+  exit 1
+}
+expected_replay_count=$(awk '$1 == "+" {count++} END {print count + 0}' <<< "$cherry_output")
+test "$expected_replay_count" -gt 0 || {
+  echo "HARD STOP: pre-rebase unique replay count is not positive"
+  exit 1
+}
+rebase_audit="$sdd_workspace/expected-rebase-replay.tsv"
+printf 'baseline\t%s\npre-rebase-head\t%s\nexpected-unique-replays\t%s\npatch-equivalent\t%s\npatch-equivalent\t%s\n' \
+  "$recorded_origin_main_sha" "$pre_rebase_head" "$expected_replay_count" \
+  "${expected_patch_equivalent_shas[0]}" "${expected_patch_equivalent_shas[1]}" \
+  > "$rebase_audit"
 set +e
 git -C "$toolkit_root" rebase "$recorded_origin_main_sha"
 rebase_status=$?
@@ -153,6 +179,34 @@ test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unresolved rebase paths remain"; exit 1;
 }
 recorded_origin_main_sha=$(cat "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha")
+rebase_audit="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/expected-rebase-replay.tsv"
+test -s "$rebase_audit" || {
+  echo "HARD STOP: missing pre-rebase replay audit"; exit 1;
+}
+test "$(awk -F '\t' '$1 == "baseline" {print $2}' "$rebase_audit")" = "$recorded_origin_main_sha" || {
+  echo "HARD STOP: replay audit baseline differs from the frozen baseline"; exit 1;
+}
+mapfile -t audited_patch_equivalent_shas < <(
+  awk -F '\t' '$1 == "patch-equivalent" {print $2}' "$rebase_audit" | LC_ALL=C sort
+)
+mapfile -t expected_patch_equivalent_shas < <(
+  printf '%s\n' \
+    "$(git -C "$toolkit_root" rev-parse 'b9eecc7a^{commit}')" \
+    "$(git -C "$toolkit_root" rev-parse '3f6ecafa^{commit}')" |
+    LC_ALL=C sort
+)
+test "${audited_patch_equivalent_shas[*]}" = "${expected_patch_equivalent_shas[*]}" || {
+  echo "HARD STOP: replay audit patch-equivalent set is incomplete or unexpected"; exit 1;
+}
+expected_replay_count=$(awk -F '\t' '$1 == "expected-unique-replays" {print $2}' "$rebase_audit")
+[[ "$expected_replay_count" =~ ^[1-9][0-9]*$ ]] || {
+  echo "HARD STOP: invalid expected replay count in pre-rebase audit"; exit 1;
+}
+actual_replay_count=$(git -C "$toolkit_root" rev-list --count "$recorded_origin_main_sha..HEAD")
+test "$actual_replay_count" -eq "$expected_replay_count" || {
+  echo "HARD STOP: rebase produced $actual_replay_count commits above baseline; expected $expected_replay_count"
+  exit 1
+}
 rebased_subjects=$(git -C "$toolkit_root" log --format=%s "$recorded_origin_main_sha..HEAD")
 for skipped_subject in \
   'fix(schema): drop the premature status enum via mixin-concept-1.1' \
@@ -190,7 +244,12 @@ Expected: Git reports the two patch-equivalent commits as skipped; the single
 Labnote conflict is resolved by composition; every upstream Labnote test
 remains; the feature registry-restoration guard remains; the focused tests
 pass; the frozen baseline partition is `69 / 122 / 102`; and the rebased
-feature partition is `69 / 121 / 102`.
+feature partition is `69 / 121 / 102`. Before starting the rebase, the gate
+requires `git cherry`'s complete minus set to be exactly `b9eecc7a` and
+`3f6ecafa` and records the plus count in ignored SDD execution state. After
+continuation, the number of commits above the frozen baseline must equal that
+recorded unique-replay count and both duplicate subjects must be absent, so no
+additional commit can be silently skipped.
 
 ---
 
@@ -1572,8 +1631,8 @@ for project_name in "${real_project_names[@]}"; do
   snapshot_path="$attempt_root/real-project-home/${snapshot_relpath[$project_name]}"
   mkdir -p "$(dirname "$snapshot_path")"
   git -C "${source_root[$project_name]}" worktree add --detach "$snapshot_path" "$actual_head"
-  test -z "$(git -C "$snapshot_path" status --porcelain)" || {
-    echo "HARD STOP: $project_name detached snapshot is dirty"; exit 1;
+  test -z "$(git -C "$snapshot_path" status --porcelain=v1 --ignored --untracked-files=all)" || {
+    echo "HARD STOP: $project_name detached snapshot is not completely clean"; exit 1;
   }
   test "$(git -C "$snapshot_path" rev-parse HEAD)" = "$actual_head"
   test "$(git -C "$snapshot_path" rev-parse 'HEAD^{tree}')" = "$tree_sha"
@@ -1602,8 +1661,12 @@ printf 'consumer\tscience-meta\t%s\t%s\tclean\ntoolkit-after\t%s\nattempt-root\t
 
 **Retry cleanup:** if an attempt stops before verification, read its path from
 `latest-attempt.txt` and remove only the registered detached worktrees; do not
-delete its reports or directory. This command is safe to repeat and lets the
-next run create a fresh attempt directory:
+delete its reports or directory. The nine external paths are derived from
+`$attempt_root` plus the explicit source-root and snapshot-relative-path
+arrays, not from inventory or manifest rows that may not have been appended
+when Step 2 stopped. The two toolkit paths are likewise deterministic. Absent
+or never-registered paths are safe. This command is safe to repeat and lets
+the next run create a fresh attempt directory:
 
 ```bash
 set -euo pipefail
@@ -1629,13 +1692,35 @@ declare -A source_root=(
   [seq-feats]=~/d/seq-feats
   [science-commons]=~/d/science-commons
 )
-while IFS=$'\t' read -r row_kind project_name _source_label _head _tree worktree_path _clean; do
-  [[ "$row_kind" = real-project-snapshot ]] || continue
+real_project_names=(
+  natural-systems
+  multiple-myeloma
+  post-acute-infection
+  health-meta
+  evolution
+  cbioportal
+  protein-landscape
+  seq-feats
+  science-commons
+)
+declare -A snapshot_relpath=(
+  [natural-systems]=d/natural-systems
+  [multiple-myeloma]=d/cancer/cancer-types/multiple-myeloma
+  [post-acute-infection]=d/health/processes/post-acute-infection
+  [health-meta]=d/health/meta
+  [evolution]=d/cancer/mechanisms/evolution
+  [cbioportal]=d/cancer/data-sources/cbioportal
+  [protein-landscape]=d/protein-landscape
+  [seq-feats]=d/seq-feats
+  [science-commons]=d/science-commons
+)
+for project_name in "${real_project_names[@]}"; do
+  worktree_path="$attempt_root/real-project-home/${snapshot_relpath[$project_name]}"
   if git -C "${source_root[$project_name]}" worktree list --porcelain | rg -Fqx "worktree $worktree_path"; then
     git -C "${source_root[$project_name]}" worktree remove --force "$worktree_path"
   fi
   git -C "${source_root[$project_name]}" worktree prune
-done < "$attempt_root/task-6-manifest.tsv"
+done
 ```
 
 - [ ] **Step 3: Run broader verification sequentially and compare the complete real-project marker with stable current-main state**
@@ -1652,10 +1737,14 @@ markers remain visible external-failure evidence; they are not green.
 Run both markers with the identical synthetic `HOME` created in Step 2. Bracket
 the runs with byte-identical snapshot-state records for all nine detached
 worktrees. Each row must match the manifest's captured HEAD and tree SHA and
-must remain clean, including no non-ignored untracked paths. There is no need
-to hash ignored `.venv` or cache payload: the detached snapshots start clean,
-the marker may use an explicit host `UV_CACHE_DIR`, and versioned corpus state
-is frozen by commit/tree. The gate never reads a live project checkout.
+must remain completely clean. Each capture runs the complete, cheap
+`git status --porcelain=v1 --ignored --untracked-files=all` check, so any
+tracked modification or newly created ignored or untracked path stops the
+attempt. The between-markers capture completes before the feature marker can
+start, so no state created by the current-main marker can be hidden from the
+feature comparison. The marker uses an explicit host `UV_CACHE_DIR`; it must
+not materialize a `.venv`, cache, or other ignored payload in a snapshot. The
+gate never reads a live project checkout.
 `science/meta` remains supplied independently by each immutable toolkit
 worktree.
 If an explicit `--basetemp` is used for any suite, precheck that neither that
@@ -1696,8 +1785,8 @@ capture_snapshot_state() {
   while IFS=$'\t' read -r row_kind project_name source_label expected_head expected_tree snapshot_path expected_clean; do
     [[ "$row_kind" = real-project-snapshot ]] || continue
     test "$expected_clean" = clean
-    test -z "$(git -C "$snapshot_path" status --porcelain --untracked-files=normal)" || {
-      echo "HARD STOP: detached snapshot became dirty: $project_name"; exit 1;
+    test -z "$(git -C "$snapshot_path" status --porcelain=v1 --ignored --untracked-files=all)" || {
+      echo "HARD STOP: detached snapshot is no longer completely clean: $project_name"; exit 1;
     }
     actual_head=$(git -C "$snapshot_path" rev-parse HEAD)
     actual_tree=$(git -C "$snapshot_path" rev-parse 'HEAD^{tree}')
@@ -2066,6 +2155,11 @@ snapshot-state records;
 ask for a go/no-go on pushing `origin/main`. **Do not
 proceed without an explicit yes.** Prior approval of the design is not approval
 of the push. Immediately after that yes, create this immutable approval record.
+The command discovers every exact `artifact` row in the Task 6 manifest,
+checks its current SHA-256, and writes one evidence row for it; the manifest
+itself is an additional evidence row. It does not maintain a selected artifact
+list, so canonical reports, suite logs, marker logs and signatures, all
+snapshot records, verbose reports, and both parity tables are frozen together.
 It is the only point at which `latest-attempt.txt` may be read for publication;
 copy the printed `approval_record` path verbatim into Steps 2 and 3.
 
@@ -2100,14 +2194,18 @@ test -z "$duplicate_artifact_keys" || {
   printf 'HARD STOP: approved manifest artifact keys are not unique:\n%s\n' "$duplicate_artifact_keys"
   exit 1
 }
-for artifact_path in "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/parity-table.md" \
-  "$approved_attempt_root/current-main-real-projects.txt" "$approved_attempt_root/feature-real-projects.txt" \
-  "$approved_attempt_root/current-main-real-project-failure-signatures.txt" "$approved_attempt_root/feature-real-project-failure-signatures.txt" \
-  "$approved_attempt_root/real-project-snapshot-inventory.tsv" \
-  "$approved_attempt_root/snapshot-state-before-current-main.tsv" "$approved_attempt_root/snapshot-state-between-real-project-markers.tsv" \
-  "$approved_attempt_root/snapshot-state-after-feature.tsv"; do
-  test -f "$artifact_path" || { echo "HARD STOP: missing approval artifact $artifact_path"; exit 1; }
-done
+malformed_artifact_rows=$(awk -F '\t' '$1 == "artifact" && NF != 4 {print NR}' "$approved_attempt_root/task-6-manifest.tsv")
+test -z "$malformed_artifact_rows" || {
+  printf 'HARD STOP: malformed manifest artifact rows: %s\n' "$malformed_artifact_rows"
+  exit 1
+}
+mapfile -t manifest_artifact_rows < <(
+  awk -F '\t' '$1 == "artifact" {print $2 "\t" $3 "\t" $4}' \
+    "$approved_attempt_root/task-6-manifest.tsv"
+)
+test "${#manifest_artifact_rows[@]}" -gt 0 || {
+  echo "HARD STOP: approved manifest contains no artifact rows"; exit 1;
+}
 printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\ncurrent-main-real-project-log\t%s\nfeature-real-project-log\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\nsnapshot-state-before-current-main\t%s\nsnapshot-state-between-markers\t%s\nsnapshot-state-after-feature\t%s\n' \
   "$approved_attempt_root" "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" \
   "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
@@ -2120,32 +2218,47 @@ printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s
   > "$approval_record"
 printf 'evidence\ttask-6-manifest\t%s\t%s\n' "$approved_attempt_root/task-6-manifest.tsv" \
   "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" >> "$approval_record"
-approval_artifact_keys=(
-  final-parity-table
-  parity-table
-  current-main-real-projects
-  feature-real-projects
-  current-main-real-project-failure-signatures
-  feature-real-project-failure-signatures
-  real-project-snapshot-inventory
-  snapshot-state-before-current-main
-  snapshot-state-between-real-project-markers
-  snapshot-state-after-feature
-)
-for manifest_key in "${approval_artifact_keys[@]}"; do
-  mapfile -t manifest_evidence_rows < <(
-    awk -F '\t' -v key="$manifest_key" \
-      '$1 == "artifact" && $2 == key {print $3 "\t" $4}' \
-      "$approved_attempt_root/task-6-manifest.tsv"
-  )
-  test "${#manifest_evidence_rows[@]}" -eq 1 || {
-    echo "HARD STOP: expected exactly one manifest path/hash row for $manifest_key"; exit 1;
+for manifest_artifact_row in "${manifest_artifact_rows[@]}"; do
+  IFS=$'\t' read -r manifest_key artifact_path expected_digest <<< "$manifest_artifact_row"
+  test -n "$manifest_key" && test -n "$artifact_path" && test -n "$expected_digest" || {
+    echo "HARD STOP: incomplete manifest artifact row"; exit 1;
   }
-  IFS=$'\t' read -r artifact_path expected_digest <<< "${manifest_evidence_rows[0]}"
-  test -n "$artifact_path" && test -n "$expected_digest" || { echo "HARD STOP: incomplete manifest evidence $manifest_key"; exit 1; }
-  test "$(sha256sum "$artifact_path" | awk '{print $1}')" = "$expected_digest" || { echo "HARD STOP: manifest evidence checksum mismatch for $manifest_key"; exit 1; }
+  test "$manifest_key" != task-6-manifest || {
+    echo "HARD STOP: manifest artifact key collides with task-6-manifest evidence"; exit 1;
+  }
+  test -f "$artifact_path" || {
+    echo "HARD STOP: missing manifest artifact $manifest_key at $artifact_path"; exit 1;
+  }
+  test "$(sha256sum "$artifact_path" | awk '{print $1}')" = "$expected_digest" || {
+    echo "HARD STOP: manifest evidence checksum mismatch for $manifest_key"; exit 1;
+  }
   printf 'evidence\t%s\t%s\t%s\n' "$manifest_key" "$artifact_path" "$expected_digest" >> "$approval_record"
 done
+duplicate_evidence_keys=$(awk -F '\t' '
+  $1 == "evidence" { count[$2]++ }
+  END {
+    for (key in count) {
+      if (count[key] != 1) print key
+    }
+  }
+' "$approval_record")
+test -z "$duplicate_evidence_keys" || {
+  printf 'HARD STOP: approval evidence keys are not unique:\n%s\n' "$duplicate_evidence_keys"
+  exit 1
+}
+mapfile -t expected_evidence_keys < <(
+  {
+    printf '%s\n' task-6-manifest
+    awk -F '\t' '$1 == "artifact" {print $2}' "$approved_attempt_root/task-6-manifest.tsv"
+  } | LC_ALL=C sort
+)
+mapfile -t actual_evidence_keys < <(
+  awk -F '\t' '$1 == "evidence" {print $2}' "$approval_record" | LC_ALL=C sort
+)
+test "${actual_evidence_keys[*]}" = "${expected_evidence_keys[*]}" || {
+  echo "HARD STOP: approval evidence coverage differs from the manifest artifact set"
+  exit 1
+}
 sha256sum "$approval_record" > "$approval_digest_path"
 printf 'Approved publication record: %s\n' "$approval_record"
 ```
@@ -2167,22 +2280,84 @@ test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "H
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
 test "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval after-toolkit SHA mismatch"; exit 1; }
-verify_approved_evidence() {
-  local evidence_key=$1
+verify_approved_evidence_set() {
+  local manifest_path="$approved_attempt_root/task-6-manifest.tsv"
+  local malformed_artifact_rows
+  local duplicate_manifest_keys
+  local duplicate_evidence_keys
+  local evidence_kind
+  local evidence_key
   local evidence_path
   local evidence_digest
-  evidence_path=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $3}' "$approval_record")
-  evidence_digest=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $4}' "$approval_record")
-  test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
-  test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
+  local expected_path
+  local expected_digest
+  local current_digest
+  local -a expected_evidence_keys
+  local -a actual_evidence_keys
+  local -a expected_artifact_rows
+
+  malformed_artifact_rows=$(awk -F '\t' '$1 == "artifact" && NF != 4 {print NR}' "$manifest_path")
+  test -z "$malformed_artifact_rows" || {
+    printf 'HARD STOP: malformed manifest artifact rows: %s\n' "$malformed_artifact_rows"
+    exit 1
+  }
+  duplicate_manifest_keys=$(awk -F '\t' '
+    $1 == "artifact" { count[$2]++ }
+    END { for (key in count) if (count[key] != 1) print key }
+  ' "$manifest_path")
+  duplicate_evidence_keys=$(awk -F '\t' '
+    $1 == "evidence" { count[$2]++ }
+    END { for (key in count) if (count[key] != 1) print key }
+  ' "$approval_record")
+  test -z "$duplicate_manifest_keys" && test -z "$duplicate_evidence_keys" || {
+    echo "HARD STOP: manifest artifact or approval evidence keys are not unique"
+    exit 1
+  }
+  mapfile -t expected_evidence_keys < <(
+    {
+      printf '%s\n' task-6-manifest
+      awk -F '\t' '$1 == "artifact" {print $2}' "$manifest_path"
+    } | LC_ALL=C sort
+  )
+  mapfile -t actual_evidence_keys < <(
+    awk -F '\t' '$1 == "evidence" {print $2}' "$approval_record" | LC_ALL=C sort
+  )
+  test "${#expected_evidence_keys[@]}" -gt 1 || {
+    echo "HARD STOP: manifest has no artifact evidence"; exit 1;
+  }
+  test "${actual_evidence_keys[*]}" = "${expected_evidence_keys[*]}" || {
+    echo "HARD STOP: approval evidence coverage differs from manifest artifacts plus task-6-manifest"
+    exit 1
+  }
+  while IFS=$'\t' read -r evidence_kind evidence_key evidence_path evidence_digest; do
+    [[ "$evidence_kind" = evidence ]] || continue
+    if [[ "$evidence_key" = task-6-manifest ]]; then
+      expected_path="$manifest_path"
+      expected_digest="$approved_manifest_digest"
+    else
+      mapfile -t expected_artifact_rows < <(
+        awk -F '\t' -v key="$evidence_key" \
+          '$1 == "artifact" && $2 == key {print $3 "\t" $4}' "$manifest_path"
+      )
+      test "${#expected_artifact_rows[@]}" -eq 1 || {
+        echo "HARD STOP: expected exactly one manifest artifact row for $evidence_key"; exit 1;
+      }
+      IFS=$'\t' read -r expected_path expected_digest <<< "${expected_artifact_rows[0]}"
+    fi
+    test "$evidence_path" = "$expected_path" && test "$evidence_digest" = "$expected_digest" || {
+      echo "HARD STOP: approval row differs from exact manifest evidence for $evidence_key"
+      exit 1
+    }
+    test -f "$evidence_path" || {
+      echo "HARD STOP: approved evidence file is missing: $evidence_key"; exit 1;
+    }
+    current_digest=$(sha256sum "$evidence_path" | awk '{print $1}')
+    test "$current_digest" = "$evidence_digest" || {
+      echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1;
+    }
+  done < "$approval_record"
 }
-for evidence_key in task-6-manifest final-parity-table parity-table \
-  current-main-real-projects feature-real-projects \
-  current-main-real-project-failure-signatures feature-real-project-failure-signatures \
-  real-project-snapshot-inventory \
-  snapshot-state-before-current-main snapshot-state-between-real-project-markers snapshot-state-after-feature; do
-  verify_approved_evidence "$evidence_key"
-done
+verify_approved_evidence_set
 integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
 integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 test ! -e "$integration_root" || { echo "HARD STOP: preserve prior publish worktree $integration_root"; exit 1; }
@@ -2221,22 +2396,84 @@ approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_r
 test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: approval SHAs missing"; exit 1; }
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
-verify_approved_evidence() {
-  local evidence_key=$1
+verify_approved_evidence_set() {
+  local manifest_path="$approved_attempt_root/task-6-manifest.tsv"
+  local malformed_artifact_rows
+  local duplicate_manifest_keys
+  local duplicate_evidence_keys
+  local evidence_kind
+  local evidence_key
   local evidence_path
   local evidence_digest
-  evidence_path=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $3}' "$approval_record")
-  evidence_digest=$(awk -F '\t' -v key="$evidence_key" '$1 == "evidence" && $2 == key {print $4}' "$approval_record")
-  test -n "$evidence_path" && test -n "$evidence_digest" || { echo "HARD STOP: missing frozen evidence $evidence_key"; exit 1; }
-  test "$(sha256sum "$evidence_path" | awk '{print $1}')" = "$evidence_digest" || { echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1; }
+  local expected_path
+  local expected_digest
+  local current_digest
+  local -a expected_evidence_keys
+  local -a actual_evidence_keys
+  local -a expected_artifact_rows
+
+  malformed_artifact_rows=$(awk -F '\t' '$1 == "artifact" && NF != 4 {print NR}' "$manifest_path")
+  test -z "$malformed_artifact_rows" || {
+    printf 'HARD STOP: malformed manifest artifact rows: %s\n' "$malformed_artifact_rows"
+    exit 1
+  }
+  duplicate_manifest_keys=$(awk -F '\t' '
+    $1 == "artifact" { count[$2]++ }
+    END { for (key in count) if (count[key] != 1) print key }
+  ' "$manifest_path")
+  duplicate_evidence_keys=$(awk -F '\t' '
+    $1 == "evidence" { count[$2]++ }
+    END { for (key in count) if (count[key] != 1) print key }
+  ' "$approval_record")
+  test -z "$duplicate_manifest_keys" && test -z "$duplicate_evidence_keys" || {
+    echo "HARD STOP: manifest artifact or approval evidence keys are not unique"
+    exit 1
+  }
+  mapfile -t expected_evidence_keys < <(
+    {
+      printf '%s\n' task-6-manifest
+      awk -F '\t' '$1 == "artifact" {print $2}' "$manifest_path"
+    } | LC_ALL=C sort
+  )
+  mapfile -t actual_evidence_keys < <(
+    awk -F '\t' '$1 == "evidence" {print $2}' "$approval_record" | LC_ALL=C sort
+  )
+  test "${#expected_evidence_keys[@]}" -gt 1 || {
+    echo "HARD STOP: manifest has no artifact evidence"; exit 1;
+  }
+  test "${actual_evidence_keys[*]}" = "${expected_evidence_keys[*]}" || {
+    echo "HARD STOP: approval evidence coverage differs from manifest artifacts plus task-6-manifest"
+    exit 1
+  }
+  while IFS=$'\t' read -r evidence_kind evidence_key evidence_path evidence_digest; do
+    [[ "$evidence_kind" = evidence ]] || continue
+    if [[ "$evidence_key" = task-6-manifest ]]; then
+      expected_path="$manifest_path"
+      expected_digest="$approved_manifest_digest"
+    else
+      mapfile -t expected_artifact_rows < <(
+        awk -F '\t' -v key="$evidence_key" \
+          '$1 == "artifact" && $2 == key {print $3 "\t" $4}' "$manifest_path"
+      )
+      test "${#expected_artifact_rows[@]}" -eq 1 || {
+        echo "HARD STOP: expected exactly one manifest artifact row for $evidence_key"; exit 1;
+      }
+      IFS=$'\t' read -r expected_path expected_digest <<< "${expected_artifact_rows[0]}"
+    fi
+    test "$evidence_path" = "$expected_path" && test "$evidence_digest" = "$expected_digest" || {
+      echo "HARD STOP: approval row differs from exact manifest evidence for $evidence_key"
+      exit 1
+    }
+    test -f "$evidence_path" || {
+      echo "HARD STOP: approved evidence file is missing: $evidence_key"; exit 1;
+    }
+    current_digest=$(sha256sum "$evidence_path" | awk '{print $1}')
+    test "$current_digest" = "$evidence_digest" || {
+      echo "HARD STOP: approved evidence changed: $evidence_key"; exit 1;
+    }
+  done < "$approval_record"
 }
-for evidence_key in task-6-manifest final-parity-table parity-table \
-  current-main-real-projects feature-real-projects \
-  current-main-real-project-failure-signatures feature-real-project-failure-signatures \
-  real-project-snapshot-inventory \
-  snapshot-state-before-current-main snapshot-state-between-real-project-markers snapshot-state-after-feature; do
-  verify_approved_evidence "$evidence_key"
-done
+verify_approved_evidence_set
 integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
 integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 test -d "$integration_root" || { echo "HARD STOP: missing approved integration worktree"; exit 1; }
