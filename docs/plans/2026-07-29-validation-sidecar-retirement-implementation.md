@@ -2730,7 +2730,8 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 
 ### Task 9: Migrate `~/d/cancer/mechanisms/evolution` atomically
 
-**Files:** `uv.lock:3062`, `AGENTS.md`; delete `validate_local.py`
+**Files:** `pyproject.toml:29`, `uv.lock:3062`, `AGENTS.md`; delete
+`validate_local.py`
 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
@@ -2790,7 +2791,11 @@ else
 fi
 ```
 
-Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50dc`.
+Historical state: the Git source is unqualified and its `ed6b50dc` revision
+lives only in `uv.lock`. This rollout makes the approved published SHA an
+explicit `rev` in `pyproject.toml` and then regenerates `uv.lock`. With uv
+0.12.0, `uv lock --upgrade-package science` retains the old locked revision;
+the explicit pin and normal relock below are required.
 
 - [ ] **Step 1: Isolated worktree**
 
@@ -2805,16 +2810,30 @@ test "$(git branch --show-current)" = sidecar-retirement || {
 }
 ```
 
-- [ ] **Step 2: Relock to the Task 7 SHA**
+- [ ] **Step 2: Pin the approved Task 7 SHA and relock**
 
 ```bash
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-uv lock --upgrade-package science && uv sync
-rg -A2 '^name = "science"' uv.lock
-rg -q "#$published_main_sha" uv.lock || { echo "FAIL: lock did not pin published SHA"; exit 1; }
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+test "$published_main_sha" = "$expected_toolkit_sha" || {
+  echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
+}
+apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: pyproject.toml
+@@
+-science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
++science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
+*** End Patch
+PATCH
+uv lock && uv sync
+rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
+rg -F "#$expected_toolkit_sha" uv.lock || {
+  echo "FAIL: uv.lock did not pin approved published SHA"; exit 1;
+}
 ```
 
 - [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
@@ -2925,7 +2944,8 @@ git -C "$source_root" worktree remove .worktrees/sidecar-retirement
 
 ### Task 10: Migrate `~/d/protein-landscape` atomically
 
-**Files:** `uv.lock:4412`, `AGENTS.md`; delete `validate_local.py`
+**Files:** `pyproject.toml:74`, `uv.lock:4412`, `AGENTS.md`; delete
+`validate_local.py`
 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
@@ -2987,7 +3007,7 @@ fi
 
 Its check is **not** promoted — the expensive-artifact check becomes a project-owned command with nothing enforcing it (design §4).
 
-- [ ] **Step 1: Isolated worktree, relock**
+- [ ] **Step 1: Isolated worktree, explicit pin, and relock**
 
 ```bash
 cd ~/d/protein-landscape && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
@@ -2999,9 +3019,23 @@ read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-uv lock --upgrade-package science && uv sync
-rg -A2 '^name = "science"' uv.lock
-rg -q "#$published_main_sha" uv.lock || { echo "FAIL: lock did not pin published SHA"; exit 1; }
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+test "$published_main_sha" = "$expected_toolkit_sha" || {
+  echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
+}
+apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: pyproject.toml
+@@
+-science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
++science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
+*** End Patch
+PATCH
+uv lock && uv sync
+rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
+rg -F "#$expected_toolkit_sha" uv.lock || {
+  echo "FAIL: uv.lock did not pin approved published SHA"; exit 1;
+}
 ```
 
 - [ ] **Step 2: Delete the wrapper only**
