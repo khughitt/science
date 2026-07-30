@@ -40,7 +40,7 @@ def test_context_requires_science_yaml(tmp_path: Path) -> None:
         ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
 
 
-def test_read_text_cached_reuses_value_for_same_absolute_path_and_mtime(
+def test_read_text_cached_reuses_value_for_same_absolute_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ctx = ValidateContext.from_project_root(_project(tmp_path), strict=False, verbose=False)
@@ -60,7 +60,26 @@ def test_read_text_cached_reuses_value_for_same_absolute_path_and_mtime(
     assert calls == 1
 
 
-def test_read_yaml_reuses_parsed_value_for_same_absolute_path_and_mtime(
+def test_read_text_cache_does_not_stat_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx = ValidateContext.from_project_root(_project(tmp_path), strict=False, verbose=False)
+    path = tmp_path / "doc.md"
+    path.write_text("hello", encoding="utf-8")
+    calls = 0
+    stat = Path.stat
+
+    def counted_stat(self: Path, *args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        return stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", counted_stat)
+
+    assert ctx.read_text_cached(path) == "hello"
+    assert ctx.read_text_cached(path) == "hello"
+    assert calls == 0
+
+
+def test_read_yaml_reuses_parsed_value_for_same_absolute_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ctx = ValidateContext.from_project_root(_project(tmp_path), strict=False, verbose=False)
@@ -81,7 +100,7 @@ def test_read_yaml_reuses_parsed_value_for_same_absolute_path_and_mtime(
     assert calls == 1
 
 
-def test_frontmatter_reuses_parsed_value_for_same_absolute_path_and_mtime(
+def test_frontmatter_reuses_parsed_value_for_same_absolute_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ctx = ValidateContext.from_project_root(_project(tmp_path), strict=False, verbose=False)

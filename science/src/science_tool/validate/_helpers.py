@@ -139,6 +139,10 @@ def entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     This is for validate checks that must inspect malformed fields without
     strict-loading the closed graph Entity model first.
     """
+    return ctx.cached_resource(("entity_frontmatters",), lambda: _load_entity_frontmatters(ctx))
+
+
+def _load_entity_frontmatters(ctx: ValidateContext) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
     paths = _entity_datapackage_paths(ctx.project_root)

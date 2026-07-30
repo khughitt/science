@@ -35,9 +35,9 @@ class ValidateContext:
     strict: bool
     verbose: bool
     include_all_checks: bool = False
-    _text_cache: dict[tuple[Path, int], str] = field(default_factory=dict, init=False, repr=False)
-    _yaml_cache: dict[tuple[Path, int], Any] = field(default_factory=dict, init=False, repr=False)
-    _split_cache: dict[tuple[Path, int], tuple[dict[str, Any], str]] = field(default_factory=dict, init=False, repr=False)
+    _text_cache: dict[Path, str] = field(default_factory=dict, init=False, repr=False)
+    _yaml_cache: dict[Path, Any] = field(default_factory=dict, init=False, repr=False)
+    _split_cache: dict[Path, tuple[dict[str, Any], str]] = field(default_factory=dict, init=False, repr=False)
     _resource_cache: dict[tuple[object, ...], Any] = field(default_factory=dict, init=False, repr=False)
 
     @classmethod
@@ -80,20 +80,19 @@ class ValidateContext:
             context._resource_cache[("project_sources", True)] = project_sources
         return context
 
-    def _cache_key(self, path: Path) -> tuple[Path, int]:
-        absolute = path.resolve()
-        return (absolute, absolute.stat().st_mtime_ns)
+    def _cache_key(self, path: Path) -> Path:
+        return path.absolute()
 
     def read_text_cached(self, path: Path) -> str:
         key = self._cache_key(path)
         if key not in self._text_cache:
-            self._text_cache[key] = key[0].read_text(encoding="utf-8")
+            self._text_cache[key] = key.read_text(encoding="utf-8")
         return self._text_cache[key]
 
     def read_yaml(self, path: Path) -> Any:
         key = self._cache_key(path)
         if key not in self._yaml_cache:
-            self._yaml_cache[key] = yaml.safe_load(self.read_text_cached(key[0])) or {}
+            self._yaml_cache[key] = yaml.safe_load(self.read_text_cached(key)) or {}
         return self._yaml_cache[key]
 
     def _split(self, path: Path) -> tuple[dict[str, Any], str]:
@@ -104,7 +103,7 @@ class ValidateContext:
         # without checking every read_text_cached consumer.
         key = self._cache_key(path)
         if key not in self._split_cache:
-            fm, body = split_frontmatter(self.read_text_cached(key[0]))
+            fm, body = split_frontmatter(self.read_text_cached(key))
             self._split_cache[key] = (fm if isinstance(fm, dict) else {}, body)
         return self._split_cache[key]
 
