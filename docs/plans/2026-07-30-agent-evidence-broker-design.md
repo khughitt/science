@@ -1,16 +1,21 @@
-# Agent evidence broker — design
+# Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 6)
-**Sub-project A** of three. B is the multi-assignment dispatch harness; C is
-`/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
-defers to and never built. A is independently landable and useful without either.
+**Status:** proposed (revision 7)
+**Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
+the slices that follow it.
 
 Revisions 2 through 6 respond to design review: six production-boundary defects in revision 1, six in
 revision 2, six in revision 3, five in revision 4, six in revision 5. Each is closed below and named at
 the point it is closed, because the reasoning that produced the defect is more useful to a reader than
 the corrected text alone.
 
-Three patterns run through what review kept finding, and each predicts where the implementation will go
+Revision 7 is not another defect round. It places this document inside the program it was already
+serving — revisions 1–6 numbered it "sub-project A of three", independently of the autonomous-audit
+specs, and two of those three sub-projects were audit-program slices under other names. §0 fixes one
+vocabulary and records the boundaries the two schemes left unowned. It also closes the one defect that
+only became visible once the two were read together, which is the fourth pattern below.
+
+Four patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
 
 **Guards narrower than the rule they enforce.** `any(location)` where the rule was "everything was
@@ -29,19 +34,74 @@ only caller that ships, still resolving a baseline. The schema was right, the ch
 project rename would still have zeroed every agent review in the run. A property proven on the path
 nobody uses is not proven.
 
-Hence §7's discipline, and two additions to it: where the document *claims* a property, the suite
+**Internally consistent, externally contradictory.** §3.5 had the reviewer write served bytes to a
+caller-supplied `--output PATH`. Nothing in this document objected, because nothing in this document
+owns the write surface: the shipped autonomy envelope does, and at `report-only` it permits exactly one
+in-tree write — the run's own report (`autonomy/path_gate.py`). Every served file would have been a
+gate denial. Six review rounds inside one document cannot find that, because the contradiction is not
+in the document. It is between the document and the system it runs inside, and it surfaced the moment
+the two were placed in one program (§0, §3.5).
+
+Hence §7's discipline, and three additions to it: where the document *claims* a property, the suite
 establishes that property **under the condition the claim names** — replay with the control-plane
-directory deleted, not merely replay — and **through the production entry point**, not only against the
-function whose signature was corrected.
+directory deleted, not merely replay — **through the production entry point**, not only against the
+function whose signature was corrected, and **against the shipped components it composes with**, not
+only against its own.
+
+## 0. Where this sits
+
+This is **Spec 2a** of the autonomous-audit program. The program's slices, with the two former
+sub-projects renamed into it:
+
+| Slice | Owns | State |
+|---|---|---|
+| Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document** |
+| Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
+| Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
+| Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
+
+**Why 2a goes first, for two reasons that are not the same reason.**
+
+The first is the compatibility window this document already argues from (§4.2): no stored record
+anywhere carries `reviewer_kind`, so the invariant "an agent review requires a `correspondence`"
+needs no data migration today. The second is independent of correspondence entirely: `run_dir` (§3.4.2)
+is what makes a run addressable from its id, and 2b cannot dispatch N assignments and later resolve
+them without it. Today `science autonomy start --baseline-out` takes an arbitrary supervisor-chosen
+path (`autonomy/cli.py`), so nothing can find a run it did not itself place. 2a ships that addressing
+layer as a side effect of needing it; building 2b first would mean inventing a weaker one and
+retiring it.
+
+Both windows close on the same event — **2c, the first lens agent** — and a third closes with them:
+Spec 1's ingestion path has never processed a report, because no producer of reports exists. That
+is the argument for 2b's first actor being **deterministic** (`science health` writing the run's own
+report, ingested through the shipped path) before any lens runs. Spec 1's own rationale was that the
+first agent should not be the experiment that discovers the finding type is incomplete; the same
+sentence holds one layer out, for the harness. 2a places no other constraint on 2b.
+
+**Three boundaries the two numbering schemes left unowned.**
+
+1. **Eligibility is 2a's; the threshold is Spec 3's.** §4.2.1 rewrites `confirmation_count()`, and
+   Spec 1's design reserves "review eligibility rules, the confirmation threshold, and promotion
+   authority" for Spec 3. The split that makes both true: 2a decides whether an agent confirmation
+   *counts as support at all*, which is a question about whether the testimony was checkable. Spec 3
+   decides *how much support is enough*, and inherits the count without reopening what feeds it.
+2. **The case store gains a second trusted writer.** Spec 1 established `ingest_report` as the
+   attested boundary into `doc/audits/cases/`; §2.1 adds `append_review` beside it, because reviews
+   are not part of an `AuditReport` and never pass through ingestion. Two writers, one store, one
+   discipline: both take the store lock through the anchored-descriptor path, and both recompute
+   actor-supplied provenance at the boundary rather than accepting it.
+3. **2a ships no dispatch and no agent.** In-process sessions (§3.4.1) exist so 2b can hold them in
+   the supervisor; that is an interface 2a offers, not a harness it builds.
 
 ## 1. The problem
 
 `Review` admits `reviewer_kind="agent"` and carries **no evidence field at all**. An agent's
 `confirms` is therefore accepted on its own authority: nothing records what the agent was shown,
 nothing checks that what it cited was ever in front of it, and nothing distinguishes "this agent
-looked and found nothing" from "this agent could not look". Spec 2 — agent-authored findings — is
-modelled but unshipped, so the cost of fixing this is at its minimum right now and rises the moment
-a producer exists.
+looked and found nothing" from "this agent could not look". Agent-authored findings and reviews are
+modelled but unshipped — no lens agent exists until 2c — so the cost of fixing this is at its minimum
+right now and rises the moment a producer exists.
 
 The failure is not hypothetical. In a downstream project a fabricated citation survived four months
 and produced a Strong finding, because the chain from claim to source was never mechanically closed.
@@ -53,7 +113,7 @@ could not be checked earns no support.
 
 ### Threat model
 
-**A bounds confabulation and drift, not filesystem-level forgery.** The reviewer is treated as
+**2a bounds confabulation and drift, not filesystem-level forgery.** The reviewer is treated as
 capable but unreliable: it will cite from memory, cite a plausible path it never opened, cite a line
 number it inferred from a symbol name, and report an absence it did not verify. Every mechanism here
 targets that.
@@ -70,16 +130,16 @@ are load-bearing below:
    … Trusted ingestion writes the independently attested equal value, never this field on its own
    authority."
 
-An actor with write access to `RunBaseline`'s directory defeats A entirely. That is the same
-assumption the autonomy envelope already makes, and A does not weaken it.
+An actor with write access to `RunBaseline`'s directory defeats 2a entirely. That is the same
+assumption the autonomy envelope already makes, and 2a does not weaken it.
 
 ### What this design does NOT own
 
-- **The judgement schema.** Lifecycle vocabularies, action verbs, remaining-work structures are C's.
-  A knows only that a review cites evidence and may declare uncertainty.
+- **The judgement schema.** Lifecycle vocabularies, action verbs, remaining-work structures are 2c's.
+  2a knows only that a review cites evidence and may declare uncertainty.
 - **Blinding.** `drift_sample/blind.py` redacts authored claims from a document under review. That is
-  a property of a study, not of a broker. A serves bytes as they are at the commit.
-- **Dispatch.** Who spawns reviewers, and how many run concurrently, is B.
+  a property of a study, not of a broker. 2a serves bytes as they are at the commit.
+- **Dispatch.** Who spawns reviewers, and how many run concurrently, is 2b's.
 - **Pluggable backends.** Git at a pinned commit, and nothing else.
 
 ### Prior art carried over
@@ -121,7 +181,12 @@ that hole.
 The package is named for the generic property — evidence is brokered — not for the study-specific use
 (blinding a reviewer to a comparison group).
 
-### 2.1 There is no review-append path today, so A builds one
+`autonomy/control_plane.py` is the one new component here that is **not** broker-private, and it lives
+under `autonomy/` rather than inside `evidence_broker/` for that reason. Addressing a run by its id is
+what 2b needs to dispatch and later resolve N assignments, brokered or not; 2a happens to be the slice
+that discovers the need first (§0). Nothing in it mentions evidence.
+
+### 2.1 There is no review-append path today, so 2a builds one
 
 **Revision 1 named `findings/ingest.py` as the enforcement point. That was wrong.** `ingest_report()`
 consumes an `AuditReport`, whose payload is `findings`, `accepted`, `metrics`, `caveats`, `unwired`,
@@ -129,7 +194,7 @@ consumes an `AuditReport`, whose payload is `findings`, `accepted`, `metrics`, `
 repository and it is a test. Placing correspondence enforcement in ingestion would have gated a door
 that does not exist.
 
-A therefore defines the boundary it needs: `findings/reviews.py::append_review()`. It is the only
+2a therefore defines the boundary it needs: `findings/reviews.py::append_review()`. It is the only
 production writer of a `Review`, it takes the store lock the way `ingest_report` does, and it is where
 correspondence is computed. §5.4 specifies it.
 
@@ -155,17 +220,18 @@ it refuses `..` rather than collapsing it, refuses absolute paths, refuses NUL, 
 Deny prefixes are then matched against the normalized form.
 
 The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
-are opened: the baseline, the journal, the control-plane root, and the actor-supplied `--output PATH`
-in §3.5. Two kinds of path, two disciplines, chosen by what the path is used for rather than by
-resemblance.
+are opened: the baseline, the journal, the control-plane root, and the `served/` directory of §3.5.
+All four are derived from `RunBaseline` rather than supplied, so the check defends the derivation
+against a relocated control plane rather than sanitising an argument. Two kinds of path, two
+disciplines, chosen by what the path is used for rather than by resemblance.
 
 `Denial` carries two strings. `reason` is categorised and stays parent-side, for the audit. `notice`
 is what the requester sees, and it is **policy-supplied**: this toolkit's existing denials are
 deliberately informative because a human triages them, while a blinding study needs them uniform and
-information-free, since a specific reason confirms the denied thing exists. A cannot decide which is
+information-free, since a specific reason confirms the denied thing exists. 2a cannot decide which is
 correct for a caller, so it does not.
 
-**Deny prefixes are a parameter, not a constant.** A guarantees only that a supplied policy is
+**Deny prefixes are a parameter, not a constant.** 2a guarantees only that a supplied policy is
 *honoured*. Proving a policy is *complete* — that it covers every artifact a study must withhold —
 remains the caller's obligation.
 
@@ -233,7 +299,7 @@ differently-rendered output would refuse an honest run.
 
 `autonomy/git.py` states its probe set explicitly — `rev-parse`, `status --porcelain`, `log`,
 `show <commit>:<path>`, `diff --raw`, `diff --name-status` — under the stated discipline that "only
-what was shown to execute is neutralized". **`grep` is not in that set.** A therefore owes that module
+what was shown to execute is neutralized". **`grep` is not in that set.** 2a therefore owes that module
 the same treatment it gave the others before adding a subcommand to it:
 
 - **Probe `grep`** for config keys that cause execution, in a scratch repository, under exactly the
@@ -343,7 +409,7 @@ cross-process and needs a contract rather than an object.
   and a repository. The journal is retained as the supervisor's own copy of what it served, not as an
   input anything later depends on.
 
-`Session` is also usable in-process, without the CLI, so B can hold sessions in the supervisor where
+`Session` is also usable in-process, without the CLI, so 2b can hold sessions in the supervisor where
 its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
 CLI mode does not, per the threat model — it is an audit aid against confabulation, not proof against
 forgery.
@@ -361,7 +427,7 @@ def control_plane_root() -> Path                        # $SCIENCE_CONTROL_PLANE
 def project_key(project_root: Path) -> str              # sha256(resolved root)[:16] — digest ONLY
 def run_dir(project_root: Path, run_id: str) -> Path    # <root>/<project-key>/<run-slug>/
 #   project.json  {"name": ..., "root": ...}   ← the human label, as metadata
-#   <run-slug>/baseline.json, journal.jsonl
+#   <run-slug>/baseline.json, journal.jsonl, served/   ← served bytes, §3.5
 ```
 
 **The key is project-scoped, and a run id alone is not a project identity.** A run id is
@@ -408,7 +474,7 @@ own. This is the one place in the design where a path may be supplied, and the r
 temporal, not structural — which is why the same channel is not offered to `evidence serve` or to
 `finish`, both of which run while an actor exists.
 
-B, holding sessions in-process, calls `start_run(..., evidence=EvidenceSessionSpec(...))` directly and
+2b, holding sessions in-process, calls `start_run(..., evidence=EvidenceSessionSpec(...))` directly and
 never touches JSON.
 
 `science autonomy finish` needs the symmetric input, which revision 3 omitted: it takes
@@ -433,9 +499,49 @@ Redirection costs the actor its support rather than buying it any.
 outcome — never the bytes themselves. Two independent reasons converge:
 
 1. `BoundedSink` caps command stdout at 20–30K visible characters and refuses rather than truncating,
-   so a large file would simply fail to emit. The `--output PATH` escape hatch exists for this.
+   so a large file would simply fail to emit.
 2. It keeps served evidence out of a conversational parent's context, which is the constraint that
-   makes B tractable at all.
+   makes 2b tractable at all.
+
+**The path is derived from the session, not supplied.** Revisions 1–6 spelled it `--output PATH`, an
+actor-chosen destination, and that is wrong twice over.
+
+It contradicts the shipped write gate. `path_gate.evaluate` permits exactly one in-tree write at
+`report-only` — the supervisor-supplied report path — and denies everything else by tier, before any
+field allowlist is consulted. A reviewer serving ten files into the working tree would collect ten
+denials, and the run would fail the gate for doing precisely what this design tells it to do. A
+brokered reviewer that cannot run at `report-only` is a brokered reviewer with no tier to run at,
+since `belief-neutral` is strictly wider and the whole point is to read, not to write belief.
+
+It also reintroduces the hazard §3.3 already refused for the journal: a destination a caller can name
+is a destination a caller can point somewhere else — over the report, over another run's artifacts,
+or through a symlink out of the tree.
+
+So served bytes go where the run's other machinery already lives, under `run_dir` (§3.4.2), at a name
+derived from the request rather than chosen:
+
+```
+<control-plane>/<project-key>/<run-slug>/
+    baseline.json      supervisor-only, exclusive-create
+    journal.jsonl      actor appends, append-only
+    served/<sha256>    actor writes; content-addressed, so a name cannot be chosen
+```
+
+Nothing in the project tree is written, so the tier's write surface is untouched and no gate change
+is owed. The receipt prints the path; the reviewer reads it back.
+
+**This is the one place an actor writes inside the control plane, and it is safe because nothing
+trusts it.** `served/` is not an input to anything: replay re-serves every entry from the pinned
+commit (§5.2), correspondence reads `exposure.inline` and the served map it rebuilds, and `finish_run`
+never opens the directory. An actor that rewrites its own served files changes what it can read and
+nothing about what it can prove — the same self-defeating shape as truncating the journal. The
+supervisor-owned artifacts keep their existing disciplines: `baseline.json` is exclusive-create and
+never rewritten, the journal is `O_APPEND` under a lock.
+
+Content addressing is what removes the name from the actor's control: `served/<sha256>` of the served
+bytes cannot be aimed, and two requests that produce identical bytes coincide harmlessly. The
+directory is created under the same containment check as the journal, so a relocated
+`SCIENCE_CONTROL_PLANE` cannot land it in the project tree.
 
 ## 4. Model changes
 
@@ -576,7 +682,7 @@ invariant 1 rejects any stored agent review lacking `correspondence`, which is e
 written before this change. Verified against the repository — `with_review` has no production caller,
 `findings/cli.py` exposes no review command, and no stored case anywhere carries `reviewer_kind` — so
 **there are zero such records and no data migration is required.** The window in which that is true
-closes when C ships a producer, which is the argument for landing A first. A record written by the new
+closes when 2c ships a producer, which is the argument for landing 2a first (§0). A record written by the new
 toolkit is still rejected by an older one, since `_Base` is `extra="forbid"`; runs pin
 `toolkit_revision`, so this is contained, but the model change and its consumers must land together.
 
@@ -647,6 +753,13 @@ prevent.
 Human and deterministic reviews are unaffected: neither is brokered, their `correspondence` is
 `None`, and they count as they do today. The blast radius is one non-test consumer, the display column
 at `findings/cli.py:317`; `PERMITTED_TRANSITIONS` does not gate on this count.
+
+**This is eligibility, not a threshold** (§0, boundary 1). Spec 1 reserves the confirmation threshold
+and promotion authority for Spec 3, and this section takes neither: it decides only whether a
+particular agent confirmation is admissible as support, on the ground that testimony nobody could
+check is not testimony. Spec 3 sets how many admissible confirmations are enough, and should inherit
+this count rather than reopen what feeds it — the alternative is a threshold tuned against a
+population that silently includes unverifiable members.
 
 ### 4.3 Baseline
 
@@ -726,7 +839,7 @@ spend a round, and still must replay.
 The cost is real and worth naming: "I searched for `X` across the corpus and found nothing" is a
 legitimate and often decisive review finding that this design cannot mechanically check. Making it
 checkable needs a `SearchEvidence` variant carrying the pattern and pathspec, which belongs with the
-consumer that needs it (C) rather than being speculatively added here.
+consumer that needs it (2c) rather than being speculatively added here.
 
 `git grep -n <pattern> <commit>` prefixes every hit with `<commit>:<path>:<line>:`, so the matched
 lines are recoverable from the served bytes — which is a second reason replay is not optional, since
@@ -904,8 +1017,15 @@ downgrade is a lie about what was checked.
   but whose baseline carries a different `run_id` is refused after loading.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused lexically; **a
   working-tree symlink over a base-commit path does not deny the request**, since the blob read never
-  consults the working tree; the dual as-spelled/resolved check still catches a symlink escape on
-  `--output`, which is a real filesystem path.
+  consults the working tree; the dual as-spelled/resolved check still catches a symlink escape on the
+  `served/` directory, which is a real filesystem path.
+- **Served bytes and the write gate** — composed against the shipped `path_gate`, not asserted: a
+  reviewer that serves several files produces a `ChangeSet` that `evaluate(..., tier=REPORT_ONLY)`
+  finds **empty**, because nothing landed in the tree. Written as the standing guard against a future
+  revision reintroducing an in-tree destination, which no test inside this package would catch. Also:
+  the served name is the sha256 of the served bytes, so a request cannot choose it; two requests
+  serving identical bytes coincide; and `finish_run` seals a run whose `served/` directory has been
+  emptied, since nothing trusted reads it.
 - **`session.py`** — a denial spends a round; exhaustion refuses without further spend; no unbudgeted
   path to `serve` is exported; `--session` cannot override the baseline's journal path, budget, or
   surface policy; `open` on an existing journal refuses; **seeding N inline inputs leaves
@@ -966,8 +1086,9 @@ shown. `unwired` extended from instruments to agent testimony.
 owed to `autonomy/git.py` before either op ships. A mutually-exclusive flag pair on each of
 `science autonomy start` and `finish`. Roughly one git call per journal entry at ingestion, memoised.
 A new package to maintain. An agent producer must put prose in `note` rather than in `evidence` for
-its reviews to count — a real constraint on C, and the one place this design dictates something about
-a schema it does not own.
+its reviews to count — a real constraint on 2c, and the one place this design dictates something about
+a schema it does not own. Served evidence accumulates under the control plane rather than in the tree,
+so run directories grow with what was read and have no retention rule yet.
 
 **Deliberately not addressed.** Whether a supplied deny policy is complete; whether a non-brokered
 agent should be permitted at all (it is, at zero support rather than at full support); mechanically
