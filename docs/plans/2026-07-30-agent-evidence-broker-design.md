@@ -1,9 +1,13 @@
 # Agent evidence broker — design
 
-**Status:** proposed
+**Status:** proposed (revision 2)
 **Sub-project A** of three. B is the multi-assignment dispatch harness; C is
 `/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
 defers to and never built. A is independently landable and useful without either.
+
+Revision 2 responds to a design review that found six production-boundary defects in revision 1.
+Each is closed below and named at the point it is closed, because the reasoning that produced the
+defect is more useful to a reader than the corrected text alone.
 
 ## 1. The problem
 
@@ -18,8 +22,31 @@ The failure is not hypothetical. In a downstream project a fabricated citation s
 and produced a Strong finding, because the chain from claim to source was never mechanically closed.
 An agent review is the same chain with a faster writer.
 
-This design closes it: evidence an agent sees is **served and recorded** rather than taken, and a
-citation that does not correspond to what was served is refused.
+This design closes it: evidence an agent sees is **served and recorded** rather than taken, a
+citation that does not correspond to what was served is refused, and an agent confirmation that
+could not be checked earns no support.
+
+### Threat model
+
+**A bounds confabulation and drift, not filesystem-level forgery.** The reviewer is treated as
+capable but unreliable: it will cite from memory, cite a plausible path it never opened, cite a line
+number it inferred from a symbol name, and report an absence it did not verify. Every mechanism here
+targets that.
+
+It does not defend against an actor running as the same uid that deliberately edits the artifacts.
+Such an actor can append a journal entry naming a file that really exists at the pinned commit, and
+that entry replays perfectly; it can also hand-edit a stored case. Two consequences follow, and both
+are load-bearing below:
+
+1. Everything trustworthy is anchored in `RunBaseline` — outside the project tree, exclusive-create,
+   integrity-sealed — and never in argv or in the tree the actor writes.
+2. Values the actor could supply are **recomputed at a trusted boundary and overwritten**, never
+   accepted. `AuditReport.ingestion_ref` already documents this idiom in this codebase: "Actor-claimed
+   … Trusted ingestion writes the independently attested equal value, never this field on its own
+   authority."
+
+An actor with write access to `RunBaseline`'s directory defeats A entirely. That is the same
+assumption the autonomy envelope already makes, and A does not weaken it.
 
 ### What this design does NOT own
 
@@ -44,16 +71,19 @@ science/src/science_tool/evidence_broker/     # NEW
     serve.py      three git ops at a pinned commit; defined-miss vs raise
     journal.py    append-only per-run log, outside the project tree
     session.py    budget-enforcing session over policy + serve + journal
-    correspond.py the join, the replay, the three-way outcome
+    correspond.py the join, the replay, the coverage-aware outcome
     cli.py        `science evidence open | serve | show`
 
 science/model/src/science_model/
-    autonomous_runs.py   + ExposureEntry, InstrumentIdentity, EvidenceExposure
-    audit/record.py      + Uncertainty, Correspondence; three Review fields
+    autonomous_runs.py   + ExposureEntry, InstrumentIdentity, InlineInput, EvidenceExposure
+    audit/record.py      + Uncertainty, Correspondence, ReviewSubmission; two Review fields;
+                           confirmation_count() gains a correspondence term
 
 science/src/science_tool/
-    autonomy/lifecycle.py   start_run records the journal path; finish_run seals it
-    findings/ingest.py      correspondence enforced beside _assert_attested_provenance
+    autonomy/baseline.py    + EvidenceSession on RunBaseline; journal path containment-checked
+    autonomy/git.py         + a probed, canonical invocation for `grep` and `log`
+    autonomy/lifecycle.py   start_run opens the session; finish_run seals it
+    findings/reviews.py     # NEW — the trusted review-append boundary
     validate/checks/        review.correspondence-unwired, info severity
 ```
 
@@ -64,6 +94,18 @@ that hole.
 
 The package is named for the generic property — evidence is brokered — not for the study-specific use
 (blinding a reviewer to a comparison group).
+
+### 2.1 There is no review-append path today, so A builds one
+
+**Revision 1 named `findings/ingest.py` as the enforcement point. That was wrong.** `ingest_report()`
+consumes an `AuditReport`, whose payload is `findings`, `accepted`, `metrics`, `caveats`, `unwired`,
+`totals`, `meta` — no reviews. `AuditFindingRecord.with_review()` has exactly one caller in the
+repository and it is a test. Placing correspondence enforcement in ingestion would have gated a door
+that does not exist.
+
+A therefore defines the boundary it needs: `findings/reviews.py::append_review()`. It is the only
+production writer of a `Review`, it takes the store lock the way `ingest_report` does, and it is where
+correspondence is computed. §5.4 specifies it.
 
 ## 3. The broker
 
@@ -110,6 +152,38 @@ repository fact, and is refused as retryable rather than treated as instrument f
 supplied a pathspec of its own. Search is the one operation that never names a path, so denying a
 directory to `read` while `git grep` returns hits from inside it denies nothing.
 
+### 3.2.1 Canonical invocation — `grep` and `log` must be probed before they ship
+
+A pinned commit fixes the repository's *content*. It does not fix how git *renders* that content, and
+for `grep` it does not even fix what the caller's pattern *means*. `grep.patternType` selects basic,
+extended, perl, or fixed matching from repository configuration, so the same pattern against the same
+commit is a different query depending on a file the actor owns. Colour, path quoting, line-number
+emission, and log formatting are all likewise config-derived. Replay comparing two hashes of
+differently-rendered output would refuse an honest run.
+
+`autonomy/git.py` states its probe set explicitly — `rev-parse`, `status --porcelain`, `log`,
+`show <commit>:<path>`, `diff --raw`, `diff --name-status` — under the stated discipline that "only
+what was shown to execute is neutralized". **`grep` is not in that set.** A therefore owes that module
+the same treatment it gave the others before adding a subcommand to it:
+
+- **Probe `grep`** for config keys that cause execution, in a scratch repository, under exactly the
+  argv the broker will use. `--textconv` is off by default; the probe establishes whether anything
+  reaches a driver anyway rather than assuming it does not.
+- **Probe `log`** for the keys that were not exercised by the existing `log` call site. `log.showSignature`
+  spawns gpg, which the current probe list does not mention.
+
+Whatever executes is neutralised by `-c` in `_HARDENING`; whatever only *shapes output* is pinned in
+the argv the broker builds, so that determinism does not depend on a config file at all:
+
+| Op | Pinned |
+|---|---|
+| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
+| `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
+| `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
+
+Config-derived rendering is the reason revision 1's determinism claim ("determinism comes free from
+the pin") was too strong. It comes free from the pin *plus* a canonical invocation.
+
 ### 3.3 Journal
 
 Append-only, one line per served response: `{op, target, pathspec, commit, sha256, outcome}`. It
@@ -118,6 +192,14 @@ actor can write is not a record of what the actor was shown.
 
 It cannot live in the run record, because that record deliberately has no in-flight shape — "a
 supervisor that dies mid-run leaves no record, so its branch reads as unattested rather than clean".
+
+Its path is **resolved from `RunBaseline`, never from argv**, and is put through
+`reject_baseline_inside_project`. A journal a caller can name is a journal a caller can substitute.
+
+Per the threat model: a same-uid actor can still append to it. What that buys is bounded — a forged
+entry must name a path that really exists at the pinned commit, so it cannot manufacture a file, and
+it leaves the forger's own fingerprints in an artifact the supervisor reads. It is not a proof of
+exposure, and this design does not claim it is one.
 
 ### 3.4 Session
 
@@ -130,7 +212,33 @@ serve function documents a budget without imposing one.
 
 The session seeds the journal with inputs the opening prompt already supplied, marked `inline` and
 audited by hash rather than against the surface policy. Without seeding, an instrument that
-legitimately lives inside a denied prefix can never be accounted for at all.
+legitimately lives inside a denied prefix can never be accounted for at all. §4.3 fixes where those
+inline inputs are *declared*, which revision 1 left open.
+
+### 3.4.1 The cross-process contract
+
+A reviewer runs as its own process and reaches the broker through the CLI, so the session is
+cross-process and needs a contract rather than an object.
+
+- **Handle.** `--session <run-id>`. It names a baseline, not a file. Journal path, budget, evidence
+  commit, instrument identity, and the inline manifest are all read from `RunBaseline`. **None of them
+  is settable on the command line.** A caller cannot lower a budget it did not set, raise one it did,
+  or point the session at a different journal.
+- **Open.** `science evidence open` writes the journal with `O_EXCL` through the anchored-descriptor
+  primitives in `findings/paths.py`, for the same reason `write_baseline` uses exclusive creation:
+  reusing a journal path discards the exposure record of whatever run already owns it.
+- **Append.** One line, `O_APPEND`, under a lock file held for the duration of the serve, so
+  concurrent reviewers in one run cannot interleave a partial line. Appends never rewrite.
+- **Spend.** `requests_used` is **derived by counting journal lines**, not stored as mutable state.
+  There is no counter to reset. Truncating the journal to buy rounds destroys the entries that make
+  the truncator's own citations correspond, so the move is self-defeating rather than merely detected.
+- **Seal.** `finish_run` reads the journal, replays it, and copies it into the run record as
+  `EvidenceExposure`. After sealing, the journal is retained; it is the only thing that can re-check
+  a run later.
+
+`Session` is also usable in-process, without the CLI, so B can hold sessions in the supervisor where
+its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
+CLI mode does not, per the threat model.
 
 ### 3.5 CLI
 
@@ -174,8 +282,19 @@ Grouped into one optional field because it is all-or-nothing: a run either was b
 and one group makes "brokered" a single checkable predicate rather than three fields that can
 disagree.
 
-Validators: `requests_used <= budget`; every entry's `commit` equals `EvidenceExposure.commit`, since
-a run that read two trees did not have one evidence surface.
+`ExposureEntry` deliberately does **not** store which lines a search matched. Those are re-derived at
+replay (§5.1); storing them would be storing the actor's account of its own exposure.
+
+**Validators:**
+
+- `requests_used <= budget`.
+- Every entry's `commit` equals `EvidenceExposure.commit` — a run that read two trees did not have one
+  evidence surface.
+- **`EvidenceExposure.commit == AutonomousRunRecord.base_commit`.** Revision 1 required only internal
+  agreement, so an arbitrary or orphan commit replayed perfectly and the exposure was bound to no run
+  at all. `base_commit` and not `head_commit`: `head` includes the actor's own writes, and an agent
+  permitted to cite a file it wrote during the run is back to self-attestation by a longer route.
+  `RunBaseline` already carries `base_commit`, so the session opens from the baseline alone.
 
 **`RunBudget` is untouched.** Its two fields are agent-attested; `requests_used` is parent-derived.
 Merging them would blur exactly the distinction that makes `RunBudget` misleading today — it looks
@@ -198,46 +317,159 @@ class Correspondence(_Base):
     code: str | None = None      # required when unwired
     reason: str | None = None
 
-# Review
+class ReviewSubmission(_Base):
+    """What a producer offers. Carries NO correspondence field — not a field a
+    producer may leave blank, a field it cannot express."""
+    reviewer_kind: ReviewerKind
+    reviewer_ref: ...
+    lens: ...
+    model: ...
+    run_ref: ...
+    outcome: ...
+    note: ...
+    evidence: tuple[Evidence, ...] = ()
+    uncertainty: tuple[Uncertainty, ...] = ()
+
+# Review — the STORED shape
     evidence: tuple[Evidence, ...] = ()      # existing discriminated union
     uncertainty: tuple[Uncertainty, ...] = ()
     correspondence: Correspondence | None = None
 ```
+
+**The submission/record split is the fix for actor-supplied `verified`.** Revision 1 forbade storing
+`violated` and stopped there, which left `verified` settable by any caller — a Pydantic invariant can
+constrain a value's shape but can never establish its provenance. Making the submitted type structurally
+incapable of carrying a correspondence is stronger than checking that it did not: there is no check to
+forget. `AuditReport` versus `AuditFindingRecord` is the same split, for the same reason.
 
 `Correspondence` mirrors `InstrumentResult`'s invariant — `unwired` requires a machine-readable code
 — so both ways this toolkit says "could not run" have one shape.
 
 `evidence` is bounded by the existing `MAX_EVIDENCE_ENTRIES`.
 
-**Two invariants, enforced in the model rather than only at a gate:**
+**Invariants on the stored `Review`:**
 
 1. `_agent_provenance` gains: an agent review **requires** `correspondence`. It may be `unwired`; it
    may not be absent. Absent reads as clean.
-2. A stored `Review` may not hold `status="violated"`. Refusal happens at ingestion, and making it a
-   model invariant means every other write path inherits it instead of each gate remembering.
+2. A stored `Review` may not hold `status="violated"`. Refusal happens at `append_review`, and making
+   it a model invariant means every other write path inherits it instead of each gate remembering.
 
 `review_id` hashes `(reviewer_kind, reviewer_ref, lens, run_ref, finding_id)`. None of the new fields
 enter it, so existing record identities are unchanged.
 
-**Compatibility caveat:** `_Base` is `extra="forbid"`, so old records missing these fields load fine,
-but a record written by the new toolkit is rejected by an old one. Runs pin `toolkit_revision`, so
-this is contained — but the model change and its consumers must land together.
+**Compatibility.** Revision 1 claimed old records load fine. That was wrong for the case that matters:
+invariant 1 rejects any stored agent review lacking `correspondence`, which is every agent review
+written before this change. Verified against the repository — `with_review` has no production caller,
+`findings/cli.py` exposes no review command, and no stored case anywhere carries `reviewer_kind` — so
+**there are zero such records and no data migration is required.** The window in which that is true
+closes when C ships a producer, which is the argument for landing A first. A record written by the new
+toolkit is still rejected by an older one, since `_Base` is `extra="forbid"`; runs pin
+`toolkit_revision`, so this is contained, but the model change and its consumers must land together.
+
+### 4.2.1 Eligibility
+
+```python
+def confirmation_count(self) -> int:
+    """Distinct confirming reviews that COUNT AS SUPPORT.
+
+    An agent confirmation counts only when its citations were checked against
+    what the agent was shown. `unwired` is not a weaker `verified`: a guard that
+    cannot see must not report clean, and free support is what it would be.
+    """
+    return len({
+        r.review_id for r in self.reviews
+        if r.outcome == "confirms" and (
+            r.reviewer_kind == "human"
+            or (r.correspondence is not None
+                and r.correspondence.status == "verified")
+        )
+    })
+```
+
+Recording a review's weaker standing while still counting it as support is a distinction with no
+consequence — revision 1's `unwired`-accepts rule preserved the exact fail-open the design exists to
+close, and paid for it with an info notice. An unbrokered agent review is still stored, still
+displayed, and still readable; it simply adds nothing to the count.
+
+The alternative — refusing to store a cited-but-unverified agent review — was rejected because the
+incentive runs backwards: a producer whose review is refused for citing paths gets it accepted by
+deleting its citations.
+
+Human reviews are unaffected: humans are not brokered, their `correspondence` is `None`, and they
+count as they do today. The blast radius is one non-test consumer, the display column at
+`findings/cli.py:317`; `PERMITTED_TRANSITIONS` does not gate on this count.
+
+### 4.3 Baseline
+
+```python
+class InlineInput(_Frozen):
+    target: str
+    sha256: str
+    lines: int
+
+class EvidenceSession(_Frozen):
+    session_id: str                    # the run slug
+    journal_path: Path
+    commit: str                        # == RunBaseline.base_commit
+    budget: int
+    instrument: InstrumentIdentity
+    inline: tuple[InlineInput, ...] = ()
+
+# RunBaseline
+    evidence: EvidenceSession | None = None
+```
+
+**This is the fix for inline evidence bypassing replay.** Revision 1 had inline entries contributing
+trusted correspondence targets on the strength of a hash in the journal — the same journal it argued
+was forgeable, which is why every other entry is replayed. Declaring them in the baseline moves them
+into the control plane: the supervisor writes the manifest when it composes the prompt, exclusive-create
+and outside the tree, and an inline entry corresponds only if its target is in that manifest *and* the
+journal's `sha256` matches the manifest's.
+
+`lines` is carried so a line or span citation into an inline input can be checked the same way as one
+into a read file. Inline bytes are not in the tree, so a line count cannot be re-derived later.
+
+`journal_path` is containment-checked by `reject_baseline_inside_project`, like the baseline itself.
 
 ## 5. Correspondence
 
 ```python
-def check_correspondence(review, exposure, *, repo) -> Correspondence
+def check_correspondence(review, exposure, session, *, repo) -> Correspondence
 ```
 
-### 5.1 The served set
+### 5.1 The served set — coverage, not paths
 
-`inline`, `read` and `history` entries contribute their `target`. `search` entries contribute the
-paths **inside** their served bytes: `git grep -n <pattern> <commit>` prefixes every hit with
-`<commit>:<path>:<line>:`, and a search hit is a legitimate way to establish that a file contains a
-symbol without reading it.
+Revision 1 built a set of paths. That certified a whole file from a single grep hit: a match on line 1
+would have approved a citation to line 900, and `LocationEvidence` carries exactly the `line` and `span`
+fields that makes such a citation expressible. The served set is therefore a map from path to
+**coverage**:
 
-That set cannot be derived from the journal alone, because the journal stores only a hash of those
-bytes. This is why replay is not optional.
+| Contributed by | Coverage | Meaning |
+|---|---|---|
+| `read`, `inline` | `FULL` + line count | every line `1..n` was in front of the reviewer |
+| `search` | `LINES` + the matched line numbers | only the hit lines were shown |
+| `history` | `PATH_ONLY` | the path's commits were shown; its contents were not |
+| defined miss | `ABSENT` | the path is not at the commit, and that was served as the answer |
+
+`git grep -n <pattern> <commit>` prefixes every hit with `<commit>:<path>:<line>:`, so the matched
+lines are recoverable from the served bytes — which is a second reason replay is not optional, since
+the journal stores only a hash of them. Where a path is both read and searched, `FULL` supersedes
+`LINES`.
+
+A `LocationEvidence` corresponds iff:
+
+- its path is in the served map, **and**
+- under `FULL`, every cited line is `<= line_count`;
+- under `LINES`, every cited line is a matched line;
+- under `PATH_ONLY` or `ABSENT`, no line or span is cited at all.
+
+A span cites every line it covers, so a ten-line span against a one-line grep hit does not correspond.
+That is strict on purpose: a reviewer wanting to cite a span should read the file. The line-count check
+under `FULL` is free once the bytes are replayed, and it closes fabricated line numbers into files the
+reviewer genuinely opened — a case revision 1 did not consider at all.
+
+`pointer` is not checked: it is a non-positional locator whose resolution depends on the document
+format, which the broker does not parse. `TextEvidence` bears no path and contributes nothing.
 
 Two cases must count as served, or the check punishes correct behaviour: a **search hit**, and a
 **defined miss** — a path absent at the commit is frequently the decisive finding, and any rubric
@@ -248,38 +480,56 @@ worth using asks for absence to be recorded with the same care as presence.
 Every non-inline entry is re-served at the pinned commit and must reproduce its recorded `sha256`.
 When the broker writes the journal it is trustworthy by construction, but a record read back off disk
 was written by whatever wrote that file, and a `sha256` field is as forgeable as the rest of the JSON.
-Determinism comes free from the pin.
+Determinism comes from the pin **and** the canonical invocation in §3.2.1.
+
+Inline entries are not in the tree and cannot be re-served; they are checked against the baseline
+manifest instead (§4.3).
 
 Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
 read many of the same files.
 
+The exposure checked is the one belonging to `review.run_ref`, resolved by `append_review` from that
+run's record and baseline. A review checked against some other run's exposure is checked against
+nothing.
+
 ### 5.3 Outcomes
 
-| Situation | Status / code | Ingestion |
-|---|---|---|
-| No exposure log | `unwired` / `NO_EXPOSURE` | accept |
-| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | accept |
-| Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refuse** |
-| Replay ran; a citation was never served | `violated` / `CITATION_UNSERVED` | **refuse** |
-| Replay ran; everything corresponded | `verified` | accept |
+| Situation | Status / code | Stored? | Counts as support? |
+|---|---|---|---|
+| No exposure log | `unwired` / `NO_EXPOSURE` | yes | **no** |
+| Repo, commit, or baseline unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
+| Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
+| Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
+| Replay ran; everything corresponded | `verified` | yes | yes |
 
 The checker reproduces the distinction it exists to enforce: *could not check* is not *checked and
-found false*. A journal that fails to reproduce at a pinned commit is not ambiguous — nothing
-legitimate produces that — so it refuses. A journal that cannot be reached genuinely could not be
-checked, so it accepts, and says so.
+found false*. A journal that fails to reproduce at a pinned commit under a canonical invocation is not
+ambiguous — nothing legitimate produces that — so the review is refused. A journal that cannot be
+reached genuinely could not be checked, so the review is stored, says so, and earns nothing.
 
 An exposure log with no path-bearing citations is `verified` with a reason: the check ran and found
 no violation. A consumer asking whether a review cited anything reads `len(evidence)`. Conflating
 that into correspondence would be the empty/unwired confusion one level up.
 
-### 5.4 Enforcement points
+### 5.4 The append boundary
 
-- `findings/ingest.py`, beside `_assert_attested_provenance`, which already raises `IngestError` on a
-  provenance mismatch. Refusing an unserved citation there is consistent, not novel.
-- The model invariant in §4.2, so a write path that bypasses ingestion still cannot store `violated`.
-- A non-gating `validate` check, `review.correspondence-unwired` at info severity, so unbrokered
-  agent reviews are visible in aggregate. The difference between a known weaker standing and a silent
-  one.
+```python
+def append_review(project_root, finding_id, submission: ReviewSubmission, *, actor) -> Review
+```
+
+- Resolves the run record and baseline named by `submission.run_ref`.
+- Calls `check_correspondence`. The result is **computed here and cannot be supplied**: `ReviewSubmission`
+  has no field for it.
+- Refuses `violated` with an `IngestError`, consistent with `_assert_attested_provenance` refusing a
+  provenance mismatch.
+- Takes the store lock through the same anchored-descriptor path as `ingest_report`, and writes via
+  `with_review`, which rebuilds through the constructor and re-checks every derived value.
+
+Plus two backstops:
+
+- The model invariant in §4.2, so a write path that bypasses this function still cannot store `violated`.
+- A non-gating `validate` check, `review.correspondence-unwired` at info severity, so unbrokered agent
+  reviews are visible in aggregate. The difference between a known weaker standing and a silent one.
 
 ## 6. Error handling
 
@@ -291,13 +541,14 @@ that into correspondence would be the empty/unwired confusion one level up.
 | Budget exhausted | Refused, spends nothing further |
 | Anything else from git | Raises, halts the run |
 
-**A run record gets `evidence=None` only if a session was never opened.** `start_run` records the
-journal path in `RunBaseline`; at `finish_run`, a baseline that says "brokered" plus a missing or
+**A run record gets `evidence=None` only if a session was never opened.** `start_run` records
+`EvidenceSession` in `RunBaseline`; at `finish_run`, a baseline that says "brokered" plus a missing or
 unreadable journal yields `RunDisposition.UNWIRED`, which blocks — rather than writing a record that
 reads as unbrokered.
 
 Without this rule, losing a journal silently downgrades every review in that run from `verified` to
-`unwired`, and `unwired` accepts. The fail-open returns through the back door.
+`unwired` — which, under §4.2.1, silently drops their support to zero. Either direction of silent
+downgrade is a lie about what was checked.
 
 ## 7. Testing
 
@@ -305,33 +556,47 @@ Without this rule, losing a journal silently downgrades every review in that run
   unrecognised stderr raises rather than answers. Named regression test: **a well-formed but
   nonexistent commit halts rather than answering**, using a genuinely invalid ref — `"0" * 40`
   produces the *miss* message and would let the test pass against broken code.
+- **Canonical invocation** — a repository configuring `grep.patternType=fixed` and one configuring
+  `basic` produce the same served bytes for the same request; `color.ui=always` does not colour the
+  output; `log.showSignature=true` does not change the served log. Each written from the probe, so the
+  probe's findings are what the tests assert.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused; the dual
   as-spelled/resolved check catches a symlink escape.
 - **`session.py`** — a denial spends a round; exhaustion refuses without further spend; no unbudgeted
-  path to `serve` is exported.
-- **Model** — agent review without `correspondence` rejected; `violated` unstorable;
-  `requests_used > budget` rejected; entries disagreeing on commit rejected; `unwired` without a code
-  rejected.
-- **Correspondence** — one test per row of §5.3, plus the search-hit and defined-miss served cases and
-  the vacuous `verified`.
+  path to `serve` is exported; `--session` cannot override the baseline's journal path or budget;
+  `open` on an existing journal refuses; `requests_used` tracks journal lines rather than a counter.
+- **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
+  rejects a `correspondence` key outright; `requests_used > budget` rejected; entries disagreeing on
+  commit rejected; `EvidenceExposure.commit != base_commit` rejected; `unwired` without a code rejected.
+- **Eligibility** — an agent `confirms` with `unwired` correspondence does not count; the same review
+  with `verified` does; a human `confirms` counts either way.
+- **Correspondence** — one test per row of §5.3, plus: a grep hit on line 1 does **not** validate a
+  citation to line 900; a span exceeding the matched lines does not correspond; a line beyond a read
+  file's length does not correspond; a `history` entry does not validate a line citation; a defined
+  miss validates a path-only citation and refuses a lined one; an inline target absent from the
+  baseline manifest does not correspond; the vacuous `verified`.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
-- **Integration** — end-to-end against a real temporary git repository: open, serve, seal, ingest.
+- **Integration** — end-to-end against a real temporary git repository: open, serve, seal, append.
 
 **Every guard is proven by restoring the prior behaviour and confirming its test fails.** Each defect
-closed downstream survived a green suite until it was negative-tested. A guard nobody has watched
-fail is a guard nobody has tested.
+closed downstream survived a green suite until it was negative-tested, and four of the six defects in
+revision 1 of this document were guards that looked right on the page. A guard nobody has watched fail
+is a guard nobody has tested.
 
 ## 8. Consequences
 
-**Gained.** An agent review's citations become checkable against what the agent was shown. The
-toolkit's first enforced budget. Instrument identity as a run-record term. A per-judgement
-uncertainty channel. `unwired` extended from instruments to agent testimony.
+**Gained.** An agent review's citations become checkable against what the agent was shown, at line
+granularity. An unverifiable agent confirmation stops counting as support. The toolkit's first
+enforced budget, and its first review-append boundary. Instrument identity as a run-record term. A
+per-judgement uncertainty channel. `unwired` extended from instruments to agent testimony.
 
-**Costs.** A model migration that must land with its consumers. Roughly one git call per journal entry
-at ingestion, memoised. A new package to maintain.
+**Costs.** A model migration that must land with its consumers. A probe of `git grep` and `git log`
+owed to `autonomy/git.py` before either op ships. Roughly one git call per journal entry at ingestion,
+memoised. A new package to maintain.
 
 **Deliberately not addressed.** Whether a supplied deny policy is complete; whether a non-brokered
-agent should be permitted at all (it is, and its weaker standing is recorded rather than assumed);
-token and wall-clock caps, which remain deferred.
+agent should be permitted at all (it is, at zero support rather than at full support); an authentic
+journal against a same-uid adversary, which the threat model excludes and which the in-process session
+mode sidesteps rather than solves; token and wall-clock caps, which remain deferred.
