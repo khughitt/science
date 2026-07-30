@@ -303,22 +303,22 @@ emission, and log formatting are all likewise config-derived. Replay comparing t
 differently-rendered output would refuse an honest run.
 
 `autonomy/git.py` states its probe set explicitly — `rev-parse`, `status --porcelain`, `log`,
-`show <commit>:<path>`, `diff --raw`, `diff --name-status` — under the stated discipline that "only
-what was shown to execute is neutralized". **`grep` is not in that set.** 2a therefore owes that module
-the same treatment it gave the others before adding a subcommand to it:
+`show <commit>:<path>`, `diff --raw`, `diff --name-status`, `grep` — under the stated discipline that
+"only what was shown to execute is neutralized". `grep` is now in that set: 2a gave that module the
+same treatment it gave the others before adding a subcommand to it:
 
-- **Probe `grep`** for config keys that cause execution, in a scratch repository, under exactly the
-  argv the broker will use. `--textconv` is off by default; the probe establishes whether anything
+- **`grep` was probed** for config keys that cause execution, in a scratch repository, under exactly
+  the argv the broker uses. `--textconv` is off by default; the probe established whether anything
   reaches a driver anyway rather than assuming it does not.
-- **Probe `log`** for the keys that were not exercised by the existing `log` call site. `log.showSignature`
-  spawns gpg, which the current probe list does not mention.
+- **`log` was probed** for the keys that were not exercised by the existing `log` call site.
+  `log.showSignature` spawns gpg, which the previous probe list did not mention.
 
 Whatever executes is neutralised by `-c` in `_HARDENING`; whatever only *shapes output* is pinned in
 the argv the broker builds, so that determinism does not depend on a config file at all:
 
 | Op | Pinned |
 |---|---|
-| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
+| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
 | `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
 | `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
 | all three | `LC_ALL=C`, `LANG=C` in the child environment |
@@ -371,11 +371,11 @@ pinned in argv, or by the environment where argv cannot reach them. Keys recorde
 INERT are left alone, per this module's standing rule: blanking them would assert a
 defense against behaviour this code has been shown not to have.
 
-**Argv is not the whole invocation; the environment is part of it.** `run_git` passes no `env` today,
-so git inherits the supervisor's locale, and a POSIX class such as `[[:alpha:]]` matches a different
+**Argv is not the whole invocation; the environment is part of it.** Left unpinned, `run_git` would let
+git inherit the supervisor's locale, and a POSIX class such as `[[:alpha:]]` matches a different
 character set under `C` than under a UTF-8 locale. Two honest replays of the same pattern against the
-same commit then disagree, and §5.3 refuses on disagreement. Pinning `LC_ALL` and `LANG` is what makes
-"deterministic given the commit" true of a regex engine rather than only of a file.
+same commit would then disagree, and §5.3 refuses on disagreement. Pinning `LC_ALL` and `LANG` is what
+makes "deterministic given the commit" true of a regex engine rather than only of a file.
 
 The same pin does a second job the broker specifically needs: **git's diagnostic text is localized, and
 §3.2 classifies defined misses by reading it.** Under a translated locale the miss messages would not
@@ -485,9 +485,11 @@ by whatever supervisor invoked it. `--session <run-id>` would have had nothing t
 `autonomy/control_plane.py` supplies the missing functions:
 
 ```python
-def control_plane_root() -> Path                        # $SCIENCE_CONTROL_PLANE, else the XDG state dir
-def project_key(project_root: Path) -> str              # sha256(resolved root)[:16] — digest ONLY
-def run_dir(project_root: Path, run_id: str) -> Path    # <root>/<project-key>/<run-slug>/
+def control_plane_root(project_root: Path) -> Path       # $SCIENCE_CONTROL_PLANE, else the XDG state dir
+def project_key(project_root: Path) -> str               # sha256(resolved root)[:16] — digest ONLY
+def run_slug(handle: str) -> str                          # bare <date>-<agent>-<short-id>, either handle spelling
+def run_dir(project_root: Path, handle: str) -> Path      # <root>/<project-key>/<run-slug>/
+def project_metadata_path(project_root: Path) -> Path     # <root>/<project-key>/project.json
 #   project.json  {"name": ..., "root": ...}   ← the human label, as metadata
 #   <run-slug>/baseline.json, journal.jsonl, served/   ← served bytes, §3.5
 ```
@@ -546,8 +548,9 @@ through `run_dir` from the supervisor's own environment. That resolution is what
 containment argument true rather than asserted: the actor cannot influence which control plane
 `finish` reads.
 
-`control_plane_root()` is still put through `reject_baseline_inside_project`, so an environment
-variable cannot relocate the control plane into the tree the actor writes.
+`control_plane_root(project_root)` is still put through `reject_baseline_inside_project`, judged
+against that same `project_root`, so an environment variable cannot relocate the control plane into
+the tree the actor writes.
 
 An actor that sets `SCIENCE_CONTROL_PLANE` when it invokes the CLI redirects its own serving to a
 baseline it forged. Consistent with the threat model, and self-limiting: `finish_run` resolves the

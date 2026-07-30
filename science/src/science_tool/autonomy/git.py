@@ -30,11 +30,15 @@ in a scratch repository against git 2.55, under exactly the commands this packag
 * `core.sshCommand`, `core.editor`, `core.alternateRefsCommand` -- no command here
   contacts a remote, opens an editor, or reads an alternate object store.
 * `log.showSignature=true` combined with `gpg.program=./spawn.sh`, against a commit
-  carrying a `gpgsig` header -- EXECUTES, under `log`. Neither key alone fires: with no
-  signed commit in view there is nothing to verify, and with `log.showSignature` unset
-  git never asks. `-c log.showSignature=false` disarms it; blanking `gpg.program` instead
-  does not -- verification stays enabled and git falls back to the default `gpg` on
-  `PATH`, so the row still reads EXECUTES against a program this key never named.
+  carrying a `gpgsig` header -- EXECUTES, under `log`. `gpg.program` alone is inert
+  because it lacks a reason to verify: with `log.showSignature` unset git never asks for a
+  signing program at all, regardless of what it names. `log.showSignature=true` alone,
+  against that same signed commit, already reaches a program -- the default `gpg` on
+  `PATH`. The composite row differs only in *which* program that reach lands on: the
+  attacker-named one rather than the default. `-c log.showSignature=false` disarms it;
+  blanking `gpg.program` instead does not -- verification stays enabled and git falls
+  back to the default `gpg` on `PATH`, so the row still reads EXECUTES against a program
+  this key never named.
 * `diff.<driver>.textconv` reached through a `grep`-side attribute, `core.pager`, and
   `pager.grep` -- all INERT, under `grep`. `grep` never invokes a textconv filter and,
   like every other call in this module, always runs with captured output, so no pager is

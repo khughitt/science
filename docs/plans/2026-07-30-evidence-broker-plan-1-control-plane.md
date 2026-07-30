@@ -928,6 +928,20 @@ def test_a_relative_control_plane_root_is_refused(tmp_path, monkeypatch, variabl
         control_plane_root(_project(tmp_path, "alpha"))
 
 
+def test_an_empty_control_plane_env_is_refused_not_silently_defaulted(tmp_path, monkeypatch):
+    """`export SCIENCE_CONTROL_PLANE=` must not quietly fall back to the XDG default --
+    that is a config error, not an unset variable, and the project's own rule is fail
+    early rather than fall back silently.
+
+    XDG_STATE_HOME is different: the XDG Base Directory spec says an empty value there
+    MUST be treated as unset, so that variable keeps its existing fallback behaviour and
+    is deliberately not covered by this test."""
+    monkeypatch.setenv(CONTROL_PLANE_ENV, "")
+
+    with pytest.raises(ControlPlaneError):
+        control_plane_root(_project(tmp_path, "alpha"))
+
+
 def test_the_working_directory_does_not_change_where_a_run_resolves(tmp_path, monkeypatch):
     """The companion guard to the rejection above, and it is deliberately trivial TODAY.
 
