@@ -26,7 +26,7 @@ from science_model.entity_schema.profile import _MIXIN_VERSION_BY_GENERATION
 # `method` is the second schema-closure slice, same rule: `test_method_entity.py`, 17 shared
 # fields against both profiles. It is the only one of these whose shared surface is computed
 # against a TYPED subclass (`MethodEntity`) rather than the generic `ProjectEntity`.
-VALUE_RECONCILED_KINDS = frozenset({"hypothesis", "concept", "method"})
+VALUE_RECONCILED_KINDS = frozenset({"hypothesis", "concept", "method", "search"})
 
 # The exact remainder, frozen. This is a RATCHET, not a target: it must SHRINK deliberately as
 # S1b authors batteries, and any growth means a mixin was declared without anyone classifying it.
@@ -71,8 +71,9 @@ def test_the_reconciled_profiles_are_the_complement() -> None:
             (2, "hypothesis"), (3, "hypothesis"),
             (2, "concept"), (3, "concept"),
             (2, "method"), (3, "method"),
+            (2, "search"), (3, "search"),
         }
     ), (
         f"value-reconciled profiles are {sorted(reconciled)}; "
-        f"expected both generations of hypothesis, concept and method, and nothing else"
+        f"expected both generations of hypothesis, concept, method and search, and nothing else"
     )

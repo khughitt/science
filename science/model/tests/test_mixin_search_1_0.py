@@ -1,9 +1,7 @@
-"""Probes for the DORMANT `mixin-search-1.0` schema.
+"""Probes for the ARMED `mixin-search-1.0` schema.
 
-Step 2 of the search slice. The mixin exists on disk but no generation row selects
-it and `schema_closed` is still False, so nothing here changes what the toolkit
-loads today. These probes fix the candidate contract before the production surfaces
-are aligned to it.
+Authored dormant in step 2 and armed in step 7. Both generation rows select it and
+`schema_closed=True` on the descriptor, so this is now what the toolkit loads.
 
 Every strict probe composes the candidate profile through the REAL
 `EntityValidator._compose` (via `validate_as`). Hand-rolling
@@ -11,7 +9,9 @@ Every strict probe composes the candidate profile through the REAL
 test file's idea of composition rather than the toolkit's.
 
 Arming a kind flips TWO independent lookups, and the fixture patches both because
-step 7 will satisfy both from one declaration:
+step 7 satisfied both from ONE declaration (`schema_closed=True`), so the pair cannot
+drift apart. The fixture is now redundant with production for this kind and is kept
+because the value/mutation probes read more clearly when the arming is explicit:
 
 - `validator.py:135` gates `unevaluatedProperties: false` on `PROJECT_MIXIN_NAMES`;
 - `loader.py:92` gates the `mixin-` filename prefix on `TYPE_MIXIN_NAMES`, so an
@@ -68,7 +68,7 @@ def _record(**overrides) -> dict:
 
 @pytest.fixture
 def strict(monkeypatch) -> EntityValidator:
-    """An EntityValidator that composes `search` STRICTLY, as step 7 eventually will."""
+    """An EntityValidator that composes `search` STRICTLY, as production now does."""
     monkeypatch.setattr(validator_module, "PROJECT_MIXIN_NAMES", PROJECT_MIXIN_NAMES | {"search"})
     monkeypatch.setattr(loader_module, "TYPE_MIXIN_NAMES", TYPE_MIXIN_NAMES | {"search"})
     return EntityValidator()
@@ -80,58 +80,53 @@ def _refuses(validator: EntityValidator, record: dict) -> str:
     return str(caught.value)
 
 
-# --- dormant: written INVERTED, flipped in step 7 --------------------------------
+# --- armed: both lookups flipped, from one declaration ---------------------------
 #
-# These four assert the CURRENT dormant state. Step 7 flips all four in the same commit
-# that adds the generation rows and sets `schema_closed=True`, which is what makes the
-# arming commit self-certifying rather than merely plausible.
+# These four were written INVERTED while dormant and flipped in the same commit that
+# added the generation rows and set `schema_closed=True`. That is what makes the arming
+# commit self-certifying rather than merely plausible.
 
 
-def test_search_is_NOT_yet_armed():
-    assert "search" not in PROJECT_MIXIN_NAMES
-    assert "search" not in TYPE_MIXIN_NAMES
+def test_search_is_armed():
+    assert "search" in PROJECT_MIXIN_NAMES
+    assert "search" in TYPE_MIXIN_NAMES
 
 
 @pytest.mark.parametrize("generation", [2, 3])
-def test_no_generation_row_selects_the_search_mixin_yet(generation):
-    """Both rows, because step 7 must move both together.
+def test_both_generation_rows_select_the_search_mixin(generation):
+    """Both rows, at the same version, and neither detail is incidental.
 
     natural-systems is pinned to generation 2 and mm30 to generation 3, so arming one
     row would split one kind's contract across the corpus -- and both projects hold
     `search` records. `sources.py:1704` calls `default_profile_for_kind(entity.kind)`
-    with no generation argument and always resolves row 2.
+    with no generation argument and always resolves row 2, so the two rows agreeing is
+    what keeps that call site consistent with the projects it resolves for.
     """
-    from science_model.entity_schema.profile import ProfileParseError
-
-    with pytest.raises(ProfileParseError):
-        default_profile_for_kind("search", generation=generation)
+    profile = default_profile_for_kind("search", generation=generation)
+    assert profile.render() == "science-entity-base/2.0+search/1.0"
 
 
-def test_the_mixin_is_NOT_yet_reachable_as_a_mixin():
+def test_the_mixin_is_now_reachable_as_a_mixin():
     """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    While dormant this raises for `extension-search-1.0.json`: the file on disk is not
-    lax, it is unreachable. That distinction is the one the slice procedure insists on --
+    While dormant this raised for `extension-search-1.0.json`: the file on disk was not
+    lax, it was unreachable. That distinction is the one the slice procedure insists on --
     an unarmed mixin is not a weak mixin.
     """
-    with pytest.raises(Exception):
-        EntityValidator().validate_as(_record(), CANDIDATE)
+    EntityValidator().validate_as(_record(), CANDIDATE)
 
 
-def test_composition_does_NOT_yet_close(monkeypatch):
-    """The defect this slice closes, demonstrated against the real composer.
+def test_composition_now_closes():
+    """The defect this slice closes, asserted against the real composer.
 
-    Patches ONLY the loader, leaving the composer unarmed. That isolates the second of
-    the two lookups and reproduces exactly what "preserved unvouched" means: the mixin
-    is found, the record validates against it, and `shadow_key` sails through because
-    `_compose` omitted `unevaluatedProperties`.
-
-    Asserting `"search" not in PROJECT_MIXIN_NAMES` here instead would restate the
-    arming check one test up and prove nothing about composition. Step 7 turns this into
-    `test_composition_now_closes`, asserting `shadow_key` is refused.
+    While dormant this test patched ONLY the loader and asserted that `shadow_key` SAILED
+    THROUGH -- isolating the second lookup to demonstrate what "preserved unvouched"
+    meant for this kind. Now both lookups derive from `schema_closed=True` and the same
+    record is refused.
     """
-    monkeypatch.setattr(loader_module, "TYPE_MIXIN_NAMES", TYPE_MIXIN_NAMES | {"search"})
-    EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    with pytest.raises(EntityValidationError) as caught:
+        EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    assert "shadow_key" in str(caught.value)
 
 
 # --- value probes: the measured corpus validates ---------------------------------
