@@ -2649,21 +2649,39 @@ Record in `AGENTS.md` that the reviews-are-not-evidence guardrail is now a toolk
 - [ ] **Step 4: Verify, capturing status before parsing**
 
 ```bash
-uv run --frozen science validate --all --strict --format json > /tmp/hm-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 - <<'PY'
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "health-meta-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
+test -f "$canonical_report" || { echo "HARD STOP: approved health/meta canonical report missing"; exit 1; }
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/hm-after-complete.json > /tmp/hm-after.json
+validation_status=$?
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
 import json
-d = json.load(open("/tmp/hm-after.json"))
-print(d["summary"])
-rules = {r.get("rule") for r in d["results"]}
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/hm-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from approved canonical baseline"
+rules = {r.get("rule") for r in actual["results"]}
 assert "validate.python-sidecar-removed" not in rules
 assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
 print("OK")
 PY
 ```
 
-Expected: no `FAIL` line and `OK`. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
+Expected: status `1`, summary `16 errors / 139 warnings`, exact complete-report
+parity with the approved canonical baseline, and `OK`. Strict validation already
+failed at the frozen consumer snapshot for unrelated corpus findings; changing
+that to zero would falsify the parity gate. The nine background papers are cited
+under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance
+records already carry `evidence_tier: background` and
+`review_typed_source: true`.
 
 - [ ] **Step 5: Commit atomically, merge, clean up**
 
@@ -2807,20 +2825,41 @@ git rm validate_local.py
 
 ```bash
 uv run --frozen science validate --all --strict --format json > /tmp/evo-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 - <<'PY'
+validation_status=$?
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "evolution-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
+test -f "$canonical_report" || { echo "HARD STOP: approved evolution canonical report missing"; exit 1; }
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/evo-after-complete.json > /tmp/evo-after-rendered.json
+complete_status=$?
+test "$complete_status" -eq 1 || {
+  echo "FAIL: complete-report validator exited $complete_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
 import json
-d = json.load(open("/tmp/evo-after.json"))
-print(d["summary"])
-rules = {r.get("rule") for r in d["results"]}
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/evo-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from approved canonical baseline"
+rules = {r.get("rule") for r in actual["results"]}
 assert "validate.python-sidecar-removed" not in rules
 assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
 print("OK")
 PY
 ```
 
-Expected: no `FAIL` line, `OK`, no traceback. This is the Task 1 Step 2 reproduction now resolved.
+Expected: both commands exit `1`, summary `18 errors / 41 warnings`, exact
+complete-report parity with the approved canonical baseline, `OK`, and no
+traceback. Strict validation already failed at the frozen consumer snapshot for
+unrelated corpus findings; the resolved regression is the traceback, not those
+findings. The first command is the exact Task 1 Step 2 reproduction.
 
 - [ ] **Step 5: Confirm the notice out-of-band**
 
@@ -2979,16 +3018,37 @@ test "$status" -eq 0 || { echo "FAIL: artifact checker exited $status"; exit 1; 
 - [ ] **Step 5: Verify validation**
 
 ```bash
-uv run --frozen science validate --all --strict --format json > /tmp/pl-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 -c "
-import json; d=json.load(open('/tmp/pl-after.json')); print(d['summary'])
-assert 'validate.python-sidecar-removed' not in {r.get('rule') for r in d['results']}
-print('OK')"
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "protein-landscape-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
+test -f "$canonical_report" || { echo "HARD STOP: approved protein-landscape canonical report missing"; exit 1; }
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/pl-after-complete.json > /tmp/pl-after.json
+validation_status=$?
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
+import json
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/pl-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from approved canonical baseline"
+assert "validate.python-sidecar-removed" not in {
+    r.get("rule") for r in actual["results"]
+}
+print("OK")
+PY
 ```
 
-Expected: no `FAIL` line, `OK`, no traceback — the crash in the method-slice inventory is resolved.
+Expected: status `1`, summary `13 errors / 642 warnings`, exact complete-report
+parity with the approved canonical baseline, `OK`, and no traceback. Strict
+validation already failed at the frozen consumer snapshot for unrelated corpus
+findings; the resolved regression is the method-slice traceback, not those
+findings.
 
 - [ ] **Step 6: Commit atomically, merge, clean up**
 

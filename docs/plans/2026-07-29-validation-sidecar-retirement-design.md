@@ -393,6 +393,16 @@ comparison is defined in two parts:
 
    Notices are not carried in `--format json`. Where a notice is the expected
    output, assert it through `RunResult.notices` or verbose text rendering.
+
+   Consumer rollout preserves the frozen canonical validator outcome; it does
+   not require unrelated corpus findings to disappear. In the approved capture,
+   strict validation exits 1 for all three external consumers: health/meta has
+   16 errors and 139 warnings, evolution has 18 errors and 41 warnings, and
+   protein-landscape has 13 errors and 642 warnings. Their migration gates must
+   compare the complete, unbudgeted after-report to the approved canonical
+   report exactly and retain that exit status. Expecting exit 0 would tune the
+   verification instrument to contradict its own baseline.
+
 2. **Intended-policy evaluation.** Evaluate the promoted check of §3.3 separately,
    against the corpus, on its own terms. It has no predecessor output to match,
    because its predecessor never observed its subject.
