@@ -90,7 +90,8 @@ The ownership alternatives are closed:
 | Project extension | Refuted. `science/src/science_tool/graph/decision_log.py` writes it onto a core kind; requiring every project to declare protein-landscape's extension merely to survive that toolkit write is inverted ownership. |
 
 Four of the five tranche kinds carry the field: `concept` (132), `finding`
-(26), `observation` (25), and `method` (20).
+(26), `observation` (**14**, corrected from 25 by the slice-4 measurement — the earlier
+figure predates the count over authored markdown frontmatter), and `method` (20).
 
 This ownership correction does not turn the field into an idea origin.
 `promoted_from` is not migratable into `origins`: `OriginRecord.type` names
@@ -189,8 +190,11 @@ authored ISO string where there is none.
 3. `search` — **DONE** (2026-07-30). 36 documents across **seven** project roots, no typed
    subclass, no template, markdown-only. The first slice to carry a CORPUS migration. See
    [`../plans/2026-07-30-schema-closure-search-slice-inventory.md`](../plans/2026-07-30-schema-closure-search-slice-inventory.md).
-4. `observation` — **NEXT**.
-5. `finding` last, because it alone carries a **source** migration.
+4. `observation` — **DONE** (2026-07-30). 21 documents in a **single** project root, no typed
+   subclass, markdown-only, and the first slice whose substantive finding came from the WRITER
+   surface rather than the corpus. See
+   [`../plans/2026-07-30-schema-closure-observation-slice-inventory.md`](../plans/2026-07-30-schema-closure-observation-slice-inventory.md).
+5. `finding` — **NEXT**, and last, because it alone carries a **source** migration.
 
 > **Corrected by slice 3:** this list used to say `finding` "alone carries a migration".
 > `finding` alone carries a *source* migration (`updated = created` over structured rows).
@@ -206,7 +210,7 @@ declarations across the 7 projects. **These are scoping estimates, not inventori
 | kind | ≈records | where |
 |---|---|---|
 | `search` | 36 | cancer 19, health 10, natural-systems 7 |
-| `observation` | 21 | health only — a single-project kind, so its corpus cannot show cross-project variation |
+| `observation` | 21 | **confirmed exactly by slice 4**, and narrower than "health": all 21 are in the single root `health/processes/cycles`, one of health's five projects. The other 16 roots were each asserted empty |
 | `finding` | 53 markdown + source rows | protein-landscape 26, natural-systems 24, cancer 3, plus the source-backed rows the migration covers |
 
 ## A Mixin May Not Enum-Lock `status` Before Its Kind Is Certified
@@ -362,6 +366,56 @@ is kind-agnostic and belongs in its own branch, not inside a kind's slice.
   `Entity` is `extra="allow"` by D3.3, not `extra="ignore"`. **Verify that a mutation
   changed what you think it changed before concluding anything from the result.**
 
+### What the fourth slice added
+
+- **Inventory the kind-agnostic MUTATORS, not just the kind's own surfaces.** The candidate
+  universe already says "every writer-emitted record", and the first three slices applied that
+  to the kind's template and corpus — neither of which can show what a kind-agnostic mutator
+  writes. `consolidate.py:183` stamps `consolidated_into` onto any member's frontmatter and
+  `unarchive` restored it to a live, schema-validated path, **failing the whole project load
+  for `hypothesis`, `method` and `search` — all already armed.** `concept` escaped only by
+  accident (its status vocabulary omits `archived`, so the consolidate gate refuses it
+  upstream), and `hypothesis` escaped the sibling `superseded_by` defect only because
+  `HypothesisEntity` declares the field as a typed model field, so its mixin inherited the
+  coverage from the model rather than from anyone's inventory. The step-1 question to add:
+  **which kind-agnostic mutators can write to this kind's frontmatter?** Answer it from the
+  mutators and the descriptor flags (`supersedable`; whether `statuses` contains `archived`),
+  never from the corpus — which by construction cannot contain a key that would have refused it.
+- **A field's ruling can be "the writer is wrong".** Omission and admission are not the only
+  moves. `consolidated_into` has no frontmatter reader — `entities.py:1004` and
+  `big_picture/digests.py:77` both read `ArchiveRow.consolidated_into` from the archive index —
+  so admitting it in four mixins would have enshrined duplicated bookkeeping in versioned
+  schemas. The slice fixed `unarchive` to strip it instead. Ask who READS the value before
+  deciding which authority should change.
+- **"Budget for fixtures" is too coarse; intersect with the generation declaration.** Step 1
+  predicted arming would break two `observation` fixtures that author no `status`. It broke
+  **zero**: `validate_against_schema` returns early when `project_schema is None`, and a
+  fixture project that declares no `entity_schema_version` is not leniently validated but
+  *unvalidated*. Measured across the tree: 20 fixture files declare a generation and none of
+  them authors an observation; the 2 that author observations declare none. The `method`
+  slice's casualty declared `entity_schema_version: 3` explicitly. **A fixture is exposed only
+  if its project declares a generation.**
+- **Verify what reaches the SCHEMA by watching the schema.** Slice 3 admitted `profile` on
+  `search` because it read a `setdefault("profile", …)` in the loader and inferred injection.
+  That call is on the structured-row path, and enrichment runs *after* `validate_against_schema`
+  in any case, so nothing it adds can face the schema. Instrumenting the validator on a real
+  gen-3 load shows the validated key set is the authored frontmatter minus exactly
+  `{canonical_id, content, file_path}`. The admission is harmless but its rationale was wrong,
+  and a rationale is what the next slice copies.
+- **A single-project kind cannot certify itself, and the tests should say which claims it
+  cannot support.** All 21 records live in one root. This slice's certification therefore
+  enumerates the other 16 roots and asserts each empty, so "one project owns the corpus" is
+  distinguishable from "only one project was examined" — and names, in the tests themselves,
+  that no probe over this corpus can distinguish a correct `status` vocabulary from an
+  over-tight one.
+- **The corpus's own project may not be loadable.** `~/d/health/processes/cycles` fails to
+  load because its aggregate task store predates the storage split — on `main` too, so it is
+  pre-existing — which makes step 6's end-to-end half impossible for the very project holding
+  every record. The
+  `search` slice hit this with `post-acute-infection`. When it happens, say so, run step 6 on
+  a synthetic project of the same shape, and pair the byte-identical graph diff with a control
+  run against **both real toolkits** rather than one patched one.
+
 ### What the first slice cost that the procedure did not predict
 
 Arming broke four guards outside the schema layer, none of them in the graph:
@@ -401,6 +455,8 @@ is why the shape is recorded rather than just the title.
 | F4 | `render_update`'s stale-owned-key hole | `final.pop(key, None)`, but that also drops the `legacy_*` triple, so it needs its own pass rather than a one-liner. | No |
 | F5 | Six unclosed core kinds carrying `promoted_from` | Resolved by their own slices; no separate work. | No |
 | F6 | `science validate` writes to the project it validates | Creates local topic entities duplicating commons overlays (one per run) and appends to tracked task files. Needs the topic-materialisation path traced to its writer; `validate` should be read-only. | Not a blocker, but it makes step-4/6 measurement untrustworthy unless the tree is restored between runs |
+| F7 | `mixin-method-1.0` omits `superseded_by` on a `supersedable` kind | Versioned bump to `mixin-method-1.1`, exactly like `mixin-concept-1.1`. `mark_superseded` stamps the key into frontmatter (`consolidation.py:147` rules frontmatter is "the only place an authored `superseded_by` can live"), and `method` is `supersedable=True`, so the writer can produce a record its own mixin refuses — verified. `mixin-hypothesis-2.0` already admits it. `search`/`concept` are `supersedable=False`, so their refusal is correct. | No, but it is a **reachable defect in shipped work**, like the `consolidated_into` one the `observation` slice fixed |
+| F8 | `~/d/health/processes/cycles` cannot be loaded | Its aggregate task store predates the storage split; the fix is `science tasks migrate-storage --apply` in that project. Fails on `main` too, so it is not slice-induced. | Not a slice blocker, but it cost the `observation` slice the end-to-end half of step 6 for the only project holding its corpus, and will cost `finding` the same wherever it overlaps |
 
 **What the two corrections to shipped work taught, stated once here because both were
 the same failure:** a slice certifies its mixin against the corpus, and the corpus cannot

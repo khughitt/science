@@ -149,7 +149,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "retired", "archived"],
             supersedable=False,
-            schema_closed=False,
+            schema_closed=True,
         ),
         EntityKind(
             name="finding",

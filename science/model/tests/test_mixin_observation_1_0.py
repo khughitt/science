@@ -1,16 +1,17 @@
-"""Probes for the DORMANT `mixin-observation-1.0` schema.
+"""Probes for the ARMED `mixin-observation-1.0` schema.
 
-Authored dormant in step 2 and armed in step 7. Until then no generation row selects
-it and `schema_closed=False` on the descriptor, so this file is what the toolkit
-*would* load, not what it loads.
+Authored dormant in step 2 and armed in step 7. Both generation rows select it and
+`schema_closed=True` on the descriptor, so this is now what the toolkit loads.
 
 Every strict probe composes the candidate profile through the REAL
 `EntityValidator._compose` (via `validate_as`). Hand-rolling
 `{"allOf": [...], "unevaluatedProperties": False}` here instead would certify this
 test file's idea of composition rather than the toolkit's.
 
-Arming a kind flips TWO independent lookups, and both must be patched to exercise the
-armed behaviour ahead of arming:
+Arming a kind flips TWO independent lookups, and the fixture patches both because
+step 7 satisfied both from ONE declaration (`schema_closed=True`), so the pair cannot
+drift apart. The fixture is now redundant with production for this kind and is kept
+because the value/mutation probes read more clearly when the arming is explicit:
 
 - `validator.py:135` gates `unevaluatedProperties: false` on `PROJECT_MIXIN_NAMES`;
 - `loader.py:92` gates the `mixin-` filename prefix on `TYPE_MIXIN_NAMES`, so an
@@ -21,11 +22,11 @@ armed behaviour ahead of arming:
 Both are patched in the CONSUMING module's namespace, not in `profile`: each does
 `from ...profile import <NAME>`, which binds a new name at import time, so rebinding
 the source module would not be seen. Six modules bind `PROJECT_MIXIN_NAMES` by value
-at import, which is also why patch-based simulation is never a substitute for step 7.
+at import, which is also why patch-based simulation was never a substitute for step 7.
 
-The four `dormant` tests below are written INVERTED and are flipped in the same commit
-that adds the generation rows and sets `schema_closed=True`. That is what makes the
-arming commit self-certifying rather than merely plausible.
+The four `armed` tests below were written INVERTED while dormant and flipped in the
+same commit that added the generation rows and set `schema_closed=True`. That is what
+makes the arming commit self-certifying rather than merely plausible.
 """
 
 import json
@@ -39,7 +40,6 @@ from science_model.entity_schema.profile import (
     PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
     ProfileComponent,
-    ProfileParseError,
     ProfileString,
     default_profile_for_kind,
 )
@@ -89,51 +89,50 @@ def _refuses(validator: EntityValidator, record: dict) -> str:
     return str(caught.value)
 
 
-# --- dormant: neither lookup is flipped yet ---------------------------------------
+# --- armed: both lookups flipped, from one declaration ---------------------------
 
 
-def test_observation_is_not_yet_armed():
-    assert "observation" not in PROJECT_MIXIN_NAMES
-    assert "observation" not in TYPE_MIXIN_NAMES
+def test_observation_is_armed():
+    assert "observation" in PROJECT_MIXIN_NAMES
+    assert "observation" in TYPE_MIXIN_NAMES
 
 
 @pytest.mark.parametrize("generation", [2, 3])
-def test_no_generation_row_selects_the_observation_mixin(generation):
+def test_both_generation_rows_select_the_observation_mixin(generation):
     """Both rows, because arming one would split one kind's contract across the corpus.
 
     That risk is theoretical for THIS kind and stated anyway: all 21 records live in a
     single project root pinned to generation 3, so no generation-2 project holds an
-    `observation`. The rows still move together at step 7, because
-    `sources.py` calls `default_profile_for_kind(entity.kind)` with no generation
-    argument and always resolves row 2 -- a row-3-only arming would leave that call site
-    resolving a profile the descriptor claims is closed.
+    `observation`. The rows move together regardless, because `sources.py` calls
+    `default_profile_for_kind(entity.kind)` with no generation argument and always
+    resolves row 2 -- a row-3-only arming would leave that call site resolving a profile
+    the descriptor claims is closed.
     """
-    with pytest.raises(ProfileParseError):
-        default_profile_for_kind("observation", generation=generation)
+    profile = default_profile_for_kind("observation", generation=generation)
+    assert profile.render() == "science-entity-base/2.0+observation/1.0"
 
 
-def test_the_mixin_is_not_yet_reachable_as_a_mixin():
+def test_the_mixin_is_now_reachable_as_a_mixin():
     """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    While dormant this resolves to `extension-observation-1.0.json`: the file on disk is
-    not lax, it is unreachable. Flipped at step 7.
+    While dormant this raised for `extension-observation-1.0.json`: the file on disk was
+    not lax, it was unreachable. That distinction is the one the slice procedure insists
+    on -- an unarmed mixin is not a weak mixin.
     """
-    with pytest.raises(Exception) as caught:
-        EntityValidator().validate_as(_record(), CANDIDATE)
-    assert "extension-observation-1.0" in str(caught.value)
+    EntityValidator().validate_as(_record(), CANDIDATE)
 
 
-def test_composition_does_not_yet_close():
-    """The defect this slice closes, demonstrated for this kind.
+def test_composition_now_closes():
+    """The defect this slice closes, asserted against the real composer.
 
-    Only the LOADER is patched here, isolating the second lookup: the mixin is found,
-    composition runs, and an undeclared key still sails through because
-    `unevaluatedProperties: false` is gated on `PROJECT_MIXIN_NAMES`. This is what
-    "preserved unvouched" means concretely. Flipped to a refusal at step 7.
+    While dormant this test patched ONLY the loader and asserted that `shadow_key` SAILED
+    THROUGH -- isolating the second lookup to demonstrate what "preserved unvouched" meant
+    for this kind. Now both lookups derive from `schema_closed=True` and the same record
+    is refused.
     """
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(loader_module, "TYPE_MIXIN_NAMES", TYPE_MIXIN_NAMES | {"observation"})
+    with pytest.raises(EntityValidationError) as caught:
         EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    assert "shadow_key" in str(caught.value)
 
 
 # --- value probes: the measured corpus validates ---------------------------------

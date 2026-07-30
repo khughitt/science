@@ -315,16 +315,81 @@ Required: `["id", "kind", "status"]`.
 
 ## Known cost at step 7
 
-`test_graph_freshness_integration.py` authors two `observation` fixtures (lines 190 and
-474) with **no `status`** — legal only while the kind is open. Arming will break both. This
-is the `method` slice's fixture lesson arriving on schedule, and it is found here at step 1
-rather than at step 7 because the lesson was written down. An exhaustive scan of
-`science/tests` and `science/model/tests` finds exactly these two sites.
+> **⚠️ This prediction was wrong. Corrected at step 7 after measuring.**
+
+Step 1 recorded: *"`test_graph_freshness_integration.py` authors two `observation` fixtures
+(lines 190 and 474) with no `status` — legal only while the kind is open. Arming will break
+both."*
+
+**Arming broke zero fixtures.** The two records are real and do lack `status`, but they were
+never exposed: their fixture project declares no `entity_schema_version`, and
+`validate_against_schema` returns early when `project_schema is None`. A record in an
+unpinned project is not leniently validated — it is not validated at all.
+
+The exact rule, measured across the test tree rather than inferred:
+
+| | count |
+|---|---|
+| fixture files declaring `entity_schema_version` | 20 |
+| …of those, authoring an `observation` | **0** |
+| fixture files authoring an `observation` | 2 |
+| …of those, declaring a generation | **0** |
+
+The `method` slice broke `test_dataset_register_run.py` because that file appends
+`entity_schema_version: 3` to its project explicitly (line 615). That is the whole
+difference.
+
+So the procedure's standing advice — "budget for guards that enumerate the armed set; a
+corpus sweep does not see them" — is right about *guards* and too coarse about *fixtures*.
+The sharper rule: **a fixture is exposed to arming only if its project declares a
+generation.** Scanning for fixtures that author the kind over-predicts; the scan has to be
+intersected with the generation declaration. Pinned by
+`test_a_project_without_a_declared_generation_is_untouched`.
+
+## Step 6: what arming changed
+
+The derived graph diff across the arming boundary is **byte-identical**
+(`dc29da65…` before and after, over a synthetic 21-record gen-3 project). Per the `method`
+slice's lesson that is not evidence — it is what a slice that armed nothing produces — so
+it is paired with a control run in both directions using the two **real** toolkits, no
+monkeypatching:
+
+```
+this branch (observation ARMED):   REFUSED -- Unevaluated properties are not allowed
+                                   ('shadow_key' was unexpected)
+main        (observation UNARMED): LOADED (22 entities) -- shadow_key preserved unvouched
+```
+
+**The corpus's own project could not be used for this.** `~/d/health/processes/cycles`
+holds all 21 records and cannot be loaded at all — `tasks/active.md predates the storage
+split` — which was verified to fail identically with `main`'s toolkit, so it is
+pre-existing and not this slice's doing. The `search` slice hit the same wall with
+`~/d/health/processes/post-acute-infection`. Those records are certified at the schema
+boundary (step 4); the end-to-end path is exercised on a synthetic project of the same
+shape, in `test_observation_slice_derived_behaviour.py`.
+
+That this kind's entire corpus lives in an unloadable project is worth stating plainly:
+**step 6 here is weaker than in any prior slice**, and no amount of care in this branch
+fixes that. What compensates is that the intended change is small and its control is exact.
+
+Intended-change allowlist, in full:
+
+| change | status |
+|---|---|
+| an undeclared key on an `observation` now refuses the project load | intended; the whole point |
+| `default_profile_for_kind("observation", …)` resolves instead of raising | intended |
+| `science entity sections observation` gains a frontmatter table | intended, per the first slice's finding — **re-verified by running both toolkits**, not inherited: it goes from 2 body-section rows to those 2 plus 16 frontmatter rows with type and constraint columns (`status` required, `promoted_from` optional, `kind` `const=observation`) |
+| graph / composite output for a clean corpus | **unchanged, byte-identical** |
+| test fixtures | **none broken** — see the corrected prediction above |
 
 ## What this slice does not close
 
 - **F7** (`mixin-method-1.1` for `superseded_by`) is filed, not fixed — different kind,
   different branch.
+- **The `cycles` project's task-storage migration.** It blocks step 6's strongest form for
+  this kind and will block `finding`'s too if that corpus overlaps. Not this slice's to
+  run: migrating an external project's storage inside a toolkit slice is exactly the scope
+  creep the one-kind-one-branch rule exists to prevent.
 - The `search` mixin keeps its unjustified `profile` admission; only the rationale is
   corrected. Removing a field needs a version bump on its own grounds.
 - F1 (the Markdown authored-vs-injected-key blind spot) still weakens step 4 here, exactly
