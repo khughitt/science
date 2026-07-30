@@ -108,9 +108,11 @@ records are `active`, exactly the uniform-corpus condition that let
 corpus can distinguish a correct vocabulary from an over-tight one, so the corpus is not
 consulted for this field at all.
 
-## OPEN RULING: `task` vs `task_ref`
+## RULING (decided): `task` vs `task_ref` — omit both, migrate the corpus
 
-This is the slice's substantive finding and it needs a decision before step 2.
+**Decision: option B.** Both keys are omitted from the mixin, and the 7 records that
+carry them are migrated to `related: [task:tNNN]` first. This is the slice's substantive
+finding.
 
 **Measured facts:**
 
@@ -138,10 +140,43 @@ This is the slice's substantive finding and it needs a decision before step 2.
 | **B. Omit both, migrate first** | One supported spelling: `related: [task:tNNN]`, which the one real consumer already reads | Corpus migration in 2 external repos; `t01` → `task:t01` is a value transform, and the `discussion:` value migrates to a *different* target |
 | **C. Admit `task_ref` only, migrate `task`** | Keeps the canonical-valued key | Still two spellings across the tranche; the survivor is still read by nothing |
 
-**Recommendation: B.** Omission is the procedure's default refusal, and the alternative
-puts a field in a versioned schema that no code reads and whose values are already
-inconsistent. It also makes slice 3 carry a small corpus migration — which the procedure
-currently says only `finding` does, and that sentence will need correcting either way.
+**Chosen: B.** Omission is the procedure's default refusal, and the alternative puts a
+field in a versioned schema that no code reads and whose values are already inconsistent.
+It also makes slice 3 carry a small corpus migration — which the procedure currently says
+only `finding` does; that sentence needs correcting.
+
+A fact found during the migration that strengthens the ruling: `natural-systems`'
+`entities/searches/0003-ontology-completeness` has carried `task:t072` in `related` all
+along. The supported spelling was already in use **in the same directory** as the
+divergent key, so this is a migration onto an existing project convention rather than a
+new one imposed by the toolkit.
+
+### Migration status
+
+| project | records | state |
+|---|---|---|
+| `~/d/natural-systems` | 2 | **DONE** — commit `a644c026` on `main`. `science validate` result sets compared as SETS (not counts) before and after: identical, 40 warnings, 0 errors. |
+| `~/d/cancer/cancer-types/multiple-myeloma` | 5 | **BLOCKED** — the repo is on branch `big-picture-regen-2026-07-30` with uncommitted work from another session. Editing there risks the change being swept into an unrelated commit. |
+
+**The mm30 migration is a hard prerequisite for step 4.** Certification composes the
+candidate profile over every project; with 5 records still carrying `task:`, the run must
+fail. That is the mixin working, not a defect to route around — do not soften the mixin
+to make certification pass.
+
+The five records and their targets, all verified to resolve before any edit:
+
+| record | current | migrates to |
+|---|---|---|
+| `0001-bulk-sc-integration-methods` | `task: discussion:0008-sc-bulk-integration` | append `discussion:0008-sc-bulk-integration` to existing `related` |
+| `0002-existing-mm-meta-analyses` | `task: discussion:0007-research-gaps` | new `related: [discussion:0007-research-gaps]` |
+| `0003-meta-analysis-methods` | `task: t01` | `related: [task:t01]` |
+| `0004-mm-deconvolution` | `task: t02` | `related: [task:t02]` |
+| `0005-mm-drug-response-expression` | `task: t03` | `related: [task:t03]` |
+
+Two of the five do not migrate to a task at all — `task: discussion:...` names a
+discussion. `t01`/`t02`/`t03` are declared in `tasks/archive.md` as "Historical task
+alias", retained expressly so older references stay resolvable, so `task:t01` is a valid
+ref rather than a dangling one.
 
 ## What this slice does not close
 
