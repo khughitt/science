@@ -1742,8 +1742,8 @@ test "$evolution_notice_status" = 1 || { echo "HARD STOP: evolution verbose exit
 test "$health_meta_notice_status" = 1 || { echo "HARD STOP: health/meta verbose exit $health_meta_notice_status"; exit 1; }
 rg -q 'no status:background papers' "$attempt_root/evolution-verbose.txt"
 rg -q '9 status:background paper' "$attempt_root/health-meta-verbose.txt"
-printf 'command\tevolution-verbose\tscience validate --all --strict --verbose\texit\t%s\t%s\ncommand\thealth-meta-verbose\tscience validate --all --strict --verbose\texit\t%s\t%s\n' \
-  "$evolution_notice_status" "$attempt_root/evolution-verbose.txt" "$health_meta_notice_status" "$attempt_root/health-meta-verbose.txt" >> "$attempt_root/task-6-manifest.tsv"
+printf 'command\tevolution-verbose\tscience validate --all --strict --verbose --output %s\texit\t%s\t%s\ncommand\thealth-meta-verbose\tscience validate --all --strict --verbose --output %s\texit\t%s\t%s\n' \
+  "$attempt_root/evolution-verbose.txt" "$evolution_notice_status" "$attempt_root/evolution-verbose.txt" "$attempt_root/health-meta-verbose.txt" "$health_meta_notice_status" "$attempt_root/health-meta-verbose.txt" >> "$attempt_root/task-6-manifest.tsv"
 record_artifact() {
   local artifact_key=$1
   local artifact_path=$2
