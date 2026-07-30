@@ -155,10 +155,11 @@ def make_signed_commit(root: Path) -> None:
     """A commit carrying a `gpgsig` header, built WITHOUT a signing key.
 
     Signature verification is the one execution path here that needs an object to verify:
-    `log.showSignature` alone against unsigned history spawns nothing, and `gpg.program`
-    alone is never consulted. Probing them separately reports INERT twice and concludes,
-    falsely, that git log executes nothing. git does not validate the header's contents
-    before handing it to the program, so a fabricated block is enough to trigger the call.
+    against unsigned history `log.showSignature` finds nothing to verify and `gpg.program`
+    is never consulted, so probing them separately against an unsigned repo reports INERT
+    twice and concludes, falsely, that git log executes nothing. git does not validate the
+    header's contents before handing it to the program, so a fabricated block is enough to
+    trigger the call.
     """
     tree = run(root, "rev-parse", "HEAD^{tree}").stdout.decode().strip()
     parent = run(root, "rev-parse", "HEAD").stdout.decode().strip()
@@ -265,8 +266,9 @@ CANDIDATES: list[Candidate] = [
     ((("log.abbrevCommit", "true"),), LOG_ARGV, None, False),
     ((("log.mailmap", "true"),), LOG_ARGV, None, False),
     ((("format.pretty", "oneline"),), LOG_ARGV, None, False),
-    # log -- execution. The signature rows run against the CRAFTED signed commit, and the
-    # combined row is the one that can fire: neither key alone consults a program.
+    # log -- execution. The signature rows run against the CRAFTED signed commit. The
+    # combined row is the one whose program is OURS; `log.showSignature` alone spawns the
+    # default `gpg` instead, which this marker cannot see (see Step 2).
     ((("log.showSignature", "true"),), SIGNED_LOG_ARGV, None, True),
     ((("gpg.program", "./spawn.sh"),), SIGNED_LOG_ARGV, None, True),
     (
@@ -302,16 +304,42 @@ Run: `python3 $SCRATCH/probe_git_ops.py | tee $SCRATCH/probe-results.md`
 Expected: a table, one row per candidate. Every row must read `EXECUTES`, `RENDERS`, or
 `INERT` — no crashes, no blank verdicts.
 
-**The signature rows are the ones to read carefully.** The two single-key rows are expected
-to report `INERT`, and that is not a finding — it is the control that proves why the
-combined row exists. The combined `log.showSignature=true` + `gpg.program=./spawn.sh` row
-against `SIGNED` is expected to report `EXECUTES`. If it does not, stop and diagnose before
-continuing: either `make_signed_commit` failed to produce an object git treats as signed
-(check `git -C <repo> cat-file commit SIGNED` for the `gpgsig` header), or this git version
-takes a path this probe does not model. Record it `UNDETERMINED` rather than `INERT` and say
-so in the design. **An untested key must not be recorded as safe** — and this one is not
-hypothetical: `verify_marks` (`autonomy/marks.py:31-39`) already runs `git log` on every
-`finish`, with no signature control of any kind.
+**The signature rows are the ones to read carefully**, and the single-key rows are not
+symmetric. Measured on git 2.55.0:
+
+| keys | verdict |
+|---|---|
+| `log.showSignature=true` | **RENDERS** |
+| `gpg.program=./spawn.sh` | **INERT** |
+| `log.showSignature=true` + `gpg.program=./spawn.sh` | **EXECUTES** |
+
+`gpg.program` alone is inert because nothing asks for a verification. `log.showSignature`
+alone is *not* inert, and the reason matters more than the verdict: git verifies the
+crafted commit using the **default `gpg` on `PATH`**, whose complaint lands in the captured
+output —
+
+```
+gpg: no valid OpenPGP data found.
+gpg: the signature could not be verified.
+```
+
+— so the row reads `RENDERS` only because the marker watches `./spawn.sh` and not the
+program git actually spawned. Read it as *executes something this probe cannot name*.
+Setting `gpg.program` merely redirects an already-live call to an attacker-chosen binary.
+This is the measurement behind Step 6's choice of `log.showSignature=false` over a blanked
+`gpg.program=`: blanking the program name leaves the verification itself enabled, which is
+precisely the state this row shows already reaches a program on `PATH`.
+
+If the combined row does not report `EXECUTES`, stop and diagnose before continuing: either
+`make_signed_commit` failed to produce an object git treats as signed (check `git -C <repo>
+cat-file commit SIGNED` for the `gpgsig` header), or this git version takes a path this
+probe does not model. Record it `UNDETERMINED` rather than `INERT` and say so in the design.
+**An untested key must not be recorded as safe** — and this one is not hypothetical:
+`verify_marks` (`autonomy/marks.py:31-39`) already runs `git log` on every `finish`, with no
+signature control of any kind.
+
+Re-measure rather than copying the table above: it is this plan's evidence that the probe
+discriminates, not a substitute for running it on the git the implementer has.
 
 - [ ] **Step 3: Record the findings in the design**
 
@@ -539,11 +567,14 @@ surfaces here rather than in plan 2.
 For each key Task 1 recorded `EXECUTES`, add it to `_HARDENING` in the spelling the probe
 showed disarms it. **Add nothing for `RENDERS` or `INERT` rows.**
 
-For the signature path this is expected to be `log.showSignature=false` rather than a
-blanked `gpg.program=`: the goal is that git never reaches verification at all, and blanking
-the program name while leaving verification on invites git to fall back to a default `gpg`
-on `PATH`. Confirm against the probe rather than assuming — if blanking `gpg.program` alone
-also disarms it, the probe will have shown that too.
+For the signature path the spelling is `log.showSignature=false`, **not** a blanked
+`gpg.program=`. Do not let the probe's marker talk you out of this: blanking the program
+name does clear the marker, because git then tries to execute the empty name and fails
+(`error: cannot run : No such file or directory`). Verification is still enabled, and in a
+repo where the attacker configured no program at all git falls back to the default `gpg` on
+`PATH` — Step 2's single-key row measured exactly that. The marker asks "did *my* binary
+run"; the requirement is "did git reach verification". Only `log.showSignature=false`
+answers the second, and Step 7's stderr assertion is what holds the distinction.
 
 This one also has a caller today. `verify_marks` (`autonomy/marks.py:31-39`) runs
 `git log` on every `finish` through this module, so the hardening takes effect there
@@ -566,35 +597,92 @@ line here is a key nobody can later justify.
 
 - [ ] **Step 7: Write the failing neutralization test**
 
-For each `EXECUTES` key, add a test to `tests/test_autonomy_git_canonical.py` in this
-shape — substituting the real key and op:
+Every `EXECUTES` row gets a **pair**: a negative control that reproduces the vector against
+bare git, and a guard that asserts `run_git` disarms it. Write the negative control first
+and watch it pass — a guard nobody has watched fail is a guard nobody has tested.
+
+**The signature vector is composite and its test must reconstruct all three conditions**:
+`log.showSignature=true`, `gpg.program=./spawn.sh`, *and* a commit carrying a `gpgsig`
+header. Configuring one key on the ordinary unsigned `_repo` reproduces nothing, so the
+guard would pass against unhardened code and prove exactly nothing. Add these helpers and
+both tests to `tests/test_autonomy_git_canonical.py`:
 
 ```python
-def test_a_configured_executing_key_does_not_fire_under_run_git(tmp_path: Path):
-    """Reconstruct the attack the probe demonstrated, and assert the hardening disarms
-    it. A guard nobody has watched fail is a guard nobody has tested."""
+FAKE_SIGNATURE = """-----BEGIN PGP SIGNATURE-----
+
+ not a real signature; git must still hand it to the configured program
+ -----END PGP SIGNATURE-----"""
+
+SIGNED_LOG_ARGV = ("log", "--pretty=format:%H %aI", "SIGNED")
+
+
+def _signed_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """A repo whose `SIGNED` ref carries a `gpgsig` header, plus the marker path a
+    configured `gpg.program` would touch. No signing key is involved: git hands the
+    block to the program before deciding whether it is well formed."""
     root = _repo(tmp_path)
     marker = tmp_path / "EXECUTED"
     spawn = root / "spawn.sh"
     spawn.write_text(f"#!/bin/sh\ntouch {marker}\ncat\n", encoding="utf-8")
     spawn.chmod(0o755)
-    subprocess.run(
-        ["git", "-C", str(root), "config", "<the.key>", "./spawn.sh"],
-        check=True, capture_output=True,
-    )
 
-    run_git(root, "<op>", "<args...>")
+    def git(*args: str) -> str:
+        out = subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True
+        )
+        return out.stdout.decode().strip()
+
+    ident = "Probe <probe@example.invalid> 0 +0000"
+    body = (
+        f"tree {git('rev-parse', 'HEAD^{tree}')}\n"
+        f"parent {git('rev-parse', 'HEAD')}\n"
+        f"author {ident}\ncommitter {ident}\n"
+        f"gpgsig {FAKE_SIGNATURE}\n\nsigned\n"
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(root), "hash-object", "-t", "commit", "-w", "--stdin"],
+        input=body.encode("utf-8"), check=True, capture_output=True,
+    ).stdout.decode().strip()
+    git("update-ref", "refs/heads/SIGNED", sha)
+
+    for key, value in (("log.showSignature", "true"), ("gpg.program", "./spawn.sh")):
+        git("config", key, value)
+    return root, marker
+
+
+def test_signature_verification_still_spawns_the_configured_program(tmp_path: Path):
+    """The negative control. Both keys AND a signed object are required -- each alone is
+    harmless, which is why this is a composite. If this ever stops failing under bare git,
+    the guard below proves nothing and the pair should be revisited, not deleted."""
+    root, marker = _signed_repo(tmp_path)
+
+    subprocess.run(["git", "-C", str(root), *SIGNED_LOG_ARGV], capture_output=True)
+
+    assert marker.exists()
+
+
+def test_run_git_never_reaches_signature_verification(tmp_path: Path):
+    """Two assertions, because there are two ways to get this wrong, and the marker only
+    catches one. The marker proves the attacker's binary did not run. The EMPTY STDERR
+    proves no verification was attempted at all -- hardening `gpg.program=` instead leaves
+    verification enabled, and git then tries to run a program regardless: the blanked name
+    (`error: cannot run : No such file or directory`) here, or the default `gpg` on PATH in
+    a repo where the attacker configured no program. Both write to stderr; neither clears
+    the marker, so `assert not marker.exists()` alone would green-light the weak fix."""
+    root, marker = _signed_repo(tmp_path)
+
+    completed = run_git(root, *SIGNED_LOG_ARGV)
 
     assert not marker.exists()
+    assert completed.stderr == b""
+    assert len(completed.stdout.splitlines()) == 2  # the signed commit and its parent
 ```
 
-And a companion asserting the attack still reproduces without the hardening, so the guard
-is proven to be watching something rather than passing because the vector died:
+Any *other* `EXECUTES` key is single and takes this simpler shape — substitute the real
+key and op, and write the control first here too:
 
 ```python
-def test_the_executing_key_still_fires_without_the_hardening(tmp_path: Path):
-    """The negative control. If this ever stops failing, the guard above proves nothing
-    and the pair should be revisited -- not deleted."""
+def test_a_configured_executing_key_does_not_fire_under_run_git(tmp_path: Path):
     root = _repo(tmp_path)
     marker = tmp_path / "EXECUTED"
     spawn = root / "spawn.sh"
@@ -606,13 +694,15 @@ def test_the_executing_key_still_fires_without_the_hardening(tmp_path: Path):
     )
 
     subprocess.run(["git", "-C", str(root), "<op>", "<args...>"], capture_output=True)
+    assert marker.exists()  # the control: the vector reproduces
+    marker.unlink()
 
-    assert marker.exists()
+    run_git(root, "<op>", "<args...>")
+    assert not marker.exists()
 ```
 
-Write the negative control first and watch it pass before writing the guard test.
-
-If Task 1 found no `EXECUTES` key, skip this step entirely and note it in the commit.
+If Task 1 found no `EXECUTES` key beyond the signature pair, write only the pair above and
+note it in the commit.
 
 - [ ] **Step 8: Run the full canonical test module**
 
