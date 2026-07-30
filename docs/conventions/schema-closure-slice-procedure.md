@@ -180,13 +180,25 @@ authored ISO string where there is none.
 1. `concept` — **DONE** (2026-07-28). 329 documents, 4 non-base fields, the reference
    class. See
    [`../plans/2026-07-28-schema-closure-concept-slice-inventory.md`](../plans/2026-07-28-schema-closure-concept-slice-inventory.md).
+   Its mixin was corrected after the fact by `mixin-concept-1.1` (2026-07-29) — see the
+   `status` ruling below. **A slice being DONE does not mean its mixin is final.**
 2. `method` — **DONE** (2026-07-29). 51 documents, the only tranche kind with a typed
    subclass (`MethodEntity`), so step 5 was the two-directional check as originally
    written. See
    [`../plans/2026-07-29-schema-closure-method-slice-inventory.md`](../plans/2026-07-29-schema-closure-method-slice-inventory.md).
-3. `search`.
+3. `search` — **NEXT**.
 4. `observation`.
 5. `finding` last, because it alone carries a source migration.
+
+Rough populations for the three remaining kinds, measured 2026-07-30 by scanning `kind:`
+declarations across the 7 projects. **These are scoping estimates, not inventories** — step
+1 owns the real count, over the candidate universe rather than the observed corpus:
+
+| kind | ≈records | where |
+|---|---|---|
+| `search` | 36 | cancer 19, health 10, natural-systems 7 |
+| `observation` | 21 | health only — a single-project kind, so its corpus cannot show cross-project variation |
+| `finding` | 53 markdown + source rows | protein-landscape 26, natural-systems 24, cancer 3, plus the source-backed rows the migration covers |
 
 ## A Mixin May Not Enum-Lock `status` Before Its Kind Is Certified
 
@@ -253,12 +265,29 @@ directly and needs no resolved profile.
 ## Unquoted YAML Dates Are a Standing Corpus Defect
 
 `created: 2026-04-07` without quotes parses as a `datetime.date`, which base 2.0 refuses
-as `{"type": "string", "format": "date"}`. **169 records across 7 projects** carry one, so
-every remaining slice inherits a share; the `method` slice hit 2 and repaired them.
+as `{"type": "string", "format": "date"}`. The `method` slice hit 2 and repaired them.
 
-No `hypothesis` or `concept` record is affected, which is why `main` is sound rather than
-quietly broken — verify that per kind rather than assuming, since two armed kinds passing
-is also what "nobody has looked" produces.
+**Re-measured 2026-07-30, superseding the "169 records" figure recorded during the
+`method` slice.** 187 markdown files across the 7 projects carry an unquoted
+`created`/`updated` in frontmatter. They split two ways, and the split matters:
+
+| | count | |
+|---|---|---|
+| entity records (carry a `kind:`) | 166 | plan 44, question 31, report 25, evidence-line 21, interpretation 19, discussion 12, topic 8, probe 5, paper 1 |
+| non-entity process artifacts (no `kind:`) | 21 | all under `natural-systems/pipeline/**` — verdicts, source notes, integration patches |
+
+The earlier figure counted the 2 since-repaired `method` records and did not separate the
+21 kind-less files, which are not entities and no slice will ever close.
+
+**No `hypothesis`, `concept`, `search`, `observation` or `finding` record is affected** —
+checked in markdown frontmatter *and* in the YAML sources, since `finding` is partly
+source-backed. So `main` is sound, and — correcting what this section previously said —
+**the remaining slices do not each inherit a share: they inherit none.** Every affected
+kind is outside the tranche. Do not budget slice time for this, and do not treat a clean
+certification run as evidence the defect was fixed.
+
+Verify per kind rather than assuming, in either direction: armed kinds passing is also
+what "nobody has looked" produces, and so is a tranche that happens to be clean.
 
 The systemic alternative is normalizing dates to ISO strings before
 `validate_against_schema`. It is defensible — the model already coerces both forms — but it
@@ -314,3 +343,26 @@ repaired:
   `morphism-edge` (70), `limit-relation` (131), and `workflow` (6). Gate 3 makes
   their load path validating, but no closed profile applies to them; validation
   must not be mistaken for repair.
+
+### Tracked follow-ups, with the shape each one actually needs
+
+Ordered by what blocks slice work, not by size. Each names its known shape so the next
+reader does not re-derive it — and two of these were re-sized *after* being filed, which
+is why the shape is recorded rather than just the title.
+
+| # | Item | Shape | Blocks a slice? |
+|---|---|---|---|
+| F1 | Markdown adapter cannot separate authored from injected keys | **`StorageAdapter` protocol change** — the adapter must report what it injected per record. NOT the one-line `INJECTED_KEYS` subtraction originally filed; `validate_canonical_markdown_record` receives one already-merged dict. | Weakens **every** slice's step-4 certification until closed. Highest-value follow-up. |
+| F2 | `hypothesis` realignment to the `promoted_from` ruling | Versioned mixin bump, exactly like `mixin-concept-1.1`. The bump procedure is now demonstrated. | No |
+| F3 | Unquoted YAML dates | 166 entity records + 21 kind-less process files. Either a corpus repair or normalizing dates before `validate_against_schema`. Kind-agnostic; needs its own branch and a design call between the two. | **No** — zero tranche-kind records affected (measured both markdown and YAML) |
+| F4 | `render_update`'s stale-owned-key hole | `final.pop(key, None)`, but that also drops the `legacy_*` triple, so it needs its own pass rather than a one-liner. | No |
+| F5 | Six unclosed core kinds carrying `promoted_from` | Resolved by their own slices; no separate work. | No |
+
+**What the two corrections to shipped work taught, stated once here because both were
+the same failure:** a slice certifies its mixin against the corpus, and the corpus cannot
+certify what it does not vary. `mixin-concept-1.0`'s `status` enum survived step 4 because
+all 329 records are `active`; F1 was mis-sized because the filing described the fix from
+the outside without opening `validate_canonical_markdown_record`. In both cases the
+artifact was written from a plausible model rather than a read. **Where a population is
+uniform or a fix is described rather than traced, reason from the declaration and the
+code, not from the measurement.**
