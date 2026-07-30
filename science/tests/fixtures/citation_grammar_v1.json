@@ -78,6 +78,12 @@
       "unsupported": ["Smith2020 p. 42"]
     },
     {
+      "name": "non-citation-at-tokens-ignored",
+      "markdown": "The UI uses @testing-library/react and @react-three/postprocessing; contact author@example.edu; report VO2@VT and P'@k.",
+      "citations": [],
+      "unsupported": []
+    },
+    {
       "name": "malformed-extra-text-before-compound",
       "markdown": "See [@Smith2020 extra; @Jones2021].",
       "citations": [{ "citekey": "Jones2021", "locator": null }],

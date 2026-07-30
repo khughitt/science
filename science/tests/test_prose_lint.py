@@ -794,6 +794,19 @@ class TestUnsupportedCitationSyntax:
         result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
         assert result["counts"].get("unsupported-citation-syntax", 0) == 0
 
+    def test_every_unsupported_citation_form_still_fails_closed(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "note.md").write_text(
+            "Bare @Smith2020.\nPrefixed [see @Smith2020].\nSuppressed [-@Smith2020].\n",
+            encoding="utf-8",
+        )
+        result = scan_root(tmp_path, checks=["unsupported-citation-syntax"])
+        assert [(h.line, h.match) for h in result["hits"]] == [
+            (1, "Smith2020"),
+            (2, "Smith2020"),
+            (3, "Smith2020"),
+        ]
+
     def test_metric_at_token_is_not_citation_syntax(self, tmp_path):
         (tmp_path / "doc").mkdir()
         (tmp_path / "doc" / "note.md").write_text("Retrieval reports P'@k for each run.\n", encoding="utf-8")

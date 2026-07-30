@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from science_tool.bibliography import BibEntry, load_bib_entries, raw_bib_entry_keys
+from science_tool.citation_tokens import is_bare_citation_candidate
 from science_tool.markdown_utils import rendered_prose
 
 
@@ -328,7 +329,7 @@ def _parse_block(
         ats = [
             match.group(1)
             for match in _BARE_AT_RE.finditer(item)
-            if _is_bare_citation_candidate(item, match.start())
+            if is_bare_citation_candidate(item, match.start(), match.end())
         ]
         unsupported.extend(ats if ats else [item])
     return citations, semantic_refs, unsupported, items
@@ -371,7 +372,7 @@ def parse_citations(
         for at in _BARE_AT_RE.finditer(line):
             if any(start <= at.start() < end for start, end in consumed_spans):
                 continue
-            if not _is_bare_citation_candidate(line, at.start()):
+            if not is_bare_citation_candidate(line, at.start(), at.end()):
                 continue
             unsupported.append(at.group(1))
     return CitationScan(
@@ -380,12 +381,6 @@ def parse_citations(
         unsupported=unsupported,
         items=items,
     )
-
-
-def _is_bare_citation_candidate(line: str, at_index: int) -> bool:
-    if at_index <= 0:
-        return True
-    return not line[at_index - 1].isalnum()
 
 
 class UnsupportedCitationSyntaxError(ValueError):

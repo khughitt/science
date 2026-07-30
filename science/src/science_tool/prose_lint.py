@@ -16,6 +16,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
+from science_tool.citation_tokens import is_bare_citation_candidate
 from science_tool.markdown_utils import (
     is_fence_line,
     frontmatter_span,
@@ -695,7 +696,7 @@ def detect_unsupported_citation_syntax(path: Path, *, strict: bool = False) -> l
                 continue
             if _span_contains(supported_spans, match.start()):
                 continue
-            if not _is_bare_citation_candidate(raw_line, match):
+            if not is_bare_citation_candidate(raw_line, match.start(), match.end()):
                 continue
             token = match.group(1)
             issues.append(
@@ -728,17 +729,6 @@ def _inline_code_spans(line: str) -> list[tuple[int, int]]:
 
 def _span_contains(spans: list[tuple[int, int]], index: int) -> bool:
     return any(start <= index < end for start, end in spans)
-
-
-def _is_bare_citation_candidate(line: str, match: re.Match[str]) -> bool:
-    at_index = match.start()
-    if match.end() < len(line) and line[match.end()] == "/":
-        return False
-    if at_index > 0 and line[at_index - 1] == "'":
-        return False
-    if at_index <= 0:
-        return True
-    return not line[at_index - 1].isalnum()
 
 
 def _supported_citation_token_spans(line: str) -> list[tuple[int, int]]:

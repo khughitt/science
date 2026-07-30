@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from science_tool.bibliography import BibEntry
+from science_tool.citation_tokens import is_bare_citation_candidate
 from science_tool.markdown_utils import UnterminatedHtmlCommentError
 from science_tool.references import (
+    _BARE_AT_RE,
     CONTRACT,
     SCHEMA_VERSION,
     DuplicateCitekeyError,
@@ -29,7 +31,7 @@ _CORPUS = Path(__file__).parent / "fixtures" / "citation_grammar_v1.json"
 # Both repos hash their copy of the corpus against this value, so a hand-edit to
 # either copy fails CI until the corpus is re-synced and the constant updated in
 # both places (deliberate, visible). Fill in with the Step 1b command output.
-CITATION_GRAMMAR_V1_SHA256 = "65329d96d10082b3b9a7fc195e44291cdcaaa8ec9ba2d9b21ada4f2f3fa249ba"
+CITATION_GRAMMAR_V1_SHA256 = "9507b1555236f93c60843cc7d732167e26d425e06b5df4802c94e14c2f4850d7"
 
 
 def test_corpus_hash_is_pinned() -> None:
@@ -44,6 +46,50 @@ def test_parse_citations_matches_shared_corpus() -> None:
         got = [{"citekey": c.citekey, "locator": c.locator} for c in scan.citations]
         assert got == case["citations"], case["name"]
         assert sorted(scan.unsupported) == sorted(case["unsupported"]), case["name"]
+
+
+def _first_at_span(line: str) -> tuple[int, int]:
+    """Span of the first `@` token, using the production token regex."""
+    match = _BARE_AT_RE.search(line)
+    assert match is not None, line
+    return match.start(), match.end()
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("@Smith2020", True),
+        ("See @Smith2020", True),
+        ("@react-three/postprocessing", False),
+        ("author@example.edu", False),
+        ("VO2@VT", False),
+        ("P'@k", False),
+    ],
+)
+def test_is_bare_citation_candidate_classifies_at_tokens(line: str, expected: bool) -> None:
+    start, end = _first_at_span(line)
+    assert is_bare_citation_candidate(line, start, end) is expected
+
+
+@pytest.mark.parametrize(("start", "end"), [(-1, 3), (3, 3), (5, 2), (0, 99)])
+def test_is_bare_citation_candidate_rejects_invalid_spans(start: int, end: int) -> None:
+    with pytest.raises(ValueError, match="span"):
+        is_bare_citation_candidate("@Smith2020", start, end)
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        "See @Smith2020 for details.",
+        "As shown [see @Smith2020].",
+        "The year [-@Smith2020].",
+    ],
+)
+def test_parse_citations_still_fails_closed_on_bare_forms(markdown: str) -> None:
+    scan = parse_citations(markdown)
+
+    assert scan.citations == []
+    assert scan.unsupported == ["Smith2020"]
 
 
 def test_parse_citations_splits_semantic_refs_from_bibliography() -> None:
