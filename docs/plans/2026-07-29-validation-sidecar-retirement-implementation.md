@@ -2870,7 +2870,14 @@ findings. The first command is the exact Task 1 Step 2 reproduction.
 - [ ] **Step 5: Confirm the notice out-of-band**
 
 ```bash
-uv run --frozen science validate --all --strict --verbose | rg 'no status:background papers'
+set +e
+uv run --frozen science validate --all --strict --verbose > /tmp/evo-after-verbose.txt
+verbose_status=$?
+set -e
+test "$verbose_status" -eq 1 || {
+  echo "FAIL: validator exited $verbose_status, expected approved baseline status 1"; exit 1;
+}
+rg 'no status:background papers' /tmp/evo-after-verbose.txt
 ```
 
 Expected: a match — all 15 papers are active, so a notice and zero warnings.
