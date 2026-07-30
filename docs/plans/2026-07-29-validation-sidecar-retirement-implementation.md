@@ -30,131 +30,138 @@
 
 ## Preconditions
 
-Both must hold before any further verification. Neither is optional. The
-recorded reconciliation target is
-`a7f3337e98515bc289781ef0a1eae7b9c2fe73a5`; a different remote value is a
-hard stop for a fresh reassessment, not permission to proceed against a moving
-target.
+Both must hold before any fresh Task 6 verification. Neither is optional.
+`origin/main` is moving, so the plan does not embed today's tip. It fetches and
+freezes one exact commit in
+`.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha`;
+that file is the sole baseline authority for the rebase, evidence paths,
+manifest, approval, and publication.
 
 - [ ] **P1: Freshly fetch and record the reconciled `origin/main` SHA.**
 
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-recorded_origin_main_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+plan3_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 git -C "$toolkit_root" fetch --prune origin
-actual_origin_main_sha=$(git -C "$toolkit_root" rev-parse origin/main)
-test "$actual_origin_main_sha" = "$recorded_origin_main_sha" || {
-  echo "HARD STOP: origin/main is $actual_origin_main_sha; reassess before continuing"
+recorded_origin_main_sha=$(git -C "$toolkit_root" rev-parse origin/main)
+git -C "$toolkit_root" merge-base --is-ancestor "$plan3_sha" "$recorded_origin_main_sha" || {
+  echo "HARD STOP: fetched origin/main does not contain completed Finding Convergence Plan 3"
   exit 1
 }
-printf '%s\n' "$recorded_origin_main_sha" > "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha"
+printf '%s\n' "$recorded_origin_main_sha" > "$sdd_workspace/reconciled-origin-main.sha"
+test "$(cat "$sdd_workspace/reconciled-origin-main.sha")" = "$recorded_origin_main_sha"
 ```
 
 - [ ] **P2: Rebase `sidecar-retirement` onto that exact remote commit before verification.**
 
-During conflict resolution, retain current main's deferred classification and
-tests for `findings migrate-acceptances`, and retain this feature's removal of
-`project artifacts port-validate-sidecar` plus the audited partition of
-`69 budgeted / 121 exempt / 102 deferred`. The only expected overlapping files
-are `science/src/science_tool/budget/registry.py` and
-`science/tests/test_budget_boundary.py`.
+Use an ordinary rebase: do **not** pass `--reapply-cherry-picks`. Git is expected
+to skip feature commits `b9eecc7a` and `3f6ecafa`, whose patches are already
+present upstream. The only expected conflict is
+`science/tests/validate/test_checks_labnote_export.py` while replaying
+`ecd2960a`. Any other conflict, a conflict at another replayed commit, or a
+clean rebase where this expected overlap did not occur is a hard stop for
+reassessment.
 
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-recorded_origin_main_sha=$(cat "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha")
-test "$recorded_origin_main_sha" = a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 || {
-  echo "HARD STOP: recorded origin/main requires reassessment"
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+recorded_origin_main_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+test "$(git -C "$toolkit_root" rev-parse origin/main)" = "$recorded_origin_main_sha" || {
+  echo "HARD STOP: fetched origin/main no longer matches the frozen baseline"
   exit 1
 }
+baseline_budget_test=$(git -C "$toolkit_root" show "$recorded_origin_main_sha:science/tests/test_budget_boundary.py")
+rg -q '"budgeted": 69' <<< "$baseline_budget_test"
+rg -q '"exempt": 122' <<< "$baseline_budget_test"
+rg -q '"deferred": 102' <<< "$baseline_budget_test"
 set +e
 git -C "$toolkit_root" rebase "$recorded_origin_main_sha"
 rebase_status=$?
 set -e
-if [ "$rebase_status" -ne 0 ]; then
-  mapfile -t unmerged_paths < <(git -C "$toolkit_root" diff --name-only --diff-filter=U)
-  expected_paths=(
-    science/src/science_tool/budget/registry.py
-    science/tests/test_budget_boundary.py
-  )
-  test "${unmerged_paths[*]}" = "${expected_paths[*]}" || {
-    printf 'HARD STOP: unexpected rebase conflicts: %s\n' "${unmerged_paths[*]}"
+test "$rebase_status" -ne 0 || {
+  echo "HARD STOP: expected the verified Labnote test conflict; reassess the replay"
+  exit 1
+}
+mapfile -t unmerged_paths < <(git -C "$toolkit_root" diff --name-only --diff-filter=U)
+expected_paths=(science/tests/validate/test_checks_labnote_export.py)
+test "${unmerged_paths[*]}" = "${expected_paths[*]}" || {
+  printf 'HARD STOP: unexpected rebase conflicts: %s\n' "${unmerged_paths[*]}"
+  exit 1
+}
+current_rebase_subject=$(git -C "$toolkit_root" show -s --format=%s REBASE_HEAD)
+test "$current_rebase_subject" = 'fix(validate): close sidecar retirement test gaps' || {
+    echo "HARD STOP: Labnote conflict occurred while replaying an unexpected commit"
     exit 1
   }
-  printf '%s\n' 'PAUSE: resolve the two verified conflicts before continuing.'
-  exit 2
-fi
+printf '%s\n' 'PAUSE: compose the verified Labnote test conflict, then run the continuation block.'
+exit 2
 ```
 
-When the command pauses, make the semantic resolution manually — do not stage
-conflict-marker text and do not use `--ours`/`--theirs` for either whole file.
-Use the current-main version as the base, then apply precisely this feature
-delta: remove the `project artifacts port-validate-sidecar` classification and
-its test/history accounting. In `registry.py`, retain current main's
-`DEFERRED["findings migrate-acceptances"]` entry with growth reason
-`"one output row per configured validation acceptance"`. In
-`test_budget_boundary.py`, retain its Plan 3 coverage and set the partition to
-exactly `69` budgeted, `121` exempt, and `102` deferred. Apply those two
-semantic edits in the paused worktree (for example with `apply_patch`), then
-run this continuation block.
+Resolve the one file by retaining **all** Labnote tests from upstream
+`f65c85f3`, while changing only
+`test_labnote_export_check_is_registered` to preserve the feature's registry
+isolation:
+
+```python
+def test_labnote_export_check_is_registered() -> None:
+    import sys
+
+    import science_tool.validate.checks as checks
+
+    module_name = "science_tool.validate.checks.labnote_export"
+    original_entries = list(checks.CANONICAL_CHECKS)
+    original_module = sys.modules.get(module_name)
+    try:
+        checks.clear_checks_for_tests()
+        sys.modules.pop(module_name, None)
+        checks._load_canonical_checks()
+
+        assert any(entry.fn.__name__ == "check_labnote_export" for entry in checks.CANONICAL_CHECKS)
+    finally:
+        checks.CANONICAL_CHECKS[:] = original_entries
+        if original_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original_module
+```
+
+Do not choose either whole side of the conflict: that would discard either the
+upstream contract tests or the feature's `try/finally` restoration. Apply the
+composed edit with `apply_patch`, then run this continuation block.
 
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
+conflict_path=science/tests/validate/test_checks_labnote_export.py
 test -n "$(git -C "$toolkit_root" rebase --show-current-patch)" || {
   echo "HARD STOP: no paused rebase to continue"; exit 1;
 }
-git -C "$toolkit_root" diff --check
-if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
-  "$toolkit_root/science/src/science_tool/budget/registry.py" \
-  "$toolkit_root/science/tests/test_budget_boundary.py"; then
+test "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" = "$conflict_path" || {
+  echo "HARD STOP: unexpected or missing unmerged path"; exit 1;
+}
+if rg -n '^(<<<<<<<|=======|>>>>>>>)' "$toolkit_root/$conflict_path"; then
   echo "HARD STOP: conflict markers remain"
   exit 1
 fi
-( cd "$toolkit_root/science" && uv run --frozen python - <<'PY'
-import click
-from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
-from science_tool.cli import main
-
-assert DEFERRED["findings migrate-acceptances"].growth_reason == "one output row per configured validation acceptance"
-assert "project artifacts port-validate-sidecar" not in BUDGETS | EXEMPTIONS | DEFERRED
-assert (len(BUDGETS), len(EXEMPTIONS), len(DEFERRED)) == (69, 121, 102)
-
-def leaves(command: click.Command, prefix: tuple[str, ...] = ()) -> set[str]:
-    if isinstance(command, click.Group):
-        return {leaf for name in command.list_commands(click.Context(command)) for leaf in leaves(command.get_command(click.Context(command), name), prefix + (name,))}
-    return {" ".join(prefix)}
-
-assert "project artifacts port-validate-sidecar" not in leaves(main)
-PY
-)
-( cd "$toolkit_root/science" && uv run --frozen pytest -q \
-  tests/test_budget_boundary.py::test_every_leaf_command_is_classified \
-  tests/test_budget_boundary.py::test_classification_partition_has_the_audited_cardinality )
-git -C "$toolkit_root" add \
-  science/src/science_tool/budget/registry.py \
-  science/tests/test_budget_boundary.py
-for resolved_path in \
-  science/src/science_tool/budget/registry.py \
-  science/tests/test_budget_boundary.py; do
-  test "$(git -C "$toolkit_root" diff --cached --name-only -- "$resolved_path")" = "$resolved_path" || {
-    echo "HARD STOP: resolved path is not staged: $resolved_path"; exit 1;
-  }
-done
-test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
-  echo "HARD STOP: unmerged paths remain after staging"; exit 1;
-}
-if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
-  "$toolkit_root/science/src/science_tool/budget/registry.py" \
-  "$toolkit_root/science/tests/test_budget_boundary.py"; then
-  echo "HARD STOP: conflict markers remain after staging"
-  exit 1
-fi
+git -C "$toolkit_root" diff --check
+git -C "$toolkit_root" add "$conflict_path"
 GIT_EDITOR=true git -C "$toolkit_root" rebase --continue
 test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unresolved rebase paths remain"; exit 1;
 }
+recorded_origin_main_sha=$(cat "$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/reconciled-origin-main.sha")
+rebased_subjects=$(git -C "$toolkit_root" log --format=%s "$recorded_origin_main_sha..HEAD")
+for skipped_subject in \
+  'fix(schema): drop the premature status enum via mixin-concept-1.1' \
+  'docs(schema-closure): record the concept status-enum closure'; do
+  if rg -Fxq "$skipped_subject" <<< "$rebased_subjects"; then
+    echo "HARD STOP: patch-equivalent commit was replayed instead of skipped: $skipped_subject"
+    exit 1
+  fi
+done
 ( cd "$toolkit_root/science" && uv run --frozen python - <<'PY'
 import click
 from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
@@ -173,13 +180,17 @@ assert "project artifacts port-validate-sidecar" not in leaves(main)
 PY
 )
 ( cd "$toolkit_root/science" && uv run --frozen pytest -q \
-  tests/test_budget_boundary.py::test_every_leaf_command_is_classified \
-  tests/test_budget_boundary.py::test_classification_partition_has_the_audited_cardinality )
+  tests/validate/test_checks_labnote_export.py \
+  tests/test_labnote_view_contract.py \
+  tests/test_labnote_export.py \
+  tests/test_budget_boundary.py )
 ```
 
-Expected: the rebase is clean after the explicit two-file resolution, the
-affected budget tests pass, and their audited partition remains
-`69 budgeted / 121 exempt / 102 deferred`.
+Expected: Git reports the two patch-equivalent commits as skipped; the single
+Labnote conflict is resolved by composition; every upstream Labnote test
+remains; the feature registry-restoration guard remains; the focused tests
+pass; the frozen baseline partition is `69 / 122 / 102`; and the rebased
+feature partition is `69 / 121 / 102`.
 
 ---
 
@@ -215,8 +226,10 @@ affected budget tests pass, and their audited partition remains
 **Interfaces:**
 - Produces: five historical baseline JSON files. The `b4af2a16` artifacts are
   preserved as evidence of completed Task 1, but are superseded as parity
-  targets after the required rebase; Task 6 recaptures the four canonical
-  reports from `a7f3337e` and identical pinned consumer snapshots.
+  targets after the required rebase. Their `a7f3337e` revision is historical
+  evidence only; Task 6 recaptures the four canonical reports from the
+  run-time-frozen reconciled `origin/main` and identical pinned consumer
+  snapshots.
 
 **Historical record — do not rerun this completed task.** Its original
 `~/scratch/sidecar-baselines/` files must never be overwritten. The separate
@@ -1438,75 +1451,142 @@ git commit -m "chore(meta): drop the validation sidecar and invoke t034 directly
 **Files:** none modified. Every prior Task 6 result, including the
 `af031823` suite and parity evidence, is superseded by this rebase. Preserve
 the old files; do not overwrite them or describe them as approval evidence.
-The Task 6 attempt captured from feature SHA
-`27e4b60d9a68371718257bb6f3db791973fd1313` is also invalidated as approval
-evidence by this plan amendment. Preserve its outputs as diagnostic evidence
-and start a fresh attempt from the commit containing this amended gate.
+Every later attempt and plan revision through
+`8e2043781b8baa2dc80f5aa1f064aa3540235702` is also invalidated as approval
+evidence by the current-main reassessment. Preserve all outputs as diagnostic
+evidence and start a fresh attempt from the commit containing this amended
+gate and the run-time-frozen baseline.
 
-- [ ] **Step 1: Rebase on the recorded current main, resolve the two budget overlaps, and run focused budget tests first**
+- [ ] **Step 1: Rebase on the frozen current main, compose the Labnote overlap, and run focused tests first**
 
-Run Preconditions P1 and P2. Resolve only
-`science/src/science_tool/budget/registry.py` and
-`science/tests/test_budget_boundary.py` by retaining both current main's
-`findings migrate-acceptances` deferral and tests, and this feature's removal
-of `project artifacts port-validate-sidecar`. Confirm the resulting audited
-partition before any broader verification.
+Run Preconditions P1 and P2. The baseline must report
+`69 budgeted / 122 exempt / 102 deferred`; the feature removes
+`project artifacts port-validate-sidecar` and must report
+`69 budgeted / 121 exempt / 102 deferred`. Confirm the composed Labnote tests
+and resulting budget partition before any broader verification.
 
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
 ( cd "$toolkit_root/science" && uv run --frozen pytest -q tests/test_budget_boundary.py )
-rg -n 'findings migrate-acceptances|port-validate-sidecar|69 budgeted|121 exempt|102 deferred' \
+rg -n 'findings migrate-acceptances|port-validate-sidecar|69 budgeted|121 exempt|102 deferred|try:|finally:' \
   "$toolkit_root/science/src/science_tool/budget/registry.py" \
-  "$toolkit_root/science/tests/test_budget_boundary.py"
+  "$toolkit_root/science/tests/test_budget_boundary.py" \
+  "$toolkit_root/science/tests/validate/test_checks_labnote_export.py"
 ```
 
 Expected: focused budget tests pass and the inspected registry/test evidence
 states `69 budgeted / 121 exempt / 102 deferred`.
 
-- [ ] **Step 2: Create immutable, clean consumer snapshots and initialize the Task 6 manifest**
+- [ ] **Step 2: Create immutable consumer and real-project snapshots and initialize the Task 6 manifest**
 
 The historical `~/scratch/sidecar-baselines/` directory is read-only evidence.
-Each retry gets a new UTC-labelled attempt beneath the revision-labelled
+Each retry gets a new UTC-labelled attempt beneath the frozen-baseline
 directory; never reuse or delete a prior attempt. Use the exact same consumer
-snapshots for before and after reports. Do not use either live feature path:
-both the after toolkit and science/meta must come from an immutable detached
-worktree at the recorded feature SHA.
+snapshots for before and after reports. The three canonical consumers retain
+their exact reviewed SHAs. Freeze the other six external repositories at their
+current HEADs. All nine external repositories become detached worktrees at
+their captured commits under `$attempt_root/real-project-home/d/...`, which is
+the synthetic `HOME` used by both marker runs. Do not use a live project path
+for verification. The after toolkit and science/meta likewise come from an
+immutable detached worktree at the recorded feature SHA.
 
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-baseline_toolkit_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_toolkit_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
 feature_branch_sha=$(git -C "$toolkit_root" rev-parse HEAD)
 test -z "$(git -C "$toolkit_root" status --porcelain)" || {
   echo "HARD STOP: feature worktree is dirty"; exit 1;
 }
 attempt_id=$(date -u +%Y%m%dT%H%M%SZ)
-attempt_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5/attempt-"$attempt_id"
+revision_root=~/scratch/sidecar-baselines/"$baseline_toolkit_sha"
+attempt_root="$revision_root/attempt-$attempt_id"
 test ! -e "$attempt_root" || { echo "HARD STOP: attempt collision at $attempt_root"; exit 1; }
-mkdir -p "$attempt_root/snapshots"
-printf '%s\n' "$attempt_root" > ~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5/latest-attempt.txt
+mkdir -p "$attempt_root/real-project-home/d"
+printf '%s\n' "$attempt_root" > "$revision_root/latest-attempt.txt"
+real_project_names=(
+  natural-systems
+  multiple-myeloma
+  post-acute-infection
+  health-meta
+  evolution
+  cbioportal
+  protein-landscape
+  seq-feats
+  science-commons
+)
 declare -A source_root=(
+  [natural-systems]=~/d/natural-systems
+  [multiple-myeloma]=~/d/cancer/cancer-types/multiple-myeloma
+  [post-acute-infection]=~/d/health/processes/post-acute-infection
   [health-meta]=~/d/health/meta
   [evolution]=~/d/cancer/mechanisms/evolution
+  [cbioportal]=~/d/cancer/data-sources/cbioportal
   [protein-landscape]=~/d/protein-landscape
+  [seq-feats]=~/d/seq-feats
+  [science-commons]=~/d/science-commons
+)
+declare -A source_label=(
+  [natural-systems]='~/d/natural-systems'
+  [multiple-myeloma]='~/d/cancer/cancer-types/multiple-myeloma'
+  [post-acute-infection]='~/d/health/processes/post-acute-infection'
+  [health-meta]='~/d/health/meta'
+  [evolution]='~/d/cancer/mechanisms/evolution'
+  [cbioportal]='~/d/cancer/data-sources/cbioportal'
+  [protein-landscape]='~/d/protein-landscape'
+  [seq-feats]='~/d/seq-feats'
+  [science-commons]='~/d/science-commons'
+)
+declare -A snapshot_relpath=(
+  [natural-systems]=d/natural-systems
+  [multiple-myeloma]=d/cancer/cancer-types/multiple-myeloma
+  [post-acute-infection]=d/health/processes/post-acute-infection
+  [health-meta]=d/health/meta
+  [evolution]=d/cancer/mechanisms/evolution
+  [cbioportal]=d/cancer/data-sources/cbioportal
+  [protein-landscape]=d/protein-landscape
+  [seq-feats]=d/seq-feats
+  [science-commons]=d/science-commons
 )
 declare -A required_head=(
   [health-meta]=36ba8ec83f91d35ba82961836bfc1731b00d9e8b
   [evolution]=25fd2cb475807c8f5af0d2553244368c55fd3ad2
   [protein-landscape]=6796628c06a562ff45029f317a0f0fdf1a2fec9e
 )
-for consumer_name in health-meta evolution protein-landscape; do
-  test -z "$(git -C "${source_root[$consumer_name]}" status --porcelain)" || {
-    echo "HARD STOP: $consumer_name source checkout is dirty"; exit 1;
+printf 'toolkit-before\t%s\nfeature-branch\t%s\n' \
+  "$baseline_toolkit_sha" "$feature_branch_sha" > "$attempt_root/task-6-manifest.tsv"
+: > "$attempt_root/real-project-snapshot-inventory.tsv"
+for project_name in "${real_project_names[@]}"; do
+  actual_head=$(git -C "${source_root[$project_name]}" rev-parse HEAD)
+  if [[ -n "${required_head[$project_name]:-}" ]]; then
+    test -z "$(git -C "${source_root[$project_name]}" status --porcelain)" || {
+      echo "HARD STOP: $project_name canonical source checkout is dirty"; exit 1;
+    }
+    test "$actual_head" = "${required_head[$project_name]}" || {
+      echo "HARD STOP: $project_name is $actual_head, expected ${required_head[$project_name]}"; exit 1;
+    }
+  fi
+  tree_sha=$(git -C "${source_root[$project_name]}" rev-parse "$actual_head^{tree}")
+  snapshot_path="$attempt_root/real-project-home/${snapshot_relpath[$project_name]}"
+  mkdir -p "$(dirname "$snapshot_path")"
+  git -C "${source_root[$project_name]}" worktree add --detach "$snapshot_path" "$actual_head"
+  test -z "$(git -C "$snapshot_path" status --porcelain)" || {
+    echo "HARD STOP: $project_name detached snapshot is dirty"; exit 1;
   }
-  actual_head=$(git -C "${source_root[$consumer_name]}" rev-parse HEAD)
-  test "$actual_head" = "${required_head[$consumer_name]}" || {
-    echo "HARD STOP: $consumer_name is $actual_head, expected ${required_head[$consumer_name]}"; exit 1;
-  }
-  git -C "${source_root[$consumer_name]}" worktree add --detach \
-    "$attempt_root/snapshots/$consumer_name" "$actual_head"
+  test "$(git -C "$snapshot_path" rev-parse HEAD)" = "$actual_head"
+  test "$(git -C "$snapshot_path" rev-parse 'HEAD^{tree}')" = "$tree_sha"
+  printf 'real-project-snapshot\t%s\t%s\t%s\t%s\t%s\tclean\n' \
+    "$project_name" "${source_label[$project_name]}" "$actual_head" "$tree_sha" "$snapshot_path" \
+    >> "$attempt_root/real-project-snapshot-inventory.tsv"
+  if [[ -n "${required_head[$project_name]:-}" ]]; then
+    printf 'consumer\t%s\t%s\t%s\tclean\n' \
+      "$project_name" "${source_label[$project_name]}" "$actual_head" \
+      >> "$attempt_root/task-6-manifest.tsv"
+  fi
 done
+cat "$attempt_root/real-project-snapshot-inventory.tsv" >> "$attempt_root/task-6-manifest.tsv"
 git -C "$toolkit_root" worktree add --detach "$attempt_root/toolkit-after" "$feature_branch_sha"
 test -z "$(git -C "$attempt_root/toolkit-after" status --porcelain)" || {
   echo "HARD STOP: detached after-toolkit worktree is dirty"; exit 1;
@@ -1515,12 +1595,9 @@ test "$(git -C "$attempt_root/toolkit-after" rev-parse HEAD)" = "$feature_branch
   echo "HARD STOP: detached after-toolkit SHA differs from feature branch"; exit 1;
 }
 science_meta_tree=$(git -C "$attempt_root/toolkit-after" rev-parse HEAD:meta)
-printf 'toolkit-before\t%s\nfeature-branch\t%s\nconsumer\thealth-meta\t%s\t%s\tclean\nconsumer\tevolution\t%s\t%s\tclean\nconsumer\tprotein-landscape\t%s\t%s\tclean\nconsumer\tscience-meta\t%s\t%s\tclean\n' \
-  "$baseline_toolkit_sha" "$feature_branch_sha" "${source_root[health-meta]}" "${required_head[health-meta]}" \
-  "${source_root[evolution]}" "${required_head[evolution]}" "${source_root[protein-landscape]}" "${required_head[protein-landscape]}" \
-  "$attempt_root/toolkit-after/meta" "$science_meta_tree" \
-  > "$attempt_root/task-6-manifest.tsv"
-printf 'toolkit-after\t%s\nattempt-root\t%s\n' "$feature_branch_sha" "$attempt_root" >> "$attempt_root/task-6-manifest.tsv"
+printf 'consumer\tscience-meta\t%s\t%s\tclean\ntoolkit-after\t%s\nattempt-root\t%s\n' \
+  "$attempt_root/toolkit-after/meta" "$science_meta_tree" "$feature_branch_sha" "$attempt_root" \
+  >> "$attempt_root/task-6-manifest.tsv"
 ```
 
 **Retry cleanup:** if an attempt stops before verification, read its path from
@@ -1531,7 +1608,9 @@ next run create a fresh attempt directory:
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
 for worktree_path in "$attempt_root/toolkit-before" "$attempt_root/toolkit-after"; do
   if git -C "$toolkit_root" worktree list --porcelain | rg -Fqx "worktree $worktree_path"; then
@@ -1540,17 +1619,23 @@ for worktree_path in "$attempt_root/toolkit-before" "$attempt_root/toolkit-after
 done
 git -C "$toolkit_root" worktree prune
 declare -A source_root=(
+  [natural-systems]=~/d/natural-systems
+  [multiple-myeloma]=~/d/cancer/cancer-types/multiple-myeloma
+  [post-acute-infection]=~/d/health/processes/post-acute-infection
   [health-meta]=~/d/health/meta
   [evolution]=~/d/cancer/mechanisms/evolution
+  [cbioportal]=~/d/cancer/data-sources/cbioportal
   [protein-landscape]=~/d/protein-landscape
+  [seq-feats]=~/d/seq-feats
+  [science-commons]=~/d/science-commons
 )
-for consumer_name in health-meta evolution protein-landscape; do
-  worktree_path="$attempt_root/snapshots/$consumer_name"
-  if git -C "${source_root[$consumer_name]}" worktree list --porcelain | rg -Fqx "worktree $worktree_path"; then
-    git -C "${source_root[$consumer_name]}" worktree remove --force "$worktree_path"
+while IFS=$'\t' read -r row_kind project_name _source_label _head _tree worktree_path _clean; do
+  [[ "$row_kind" = real-project-snapshot ]] || continue
+  if git -C "${source_root[$project_name]}" worktree list --porcelain | rg -Fqx "worktree $worktree_path"; then
+    git -C "${source_root[$project_name]}" worktree remove --force "$worktree_path"
   fi
-  git -C "${source_root[$consumer_name]}" worktree prune
-done
+  git -C "${source_root[$project_name]}" worktree prune
+done < "$attempt_root/task-6-manifest.tsv"
 ```
 
 - [ ] **Step 3: Run broader verification sequentially and compare the complete real-project marker with stable current-main state**
@@ -1564,14 +1649,15 @@ signatures. Empty signature files are valid only when both markers exit zero.
 A current-main-only or feature-only failure is a hard stop. Matching nonzero
 markers remain visible external-failure evidence; they are not green.
 
-Bracket the two marker runs with byte-identical state records for every live
-external project root consumed by the marker. Each record binds the declared
-root and HEAD to a digest over tracked status bytes, the full binary tracked
-diff from HEAD, and every untracked path, file mode, and content, including
-ignored paths.
-The gate reads but never modifies these repositories. `science/meta` is not a
-live external root: each marker consumes the copy already SHA-pinned inside its
-immutable toolkit worktree.
+Run both markers with the identical synthetic `HOME` created in Step 2. Bracket
+the runs with byte-identical snapshot-state records for all nine detached
+worktrees. Each row must match the manifest's captured HEAD and tree SHA and
+must remain clean, including no non-ignored untracked paths. There is no need
+to hash ignored `.venv` or cache payload: the detached snapshots start clean,
+the marker may use an explicit host `UV_CACHE_DIR`, and versioned corpus state
+is frozen by commit/tree. The gate never reads a live project checkout.
+`science/meta` remains supplied independently by each immutable toolkit
+worktree.
 If an explicit `--basetemp` is used for any suite, precheck that neither that
 path nor any ancestor contains a `.git` marker; the default pytest temp path is
 preferred.
@@ -1579,9 +1665,11 @@ preferred.
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
-git -C "$toolkit_root" worktree add --detach "$attempt_root/toolkit-before" a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+git -C "$toolkit_root" worktree add --detach "$attempt_root/toolkit-before" "$baseline_sha"
 run_zero_suite() {
   local command_key=$1
   local suite_dir=$2
@@ -1599,106 +1687,70 @@ run_zero_suite toolkit-suite "$attempt_root/toolkit-after/science" "" "$attempt_
 run_zero_suite model-suite "$attempt_root/toolkit-after/science/model" "" "$attempt_root/model-suite.txt"
 run_zero_suite snapshot-marker "$attempt_root/toolkit-after/science" "-m snapshot" "$attempt_root/snapshot-marker.txt"
 
-external_root_labels=(
-  '~/d/natural-systems'
-  '~/d/cancer/cancer-types/multiple-myeloma'
-  '~/d/health/processes/post-acute-infection'
-  '~/d/health/meta'
-  '~/d/cancer/mechanisms/evolution'
-  '~/d/cancer/data-sources/cbioportal'
-  '~/d/protein-landscape'
-  '~/d/seq-feats'
-)
-capture_external_state() {
+capture_snapshot_state() {
   local output_path=$1
-  local input_dir="$output_path.inputs"
-  test ! -e "$output_path" && test ! -e "$input_dir" || {
-    echo "HARD STOP: external-state capture path already exists: $output_path"; exit 1;
+  test ! -e "$output_path" || {
+    echo "HARD STOP: snapshot-state capture path already exists: $output_path"; exit 1;
   }
-  mkdir -p "$input_dir"
   : > "$output_path"
-  local external_index
-  for external_index in "${!external_root_labels[@]}"; do
-    local external_root_label=${external_root_labels[$external_index]}
-    local external_root_path=${external_root_label/#\~/$HOME}
-    test -d "$external_root_path" || {
-      echo "HARD STOP: external project root is missing: $external_root_label"; exit 1;
+  while IFS=$'\t' read -r row_kind project_name source_label expected_head expected_tree snapshot_path expected_clean; do
+    [[ "$row_kind" = real-project-snapshot ]] || continue
+    test "$expected_clean" = clean
+    test -z "$(git -C "$snapshot_path" status --porcelain --untracked-files=normal)" || {
+      echo "HARD STOP: detached snapshot became dirty: $project_name"; exit 1;
     }
-    test "$(git -C "$external_root_path" rev-parse --is-inside-work-tree 2>/dev/null)" = true || {
-      echo "HARD STOP: external project is not a Git worktree: $external_root_label"; exit 1;
+    actual_head=$(git -C "$snapshot_path" rev-parse HEAD)
+    actual_tree=$(git -C "$snapshot_path" rev-parse 'HEAD^{tree}')
+    test "$actual_head" = "$expected_head" && test "$actual_tree" = "$expected_tree" || {
+      echo "HARD STOP: detached snapshot identity changed: $project_name"; exit 1;
     }
-    test -z "$(git -C "$external_root_path" rev-parse --show-prefix)" || {
-      echo "HARD STOP: external project path is not its Git worktree root: $external_root_label"; exit 1;
-    }
-    local external_head
-    local digest_input
-    local untracked_list
-    local sorted_untracked_list
-    local state_digest
-    external_head=$(git -C "$external_root_path" rev-parse HEAD)
-    digest_input="$input_dir/$(printf '%02d' "$external_index").bin"
-    untracked_list="$input_dir/$(printf '%02d' "$external_index")-untracked-paths.bin"
-    sorted_untracked_list="$input_dir/$(printf '%02d' "$external_index")-untracked-paths-sorted.bin"
-    git -C "$external_root_path" ls-files --others -z > "$untracked_list"
-    LC_ALL=C sort -z "$untracked_list" > "$sorted_untracked_list"
-    {
-      printf 'head\0%s\0tracked-status\0' "$external_head"
-      git -C "$external_root_path" status --porcelain=v1 -z --untracked-files=no
-      printf 'tracked-diff\0'
-      git -C "$external_root_path" diff --binary --full-index --no-color \
-        --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/ HEAD --
-      printf 'untracked\0'
-      while IFS= read -r -d '' relative_path; do
-        local absolute_path="$external_root_path/$relative_path"
-        printf 'path\0%s\0mode\0%s\0' "$relative_path" "$(stat -c '%f' -- "$absolute_path")"
-        if [[ -L "$absolute_path" ]]; then
-          printf 'symlink-target\0'
-          readlink -z -- "$absolute_path"
-        elif [[ -f "$absolute_path" ]]; then
-          printf 'file-content-sha256\0'
-          sha256sum < "$absolute_path" | awk '{printf "%s%c", $1, 0}'
-        else
-          echo "HARD STOP: unsupported untracked path type: $external_root_label/$relative_path"
-          exit 1
-        fi
-      done < "$sorted_untracked_list"
-    } > "$digest_input"
-    state_digest=$(sha256sum "$digest_input" | awk '{print $1}')
-    printf 'external-project\t%s\t%s\t%s\n' \
-      "$external_root_label" "$external_head" "$state_digest" >> "$output_path"
-  done
+    printf 'real-project-snapshot\t%s\t%s\t%s\t%s\t%s\tclean\n' \
+      "$project_name" "$source_label" "$actual_head" "$actual_tree" "$snapshot_path" \
+      >> "$output_path"
+  done < "$attempt_root/task-6-manifest.tsv"
+  test "$(wc -l < "$output_path")" -eq 9 || {
+    echo "HARD STOP: snapshot-state record does not contain exactly nine projects"; exit 1;
+  }
 }
 run_real_project_marker() {
   local command_key=$1
   local suite_dir=$2
   local output_path=$3
+  local marker_home="$attempt_root/real-project-home"
+  local host_uv_cache="${UV_CACHE_DIR:-$HOME/.cache/uv}"
   set +e
-  ( cd "$suite_dir" && uv run --frozen pytest -m real_projects ) > "$output_path" 2>&1
+  ( cd "$suite_dir" && HOME="$marker_home" UV_CACHE_DIR="$host_uv_cache" \
+      uv run --frozen pytest -m real_projects ) > "$output_path" 2>&1
   local marker_status=$?
   set -e
-  printf 'command\t%s\tcd %s && uv run --frozen pytest -m real_projects\texit\t%s\t%s\n' \
-    "$command_key" "$suite_dir" "$marker_status" "$output_path" >> "$attempt_root/task-6-manifest.tsv"
+  printf 'command\t%s\tcd %s && HOME=%s UV_CACHE_DIR=%s uv run --frozen pytest -m real_projects\texit\t%s\t%s\n' \
+    "$command_key" "$suite_dir" "$marker_home" "$host_uv_cache" "$marker_status" "$output_path" \
+    >> "$attempt_root/task-6-manifest.tsv"
 }
 
-capture_external_state "$attempt_root/external-state-before-current-main.tsv"
+capture_snapshot_state "$attempt_root/snapshot-state-before-current-main.tsv"
+cmp -s "$attempt_root/real-project-snapshot-inventory.tsv" \
+  "$attempt_root/snapshot-state-before-current-main.tsv" || {
+    echo "HARD STOP: initial snapshot state differs from captured inventory"; exit 1;
+  }
 run_real_project_marker current-main-real-project-marker \
   "$attempt_root/toolkit-before/science" "$attempt_root/current-main-real-projects.txt"
-capture_external_state "$attempt_root/external-state-between-real-project-markers.tsv"
-if ! cmp -s "$attempt_root/external-state-before-current-main.tsv" \
-  "$attempt_root/external-state-between-real-project-markers.tsv"; then
-  diff -u "$attempt_root/external-state-before-current-main.tsv" \
-    "$attempt_root/external-state-between-real-project-markers.tsv" || true
-  echo "HARD STOP: external project state changed during the current-main marker; preserve this attempt and start fresh"
+capture_snapshot_state "$attempt_root/snapshot-state-between-real-project-markers.tsv"
+if ! cmp -s "$attempt_root/snapshot-state-before-current-main.tsv" \
+  "$attempt_root/snapshot-state-between-real-project-markers.tsv"; then
+  diff -u "$attempt_root/snapshot-state-before-current-main.tsv" \
+    "$attempt_root/snapshot-state-between-real-project-markers.tsv" || true
+  echo "HARD STOP: detached snapshot state changed during the current-main marker; preserve this attempt and start fresh"
   exit 1
 fi
 run_real_project_marker feature-real-project-marker \
   "$attempt_root/toolkit-after/science" "$attempt_root/feature-real-projects.txt"
-capture_external_state "$attempt_root/external-state-after-feature.tsv"
-if ! cmp -s "$attempt_root/external-state-before-current-main.tsv" \
-  "$attempt_root/external-state-after-feature.tsv"; then
-  diff -u "$attempt_root/external-state-before-current-main.tsv" \
-    "$attempt_root/external-state-after-feature.tsv" || true
-  echo "HARD STOP: external project state changed during the feature marker; preserve this attempt and start fresh"
+capture_snapshot_state "$attempt_root/snapshot-state-after-feature.tsv"
+if ! cmp -s "$attempt_root/snapshot-state-before-current-main.tsv" \
+  "$attempt_root/snapshot-state-after-feature.tsv"; then
+  diff -u "$attempt_root/snapshot-state-before-current-main.tsv" \
+    "$attempt_root/snapshot-state-after-feature.tsv" || true
+  echo "HARD STOP: detached snapshot state changed during the feature marker; preserve this attempt and start fresh"
   exit 1
 fi
 
@@ -1751,11 +1803,11 @@ diff -u "$attempt_root/current-main-real-project-failure-signatures.txt" \
 
 Record matching nonzero full-marker statuses and their complete sorted
 signatures in the final parity evidence. Step 6 is the single owner of the
-marker-log, signature, and external-state manifest artifact rows and checksums.
-Matching external failures remain visible evidence, not a green result or an
+marker-log, signature, and snapshot-state manifest artifact rows and checksums.
+Matching snapshot failures remain visible evidence, not a green result or an
 implicit exception.
 
-- [ ] **Step 4: Recapture four canonical before reports from `a7f3337e` and the pinned snapshots**
+- [ ] **Step 4: Recapture four canonical before reports from the frozen baseline and pinned snapshots**
 
 Build the before environment from the exact old toolkit worktree, then write
 only into the new revision-labelled directory. The source path for science/meta
@@ -1763,15 +1815,18 @@ is the rebased feature worktree's migrated tree for both before and after.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
 uv venv "$attempt_root/before-venv"
 uv pip install --python "$attempt_root/before-venv/bin/python" -e "$attempt_root/toolkit-before/science"
 before_bin="$attempt_root/before-venv/bin/science"
 declare -A project_root=(
-  [health-meta]="$attempt_root/snapshots/health-meta"
-  [evolution]="$attempt_root/snapshots/evolution"
-  [protein-landscape]="$attempt_root/snapshots/protein-landscape"
+  [health-meta]="$attempt_root/real-project-home/d/health/meta"
+  [evolution]="$attempt_root/real-project-home/d/cancer/mechanisms/evolution"
+  [protein-landscape]="$attempt_root/real-project-home/d/protein-landscape"
   [science-meta]="$attempt_root/toolkit-after/meta"
 )
 for consumer_name in health-meta evolution protein-landscape science-meta; do
@@ -1790,7 +1845,10 @@ done
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
 feature_branch_sha=$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")
 toolkit_after_sha=$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$attempt_root/task-6-manifest.tsv")
@@ -1800,9 +1858,9 @@ uv venv "$attempt_root/after-venv"
 uv pip install --python "$attempt_root/after-venv/bin/python" -e "$attempt_root/toolkit-after/science"
 after_bin="$attempt_root/after-venv/bin/science"
 declare -A project_root=(
-  [health-meta]="$attempt_root/snapshots/health-meta"
-  [evolution]="$attempt_root/snapshots/evolution"
-  [protein-landscape]="$attempt_root/snapshots/protein-landscape"
+  [health-meta]="$attempt_root/real-project-home/d/health/meta"
+  [evolution]="$attempt_root/real-project-home/d/cancer/mechanisms/evolution"
+  [protein-landscape]="$attempt_root/real-project-home/d/protein-landscape"
   [science-meta]="$attempt_root/toolkit-after/meta"
 )
 declare -A expected_exit=( [health-meta]=1 [evolution]=1 [protein-landscape]=1 [science-meta]=0 )
@@ -1832,7 +1890,10 @@ missing data is a hard failure.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
 ATTEMPT_ROOT="$attempt_root" python3 - <<'PY'
 import json
@@ -1862,9 +1923,9 @@ for name in names:
 PY
 after_bin="$attempt_root/after-venv/bin/science"
 set +e
-( cd "$attempt_root/snapshots/evolution" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/evolution-verbose.txt" ) > "$attempt_root/evolution-verbose-command.txt" 2>&1
+( cd "$attempt_root/real-project-home/d/cancer/mechanisms/evolution" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/evolution-verbose.txt" ) > "$attempt_root/evolution-verbose-command.txt" 2>&1
 evolution_notice_status=$?
-( cd "$attempt_root/snapshots/health-meta" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/health-meta-verbose.txt" ) > "$attempt_root/health-meta-verbose-command.txt" 2>&1
+( cd "$attempt_root/real-project-home/d/health/meta" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/health-meta-verbose.txt" ) > "$attempt_root/health-meta-verbose-command.txt" 2>&1
 health_meta_notice_status=$?
 set -e
 test "$evolution_notice_status" = 1 || { echo "HARD STOP: evolution verbose exit $evolution_notice_status"; exit 1; }
@@ -1897,43 +1958,64 @@ record_artifact current-main-real-projects "$attempt_root/current-main-real-proj
 record_artifact feature-real-projects "$attempt_root/feature-real-projects.txt"
 record_file_artifact current-main-real-project-failure-signatures "$attempt_root/current-main-real-project-failure-signatures.txt"
 record_file_artifact feature-real-project-failure-signatures "$attempt_root/feature-real-project-failure-signatures.txt"
-record_artifact external-state-before-current-main "$attempt_root/external-state-before-current-main.tsv"
-record_artifact external-state-between-real-project-markers "$attempt_root/external-state-between-real-project-markers.tsv"
-record_artifact external-state-after-feature "$attempt_root/external-state-after-feature.tsv"
+record_artifact real-project-snapshot-inventory "$attempt_root/real-project-snapshot-inventory.tsv"
+record_artifact snapshot-state-before-current-main "$attempt_root/snapshot-state-before-current-main.tsv"
+record_artifact snapshot-state-between-real-project-markers "$attempt_root/snapshot-state-between-real-project-markers.tsv"
+record_artifact snapshot-state-after-feature "$attempt_root/snapshot-state-after-feature.tsv"
 record_artifact evolution-verbose "$attempt_root/evolution-verbose.txt"
 record_artifact health-meta-verbose "$attempt_root/health-meta-verbose.txt"
 ATTEMPT_ROOT="$attempt_root" python3 - <<'PY'
 import os
+from collections import Counter
 from pathlib import Path
 
 root = Path(os.environ["ATTEMPT_ROOT"])
 lines = [line.split("\t") for line in (root / "task-6-manifest.tsv").read_text().splitlines()]
-singletons = {row[0]: row for row in lines if row and row[0] in {"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"}}
+singleton_rows = [row for row in lines if row and row[0] in {"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"}]
+singletons = {row[0]: row for row in singleton_rows}
 required_artifacts = {
     *(f"{name}-{phase}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("canonical", "after")),
     "parity-table", "toolkit-suite", "model-suite", "snapshot-marker",
     "current-main-real-projects", "feature-real-projects",
     "current-main-real-project-failure-signatures", "feature-real-project-failure-signatures",
-    "external-state-before-current-main", "external-state-between-real-project-markers",
-    "external-state-after-feature",
+    "real-project-snapshot-inventory",
+    "snapshot-state-before-current-main", "snapshot-state-between-real-project-markers",
+    "snapshot-state-after-feature",
     "evolution-verbose", "health-meta-verbose",
 }
 artifact_keys = {row[1] for row in lines if len(row) == 4 and row[0] == "artifact"}
 consumer_names = {row[1] for row in lines if len(row) == 5 and row[0] == "consumer"}
+snapshot_names = {row[1] for row in lines if len(row) == 7 and row[0] == "real-project-snapshot"}
 command_names = {row[1] for row in lines if len(row) >= 5 and row[0] == "command"}
 required_commands = {"toolkit-suite", "model-suite", "snapshot-marker", "current-main-real-project-marker", "feature-real-project-marker", "evolution-verbose", "health-meta-verbose", *(f"{phase}-{name}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("before", "after"))}
-missing = ({"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"} - singletons.keys()) | (required_artifacts - artifact_keys) | ({"health-meta", "evolution", "protein-landscape", "science-meta"} - consumer_names) | (required_commands - command_names)
+required_snapshots = {"natural-systems", "multiple-myeloma", "post-acute-infection", "health-meta", "evolution", "cbioportal", "protein-landscape", "seq-feats", "science-commons"}
+missing = ({"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"} - singletons.keys()) | (required_artifacts - artifact_keys) | ({"health-meta", "evolution", "protein-landscape", "science-meta"} - consumer_names) | (required_snapshots - snapshot_names) | (required_commands - command_names)
 if missing or singletons["toolkit-after"][1] != singletons["feature-branch"][1]:
     raise SystemExit(f"HARD STOP: incomplete or inconsistent manifest: {sorted(missing)}")
+key_counts = {
+    "singleton": Counter(row[0] for row in singleton_rows),
+    "artifact": Counter(row[1] for row in lines if len(row) == 4 and row[0] == "artifact"),
+    "consumer": Counter(row[1] for row in lines if len(row) == 5 and row[0] == "consumer"),
+    "real-project-snapshot": Counter(row[1] for row in lines if len(row) == 7 and row[0] == "real-project-snapshot"),
+    "command": Counter(row[1] for row in lines if len(row) >= 5 and row[0] == "command"),
+}
+duplicates = {
+    f"{kind}:{key}"
+    for kind, counts in key_counts.items()
+    for key, count in counts.items()
+    if count != 1
+}
+if duplicates or artifact_keys != required_artifacts or consumer_names != {"health-meta", "evolution", "protein-landscape", "science-meta"} or snapshot_names != required_snapshots or command_names != required_commands:
+    raise SystemExit(f"HARD STOP: non-unique or unexpected manifest rows: {sorted(duplicates)}")
 PY
 sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.sha256"
 {
   printf '# Task 6 parity — toolkit before %s; toolkit after %s; branch %s\n\n' \
-    a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$attempt_root/task-6-manifest.tsv")" "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")"
+    "$baseline_sha" "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$attempt_root/task-6-manifest.tsv")" "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")"
   printf 'Pinned consumers: health/meta `36ba8ec83f91d35ba82961836bfc1731b00d9e8b`; evolution `25fd2cb475807c8f5af0d2553244368c55fd3ad2`; protein-landscape `6796628c06a562ff45029f317a0f0fdf1a2fec9e`; science/meta tree `%s`.\n\n' "$(awk -F '\t' '$1 == "consumer" && $2 == "science-meta" {print $4}' "$attempt_root/task-6-manifest.tsv")"
   current_main_real_status=$(awk -F '\t' '$1 == "command" && $2 == "current-main-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
   feature_real_status=$(awk -F '\t' '$1 == "command" && $2 == "feature-real-project-marker" {print $5}' "$attempt_root/task-6-manifest.tsv")
-  printf 'Full real-project marker parity: current main exit `%s`; feature exit `%s`. External project state matched before, between, and after the marker runs; see the checksummed manifest artifacts.\n\n' \
+  printf 'Full real-project marker parity: current main exit `%s`; feature exit `%s`. All nine detached snapshot states matched before, between, and after the marker runs; see the checksummed manifest artifacts.\n\n' \
     "$current_main_real_status" "$feature_real_status"
   if test "$current_main_real_status" = 0; then
     printf 'Both full real-project markers were green and emitted no `FAILED ...` signatures.\n\n'
@@ -1963,9 +2045,8 @@ sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.s
 The manifest, its detached SHA-256 file, `final-parity-table.md`, four before
 reports, four after reports, verbose-notice evidence, both complete
 real-project marker logs and statuses, both complete failure-signature files,
-and all three identical external-state records are the Task 6 result. Re-run
-this entire task after any rebase, merge-resolution change, or external state
-drift.
+and all three identical nine-project snapshot-state records are the Task 6
+result. Re-run this entire task after any rebase or merge-resolution change.
 
 ---
 
@@ -1974,12 +2055,14 @@ drift.
 **Files:** none.
 
 A consumer cannot resolve an unpushed revision, so this must precede Tasks 8–10. It is the one irreversible step in the plan. Never merge or publish from
-the divergent local `main` checkout at `395f3af22425ac30926fc6c46b71d76366e70902`.
+the local `main` checkout; publication starts from the exact approved baseline
+in a temporary integration worktree.
 
 - [ ] **Step 1: Obtain explicit approval to merge and push**
 
 Present Task 6's final parity table, manifest SHA-256, both full-marker statuses
-and logs, both signature files, and the three identical external-state records;
+and logs, both signature files, and the three identical nine-project
+snapshot-state records;
 ask for a go/no-go on pushing `origin/main`. **Do not
 proceed without an explicit yes.** Prior approval of the design is not approval
 of the push. Immediately after that yes, create this immutable approval record.
@@ -1988,7 +2071,10 @@ copy the printed `approval_record` path verbatim into Steps 2 and 3.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+sdd_workspace="$toolkit_root/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation"
+baseline_sha=$(cat "$sdd_workspace/reconciled-origin-main.sha")
+revision_root=~/scratch/sidecar-baselines/"$baseline_sha"
 approved_attempt_root=$(cat "$revision_root/latest-attempt.txt")
 approval_id=$(date -u +%Y%m%dT%H%M%SZ)
 approval_record="$revision_root/approval-$approval_id.tsv"
@@ -1998,6 +2084,9 @@ test ! -e "$approval_record" && test ! -e "$approval_digest_path" || {
 }
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv")" = "$(cat "$approved_attempt_root/task-6-manifest.sha256")" || {
   echo "HARD STOP: approved attempt manifest digest mismatch"; exit 1;
+}
+test "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$baseline_sha" || {
+  echo "HARD STOP: latest attempt does not use the frozen baseline"; exit 1;
 }
 duplicate_artifact_keys=$(awk -F '\t' '
   $1 == "artifact" { count[$2]++ }
@@ -2014,19 +2103,20 @@ test -z "$duplicate_artifact_keys" || {
 for artifact_path in "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/parity-table.md" \
   "$approved_attempt_root/current-main-real-projects.txt" "$approved_attempt_root/feature-real-projects.txt" \
   "$approved_attempt_root/current-main-real-project-failure-signatures.txt" "$approved_attempt_root/feature-real-project-failure-signatures.txt" \
-  "$approved_attempt_root/external-state-before-current-main.tsv" "$approved_attempt_root/external-state-between-real-project-markers.tsv" \
-  "$approved_attempt_root/external-state-after-feature.tsv"; do
+  "$approved_attempt_root/real-project-snapshot-inventory.tsv" \
+  "$approved_attempt_root/snapshot-state-before-current-main.tsv" "$approved_attempt_root/snapshot-state-between-real-project-markers.tsv" \
+  "$approved_attempt_root/snapshot-state-after-feature.tsv"; do
   test -f "$artifact_path" || { echo "HARD STOP: missing approval artifact $artifact_path"; exit 1; }
 done
-printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\ncurrent-main-real-project-log\t%s\nfeature-real-project-log\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\nexternal-state-before-current-main\t%s\nexternal-state-between-markers\t%s\nexternal-state-after-feature\t%s\n' \
+printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\ncurrent-main-real-project-log\t%s\nfeature-real-project-log\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\nsnapshot-state-before-current-main\t%s\nsnapshot-state-between-markers\t%s\nsnapshot-state-after-feature\t%s\n' \
   "$approved_attempt_root" "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" \
   "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
   "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
   "$approved_attempt_root/final-parity-table.md" \
   "$approved_attempt_root/current-main-real-projects.txt" "$approved_attempt_root/feature-real-projects.txt" \
   "$approved_attempt_root/current-main-real-project-failure-signatures.txt" "$approved_attempt_root/feature-real-project-failure-signatures.txt" \
-  "$approved_attempt_root/external-state-before-current-main.tsv" "$approved_attempt_root/external-state-between-real-project-markers.tsv" \
-  "$approved_attempt_root/external-state-after-feature.tsv" \
+  "$approved_attempt_root/snapshot-state-before-current-main.tsv" "$approved_attempt_root/snapshot-state-between-real-project-markers.tsv" \
+  "$approved_attempt_root/snapshot-state-after-feature.tsv" \
   > "$approval_record"
 printf 'evidence\ttask-6-manifest\t%s\t%s\n' "$approved_attempt_root/task-6-manifest.tsv" \
   "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" >> "$approval_record"
@@ -2037,9 +2127,10 @@ approval_artifact_keys=(
   feature-real-projects
   current-main-real-project-failure-signatures
   feature-real-project-failure-signatures
-  external-state-before-current-main
-  external-state-between-real-project-markers
-  external-state-after-feature
+  real-project-snapshot-inventory
+  snapshot-state-before-current-main
+  snapshot-state-between-real-project-markers
+  snapshot-state-after-feature
 )
 for manifest_key in "${approval_artifact_keys[@]}"; do
   mapfile -t manifest_evidence_rows < <(
@@ -2064,8 +2155,6 @@ printf 'Approved publication record: %s\n' "$approval_record"
 ```bash
 set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
-recorded_origin_main_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 approval_digest_path="$approval_record.sha256"
 test -s "$approval_record" && test -s "$approval_digest_path" || { echo "HARD STOP: missing explicit approval record"; exit 1; }
@@ -2074,7 +2163,7 @@ approved_attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval
 approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
 approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
 approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
-test "$approved_baseline_sha" = "$recorded_origin_main_sha" || { echo "HARD STOP: approval baseline SHA mismatch"; exit 1; }
+test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: approval SHAs missing"; exit 1; }
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
 test "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval after-toolkit SHA mismatch"; exit 1; }
@@ -2090,25 +2179,27 @@ verify_approved_evidence() {
 for evidence_key in task-6-manifest final-parity-table parity-table \
   current-main-real-projects feature-real-projects \
   current-main-real-project-failure-signatures feature-real-project-failure-signatures \
-  external-state-before-current-main external-state-between-real-project-markers external-state-after-feature; do
+  real-project-snapshot-inventory \
+  snapshot-state-before-current-main snapshot-state-between-real-project-markers snapshot-state-after-feature; do
   verify_approved_evidence "$evidence_key"
 done
-integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
+integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 test ! -e "$integration_root" || { echo "HARD STOP: preserve prior publish worktree $integration_root"; exit 1; }
 test "$(git -C "$toolkit_root" rev-parse sidecar-retirement)" = "$approved_feature_sha" || {
   echo "HARD STOP: sidecar-retirement advanced after Task 6 approval"; exit 1;
 }
 git -C "$toolkit_root" fetch --prune origin
 actual_origin_main_sha=$(git -C "$toolkit_root" rev-parse origin/main)
-test "$actual_origin_main_sha" = "$recorded_origin_main_sha" || {
+test "$actual_origin_main_sha" = "$approved_baseline_sha" || {
   echo "HARD STOP: origin/main changed; reassess and recapture Task 6"; exit 1;
 }
-git -C "$toolkit_root" worktree add -b sidecar-retirement-publish "$integration_root" "$recorded_origin_main_sha"
+git -C "$toolkit_root" worktree add -b "$integration_branch" "$integration_root" "$approved_baseline_sha"
 git -C "$integration_root" merge --no-ff "$approved_feature_sha" -m "merge: retire validation sidecar"
 merge_sha=$(git -C "$integration_root" rev-parse HEAD)
 first_parent_sha=$(git -C "$integration_root" rev-parse HEAD^1)
 second_parent_sha=$(git -C "$integration_root" rev-parse HEAD^2)
-test "$first_parent_sha" = "$recorded_origin_main_sha" || {
+test "$first_parent_sha" = "$approved_baseline_sha" || {
   echo "HARD STOP: merge first parent is $first_parent_sha"; exit 1;
 }
 test "$second_parent_sha" = "$approved_feature_sha" || {
@@ -2120,7 +2211,6 @@ test "$second_parent_sha" = "$approved_feature_sha" || {
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 approval_digest_path="$approval_record.sha256"
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_digest_path")" || { echo "HARD STOP: approval record changed"; exit 1; }
@@ -2128,7 +2218,7 @@ approved_attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval
 approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
 approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
 approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
-test "$approved_baseline_sha" = a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 || { echo "HARD STOP: approval baseline SHA mismatch"; exit 1; }
+test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: approval SHAs missing"; exit 1; }
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
 test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
 verify_approved_evidence() {
@@ -2143,18 +2233,24 @@ verify_approved_evidence() {
 for evidence_key in task-6-manifest final-parity-table parity-table \
   current-main-real-projects feature-real-projects \
   current-main-real-project-failure-signatures feature-real-project-failure-signatures \
-  external-state-before-current-main external-state-between-real-project-markers external-state-after-feature; do
+  real-project-snapshot-inventory \
+  snapshot-state-before-current-main snapshot-state-between-real-project-markers snapshot-state-after-feature; do
   verify_approved_evidence "$evidence_key"
 done
-integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
+integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 test -d "$integration_root" || { echo "HARD STOP: missing approved integration worktree"; exit 1; }
 merge_sha=$(git -C "$integration_root" rev-parse HEAD)
+git -C "$integration_root" fetch --prune origin
+test "$(git -C "$integration_root" rev-parse origin/main)" = "$approved_baseline_sha" || {
+  echo "HARD STOP: origin/main advanced after integration; reassess and recapture Task 6"; exit 1;
+}
 git -C "$integration_root" push origin HEAD:main
 remote_main_sha=$(git -C "$integration_root" ls-remote origin refs/heads/main | awk '{print $1}')
 test "$remote_main_sha" = "$merge_sha" || { echo "HARD STOP: remote main is $remote_main_sha"; exit 1; }
 printf '%s\n' "$merge_sha" > "$approved_attempt_root/published-main.sha"
 git -C ~/d/science/.worktrees/sidecar-retirement worktree remove "$integration_root"
-git -C ~/d/science/.worktrees/sidecar-retirement branch -D sidecar-retirement-publish
+git -C ~/d/science/.worktrees/sidecar-retirement branch -D "$integration_branch"
 ```
 
 Expected: the merge commit's first parent is the recorded remote SHA and
@@ -2169,11 +2265,14 @@ set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
-integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+test -n "$approved_baseline_sha" || { echo "HARD STOP: approval baseline SHA missing"; exit 1; }
+integration_root=~/scratch/sidecar-integration-"${approved_baseline_sha:0:8}"-"$(basename "$approval_record" .tsv)"
+integration_branch=validation-sidecar-integration-"${approved_baseline_sha:0:8}"
 if git -C "$toolkit_root" worktree list --porcelain | rg -Fqx "worktree $integration_root"; then
   git -C "$toolkit_root" worktree remove --force "$integration_root"
 fi
-git -C "$toolkit_root" branch -D sidecar-retirement-publish 2>/dev/null || true
+git -C "$toolkit_root" branch -D "$integration_branch" 2>/dev/null || true
 git -C "$toolkit_root" worktree prune
 ```
 
@@ -2183,19 +2282,30 @@ git -C "$toolkit_root" worktree prune
 
 **Files:** `pyproject.toml:13`, `uv.lock`, `AGENTS.md`; delete `validate_local.py`
 
-**Entry gate:** Before creating a worktree, require the recorded Task 6
-manifest SHA and the exact clean source snapshot. Drift means recapturing and
-reverifying Task 6 before editing.
+**Entry gate:** Paste the exact immutable approval-record path from Task 7;
+never discover authorization through `latest-attempt.txt`. Derive the attempt,
+baseline, feature, published SHA, manifest digest, and exact clean consumer
+snapshot from that record. Drift means recapturing and reverifying Task 6
+before editing.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
+approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
+test -n "$attempt_root" && test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: incomplete approval record"; exit 1; }
+test "$(sha256sum "$attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_baseline_sha"
+test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha"
 source_root=~/d/health/meta
 required_head=$(awk -F '\t' '$1 == "consumer" && $2 == "health-meta" {print $4}' "$attempt_root/task-6-manifest.tsv")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-test "$(sha256sum "$attempt_root/task-6-manifest.tsv")" = "$(cat "$attempt_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
 test "$(git -C ~/d/science/.worktrees/sidecar-retirement ls-remote origin refs/heads/main | awk '{print $1}')" = "$published_main_sha" || { echo "HARD STOP: published main is not recorded SHA"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^1")" = "$approved_baseline_sha" || { echo "HARD STOP: published first parent is not approved baseline"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^2")" = "$approved_feature_sha" || { echo "HARD STOP: published second parent is not approved feature"; exit 1; }
 test "$required_head" = 36ba8ec83f91d35ba82961836bfc1731b00d9e8b || { echo "HARD STOP: health/meta missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: health/meta source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: health/meta HEAD drift; recapture Task 6"; exit 1; }
@@ -2216,8 +2326,9 @@ cd .worktrees/sidecar-retirement && git branch --show-current
 Replace `rev = "3b72db60b8d591cf3dbac8ae25ca194f6cda9c8b"` in `[tool.uv.sources]` with the published SHA recorded by Task 7, then:
 
 ```bash
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
 uv lock && uv sync
 rg -A2 '^name = "science"' uv.lock
@@ -2270,18 +2381,29 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 
 **Files:** `uv.lock:3062`, `AGENTS.md`; delete `validate_local.py`
 
-**Entry gate:** Run the same manifest integrity and clean-snapshot gate before
-editing; no migration is authorized after drift.
+**Entry gate:** Paste the exact immutable approval-record path from Task 7;
+never discover authorization through `latest-attempt.txt`. Derive the attempt,
+baseline, feature, published SHA, manifest digest, and exact clean consumer
+snapshot from that record. No migration is authorized after drift.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
+approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
+test -n "$attempt_root" && test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: incomplete approval record"; exit 1; }
+test "$(sha256sum "$attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_baseline_sha"
+test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha"
 source_root=~/d/cancer/mechanisms/evolution
 required_head=$(awk -F '\t' '$1 == "consumer" && $2 == "evolution" {print $4}' "$attempt_root/task-6-manifest.tsv")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-test "$(sha256sum "$attempt_root/task-6-manifest.tsv")" = "$(cat "$attempt_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
 test "$(git -C ~/d/science/.worktrees/sidecar-retirement ls-remote origin refs/heads/main | awk '{print $1}')" = "$published_main_sha" || { echo "HARD STOP: published main is not recorded SHA"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^1")" = "$approved_baseline_sha" || { echo "HARD STOP: published first parent is not approved baseline"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^2")" = "$approved_feature_sha" || { echo "HARD STOP: published second parent is not approved feature"; exit 1; }
 test "$required_head" = 25fd2cb475807c8f5af0d2553244368c55fd3ad2 || { echo "HARD STOP: evolution missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: evolution source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: evolution HEAD drift; recapture Task 6"; exit 1; }
@@ -2302,8 +2424,9 @@ cd .worktrees/sidecar-retirement && git branch --show-current
 - [ ] **Step 2: Relock to the Task 7 SHA**
 
 ```bash
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
 uv lock --upgrade-package science && uv sync
 rg -A2 '^name = "science"' uv.lock
@@ -2358,18 +2481,29 @@ git worktree remove .worktrees/sidecar-retirement
 
 **Files:** `uv.lock:4412`, `AGENTS.md`; delete `validate_local.py`
 
-**Entry gate:** Run the same manifest integrity and clean-snapshot gate before
-editing; no migration is authorized after drift.
+**Entry gate:** Paste the exact immutable approval-record path from Task 7;
+never discover authorization through `latest-attempt.txt`. Derive the attempt,
+baseline, feature, published SHA, manifest digest, and exact clean consumer
+snapshot from that record. No migration is authorized after drift.
 
 ```bash
 set -euo pipefail
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
+approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
+test -n "$attempt_root" && test -n "$approved_baseline_sha" && test -n "$approved_feature_sha" || { echo "HARD STOP: incomplete approval record"; exit 1; }
+test "$(sha256sum "$attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
+test "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_baseline_sha"
+test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha"
 source_root=~/d/protein-landscape
 required_head=$(awk -F '\t' '$1 == "consumer" && $2 == "protein-landscape" {print $4}' "$attempt_root/task-6-manifest.tsv")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-test "$(sha256sum "$attempt_root/task-6-manifest.tsv")" = "$(cat "$attempt_root/task-6-manifest.sha256")" || { echo "HARD STOP: Task 6 manifest drift"; exit 1; }
 test "$(git -C ~/d/science/.worktrees/sidecar-retirement ls-remote origin refs/heads/main | awk '{print $1}')" = "$published_main_sha" || { echo "HARD STOP: published main is not recorded SHA"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^1")" = "$approved_baseline_sha" || { echo "HARD STOP: published first parent is not approved baseline"; exit 1; }
+test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^2")" = "$approved_feature_sha" || { echo "HARD STOP: published second parent is not approved feature"; exit 1; }
 test "$required_head" = 6796628c06a562ff45029f317a0f0fdf1a2fec9e || { echo "HARD STOP: protein-landscape missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: protein-landscape source drift"; exit 1; }
 test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: protein-landscape HEAD drift; recapture Task 6"; exit 1; }
@@ -2382,8 +2516,9 @@ Its check is **not** promoted — the expensive-artifact check becomes a project
 ```bash
 cd ~/d/protein-landscape && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
 cd .worktrees/sidecar-retirement
-revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
 uv lock --upgrade-package science && uv sync
 rg -A2 '^name = "science"' uv.lock
