@@ -2654,9 +2654,11 @@ test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || {
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "health-meta-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
 test -f "$canonical_report" || { echo "HARD STOP: approved health/meta canonical report missing"; exit 1; }
+set +e
 uv run --frozen science validate --all --strict --format json \
   --output /tmp/hm-after-complete.json > /tmp/hm-after.json
 validation_status=$?
+set -e
 test "$validation_status" -eq 1 || {
   echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
 }
@@ -2824,8 +2826,10 @@ git rm validate_local.py
 - [ ] **Step 4: Run the exact original command that crashed**
 
 ```bash
+set +e
 uv run --frozen science validate --all --strict --format json > /tmp/evo-after.json
 validation_status=$?
+set -e
 test "$validation_status" -eq 1 || {
   echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
 }
@@ -2834,9 +2838,11 @@ test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || {
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "evolution-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
 test -f "$canonical_report" || { echo "HARD STOP: approved evolution canonical report missing"; exit 1; }
+set +e
 uv run --frozen science validate --all --strict --format json \
   --output /tmp/evo-after-complete.json > /tmp/evo-after-rendered.json
 complete_status=$?
+set -e
 test "$complete_status" -eq 1 || {
   echo "FAIL: complete-report validator exited $complete_status, expected approved baseline status 1"; exit 1;
 }
@@ -3023,9 +3029,11 @@ test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || {
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "protein-landscape-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
 test -f "$canonical_report" || { echo "HARD STOP: approved protein-landscape canonical report missing"; exit 1; }
+set +e
 uv run --frozen science validate --all --strict --format json \
   --output /tmp/pl-after-complete.json > /tmp/pl-after.json
 validation_status=$?
+set -e
 test "$validation_status" -eq 1 || {
   echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
 }
