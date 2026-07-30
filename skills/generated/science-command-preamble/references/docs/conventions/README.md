@@ -18,7 +18,7 @@ those durable homes.
 - [`data-boundary.md`](data-boundary.md) — tracked source records vs ignored payload data, `science data audit`, conservative fixes, and `data_policy:` overrides.
 - [`pipeline-qa-checkpoints.md`](pipeline-qa-checkpoints.md) — concrete shape for a pipeline data-QA step (structural vs distribution severity, config-driven bounds including shared registry/enum validation, markdown report, fail-early on structural).
 - [`reproducible-manifest-dates.md`](reproducible-manifest-dates.md) — workflow-run / derived-dataset manifest `created`/`updated` must derive from run identity (run-slug date / `--produced-at` / commit time), not regeneration wall-clock, so manifests stay date-honest and byte-reproducible.
-- [`validate.md`](validate.md) — `science validate` CLI reference, including Python sidecar and output contracts.
+- [`validate.md`](validate.md) — `science validate` CLI reference, including its toolkit-only validation and output contracts.
 
 ## Deferred Convention Backlog
 

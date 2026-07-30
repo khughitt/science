@@ -101,19 +101,15 @@ def test_registry_changelog_has_validate_cli_migration_release_notes() -> None:
     assert porting_guide in phase_3
 
 
-def test_registry_extension_protocol_uses_python_sidecar() -> None:
+def test_registry_extension_protocol_is_none() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     protocol = validate["extension_protocol"]
 
-    assert protocol["kind"] == "python_sidecar"
-    assert protocol["sidecar_path"] == "validate_local.py"
-    assert "hook_namespace" not in protocol
-    assert "import" in protocol["contract"].lower()
-    assert "@hook" in protocol["contract"]
-    assert "docs/migration/2026-05-19-validate-local-sh-porting-guide.md" not in protocol["contract"]
-    for hook_point in ("pre_validation", "extra_checks", "post_validation"):
-        assert hook_point in protocol["contract"]
+    assert protocol["kind"] == "none"
+    assert "never executes project-authored code" in protocol["rationale"]
+    assert "sidecar_path" not in protocol
+    assert "contract" not in protocol
 
 
 def test_validate_sh_no_longer_contains_section_8_body() -> None:

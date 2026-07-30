@@ -42,10 +42,20 @@ RULE_SIDECAR_REMOVED = FindingRule(
     display_order=19902,
     default_visibility="visible",
 )
+RULE_PYTHON_SIDECAR_REMOVED = FindingRule(
+    id="validate.python-sidecar-removed",
+    severities=frozenset({"error"}),
+    subject_types=frozenset({"project"}),
+    qualifier_schema=RuntimeEmptyQualifiers,
+    title="Python validation sidecar removed",
+    section=RUNTIME_SECTION.id,
+    display_order=19903,
+    default_visibility="visible",
+)
 VALIDATION_RUNTIME_PRODUCER = FindingProducer(
     producer_id="validate.runtime",
     namespace="validate_checks",
     source_module="validate/runtime.py",
-    rules=(RULE_CHECK_ERROR, RULE_SIDECAR_REMOVED),
+    rules=(RULE_CHECK_ERROR, RULE_SIDECAR_REMOVED, RULE_PYTHON_SIDECAR_REMOVED),
     sections=(RUNTIME_SECTION,),
 )

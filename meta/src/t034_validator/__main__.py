@@ -3,7 +3,10 @@
 # task_ids: [t034]
 # decision_bearing: false
 # science:end
-"""CLI for the t034 validator. Invoked from validate.local.sh.
+"""CLI for the t034 validator.
+
+Run t034 validation directly: ``uv run python -m t034_validator evidence/``.
+It is no longer part of ``science validate``; nothing enforces that it runs.
 
 Usage: python -m t034_validator <yaml-dir>
 

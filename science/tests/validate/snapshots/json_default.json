@@ -1,24 +1,16 @@
 {
   "summary": {
-    "errors": 6,
+    "errors": 7,
     "warnings": 3,
     "infos": 0
   },
   "results": [
     {
-      "severity": "error",
-      "path": null,
-      "line": null,
-      "message": "validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
-      "rule": "validate.sidecar-removed",
-      "task": null
-    },
-    {
       "severity": "warn",
       "path": "pyproject.toml",
       "line": null,
       "message": "pyproject.toml does not list science under [dependency-groups].dev (fix: add the dependency and configure `science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\" }`)",
-      "rule": "tooling",
+      "rule": "tooling.check",
       "task": null
     },
     {
@@ -26,7 +18,7 @@
       "path": null,
       "line": null,
       "message": "2 broken refs: namespace",
-      "rule": "references",
+      "rule": "references.check",
       "task": null
     },
     {
@@ -42,7 +34,7 @@
       "path": null,
       "line": null,
       "message": "graph audit: unresolved_reference \u2014 report:overview related -> unknown-project:question:q01 (entities/reports/0001-overview.md references an unknown canonical entity (no local entity for unknown-project:question:q01; cross-project references to peer-project entities are not commons-promotable -- link them in prose rather than structured frontmatter, or check the ref's spelling))",
-      "rule": "graph",
+      "rule": "graph.check",
       "task": null
     },
     {
@@ -50,7 +42,7 @@
       "path": null,
       "line": null,
       "message": "task t099 missing required field: aspects",
-      "rule": "tasks",
+      "rule": "tasks.check",
       "task": null
     },
     {
@@ -58,7 +50,7 @@
       "path": null,
       "line": null,
       "message": "Unknown project namespace 'unknown-project' in ref 'unknown-project:question:q01'. Add it to science.yaml peers: or use a local ref.",
-      "rule": "cross-references",
+      "rule": "cross-references.check",
       "task": null
     },
     {
@@ -66,7 +58,7 @@
       "path": "entities/questions/0001-research-question.md",
       "line": null,
       "message": "filename stem '0001-research-question' != id local-part 'q00'",
-      "rule": "entity-conformance",
+      "rule": "entity-conformance.check",
       "task": null
     },
     {
@@ -74,7 +66,23 @@
       "path": "entities/reports/0001-overview.md",
       "line": null,
       "message": "filename stem '0001-overview' != id local-part 'overview'",
-      "rule": "entity-conformance",
+      "rule": "entity-conformance.check",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "validate.local.sh is no longer supported; migrate it using docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
+      "rule": "validate.sidecar-removed",
+      "task": null
+    },
+    {
+      "severity": "error",
+      "path": null,
+      "line": null,
+      "message": "validate_local.py is no longer executed; project checks belong in the toolkit. See docs/migration/2026-05-19-validate-local-sh-porting-guide.md",
+      "rule": "validate.python-sidecar-removed",
       "task": null
     }
   ]

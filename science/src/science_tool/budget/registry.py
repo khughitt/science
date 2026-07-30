@@ -169,7 +169,6 @@ EXEMPTIONS: dict[str, str] = {
     "project artifacts check": "fixed-shape status record for one artifact",
     "project artifacts install": "fixed-shape result with at most one backup path",
     "project artifacts pin": "single pin confirmation",
-    "project artifacts port-validate-sidecar": "single generated-sidecar path",
     "project artifacts unpin": "single unpin confirmation",
     "project serialize": "fixed-shape file and payload count summary",
     "questions reserve": "fixed-shape single-reservation result",

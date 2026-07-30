@@ -36,7 +36,6 @@ def execute_validation(project_root: Path) -> ValidationHealthRun:
         project_root,
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
     )
     unwired_producers = tuple(
         sorted(

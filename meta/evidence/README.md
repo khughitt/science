@@ -3,9 +3,10 @@
 This directory holds typed evidence payloads against the t022 v2.3 core contract
 plus any t034 / t037 / etc. extensions.
 
-**Validation.** `validate.sh` runs `python -m t034_validator evidence/` via
-`validate.local.sh`. Each `.yaml` / `.yml` file is one payload; the file's
-`core.payload_id` is its registry key.
+**Validation.** Run t034 validation directly: `uv run python -m t034_validator
+evidence/`. It is no longer part of `science validate`; nothing enforces that it
+runs. Each `.yaml` / `.yml` file is one payload; the file's `core.payload_id`
+is its registry key.
 
 **Contracts.**
 - `t022-core-contract.md` is the durable authoring contract for the core payload

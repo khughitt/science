@@ -74,8 +74,7 @@ A few of the commands you will reach for most:
 Full command map in the [user guide](docs/user-guide/agent-workflows.md).
 
 project-local tooling is installed through each project's `pyproject.toml` so
-agents run the `science` CLI from the managed project environment. Validation
-also supports Python sidecar hooks for project-specific checks.
+agents run the `science` CLI from the managed project environment. `science validate` runs only toolkit-defined checks and never executes project-authored code.
 
 ## Skills
 

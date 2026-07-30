@@ -14,14 +14,10 @@ artifacts:
       kind: shebang_comment
       comment_prefix: '#'
     extension_protocol:
-      kind: python_sidecar
-      sidecar_path: validate_local.py
-      contract: |
-        The packaged validate.sh shim executes `uv run science validate "$@"`.
-        The Python validator imports project-local `validate_local.py` when present.
-        Project checks register by decorating functions with `@hook(...)`; supported
-        hook points are `pre_validation`, `extra_checks`, and `post_validation`.
-        Hooks run inside the Python validation process around canonical validation.
+      kind: none
+      rationale: >
+        science validate never executes project-authored code. Project checks
+        belong in the toolkit's canonical check set.
     mutation_policy:
       requires_clean_worktree: true
       commit_default: true

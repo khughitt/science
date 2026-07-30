@@ -226,7 +226,7 @@ def test_license_missing_surfaces_through_runner(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+    result = run(tmp_path, strict=False, verbose=False)
 
     assert any(r.rule_id == "dataset.license-missing" for r in result.results)
 

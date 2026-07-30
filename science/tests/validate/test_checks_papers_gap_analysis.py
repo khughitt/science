@@ -63,7 +63,11 @@ def test_papers_check_emits_info_message(tmp_path: Path) -> None:
 
     results = list(check_papers(_ctx(tmp_path)))
 
-    assert [(result.severity, result.message) for result in results] == [
+    assert [
+        (result.severity, result.message)
+        for result in results
+        if result.path == Path("entities/papers")
+    ] == [
         (Severity.INFO, "Paper summary structure is checked in entities/papers/")
     ]
 

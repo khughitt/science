@@ -314,7 +314,7 @@ def test_e2e_below_floor_reports_error(tmp_path: Path) -> None:
 
     _seed_mm30_shape(tmp_path, observed=1)
     with _only_aggregation_support_check():
-        result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+        result = run(tmp_path, strict=False, verbose=False)
     assert any(r.rule_id == "aggregation-support.below-floor" for r in result.results)
     assert result.errors >= 1
 
@@ -324,7 +324,7 @@ def test_e2e_at_floor_is_warn_not_error(tmp_path: Path) -> None:
 
     _seed_mm30_shape(tmp_path, observed=4)
     with _only_aggregation_support_check():
-        result = run(tmp_path, strict=False, verbose=False, enable_python_sidecar=False)
+        result = run(tmp_path, strict=False, verbose=False)
     rules = [r.rule_id for r in result.results]
     assert "aggregation-support.below-expected" in rules
     assert "aggregation-support.below-floor" not in rules

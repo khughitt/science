@@ -559,6 +559,6 @@ def test_runner_surfaces_benchmark_warning_through_full_profile(tmp_path: Path) 
         encoding="utf-8",
     )
 
-    result = run(tmp_path, strict=False, verbose=False, profile="full", enable_python_sidecar=False)
+    result = run(tmp_path, strict=False, verbose=False, profile="full")
 
     assert any(r.rule_id == "benchmark.facets-lack-task-or-limitation" for r in result.results)
