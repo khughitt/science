@@ -4,8 +4,10 @@ import pytest
 from click.testing import CliRunner
 
 import science_tool.findings.cli as findings_cli
+from science_tool.findings.acceptance_migration import AcceptanceMigration, EntryMigration
 from science_tool.findings.cli import findings_group
 from science_tool.findings.producers import FindingProducer, build_registry
+from science_tool.validate.acceptance import AcceptedValidationEntry, classify_acceptance_entry
 
 
 REGISTRY = build_registry(
@@ -304,3 +306,280 @@ def test_the_offered_statuses_are_the_models_statuses(tmp_path):
     for status in CASE_STATUSES:
         assert status in result.output
     assert set(CASE_STATUSES) == {"proposed", "confirmed", "dismissed", "promoted"}
+
+
+def _legacy_config() -> str:
+    return """# top-level comment
+name: \"quoted project\"
+profile: research
+health:
+  before: \"keep quoted\"
+  accepted_validation:
+    # old acceptance comment
+    - rule: manifest.check
+      severity: warning
+      path: science.yaml
+      task: task:one
+      message_contains:
+        - missing profile
+      reason: reviewed
+  after: "keep after"
+unrelated:
+  quoted: "still quoted"
+"""
+
+
+def _entry(finding_id: str, *, accepted_on: str | None = None) -> AcceptedValidationEntry:
+    raw = {
+        "finding_id": finding_id,
+        "fingerprint_version": 1,
+        "severity_scope": ["warn"],
+        "reason": "reviewed",
+    }
+    if accepted_on is not None:
+        raw["accepted_on"] = accepted_on
+    return AcceptedValidationEntry.model_validate(raw)
+
+
+def _migration(*rows: EntryMigration) -> AcceptanceMigration:
+    return AcceptanceMigration(entries=rows, indeterminate_producers=())
+
+
+def _migrated_result(_project_root):
+    return _migration(EntryMigration(0, "migrated", _entry("a" * 64), "matched exactly one current finding"))
+
+
+def test_migrate_acceptances_is_dry_run_by_default(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(findings_cli, "run_acceptance_migration", _migrated_result, raising=False)
+
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["can_apply"] is True
+    assert payload["applied"] is False
+    assert path.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("verdict", ["invalid", "stale", "ambiguous", "duplicate", "indeterminate"])
+def test_migrate_acceptances_refuses_every_blocking_verdict_without_writing(tmp_path, monkeypatch, verdict):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+    classifier_error = classify_acceptance_entry("scalar").error
+
+    def blocking_result(_project_root):
+        return _migration(
+            EntryMigration(0, verdict, None, classifier_error if verdict == "invalid" else f"{verdict} detail"),
+            EntryMigration(1, "stale", None, "second problem"),
+        )
+
+    monkeypatch.setattr(findings_cli, "run_acceptance_migration", blocking_result, raising=False)
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert [entry["verdict"] for entry in payload["entries"]] == [verdict, "stale"]
+    assert payload["entries"][0]["detail"] == (classifier_error if verdict == "invalid" else f"{verdict} detail")
+    assert path.read_text(encoding="utf-8") == original
+    if verdict == "invalid":
+        table_result = CliRunner().invoke(
+            findings_group,
+            ["migrate-acceptances", "--project-root", str(tmp_path)],
+        )
+        assert table_result.exit_code == 2
+        assert classifier_error in table_result.output
+
+
+def test_migrate_acceptances_apply_skips_all_current_entries(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+
+    def current_result(_project_root):
+        return _migration(
+            EntryMigration(0, "already-current", _entry("a" * 64, accepted_on="2026-07-01"), "entry is already current")
+        )
+
+    monkeypatch.setattr(findings_cli, "run_acceptance_migration", current_result, raising=False)
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["applied"] is False
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_migrate_acceptances_apply_round_trips_only_acceptance_entries(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+
+    def mixed_result(_project_root):
+        return _migration(
+            EntryMigration(
+                0, "already-current", _entry("c" * 64, accepted_on="2026-07-01"), "entry is already current"
+            ),
+            EntryMigration(1, "migrated", _entry("a" * 64), "matched exactly one current finding"),
+        )
+
+    writes: list[tuple[object, str]] = []
+
+    def record_atomic_write(path, text):
+        writes.append((path, text))
+        path.write_text(text, encoding="utf-8")
+
+    monkeypatch.setattr(findings_cli, "run_acceptance_migration", mixed_result, raising=False)
+    monkeypatch.setattr(findings_cli, "atomic_write_text", record_atomic_write, raising=False)
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["applied"] is True
+    assert len(writes) == 1
+    rewritten = path.read_text(encoding="utf-8")
+    assert "# top-level comment" in rewritten
+    assert 'name: "quoted project"' in rewritten
+    assert 'before: "keep quoted"' in rewritten
+    assert 'after: "keep after"' in rewritten
+    assert 'quoted: "still quoted"' in rewritten
+    assert rewritten.index("before:") < rewritten.index("accepted_validation:") < rewritten.index("after:")
+    assert "rule:" not in rewritten
+    assert "severity:" not in rewritten
+    assert "path:" not in rewritten
+    assert "task:" not in rewritten
+    assert "message_contains:" not in rewritten
+    assert "finding_id: " + "a" * 64 in rewritten
+    assert "fingerprint_version: 1" in rewritten
+    assert "severity_scope:\n        - warn" in rewritten
+    assert "reason: reviewed" in rewritten
+    assert "accepted_on:" in rewritten
+    assert "2026-07-01" in rewritten
+    assert rewritten.count("accepted_on:") == 1
+
+
+def test_migrate_acceptances_apply_refuses_a_concurrent_config_edit(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(findings_cli, "run_acceptance_migration", _migrated_result, raising=False)
+
+    real_apply = findings_cli.apply_migrated_config
+
+    def mutate_before_write(_project_root, *, expected_original, rendered):
+        path.write_text(expected_original + "# concurrent edit\n", encoding="utf-8")
+        real_apply(
+            tmp_path,
+            expected_original=expected_original,
+            rendered=rendered,
+        )
+
+    monkeypatch.setattr(findings_cli, "apply_migrated_config", mutate_before_write, raising=False)
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "changed after migration classification" in json.loads(result.output)["error"]
+    assert path.read_text(encoding="utf-8") == original + "# concurrent edit\n"
+
+
+def test_migrate_acceptances_apply_refuses_a_config_edit_during_classification(tmp_path, monkeypatch):
+    original = _legacy_config()
+    path = tmp_path / "science.yaml"
+    path.write_text(original, encoding="utf-8")
+
+    def mutate_during_classification(_project_root):
+        path.write_text(original + "# concurrent edit\n", encoding="utf-8")
+        return _migrated_result(tmp_path)
+
+    monkeypatch.setattr(
+        findings_cli,
+        "run_acceptance_migration",
+        mutate_during_classification,
+        raising=False,
+    )
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "changed after migration classification" in json.loads(result.output)["error"]
+    assert path.read_text(encoding="utf-8") == original + "# concurrent edit\n"
+
+
+@pytest.mark.parametrize(
+    ("root_exists", "config_text", "error_fragment"),
+    [
+        (False, None, "No such file"),
+        (True, None, "No such file"),
+        (True, "health:\n  accepted_validation: scalar\n", "must be a list"),
+        (True, "health: [\n", "expected the node content"),
+    ],
+)
+def test_migrate_acceptances_refuses_missing_or_invalid_required_config(
+    tmp_path,
+    root_exists,
+    config_text,
+    error_fragment,
+):
+    project_root = tmp_path / "project"
+    if root_exists:
+        project_root.mkdir()
+    if config_text is not None:
+        (project_root / "science.yaml").write_text(config_text, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(project_root), "--format", "json"],
+    )
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.output)
+    assert payload["can_apply"] is False
+    assert error_fragment in payload["error"]
+
+
+@pytest.mark.parametrize(
+    "config_text",
+    [
+        "name: no-health\n",
+        "health:\n  other_setting: true\n",
+    ],
+)
+def test_migrate_acceptances_treats_absent_optional_acceptance_containers_as_empty(
+    tmp_path,
+    config_text,
+):
+    path = tmp_path / "science.yaml"
+    path.write_text(config_text, encoding="utf-8")
+
+    result = CliRunner().invoke(
+        findings_group,
+        ["migrate-acceptances", "--project-root", str(tmp_path), "--apply", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "applied": False,
+        "can_apply": True,
+        "needs_write": False,
+        "indeterminate_producers": [],
+        "entries": [],
+    }
+    assert path.read_text(encoding="utf-8") == config_text

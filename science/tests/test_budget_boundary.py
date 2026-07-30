@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 122,
-    "deferred": 101,
+    "deferred": 102,
 }
 
 
@@ -160,6 +160,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     Skill-coverage curation then adds one deferred leaf. `skills curate` emits one
     row per uncovered candidate and can include growable occurrence evidence and
     skipped-project context, taking the live partition to 69/122/101 = 292.
+
+    The acceptance migrator adds one deferred leaf. `findings migrate-acceptances`
+    emits one row per configured validation acceptance, taking the live partition to
+    69/122/102 = 293.
     """
     actual = {
         "budgeted": len(BUDGETS),
@@ -174,6 +178,12 @@ def test_findings_ingest_is_deferred_because_validation_text_can_grow():
     assert "findings ingest" not in EXEMPTIONS
     assert "validation" in DEFERRED["findings ingest"].growth_reason
     assert "report" in DEFERRED["findings ingest"].growth_reason
+
+
+def test_acceptance_migration_is_deferred_because_entries_can_grow() -> None:
+    command = "findings migrate-acceptances"
+    assert command not in EXEMPTIONS
+    assert "acceptance" in DEFERRED[command].growth_reason
 
 
 def test_belief_basis_is_deferred_because_compare_emits_one_row_per_delta() -> None:
@@ -201,11 +211,7 @@ def _callback_constructs_bounded_sink(source: str) -> bool:
     cannot establish that the Click callback owns its payload channel.
     """
     tree = ast.parse(inspect.cleandoc(source))
-    callbacks = [
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ]
+    callbacks = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
     if len(callbacks) != 1:
         return False
 
@@ -217,9 +223,7 @@ def _callback_constructs_bounded_sink(source: str) -> bool:
             yield from _owned_nodes(child)
 
     return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "BoundedSink"
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "BoundedSink"
         for statement in callbacks[0].body
         for node in _owned_nodes(statement)
     )

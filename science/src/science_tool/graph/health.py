@@ -25,7 +25,10 @@ from science_tool.graph.health_checks.schema_invalid import (
 )
 from science_tool.graph.sources import load_project_sources
 from science_tool.instruments import InstrumentResult
-from science_tool.validate.acceptance import partition_health_acceptances
+from science_tool.validate.acceptance import (
+    accepted_validation_entries,
+    partition_accepted_findings,
+)
 
 
 @dataclass(frozen=True)
@@ -78,12 +81,18 @@ def _select_health_checks(
 def _partition_validation_acceptances(
     project_root: Path,
     producer_results: dict[str, FindingProducerResult],
+    *,
+    registry: FindingRegistry,
 ) -> tuple[dict[str, FindingProducerResult], tuple]:
     validate_result = producer_results.get("validate")
     if validate_result is None or validate_result.instrument.status == "unwired":
         return producer_results, ()
     reported = [ReportedFinding(producer_id="validate", finding=finding) for finding in validate_result.instrument.rows]
-    remaining, accepted = partition_health_acceptances(project_root, reported)
+    remaining, accepted = partition_accepted_findings(
+        accepted_validation_entries(project_root),
+        reported,
+        registry=registry,
+    )
     producer_results = dict(producer_results)
     producer_results["validate"] = FindingProducerResult(
         instrument=InstrumentResult.from_rows(
@@ -152,6 +161,7 @@ def execute_health_report(
     producer_results, accepted = _partition_validation_acceptances(
         project_root,
         producer_results,
+        registry=registry,
     )
     elapsed = perf_counter() - started
     return HealthExecution(

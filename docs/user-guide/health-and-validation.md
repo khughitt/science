@@ -51,16 +51,41 @@ audit trail remains visible.
 ```yaml
 health:
   accepted_validation:
-    - rule: belief.fragile-single-line
-      severity: warning
-      message_contains:
-        - proposition/example-target
-        - evidence-line/example-sensitive-line
-      reason: Reviewed single-line sensitivity; the claim remains intentionally fragile pending independent replication.
+    - finding_id: "<64-lowercase-hex>"
+      fingerprint_version: 1
+      severity_scope: ["warn"]
+      reason: Reviewed residual risk; the project is intentionally retaining it.
 ```
 
-Use narrow match criteria and a concrete reason. Do not accept a warning until
-the project has decided that the residual state is honest and useful to track.
+Use the finding fingerprint from health output and a concrete reason. `warn` and
+`error` are the canonical severity spellings. Only validation findings are
+eligible for these entries, and `science validate` remains warn-only: even an
+entry whose scope includes `error` does not hide validation errors from that
+command.
+
+Migrate older prose-keyed entries with:
+
+```bash
+science findings migrate-acceptances
+science findings migrate-acceptances --apply
+```
+
+The command is a dry run by default. `--apply` is all-or-nothing: any invalid,
+stale, ambiguous, duplicate, or indeterminate entry prevents the write.
+Migrated entries omit `accepted_on` because their historical acceptance date is
+unknown. Rerunning the command reports valid replacement entries as
+`already-current`; when every entry is current, `--apply` exits successfully
+without rewriting `science.yaml`.
+
+Migration reports syntax or model failures as `invalid` and includes the
+classifier error. `stale` is reserved for a valid legacy matcher that found no
+current finding. Legacy and invalid entries suppress nothing. After emitting
+its complete table or JSON output (and any `--output` notice), `science health`
+exits 2 when either kind is configured because it could not apply the requested
+acceptance counts. Ordinary ERROR findings do not change the health exit code.
+
+Do not accept a warning until the project has decided that the residual state
+is honest and useful to track.
 
 Health JSON uses the shared audit-report schema. Its channels remain distinct:
 
