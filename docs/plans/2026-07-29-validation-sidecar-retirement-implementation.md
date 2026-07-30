@@ -2821,14 +2821,24 @@ expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
 test "$published_main_sha" = "$expected_toolkit_sha" || {
   echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
 }
-apply_patch <<'PATCH'
+```
+
+Use the patch tool, not a shell command, from this consumer worktree to apply
+exactly:
+
+```
 *** Begin Patch
 *** Update File: pyproject.toml
 @@
 -science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
 +science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
 *** End Patch
-PATCH
+```
+
+Then run the normal relock and assertions:
+
+```bash
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
 uv lock && uv sync
 rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
 rg -F "#$expected_toolkit_sha" uv.lock || {
@@ -3023,14 +3033,24 @@ expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
 test "$published_main_sha" = "$expected_toolkit_sha" || {
   echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
 }
-apply_patch <<'PATCH'
+```
+
+Use the patch tool, not a shell command, from this consumer worktree to apply
+exactly:
+
+```
 *** Begin Patch
 *** Update File: pyproject.toml
 @@
 -science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
 +science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
 *** End Patch
-PATCH
+```
+
+Then run the normal relock and assertions:
+
+```bash
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
 uv lock && uv sync
 rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
 rg -F "#$expected_toolkit_sha" uv.lock || {
