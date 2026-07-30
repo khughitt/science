@@ -1557,6 +1557,9 @@ The three known real-project failures are not waived: capture the complete
 output, then run their exact node IDs against both the `a7f3337e` toolkit
 worktree and the rebased feature worktree. Any changed result, or any
 additional failed node in the rebased marker, is a hard failure.
+If an explicit `--basetemp` is used for any suite, precheck that neither that
+path nor any ancestor contains a `.git` marker; the default pytest temp path is
+preferred.
 
 ```bash
 set -euo pipefail
@@ -1611,8 +1614,10 @@ awk -F '\t' '$1 == "current-main" { before[$2] = $3 } $1 == "rebased-feature" { 
 awk -F '\t' '$3 == 0 { print "HARD STOP: expected nonzero known failure: " $2; failed = 1 } END { exit failed }' \
   "$attempt_root/known-real-project-statuses.tsv"
 for label in current-main rebased-feature; do
-  rg -h '^FAILED ' "$attempt_root"/"$label"-*.txt | sort > "$attempt_root/$label-failure-signatures.txt"
+  rg --no-filename '^FAILED ' "$attempt_root"/"$label"-*.txt | sort > "$attempt_root/$label-failure-signatures.txt"
 done
+test -s "$attempt_root/current-main-failure-signatures.txt" || { echo "HARD STOP: missing current-main failure signature"; exit 1; }
+test -s "$attempt_root/rebased-feature-failure-signatures.txt" || { echo "HARD STOP: missing rebased-feature failure signature"; exit 1; }
 diff -u "$attempt_root/current-main-failure-signatures.txt" "$attempt_root/rebased-feature-failure-signatures.txt"
 ```
 
@@ -1728,9 +1733,9 @@ for name in names:
 PY
 after_bin="$attempt_root/after-venv/bin/science"
 set +e
-( cd "$attempt_root/snapshots/evolution" && "$after_bin" validate --all --strict --verbose ) > "$attempt_root/evolution-verbose.txt" 2>&1
+( cd "$attempt_root/snapshots/evolution" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/evolution-verbose.txt" ) > "$attempt_root/evolution-verbose-command.txt" 2>&1
 evolution_notice_status=$?
-( cd "$attempt_root/snapshots/health-meta" && "$after_bin" validate --all --strict --verbose ) > "$attempt_root/health-meta-verbose.txt" 2>&1
+( cd "$attempt_root/snapshots/health-meta" && "$after_bin" validate --all --strict --verbose --output "$attempt_root/health-meta-verbose.txt" ) > "$attempt_root/health-meta-verbose-command.txt" 2>&1
 health_meta_notice_status=$?
 set -e
 test "$evolution_notice_status" = 1 || { echo "HARD STOP: evolution verbose exit $evolution_notice_status"; exit 1; }
