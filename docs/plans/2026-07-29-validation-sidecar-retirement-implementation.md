@@ -135,13 +135,22 @@ PY
 git -C "$toolkit_root" add \
   science/src/science_tool/budget/registry.py \
   science/tests/test_budget_boundary.py
-expected_staged_paths=$'science/src/science_tool/budget/registry.py\nscience/tests/test_budget_boundary.py'
-test "$(git -C "$toolkit_root" diff --cached --name-only)" = "$expected_staged_paths" || {
-  echo "HARD STOP: staged paths are not exactly the two resolved files"; exit 1;
-}
+for resolved_path in \
+  science/src/science_tool/budget/registry.py \
+  science/tests/test_budget_boundary.py; do
+  test "$(git -C "$toolkit_root" diff --cached --name-only -- "$resolved_path")" = "$resolved_path" || {
+    echo "HARD STOP: resolved path is not staged: $resolved_path"; exit 1;
+  }
+done
 test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unmerged paths remain after staging"; exit 1;
 }
+if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
+  "$toolkit_root/science/src/science_tool/budget/registry.py" \
+  "$toolkit_root/science/tests/test_budget_boundary.py"; then
+  echo "HARD STOP: conflict markers remain after staging"
+  exit 1
+fi
 GIT_EDITOR=true git -C "$toolkit_root" rebase --continue
 test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unresolved rebase paths remain"; exit 1;
@@ -1605,16 +1614,12 @@ for label in current-main rebased-feature; do
   rg -h '^FAILED ' "$attempt_root"/"$label"-*.txt | sort > "$attempt_root/$label-failure-signatures.txt"
 done
 diff -u "$attempt_root/current-main-failure-signatures.txt" "$attempt_root/rebased-feature-failure-signatures.txt"
-printf 'artifact\tknown-real-project-statuses\t%s\t%s\nartifact\tcurrent-main-failure-signatures\t%s\t%s\nartifact\trebased-feature-failure-signatures\t%s\t%s\n' \
-  "$attempt_root/known-real-project-statuses.tsv" "$(sha256sum "$attempt_root/known-real-project-statuses.tsv" | awk '{print $1}')" \
-  "$attempt_root/current-main-failure-signatures.txt" "$(sha256sum "$attempt_root/current-main-failure-signatures.txt" | awk '{print $1}')" \
-  "$attempt_root/rebased-feature-failure-signatures.txt" "$(sha256sum "$attempt_root/rebased-feature-failure-signatures.txt" | awk '{print $1}')" \
-  >> "$attempt_root/task-6-manifest.tsv"
 ```
 
 Record the three matched nonzero statuses as known external-state failures in
-the manifest and final parity table. They remain visible evidence, not a
-green result or an implicit exception.
+the final parity table. Step 6 is the single owner of their manifest artifact
+rows and checksums. They remain visible evidence, not a green result or an
+implicit exception.
 
 - [ ] **Step 4: Recapture four canonical before reports from `a7f3337e` and the pinned snapshots**
 
@@ -1785,6 +1790,18 @@ sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.s
   cat "$attempt_root/parity-table.md"
 } > "$attempt_root/final-parity-table.md"
 record_artifact final-parity-table "$attempt_root/final-parity-table.md"
+duplicate_artifact_keys=$(awk -F '\t' '
+  $1 == "artifact" { count[$2]++ }
+  END {
+    for (key in count) {
+      if (count[key] != 1) print key
+    }
+  }
+' "$attempt_root/task-6-manifest.tsv")
+test -z "$duplicate_artifact_keys" || {
+  printf 'HARD STOP: manifest artifact keys are not unique:\n%s\n' "$duplicate_artifact_keys"
+  exit 1
+}
 sha256sum "$attempt_root/task-6-manifest.tsv" > "$attempt_root/task-6-manifest.sha256"
 ```
 
@@ -1824,6 +1841,18 @@ test ! -e "$approval_record" && test ! -e "$approval_digest_path" || {
 test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv")" = "$(cat "$approved_attempt_root/task-6-manifest.sha256")" || {
   echo "HARD STOP: approved attempt manifest digest mismatch"; exit 1;
 }
+duplicate_artifact_keys=$(awk -F '\t' '
+  $1 == "artifact" { count[$2]++ }
+  END {
+    for (key in count) {
+      if (count[key] != 1) print key
+    }
+  }
+' "$approved_attempt_root/task-6-manifest.tsv")
+test -z "$duplicate_artifact_keys" || {
+  printf 'HARD STOP: approved manifest artifact keys are not unique:\n%s\n' "$duplicate_artifact_keys"
+  exit 1
+}
 for artifact_path in "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/parity-table.md" \
   "$approved_attempt_root/rebased-real-projects.txt" "$approved_attempt_root/current-main-failure-signatures.txt" \
   "$approved_attempt_root/rebased-feature-failure-signatures.txt"; do
@@ -1847,9 +1876,16 @@ declare -A evidence_key=(
 )
 for approval_key in final-parity-table parity-table rebased-real-projects current-main-signatures feature-signatures; do
   manifest_key=${evidence_key[$approval_key]}
-  artifact_path=$(awk -F '\t' -v key="$manifest_key" '$1 == "artifact" && $2 == key {print $3}' "$approved_attempt_root/task-6-manifest.tsv")
-  expected_digest=$(awk -F '\t' -v key="$manifest_key" '$1 == "artifact" && $2 == key {print $4}' "$approved_attempt_root/task-6-manifest.tsv")
-  test -n "$artifact_path" && test -n "$expected_digest" || { echo "HARD STOP: missing manifest evidence $manifest_key"; exit 1; }
+  mapfile -t manifest_evidence_rows < <(
+    awk -F '\t' -v key="$manifest_key" \
+      '$1 == "artifact" && $2 == key {print $3 "\t" $4}' \
+      "$approved_attempt_root/task-6-manifest.tsv"
+  )
+  test "${#manifest_evidence_rows[@]}" -eq 1 || {
+    echo "HARD STOP: expected exactly one manifest path/hash row for $manifest_key"; exit 1;
+  }
+  IFS=$'\t' read -r artifact_path expected_digest <<< "${manifest_evidence_rows[0]}"
+  test -n "$artifact_path" && test -n "$expected_digest" || { echo "HARD STOP: incomplete manifest evidence $manifest_key"; exit 1; }
   test "$(sha256sum "$artifact_path" | awk '{print $1}')" = "$expected_digest" || { echo "HARD STOP: manifest evidence checksum mismatch for $manifest_key"; exit 1; }
   printf 'evidence\t%s\t%s\t%s\n' "$approval_key" "$artifact_path" "$expected_digest" >> "$approval_record"
 done
