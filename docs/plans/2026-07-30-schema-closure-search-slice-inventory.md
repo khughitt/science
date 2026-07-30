@@ -155,28 +155,68 @@ new one imposed by the toolkit.
 
 | project | records | state |
 |---|---|---|
-| `~/d/natural-systems` | 2 | **DONE** — commit `a644c026` on `main`. `science validate` result sets compared as SETS (not counts) before and after: identical, 40 warnings, 0 errors. |
-| `~/d/cancer/cancer-types/multiple-myeloma` | 5 | **BLOCKED** — the repo is on branch `big-picture-regen-2026-07-30` with uncommitted work from another session. Editing there risks the change being swept into an unrelated commit. |
+| `~/d/natural-systems` | 2 | **DONE** — commit `a644c026` on `main`. `science validate` summary identical before and after: 0 errors, 121 warnings. |
+| `~/d/cancer/cancer-types/multiple-myeloma` | 5 | **DONE** — commit `1850f38f` on `main`. 0 errors before and after. |
 
-**The mm30 migration is a hard prerequisite for step 4.** Certification composes the
-candidate profile over every project; with 5 records still carrying `task:`, the run must
-fail. That is the mixin working, not a defect to route around — do not soften the mixin
-to make certification pass.
+What each record became:
 
-The five records and their targets, all verified to resolve before any edit:
-
-| record | current | migrates to |
+| record | was | became |
 |---|---|---|
-| `0001-bulk-sc-integration-methods` | `task: discussion:0008-sc-bulk-integration` | append `discussion:0008-sc-bulk-integration` to existing `related` |
-| `0002-existing-mm-meta-analyses` | `task: discussion:0007-research-gaps` | new `related: [discussion:0007-research-gaps]` |
-| `0003-meta-analysis-methods` | `task: t01` | `related: [task:t01]` |
-| `0004-mm-deconvolution` | `task: t02` | `related: [task:t02]` |
-| `0005-mm-drug-response-expression` | `task: t03` | `related: [task:t03]` |
+| `0001-bulk-sc-integration-methods` | `task: discussion:0008-sc-bulk-integration` | `discussion:0008-sc-bulk-integration` appended to existing `related` |
+| `0002-existing-mm-meta-analyses` | `task: discussion:0007-research-gaps` | `related: [discussion:0007-research-gaps]` |
+| `0003-meta-analysis-methods` | `task: t01` | **prose note**, not a ref |
+| `0004-mm-deconvolution` | `task: t02` | **prose note**, not a ref |
+| `0005-mm-drug-response-expression` | `task: t03` | **prose note**, not a ref |
 
-Two of the five do not migrate to a task at all — `task: discussion:...` names a
-discussion. `t01`/`t02`/`t03` are declared in `tasks/archive.md` as "Historical task
-alias", retained expressly so older references stay resolvable, so `task:t01` is a valid
-ref rather than a dangling one.
+Two of the five never named a task at all — `task: discussion:...` names a discussion.
+
+### ⚠️ Correction: `tasks/archive.md` aliases are NOT resolvable refs
+
+This document originally asserted that `t01`/`t02`/`t03` "are declared in `tasks/archive.md`
+as 'Historical task alias', retained expressly so older references stay resolvable, so
+`task:t01` is a valid ref rather than a dangling one."
+
+**That was wrong, and `science validate` caught it.** Migrating them into `related`
+produced three `graph.check` errors:
+
+```
+ERROR graph audit: unresolved_reference — search:0003-meta-analysis-methods related -> task:t01
+  (no local entity for task:t01; 'task' is not a commons-promotable kind)
+```
+
+`archive.md` declares aliases in prose; the graph resolver loads *entities*, and an alias
+is not one. The contrast is what makes it measurable: `task:t828` (mm30 record 0008) and
+`task:t021`/`t761`/`t072` (natural-systems) all resolve, because those name real task
+records under `tasks/active/` or `tasks/done/`. The three that failed are exactly the
+three with no backing record.
+
+The association is recorded in prose instead — which is what the resolver's own error
+message advises ("link cross-cutting references in prose").
+
+**The generalizable lesson for step 1:** reading an identifier in a file is not evidence
+that the resolver can resolve it. Verify a migration target by *resolution*, not by
+grepping for the string. The archive file's own stated purpose — "preserve reference
+integrity" — is what made the wrong answer plausible.
+
+### ⚠️ `science validate` mutates the project it validates
+
+Discovered while trying to establish a mm30 baseline, and worth recording because it
+invalidates the obvious way of doing before/after comparisons:
+
+- Repeated runs **created 10 untracked entity files** under `entities/topics/`, one per
+  run, each a local copy of a topic that already exists as a commons overlay. Each new
+  file then produced an `overlay-local-duplicate` error plus a cascade of
+  `ambiguous_reference` errors, so the reported error count climbed monotonically across
+  identical runs: 3 → 24 → 109 → 168. Every one of those errors was self-inflicted by the
+  measurement.
+- A run also **modified a tracked task file** (`tasks/active/t915-…`), appending a
+  worked-analysis section, which then flipped that task's status in a rebuilt
+  `graph.trig`.
+
+Consequences for anyone certifying a slice: a before/after `validate` comparison is only
+valid if the tree is restored to an identical state between runs, and the derived
+`knowledge/*.trig` must not be committed from a certification run — it can absorb
+unrelated mutations. Filed as toolkit debt; it is not this slice's to fix.
 
 ## What this slice does not close
 
