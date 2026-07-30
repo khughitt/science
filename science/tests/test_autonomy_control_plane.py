@@ -121,6 +121,10 @@ def test_a_hostile_handle_is_refused_before_any_join(tmp_path, monkeypatch, host
         "2026-07-30-Lens-a3f1",    # agent is not a kebab-case slug
         "2026-07-30-lens_x-a3f1",  # underscore is not in the agent alphabet
         "2026-07-30--a3f1",        # empty agent
+        "2026-W31-4-lens-a3f1",    # ISO week notation; date.fromisoformat accepts it, generate_run_id never emits it
+        "20260730XY-lens-a3f1",    # basic format; date.fromisoformat ignores chars 8-9 entirely
+        "20260730/x-lens-a3f1",    # a path separator hiding inside what fromisoformat treats as the date
+        "2026-02-30-lens-a3f1",    # well-shaped but not a real calendar date
     ],
 )
 def test_a_handle_no_generate_run_id_call_could_produce_is_refused(
@@ -149,6 +153,20 @@ def test_a_hyphenated_agent_slug_still_resolves(tmp_path, monkeypatch):
 def test_a_relative_control_plane_root_is_refused(tmp_path, monkeypatch, variable):
     monkeypatch.delenv(CONTROL_PLANE_ENV, raising=False)
     monkeypatch.setenv(variable, "relative/state")
+
+    with pytest.raises(ControlPlaneError):
+        control_plane_root(_project(tmp_path, "alpha"))
+
+
+def test_an_empty_control_plane_env_is_refused_not_silently_defaulted(tmp_path, monkeypatch):
+    """`export SCIENCE_CONTROL_PLANE=` must not quietly fall back to the XDG default --
+    that is a config error, not an unset variable, and the project's own rule is fail
+    early rather than fall back silently.
+
+    XDG_STATE_HOME is different: the XDG Base Directory spec says an empty value there
+    MUST be treated as unset, so that variable keeps its existing fallback behaviour and
+    is deliberately not covered by this test."""
+    monkeypatch.setenv(CONTROL_PLANE_ENV, "")
 
     with pytest.raises(ControlPlaneError):
         control_plane_root(_project(tmp_path, "alpha"))

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import date
 from pathlib import Path
 
@@ -40,6 +41,14 @@ from science_tool.autonomy.baseline import reject_baseline_inside_project
 CONTROL_PLANE_ENV = "SCIENCE_CONTROL_PLANE"
 
 _DATE_LENGTH = len("YYYY-MM-DD")
+#: `date.fromisoformat` accepts far more than `YYYY-MM-DD` on Python 3.11+ -- ISO week
+#: notation (`2026-W31-4`), basic format with trailing characters ignored (`20260730XY`),
+#: even a path separator hiding past the digits it actually reads (`20260730/x`). None of
+#: those can come from `generate_run_id`, which builds the date via `date.isoformat()` --
+#: strict `YYYY-MM-DD`, always. The shape is checked here, BEFORE `fromisoformat` is asked
+#: whether the date is real, so `fromisoformat`'s leniency never gets a substring it wasn't
+#: shape-verified first.
+_DATE_SHAPE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ControlPlaneError(ValueError):
@@ -74,9 +83,20 @@ def control_plane_root(project_root: Path) -> Path:
     same function, and one failure should not have two names.
     """
     configured = os.environ.get(CONTROL_PLANE_ENV)
-    if configured:
+    if configured is not None and configured != "":
         root = _absolute_or_refuse(configured, CONTROL_PLANE_ENV)
+    elif configured == "":
+        # Unlike `XDG_STATE_HOME` below, this variable has no external spec granting an
+        # empty value the meaning "unset". `export SCIENCE_CONTROL_PLANE=` is a config
+        # error, not an absent one, and falling back silently would hide it.
+        raise ControlPlaneError(
+            f"{CONTROL_PLANE_ENV} is set but empty; unset it entirely to use the XDG "
+            "default, or set it to an absolute path"
+        )
     else:
+        # XDG_STATE_HOME: the XDG Base Directory spec requires an empty value here to be
+        # treated the same as unset, so `xdg_state_home` (falsy on "") intentionally falls
+        # through to the default below. Do not "fix" this to match the branch above.
         xdg_state_home = os.environ.get("XDG_STATE_HOME")
         base = (
             _absolute_or_refuse(xdg_state_home, "XDG_STATE_HOME")
@@ -114,7 +134,11 @@ def run_slug(handle: str) -> str:
     rather than by a looser shape test that would admit `2026-07-30-a`.
     """
     slug = handle.removeprefix(RUN_ID_PREFIX)
-    if len(slug) <= _DATE_LENGTH or slug[_DATE_LENGTH] != "-":
+    if (
+        len(slug) <= _DATE_LENGTH
+        or slug[_DATE_LENGTH] != "-"
+        or not _DATE_SHAPE_RE.match(slug[:_DATE_LENGTH])
+    ):
         raise ControlPlaneError(f"run handle must begin with a YYYY-MM-DD date, got {handle!r}")
     try:
         date.fromisoformat(slug[:_DATE_LENGTH])
