@@ -1,16 +1,22 @@
 # Agent evidence broker — design
 
-**Status:** proposed (revision 3)
+**Status:** proposed (revision 4)
 **Sub-project A** of three. B is the multi-assignment dispatch harness; C is
 `/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
 defers to and never built. A is independently landable and useful without either.
 
-Revisions 2 and 3 respond to design review: six production-boundary defects found in revision 1, six
-more in revision 2. Each is closed below and named at the point it is closed, because the reasoning
-that produced the defect is more useful to a reader than the corrected text alone. Two of revision 2's
-defects were introduced *by* revision 2 — a new eligibility rule that dropped deterministic reviewers,
-and a spend counter that could not represent its own budget — which is the argument for §7's rule that
-a guard nobody has watched fail is a guard nobody has tested.
+Revisions 2 through 4 respond to design review: six production-boundary defects found in revision 1,
+six more in revision 2, six more in revision 3. Each is closed below and named at the point it is
+closed, because the reasoning that produced the defect is more useful to a reader than the corrected
+text alone.
+
+The pattern in what review kept finding is worth stating, because it predicts where the implementation
+will go wrong. Every round, the defects clustered in guards that were **narrower than the rule they
+were written to enforce** — `any(location)` where the rule was "everything was checked", `line`/`span`
+forbidden where the rule was "cite only what you saw" and `pointer` walked through the gap, a run slug
+where the rule needed a project identity. A guard that restates its rule on one axis and leaves the
+others open reads, on the page, exactly like a guard that works. That is the argument for §7's
+discipline: restore the prior behaviour and watch the test fail, on every axis the rule names.
 
 ## 1. The problem
 
@@ -84,7 +90,7 @@ science/model/src/science_model/
 
 science/src/science_tool/
     autonomy/baseline.py    + EvidenceSession on RunBaseline; journal path containment-checked
-    autonomy/control_plane.py  # NEW — the run-id-keyed canonical root
+    autonomy/control_plane.py  # NEW — the project-and-run-keyed canonical root
     autonomy/git.py         + a probed, canonical invocation for `grep` and `log`
     autonomy/lifecycle.py   start_run opens the session; finish_run seals it
     findings/reviews.py     # NEW — the trusted review-append boundary
@@ -278,18 +284,40 @@ A handle that names a baseline requires that a run id determine where its baseli
 not: `science autonomy start --baseline-out` is `required=True` and takes an arbitrary path, chosen
 by whatever supervisor invoked it. `--session <run-id>` would have had nothing to resolve against.
 
-`autonomy/control_plane.py` supplies the missing function:
+`autonomy/control_plane.py` supplies the missing functions:
 
 ```python
-def control_plane_root() -> Path          # $SCIENCE_CONTROL_PLANE, else the XDG state dir
-def run_dir(run_id: str) -> Path          # <root>/<run-slug>/
+def control_plane_root() -> Path                        # $SCIENCE_CONTROL_PLANE, else the XDG state dir
+def project_key(project_root: Path) -> str              # <science.yaml name>-<sha256(resolved root)[:12]>
+def run_dir(project_root: Path, run_id: str) -> Path    # <root>/<project-key>/<run-slug>/
 #   baseline.json, journal.jsonl
 ```
+
+**The key is project-scoped, and a run id alone is not a project identity.** A run id is
+`<date>-<agent>-<short-id>`; two projects running the same agent role on the same day with the same
+disambiguator produce the same slug, and a fork inherits its parent's `science.yaml` name outright. A
+single global root would let one project's session resolve another's baseline — and between a fork and
+its parent, which share a base commit, the replay would even succeed.
+
+`name` alone therefore cannot carry the scope; the digest of the *resolved* project root does, and
+`name` stays in the key so a human listing the control plane can read it. Two worktrees of one project
+get two control planes, which is correct: they are two trees at two commits.
+
+Known limitation, stated rather than engineered around: moving a project orphans its **unsealed**
+sessions, because the key changes. Sealed runs are unaffected — `EvidenceExposure` is copied into the
+run record at `finish`, and the journal is needed only to re-check a run later.
 
 `--baseline-out` and a new `--broker` flag on `science autonomy start` are **mutually exclusive**.
 `--broker` derives both paths and refuses an explicit one; without it, nothing changes for runs that
 do not broker evidence. No silent fallback: a brokered run whose baseline was written somewhere else
 is refused rather than searched for.
+
+`science autonomy finish` needs the symmetric input, which revision 3 omitted: it takes
+`--baseline PATH` as `required=True` today, so a brokered run had no way to say which run it was
+closing. A new `--session <run-id>`, **mutually exclusive with `--baseline`**, resolves the baseline
+through `run_dir` from the supervisor's own environment. That resolution is what makes §3.4.2's
+containment argument true rather than asserted: the actor cannot influence which control plane
+`finish` reads.
 
 `control_plane_root()` is still put through `reject_baseline_inside_project`, so an environment
 variable cannot relocate the control plane into the tree the actor writes.
@@ -331,7 +359,7 @@ class EvidenceExposure(_Frozen):
     commit: str
     budget: int
     requests_used: int          # includes denials; they spend rounds
-    instrument: InstrumentIdentity | None = None
+    instrument: InstrumentIdentity      # required — see below
     entries: tuple[ExposureEntry, ...] = ()
 
 # AutonomousRunRecord
@@ -363,6 +391,13 @@ like a cap and is a self-report.
 `InstrumentIdentity` closes a gap this toolkit currently has outright: `RunBaseline` binds run, agent,
 model, branch, commit and toolkit revision, but not the *instrument*. A judgement scored against a
 silently edited rubric is presently undetectable.
+
+**It is required, not optional.** Revision 3 required it on `EvidenceSession` and left it optional on
+`EvidenceExposure`, so it was mandatory to open a session and droppable at seal time — which is where
+it needs to survive, since the exposure is what anyone later reads. `evidence` is all-or-nothing; a
+brokered run missing the identity of the instrument that produced its judgements is not a partially
+brokered run, it is a run whose central provenance term went missing between opening and sealing.
+Optionality here would have recreated `RunBudget`'s problem: a field that looks binding and is not.
 
 ### 4.2 Review
 
@@ -432,11 +467,12 @@ toolkit is still rejected by an older one, since `_Base` is `extra="forbid"`; ru
 def confirmation_count(self) -> int:
     """Distinct confirming reviews that COUNT AS SUPPORT.
 
-    An agent confirmation counts only when it cited something mechanically
-    checkable AND that citation was checked against what the agent was shown.
-    `unwired` is not a weaker `verified`: a guard that cannot see must not
-    report clean, and free support is what it would be. A vacuous `verified` --
-    a review that cited no path at all -- is not evidence of anything either.
+    An agent confirmation counts only when EVERYTHING it cited was mechanically
+    checkable and was checked against what the agent was shown. `unwired` is not
+    a weaker `verified`: a guard that cannot see must not report clean, and free
+    support is what it would be. A vacuous `verified` -- a review that cited no
+    path at all -- is not evidence of anything either. Prose belongs in `note`,
+    which every review already has, and costs nothing there.
     """
     return len({
         r.review_id for r in self.reviews
@@ -444,7 +480,8 @@ def confirmation_count(self) -> int:
             r.reviewer_kind != "agent"
             or (r.correspondence is not None
                 and r.correspondence.status == "verified"
-                and any(e.type == "location" for e in r.evidence))
+                and r.evidence
+                and all(e.type == "location" for e in r.evidence))
         )
     })
 ```
@@ -464,12 +501,24 @@ regression introduced by this design, not a gap it inherited. The rule is that b
 of the reviewer kind that can confabulate; the exclusion list is one entry long and is spelled that
 way.
 
-**The `any(location)` term closes the vacuous `verified`.** `evidence` defaults to empty and
-`TextEvidence` bears no path, so an agent review citing nothing — or citing only prose — corresponds
-trivially and, under revision 2, counted in full. That is the cheapest possible fabrication:
-"I confirm this" with nothing attached, scoring the same as a checked citation. Because `verified`
-means every `LocationEvidence` corresponded, the presence of one is sufficient to know at least one
-mechanically covered item exists, so the test is exact and needs no stored count.
+**`all`, not `any`.** `evidence` defaults to empty and `TextEvidence` bears no path, so an agent
+review citing nothing — or citing only prose — corresponded trivially and, under revision 2, counted
+in full. That is the cheapest possible fabrication: "I confirm this" with nothing attached, scoring
+the same as a checked citation.
+
+Revision 3's `any(location)` fixed the empty case and left the mixed one, which is worse than it
+looks. Correspondence ignores `TextEvidence` entirely, so a review pairing one honest citation to a
+README with three fabricated prose exhibits came back `verified` and counted in full — the single real
+citation laundering everything beside it. A partially checked review is not a checked review, and
+reporting it as one is precisely the failure this design exists to prevent.
+
+So for a *counted* agent confirmation, evidence must be non-empty and **every** entry must be
+`LocationEvidence`. Because `verified` means every location citation corresponded, "all entries are
+locations" and "everything was checked" are the same statement, and the test needs no stored count.
+
+`TextEvidence` on an agent review is not forbidden — it is simply uncounted, and `note` already exists
+for prose at no cost. The incentive points the right way: a producer wanting its review to count moves
+its prose to `note`, which is where prose was always supposed to go.
 
 This keeps the vacuous case `verified` at §5.3 rather than reclassifying it. The check genuinely ran
 and genuinely found no violation; what it did not do is establish support. Collapsing "no violation"
@@ -568,15 +617,26 @@ A `LocationEvidence` corresponds iff:
 - its path is in the served map, **and**
 - under `FULL`, every cited line is `<= line_count`;
 - under `LINES`, every cited line is a matched line;
-- under `PATH_ONLY` or `ABSENT`, no line or span is cited at all.
+- under `PATH_ONLY` or `ABSENT`, no line or span is cited at all; **and**
+- `pointer` is absent under every coverage except `FULL`.
 
 A span cites every line it covers, so a ten-line span against a one-line grep hit does not correspond.
 That is strict on purpose: a reviewer wanting to cite a span should read the file. The line-count check
 under `FULL` is free once the bytes are replayed, and it closes fabricated line numbers into files the
 reviewer genuinely opened — a case revision 1 did not consider at all.
 
-`pointer` is not checked: it is a non-positional locator whose resolution depends on the document
-format, which the broker does not parse. `TextEvidence` bears no path and contributes nothing.
+**`pointer` is gated by coverage even though its value is never checked.** It is a non-positional
+locator — a heading, a symbol name — whose resolution depends on a document format the broker does not
+parse. Revision 3 forbade `line` and `span` under the weaker coverages and said nothing about
+`pointer`, which left the whole hole open in a different shape: an agent could run `history` on a path,
+never see one byte of it, cite `pointer="class FooBar"`, and earn support for a symbol it inferred
+from the filename.
+
+The rule that follows from not parsing pointers is that a pointer is only meaningful when the entire
+file was in front of the reviewer, since anything less means the pointed-at region may be exactly the
+part not served. So `pointer` is permitted under `FULL` and nowhere else — including under `LINES`,
+where a pointer may well name something outside the matched lines. `TextEvidence` bears no path and
+contributes nothing.
 
 Two cases must count as served, or the check punishes correct behaviour: a **search hit**, and a
 **read miss** — a path absent at the commit is frequently the decisive finding, and any rubric worth
@@ -625,7 +685,12 @@ two would be the empty/unwired confusion one level up.
 def append_review(project_root, finding_id, submission: ReviewSubmission, *, actor) -> Review
 ```
 
-- Resolves the run record and baseline named by `submission.run_ref`.
+- **Branches on `reviewer_kind`.** Only an agent submission resolves a run record and baseline and runs
+  `check_correspondence`. Human and deterministic submissions get `correspondence=None` and are stored.
+  Revision 3 resolved a baseline for every submission, which would have made the boundary unusable for
+  the two reviewer kinds §4.2.1 says are unaffected: a human review's `run_ref` need not name an
+  autonomous run at all, and demanding a control-plane baseline for one would refuse every human review
+  in the toolkit. Broker the kind that needs brokering.
 - Calls `check_correspondence`. The result is **computed here and cannot be supplied**: `ReviewSubmission`
   has no field for it.
 - Refuses `violated` with an `IngestError`, consistent with `_assert_attested_provenance` refusing a
@@ -674,24 +739,30 @@ downgrade is a lie about what was checked.
   path to `serve` is exported; `--session` cannot override the baseline's journal path, budget, or
   surface policy; `open` on an existing journal refuses; **seeding N inline inputs leaves
   `requests_used` at zero**; a denied request and a malformed pattern each raise it by one.
-- **`control_plane.py`** — `run_dir` is a pure function of the run id; `--broker` and `--baseline-out`
-  together are refused; a brokered run whose baseline is elsewhere is refused rather than searched for;
-  a control-plane root inside the project is refused.
+- **`control_plane.py`** — `run_dir` is a pure function of `(project root, run id)`; **two projects
+  producing the same run slug get different directories**, and a fork of a project does not resolve its
+  parent's; `--broker` and `--baseline-out` together are refused, as are `--session` and `--baseline` on
+  `finish`; a brokered run whose baseline is elsewhere is refused rather than searched for; a
+  control-plane root inside the project is refused.
 - **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
   rejects a `correspondence` key outright; `requests_used > budget` rejected; entries disagreeing on
-  commit rejected; `EvidenceExposure.commit != base_commit` rejected; `unwired` without a code rejected.
+  commit rejected; `EvidenceExposure.commit != base_commit` rejected; an exposure without an
+  `instrument` rejected; `unwired` without a code rejected.
 - **Eligibility** — one test per `ReviewerKind`, asserted against the `Literal` rather than a hand-written
   list, so a kind added later fails loudly instead of silently landing on the wrong side: an agent
-  `confirms` counts only when `verified` **and** carrying a `LocationEvidence`; `human` and
-  `deterministic` count regardless; an agent `confirms` with only `TextEvidence` does not count; the
-  same review with one location citation does.
+  `confirms` counts only when `verified` **and** every evidence entry is a location; `human` and
+  `deterministic` count regardless; an agent `confirms` with only `TextEvidence` does not count;
+  **one honest location citation mixed with prose entries does not count**; the same review with the
+  prose moved to `note` does.
 - **Correspondence** — one test per row of §5.3, plus: a grep hit on line 1 does **not** validate a
   citation to line 900; a span exceeding the matched lines does not correspond; a line beyond a read
-  file's length does not correspond; a `history` entry does not validate a line citation; a read miss
-  validates a path-only citation and refuses a lined one; **a search miss and an empty history
-  contribute no coverage at all**; an inline target absent from the baseline manifest does not
-  correspond; a policy narrowed between serving and replay does not silently re-serve denied hits;
-  the vacuous `verified`.
+  file's length does not correspond; a `history` entry does not validate a line citation **nor a
+  pointer**; a pointer under `LINES` does not correspond; a read miss validates a path-only citation
+  and refuses a lined one; **a search miss and an empty history contribute no coverage at all**; an
+  inline target absent from the baseline manifest does not correspond; a policy narrowed between
+  serving and replay does not silently re-serve denied hits; the vacuous `verified`.
+- **`append_review`** — a human submission is stored without a baseline existing at all; the same for
+  `deterministic`; an agent submission whose run has no baseline yields `unwired`, not a crash.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
@@ -706,14 +777,16 @@ is a guard nobody has tested.
 
 **Gained.** An agent review's citations become checkable against what the agent was shown, at line
 granularity. An agent confirmation that cited nothing, or whose citations could not be checked, stops
-counting as support. The toolkit's first enforced budget, its first review-append boundary, and its
+counting as support. The toolkit's first enforced budget, its first review-append boundary, and its first
 first run-id-addressable control plane. Instrument identity as a run-record term. A per-judgement
 uncertainty channel. `unwired` extended from instruments to agent testimony.
 
 **Costs.** A model migration that must land with its consumers. A probe of `git grep` and `git log`
-owed to `autonomy/git.py` before either op ships. A new mutually-exclusive flag pair on
-`science autonomy start`. Roughly one git call per journal entry at ingestion, memoised. A new package
-to maintain.
+owed to `autonomy/git.py` before either op ships. A mutually-exclusive flag pair on each of
+`science autonomy start` and `finish`. Roughly one git call per journal entry at ingestion, memoised.
+A new package to maintain. An agent producer must put prose in `note` rather than in `evidence` for
+its reviews to count — a real constraint on C, and the one place this design dictates something about
+a schema it does not own.
 
 **Deliberately not addressed.** Whether a supplied deny policy is complete; whether a non-brokered
 agent should be permitted at all (it is, at zero support rather than at full support); mechanically
