@@ -2730,8 +2730,9 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 
 ### Task 9: Migrate `~/d/cancer/mechanisms/evolution` atomically
 
-**Files:** `pyproject.toml:29`, `uv.lock:3062`, `AGENTS.md`; delete
-`validate_local.py`
+**Files:** `pyproject.toml:29`, `uv.lock:3062`, `AGENTS.md`,
+`entities/plans/0006-guardrail-reviews-are-not-evidence.md`,
+`entities/themes/0002-methodology-guardrails.md`; delete `validate_local.py`
 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
@@ -2846,11 +2847,29 @@ rg -F "#$expected_toolkit_sha" uv.lock || {
 }
 ```
 
-- [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
+- [ ] **Step 3: Delete the sidecar and update current ownership docs**
 
 ```bash
 git rm validate_local.py
 ```
+
+Update `AGENTS.md` to remove project-local sidecar ownership and state that the
+reviews-are-not-evidence guardrail is enforced by canonical toolkit checks
+during `science validate`.
+
+Update the two active entities
+`entities/plans/0006-guardrail-reviews-are-not-evidence.md` and
+`entities/themes/0002-methodology-guardrails.md` in the same atomic migration.
+Replace their present-tense claims that `validate.local.sh`,
+`validate_local.py`, or another project-local sidecar provides automated
+enforcement with the current ownership boundary: the canonical Science toolkit
+enforces the guardrail during `science validate`.
+Preserve the historical origin context — the earlier project work did introduce
+the local sidecar, and this migration supersedes that mechanism. Do not rewrite
+the past as though the toolkit-owned check existed at that time.
+
+Leave `tasks/done/2026-05.md` unchanged. It is a completed task record and
+therefore remains historical.
 
 - [ ] **Step 4: Run the exact original command that crashed**
 
