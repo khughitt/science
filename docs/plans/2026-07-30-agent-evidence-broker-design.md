@@ -1,22 +1,31 @@
 # Agent evidence broker — design
 
-**Status:** proposed (revision 4)
+**Status:** proposed (revision 5)
 **Sub-project A** of three. B is the multi-assignment dispatch harness; C is
 `/science:review-plans`, the LLM plan-adjudication layer this toolkit's drift-screen design
 defers to and never built. A is independently landable and useful without either.
 
-Revisions 2 through 4 respond to design review: six production-boundary defects found in revision 1,
-six more in revision 2, six more in revision 3. Each is closed below and named at the point it is
+Revisions 2 through 5 respond to design review: six production-boundary defects in revision 1, six in
+revision 2, six in revision 3, five in revision 4. Each is closed below and named at the point it is
 closed, because the reasoning that produced the defect is more useful to a reader than the corrected
 text alone.
 
-The pattern in what review kept finding is worth stating, because it predicts where the implementation
-will go wrong. Every round, the defects clustered in guards that were **narrower than the rule they
-were written to enforce** — `any(location)` where the rule was "everything was checked", `line`/`span`
-forbidden where the rule was "cite only what you saw" and `pointer` walked through the gap, a run slug
-where the rule needed a project identity. A guard that restates its rule on one axis and leaves the
-others open reads, on the page, exactly like a guard that works. That is the argument for §7's
-discipline: restore the prior behaviour and watch the test fail, on every axis the rule names.
+Two patterns run through what review kept finding, and both predict where the implementation will go
+wrong.
+
+**Guards narrower than the rule they enforce.** `any(location)` where the rule was "everything was
+checked". `line` and `span` forbidden under weak coverage while `pointer` walked through the gap. A run
+slug where the rule needed a project identity. A guard that restates its rule on one axis and leaves the
+others open reads, on the page, exactly like a guard that works.
+
+**Claims that outran their mechanism.** "Determinism comes free from the pin" — until repository config
+decides what a pattern means. "Sealed runs are unaffected by a project move" — while the checker still
+took a live session. Both were true of the intent and false of the design, and prose is where that gap
+hides, because a sentence can assert a property no field implements.
+
+Hence §7's discipline, and one addition to it: where the document *claims* a property, the test suite
+should establish that property under the condition the claim names — replay with the control-plane
+directory deleted, not merely replay.
 
 ## 1. The problem
 
@@ -125,9 +134,23 @@ correspondence is computed. §5.4 specifies it.
 def authorize(request: EvidenceRequest, policy: SurfacePolicy) -> Denial | None
 ```
 
-Containment is checked **before** any prefix, because a prefix check alone is walked around with
-`..`. Both the as-spelled and the symlink-resolved path are checked, following
-`autonomy/baseline.py::reject_baseline_inside_project`.
+Containment is checked **before** any prefix, because a prefix check alone is walked around with `..`.
+
+**A git path is normalized lexically and the filesystem is never consulted.** Revisions 1–4 borrowed
+`reject_baseline_inside_project`'s dual as-spelled/resolved idiom wholesale, which is the wrong tool
+here: it follows symlinks in the mutable working tree, while the served surface is
+`git show <commit>:<path>` — a blob read that never touches the working tree at all. Replacing a
+base-commit file with a working-tree symlink would therefore deny a request that was entirely safe,
+and resolving would buy no security in exchange, because there is no filesystem lookup to protect.
+
+`normalize_project_path` is already the right function and is already what `LocationEvidence` uses:
+it refuses `..` rather than collapsing it, refuses absolute paths, refuses NUL, and normalizes UTF-8.
+Deny prefixes are then matched against the normalized form.
+
+The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
+are opened: the baseline, the journal, the control-plane root, and the actor-supplied `--output PATH`
+in §3.5. Two kinds of path, two disciplines, chosen by what the path is used for rather than by
+resemblance.
 
 `Denial` carries two strings. `reason` is categorised and stays parent-side, for the audit. `notice`
 is what the requester sees, and it is **policy-supplied**: this toolkit's existing denials are
@@ -288,9 +311,10 @@ by whatever supervisor invoked it. `--session <run-id>` would have had nothing t
 
 ```python
 def control_plane_root() -> Path                        # $SCIENCE_CONTROL_PLANE, else the XDG state dir
-def project_key(project_root: Path) -> str              # <science.yaml name>-<sha256(resolved root)[:12]>
+def project_key(project_root: Path) -> str              # sha256(resolved root)[:16] — digest ONLY
 def run_dir(project_root: Path, run_id: str) -> Path    # <root>/<project-key>/<run-slug>/
-#   baseline.json, journal.jsonl
+#   project.json  {"name": ..., "root": ...}   ← the human label, as metadata
+#   <run-slug>/baseline.json, journal.jsonl
 ```
 
 **The key is project-scoped, and a run id alone is not a project identity.** A run id is
@@ -299,18 +323,46 @@ disambiguator produce the same slug, and a fork inherits its parent's `science.y
 single global root would let one project's session resolve another's baseline — and between a fork and
 its parent, which share a base commit, the replay would even succeed.
 
-`name` alone therefore cannot carry the scope; the digest of the *resolved* project root does, and
-`name` stays in the key so a human listing the control plane can read it. Two worktrees of one project
-get two control planes, which is correct: they are two trees at two commits.
+**The digest is the whole directory name; the project's name is metadata inside it.** Revision 4 put
+`<name>-<digest>` in the path for legibility. `ProjectConfig.name` is an unconstrained `str` on a model
+with `extra="allow"`, so a name containing `/` or `..`, or one long enough to blow a path limit, becomes
+a control-plane path that escapes or fails to create — a filesystem-injection vector bought for a
+cosmetic gain. The digest already carries the whole identity; legibility costs nothing in a
+`project.json` beside the run directories, where a human can read it and a path resolver never does.
 
-Known limitation, stated rather than engineered around: moving a project orphans its **unsealed**
-sessions, because the key changes. Sealed runs are unaffected — `EvidenceExposure` is copied into the
-run record at `finish`, and the journal is needed only to re-check a run later.
+Two worktrees of one project get two control planes, which is correct: they are two trees at two
+commits.
 
-`--baseline-out` and a new `--broker` flag on `science autonomy start` are **mutually exclusive**.
-`--broker` derives both paths and refuses an explicit one; without it, nothing changes for runs that
-do not broker evidence. No silent fallback: a brokered run whose baseline was written somewhere else
-is refused rather than searched for.
+`--baseline-out` and a new `--broker-spec PATH` option on `science autonomy start` are **mutually
+exclusive**. `--broker-spec` derives both control-plane paths and refuses an explicit baseline path;
+without it, nothing changes for runs that do not broker evidence. No silent fallback: a brokered run
+whose baseline was written somewhere else is refused rather than searched for.
+
+**`--broker-spec` is where the session's mandatory inputs come from**, which revision 4 left with no
+source at all: `EvidenceSession` requires a budget, a surface policy, an instrument identity, and an
+inline manifest, none of them CLI-settable, behind a flag that carried no value. `autonomy start
+--broker` could not have built its baseline.
+
+```python
+class EvidenceSessionSpec(_Frozen):     # the supervisor's declaration, read from JSON
+    budget: int
+    surface_policy: SurfacePolicy
+    instrument: InstrumentIdentity
+    inline_paths: tuple[Path, ...] = ()
+```
+
+`start` reads each `inline_paths` entry and computes its `sha256` and line count itself, producing the
+`InlineInput` manifest. A supervisor that declared those numbers would be attesting to bytes it had not
+necessarily read.
+
+**A file is a legitimate trust channel here specifically because there is no actor yet.** `start` is
+what opens the run; until it returns, nothing has been dispatched and every input is the supervisor's
+own. This is the one place in the design where a path may be supplied, and the reason it is safe is
+temporal, not structural — which is why the same channel is not offered to `evidence serve` or to
+`finish`, both of which run while an actor exists.
+
+B, holding sessions in-process, calls `start_run(..., evidence=EvidenceSessionSpec(...))` directly and
+never touches JSON.
 
 `science autonomy finish` needs the symmetric input, which revision 3 omitted: it takes
 `--baseline PATH` as `required=True` today, so a brokered run had no way to say which run it was
@@ -360,6 +412,9 @@ class EvidenceExposure(_Frozen):
     budget: int
     requests_used: int          # includes denials; they spend rounds
     instrument: InstrumentIdentity      # required — see below
+    surface_policy: SurfacePolicy       # sealed: part of the query, so part of the replay
+    inline: tuple[InlineInput, ...] = ()
+    replay_protocol: int                # see §5.2
     entries: tuple[ExposureEntry, ...] = ()
 
 # AutonomousRunRecord
@@ -369,6 +424,18 @@ class EvidenceExposure(_Frozen):
 Grouped into one optional field because it is all-or-nothing: a run either was brokered or was not,
 and one group makes "brokered" a single checkable predicate rather than three fields that can
 disagree.
+
+**The exposure seals every input replay needs, so it is self-sufficient.** Revision 4 claimed sealed
+runs survive a project move; they did not. `check_correspondence` still took the live `EvidenceSession`,
+and the exposure carried neither the surface policy nor the inline manifest — so once the control-plane
+key changed, the baseline orphaned, replay lost its policy and its manifest, and every agent review in
+that run silently became `unwired`. Under §4.2.1 that means silently losing all its support: exactly
+the back-door fail-open §6 exists to prevent, arriving through a directory rename.
+
+Copying the policy, the manifest and the protocol version into the exposure at `finish` makes the run
+record the complete record of what was replayable, which is what "sealed" should have meant in the
+first place. Re-checking a run then needs the record and a repository, and nothing else. The claim it
+buys is now true rather than asserted: **a project move orphans unsealed sessions only.**
 
 `ExposureEntry` deliberately does **not** store which lines a search matched. Those are re-derived at
 replay (§5.1); storing them would be storing the actor's account of its own exposure.
@@ -571,13 +638,15 @@ autonomy write-surface policy, a different thing about a different boundary, and
 for two policies is how they end up enforced as one.
 
 `journal_path` is containment-checked by `reject_baseline_inside_project`, like the baseline itself,
-and under `--broker` it is derived from `control_plane.run_dir()` rather than supplied at all.
+and under `--broker-spec` it is derived from `control_plane.run_dir()` rather than supplied at all.
 
 ## 5. Correspondence
 
 ```python
-def check_correspondence(review, exposure, session, *, repo) -> Correspondence
+def check_correspondence(review, exposure, *, repo) -> Correspondence
 ```
+
+The live session is gone from the signature: everything replay needs is sealed into `exposure`.
 
 ### 5.1 The served set — coverage, not paths
 
@@ -655,6 +724,23 @@ manifest instead (§4.3).
 Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
 read many of the same files.
 
+**Replay is bound to a `REPLAY_PROTOCOL_VERSION`, not to `toolkit_revision`.** Reproducing a hash
+depends on the serving implementation — the defined-miss markers, the canonical argv of §3.2.1, the
+hit-line parsing. A later toolkit that changes any of them would recompute different bytes and classify
+an honest old exposure as `EXPOSURE_UNREPRODUCIBLE`, which **refuses**. A guard whose failure mode is
+"refuse honest historical work after an upgrade" is worse than the gap it closes.
+
+Comparing `toolkit_revision` instead would be safe in direction — mismatch yields `unwired`, which
+refuses nothing — but every toolkit bump would zero the support of every prior run, including the
+overwhelming majority whose serving behaviour did not change. A signal that fires on every upgrade is a
+signal people learn to ignore.
+
+So the protocol carries its own integer, sealed into the exposure and bumped **only** when serving or
+parsing changes. A mismatch is `unwired` / `REPLAY_PROTOCOL_MISMATCH`: could-not-check, not
+checked-and-found-false, consistent with every other row of §5.3. Ordinary releases invalidate nothing;
+a real change to what serving means invalidates exactly the runs it should, loudly, with a code that
+says why.
+
 The exposure checked is the one belonging to `review.run_ref`, resolved by `append_review` from that
 run's record and baseline. A review checked against some other run's exposure is checked against
 nothing.
@@ -664,7 +750,8 @@ nothing.
 | Situation | Status / code | Stored? | Counts as support? |
 |---|---|---|---|
 | No exposure log | `unwired` / `NO_EXPOSURE` | yes | **no** |
-| Repo, commit, or baseline unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
+| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
+| Exposure sealed under a different replay protocol | `unwired` / `REPLAY_PROTOCOL_MISMATCH` | yes | **no** |
 | Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
 | Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
 | Replay ran; everything corresponded | `verified` | yes | yes |
@@ -733,17 +820,26 @@ downgrade is a lie about what was checked.
   `basic` produce the same served bytes for the same request; `color.ui=always` does not colour the
   output; `log.showSignature=true` does not change the served log. Each written from the probe, so the
   probe's findings are what the tests assert.
-- **`policy.py`** — containment before prefix; `..` and absolute paths refused; the dual
-  as-spelled/resolved check catches a symlink escape.
+- **`policy.py`** — containment before prefix; `..` and absolute paths refused lexically; **a
+  working-tree symlink over a base-commit path does not deny the request**, since the blob read never
+  consults the working tree; the dual as-spelled/resolved check still catches a symlink escape on
+  `--output`, which is a real filesystem path.
 - **`session.py`** — a denial spends a round; exhaustion refuses without further spend; no unbudgeted
   path to `serve` is exported; `--session` cannot override the baseline's journal path, budget, or
   surface policy; `open` on an existing journal refuses; **seeding N inline inputs leaves
   `requests_used` at zero**; a denied request and a malformed pattern each raise it by one.
 - **`control_plane.py`** — `run_dir` is a pure function of `(project root, run id)`; **two projects
   producing the same run slug get different directories**, and a fork of a project does not resolve its
-  parent's; `--broker` and `--baseline-out` together are refused, as are `--session` and `--baseline` on
+  parent's; **a `science.yaml` name containing `/` or `..`, or one 4096 characters long, changes no
+  path** — asserted directly, since that is the vector the digest-only key exists to close;
+  `--broker-spec` and `--baseline-out` together are refused, as are `--session` and `--baseline` on
   `finish`; a brokered run whose baseline is elsewhere is refused rather than searched for; a
   control-plane root inside the project is refused.
+- **Sealing** — a sealed run replays from `(record, repo)` alone, with the control-plane directory
+  **deleted**: the named regression test for the move case, written so a future change that reintroduces
+  a live-session dependency fails here rather than in a project someone renamed.
+- **Protocol version** — an exposure sealed at protocol `N` read by a toolkit at `N+1` yields
+  `unwired`/`REPLAY_PROTOCOL_MISMATCH`, never `violated`; the same exposure at `N` replays clean.
 - **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
   rejects a `correspondence` key outright; `requests_used > budget` rejected; entries disagreeing on
   commit rejected; `EvidenceExposure.commit != base_commit` rejected; an exposure without an
@@ -777,9 +873,10 @@ is a guard nobody has tested.
 
 **Gained.** An agent review's citations become checkable against what the agent was shown, at line
 granularity. An agent confirmation that cited nothing, or whose citations could not be checked, stops
-counting as support. The toolkit's first enforced budget, its first review-append boundary, and its first
-first run-id-addressable control plane. Instrument identity as a run-record term. A per-judgement
-uncertainty channel. `unwired` extended from instruments to agent testimony.
+counting as support. The toolkit's first enforced budget, its first review-append boundary, and its
+first addressable control plane. Instrument identity as a run-record term. A per-judgement
+uncertainty channel. A run record that is a complete, self-sufficient account of what its agents were
+shown. `unwired` extended from instruments to agent testimony.
 
 **Costs.** A model migration that must land with its consumers. A probe of `git grep` and `git log`
 owed to `autonomy/git.py` before either op ships. A mutually-exclusive flag pair on each of
