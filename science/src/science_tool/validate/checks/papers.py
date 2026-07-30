@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from science_tool.entities import resolve_path_policy
+from science_tool.entity_scan import iter_entity_markdown
 from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.findings import declare_validation_rules, validation_observation
@@ -83,7 +84,7 @@ def _evidence_ref_observations(
     for root in _citation_roots(ctx):
         if not root.is_dir():
             continue
-        for path in sorted(root.rglob("*.md")):
+        for path in iter_entity_markdown(root):
             refs = ctx.frontmatter(path).get("evidence_refs")
             if not isinstance(refs, list):
                 continue
