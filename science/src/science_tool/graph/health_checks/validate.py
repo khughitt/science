@@ -44,7 +44,6 @@ def execute_validation(
         project_root,
         strict=False,
         verbose=False,
-        enable_python_sidecar=False,
         project_sources=project_sources,
     )
     unwired_producers = tuple(

@@ -23,14 +23,3 @@ def test_legacy_bash_sidecar_is_reported_and_never_executed(tmp_path: Path) -> N
     assert len(findings) == 1
     assert findings[0].severity == "error"
     assert not marker.exists()
-
-
-def test_disabled_sidecar_mode_ignores_sidecars(tmp_path: Path) -> None:
-    (tmp_path / "validate.local.sh").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
-    result = run(
-        _project(tmp_path),
-        strict=False,
-        verbose=False,
-        enable_python_sidecar=False,
-    )
-    assert not [item for item in result.results if item.rule_id == "validate.sidecar-removed"]

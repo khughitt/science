@@ -9,7 +9,6 @@ from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
-from science_tool.validate.runner import clear_hooks_for_tests
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "validate" / "fixtures" / "_combined"
@@ -39,7 +38,6 @@ def _ensure_canonical_checks() -> None:
 
 
 def _validate_output(*args: str) -> str:
-    clear_hooks_for_tests()
     _ensure_canonical_checks()
     result = CliRunner().invoke(
         main,
@@ -47,7 +45,6 @@ def _validate_output(*args: str) -> str:
         env={"COLUMNS": str(SNAPSHOT_TERMINAL_WIDTH)},
         terminal_width=SNAPSHOT_TERMINAL_WIDTH,
     )
-    clear_hooks_for_tests()
     clear_checks_for_tests()
 
     if result.exit_code != 1:

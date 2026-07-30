@@ -54,11 +54,21 @@ def test_labnote_export_check_is_registered() -> None:
 
     import science_tool.validate.checks as checks
 
-    checks.clear_checks_for_tests()
-    sys.modules.pop("science_tool.validate.checks.labnote_export", None)
-    checks._load_canonical_checks()
+    module_name = "science_tool.validate.checks.labnote_export"
+    original_entries = list(checks.CANONICAL_CHECKS)
+    original_module = sys.modules.get(module_name)
+    try:
+        checks.clear_checks_for_tests()
+        sys.modules.pop(module_name, None)
+        checks._load_canonical_checks()
 
-    assert any(entry.fn.__name__ == "check_labnote_export" for entry in checks.CANONICAL_CHECKS)
+        assert any(entry.fn.__name__ == "check_labnote_export" for entry in checks.CANONICAL_CHECKS)
+    finally:
+        checks.CANONICAL_CHECKS[:] = original_entries
+        if original_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = original_module
 
 
 def _view(**overrides) -> dict:

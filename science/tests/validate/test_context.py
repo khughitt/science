@@ -27,9 +27,6 @@ def test_context_loads_manifest_and_default_directories(tmp_path: Path) -> None:
     assert ctx.project_root == tmp_path.resolve()
     assert ctx.doc_dir == tmp_path / "doc"
     assert ctx.specs_dir == tmp_path / "specs"
-    assert ctx.papers_dir == tmp_path / "doc" / "papers"
-    assert ctx.provenance_dir == tmp_path / "doc" / "provenance"
-    assert ctx.themes_dir == tmp_path / "doc" / "themes"
     assert ctx.manifest == {"name": "demo"}
     assert ctx.strict is True
     assert ctx.verbose is False

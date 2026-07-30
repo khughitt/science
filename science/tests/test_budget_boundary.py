@@ -23,7 +23,7 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
-    "exempt": 122,
+    "exempt": 121,
     "deferred": 102,
 }
 
@@ -161,9 +161,12 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     row per uncovered candidate and can include growable occurrence evidence and
     skipped-project context, taking the live partition to 69/122/101 = 292.
 
-    The acceptance migrator adds one deferred leaf. `findings migrate-acceptances`
-    emits one row per configured validation acceptance, taking the live partition to
-    69/122/102 = 293.
+    Finding Convergence Plan 3 then adds `findings migrate-acceptances` as one
+    deferred leaf: its `entries` payload has one output row per configured
+    validation acceptance, taking the partition to 69/122/102 = 293. Validation
+    sidecar retirement removes the fixed-output `project artifacts
+    port-validate-sidecar` leaf and its exemption, leaving the live partition at
+    69/121/102 = 292.
     """
     actual = {
         "budgeted": len(BUDGETS),

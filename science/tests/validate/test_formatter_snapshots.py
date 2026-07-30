@@ -10,7 +10,6 @@ from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.validate.checks import CANONICAL_CHECK_MODULES, clear_checks_for_tests
-from science_tool.validate.runner import clear_hooks_for_tests
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COMBINED_PROJECT = FIXTURES / "_combined"
@@ -22,9 +21,7 @@ CHECK_MODULES = CANONICAL_CHECK_MODULES
 @pytest.fixture(autouse=True)
 def clean_validate_registries() -> Generator[None]:
     clear_checks_for_tests()
-    clear_hooks_for_tests()
     yield
-    clear_hooks_for_tests()
     clear_checks_for_tests()
 
 
