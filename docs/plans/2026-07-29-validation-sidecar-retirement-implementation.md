@@ -82,35 +82,66 @@ if [ "$rebase_status" -ne 0 ]; then
     printf 'HARD STOP: unexpected rebase conflicts: %s\n' "${unmerged_paths[*]}"
     exit 1
   }
-  # Resolve registry.py by retaining main's deferred findings migrate-acceptances
-  # entry and the feature's removed project-artifacts port command. Resolve the
-  # test by retaining the migrate-acceptances assertion and 69/121/102 partition.
-  git -C "$toolkit_root" add \
-    science/src/science_tool/budget/registry.py \
-    science/tests/test_budget_boundary.py
-  GIT_EDITOR=true git -C "$toolkit_root" rebase --continue
+  printf '%s\n' 'PAUSE: resolve the two verified conflicts before continuing.'
+  exit 2
 fi
+```
+
+When the command pauses, make the semantic resolution manually — do not stage
+conflict-marker text and do not use `--ours`/`--theirs` for either whole file.
+Use the current-main version as the base, then apply precisely this feature
+delta: remove the `project artifacts port-validate-sidecar` classification and
+its test/history accounting. In `registry.py`, retain current main's
+`DEFERRED["findings migrate-acceptances"]` entry with growth reason
+`"one output row per configured validation acceptance"`. In
+`test_budget_boundary.py`, retain its Plan 3 coverage and set the partition to
+exactly `69` budgeted, `121` exempt, and `102` deferred. Apply those two
+semantic edits in the paused worktree (for example with `apply_patch`), then
+run this continuation block.
+
+```bash
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+test -n "$(git -C "$toolkit_root" rebase --show-current-patch)" || {
+  echo "HARD STOP: no paused rebase to continue"; exit 1;
+}
+test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
+  echo "HARD STOP: resolve both files before staging"; exit 1;
+}
+git -C "$toolkit_root" diff --check
+if rg -n '^(<<<<<<<|=======|>>>>>>>)' \
+  "$toolkit_root/science/src/science_tool/budget/registry.py" \
+  "$toolkit_root/science/tests/test_budget_boundary.py"; then
+  echo "HARD STOP: conflict markers remain"
+  exit 1
+fi
+git -C "$toolkit_root" add \
+  science/src/science_tool/budget/registry.py \
+  science/tests/test_budget_boundary.py
+GIT_EDITOR=true git -C "$toolkit_root" rebase --continue
 test -z "$(git -C "$toolkit_root" diff --name-only --diff-filter=U)" || {
   echo "HARD STOP: unresolved rebase paths remain"; exit 1;
 }
-python3 - "$toolkit_root" <<'PY'
-from pathlib import Path
-import sys
+( cd "$toolkit_root/science" && uv run --frozen python - <<'PY'
+import click
+from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
+from science_tool.cli import main
 
-root = Path(sys.argv[1])
-registry = (root / "science/src/science_tool/budget/registry.py").read_text()
-tests = (root / "science/tests/test_budget_boundary.py").read_text()
-required = {
-    "registry deferred classification": "findings migrate-acceptances",
-    "audited budget cardinality": "69",
-    "audited exempt cardinality": "121",
-    "audited deferred cardinality": "102",
-}
-missing = [label for label, text in required.items() if text not in registry + tests]
-if missing or "port_validate_sidecar" in registry:
-    raise SystemExit(f"HARD STOP: incomplete combined resolution: {missing}")
+assert DEFERRED["findings migrate-acceptances"].growth_reason == "one output row per configured validation acceptance"
+assert "project artifacts port-validate-sidecar" not in BUDGETS | EXEMPTIONS | DEFERRED
+assert (len(BUDGETS), len(EXEMPTIONS), len(DEFERRED)) == (69, 121, 102)
+
+def leaves(command: click.Command, prefix: tuple[str, ...] = ()) -> set[str]:
+    if isinstance(command, click.Group):
+        return {leaf for name in command.list_commands(click.Context(command)) for leaf in leaves(command.get_command(click.Context(command), name), prefix + (name,))}
+    return {" ".join(prefix)}
+
+assert "project artifacts port-validate-sidecar" not in leaves(main)
 PY
-( cd "$toolkit_root/science" && uv run --frozen pytest -q tests/test_budget_boundary.py )
+)
+( cd "$toolkit_root/science" && uv run --frozen pytest -q \
+  tests/test_budget_boundary.py::test_every_leaf_command_is_classified \
+  tests/test_budget_boundary.py::test_classification_partition_has_the_audited_cardinality )
 ```
 
 Expected: the rebase is clean after the explicit two-file resolution, the
@@ -1500,12 +1531,22 @@ toolkit_root=~/d/science/.worktrees/sidecar-retirement
 revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 attempt_root=$(cat "$revision_root/latest-attempt.txt")
 git -C "$toolkit_root" worktree add --detach "$attempt_root/toolkit-before" a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-( cd "$attempt_root/toolkit-after/science" && uv run --frozen pytest )
-printf 'command\ttoolkit-suite\tcd %s/science && uv run --frozen pytest\texit\t0\t%s\n' "$toolkit_root" "$attempt_root/toolkit-suite.txt" >> "$attempt_root/task-6-manifest.tsv"
-( cd "$attempt_root/toolkit-after/science/model" && uv run --frozen pytest )
-printf 'command\tmodel-suite\tcd %s/science/model && uv run --frozen pytest\texit\t0\t%s\n' "$toolkit_root" "$attempt_root/model-suite.txt" >> "$attempt_root/task-6-manifest.tsv"
-( cd "$attempt_root/toolkit-after/science" && uv run --frozen pytest -m snapshot )
-printf 'command\tsnapshot-marker\tcd %s/science && uv run --frozen pytest -m snapshot\texit\t0\t%s\n' "$toolkit_root" "$attempt_root/snapshot-marker.txt" >> "$attempt_root/task-6-manifest.tsv"
+run_zero_suite() {
+  local command_key=$1
+  local suite_dir=$2
+  local suite_args=$3
+  local output_path=$4
+  set +e
+  ( cd "$suite_dir" && uv run --frozen pytest $suite_args ) > "$output_path" 2>&1
+  local suite_status=$?
+  set -e
+  test "$suite_status" = 0 || { echo "HARD STOP: $command_key exited $suite_status"; exit 1; }
+  printf 'command\t%s\tcd %s && uv run --frozen pytest %s\texit\t%s\t%s\n' \
+    "$command_key" "$suite_dir" "$suite_args" "$suite_status" "$output_path" >> "$attempt_root/task-6-manifest.tsv"
+}
+run_zero_suite toolkit-suite "$attempt_root/toolkit-after/science" "" "$attempt_root/toolkit-suite.txt"
+run_zero_suite model-suite "$attempt_root/toolkit-after/science/model" "" "$attempt_root/model-suite.txt"
+run_zero_suite snapshot-marker "$attempt_root/toolkit-after/science" "-m snapshot" "$attempt_root/snapshot-marker.txt"
 set +e
 ( cd "$attempt_root/toolkit-after/science" && uv run --frozen pytest -m real_projects ) > "$attempt_root/rebased-real-projects.txt" 2>&1
 rebased_real_status=$?
@@ -1680,6 +1721,9 @@ for consumer_name in health-meta evolution protein-landscape science-meta; do
   record_artifact "$consumer_name-after" "$attempt_root/$consumer_name-after.json"
 done
 record_artifact parity-table "$attempt_root/parity-table.md"
+record_artifact toolkit-suite "$attempt_root/toolkit-suite.txt"
+record_artifact model-suite "$attempt_root/model-suite.txt"
+record_artifact snapshot-marker "$attempt_root/snapshot-marker.txt"
 record_artifact rebased-real-projects "$attempt_root/rebased-real-projects.txt"
 record_artifact known-real-project-statuses "$attempt_root/known-real-project-statuses.tsv"
 record_artifact current-main-failure-signatures "$attempt_root/current-main-failure-signatures.txt"
@@ -1695,7 +1739,8 @@ lines = [line.split("\t") for line in (root / "task-6-manifest.tsv").read_text()
 singletons = {row[0]: row for row in lines if row and row[0] in {"toolkit-before", "toolkit-after", "feature-branch", "attempt-root"}}
 required_artifacts = {
     *(f"{name}-{phase}" for name in ("health-meta", "evolution", "protein-landscape", "science-meta") for phase in ("canonical", "after")),
-    "parity-table", "rebased-real-projects", "known-real-project-statuses",
+    "parity-table", "toolkit-suite", "model-suite", "snapshot-marker",
+    "rebased-real-projects", "known-real-project-statuses",
     "current-main-failure-signatures", "rebased-feature-failure-signatures",
     "evolution-verbose", "health-meta-verbose",
 }
@@ -1738,7 +1783,38 @@ the divergent local `main` checkout at `395f3af22425ac30926fc6c46b71d76366e70902
 Present Task 6's final parity table, manifest SHA-256, and explicitly recorded
 real-project comparison; ask for a go/no-go on pushing `origin/main`. **Do not
 proceed without an explicit yes.** Prior approval of the design is not approval
-of the push.
+of the push. Immediately after that yes, create this immutable approval record.
+It is the only point at which `latest-attempt.txt` may be read for publication;
+copy the printed `approval_record` path verbatim into Steps 2 and 3.
+
+```bash
+set -euo pipefail
+revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
+approved_attempt_root=$(cat "$revision_root/latest-attempt.txt")
+approval_id=$(date -u +%Y%m%dT%H%M%SZ)
+approval_record="$revision_root/approval-$approval_id.tsv"
+approval_digest_path="$approval_record.sha256"
+test ! -e "$approval_record" && test ! -e "$approval_digest_path" || {
+  echo "HARD STOP: approval record collision"; exit 1;
+}
+test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv")" = "$(cat "$approved_attempt_root/task-6-manifest.sha256")" || {
+  echo "HARD STOP: approved attempt manifest digest mismatch"; exit 1;
+}
+for artifact_path in "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/parity-table.md" \
+  "$approved_attempt_root/rebased-real-projects.txt" "$approved_attempt_root/current-main-failure-signatures.txt" \
+  "$approved_attempt_root/rebased-feature-failure-signatures.txt"; do
+  test -s "$artifact_path" || { echo "HARD STOP: missing approval artifact $artifact_path"; exit 1; }
+done
+printf 'attempt-root\t%s\nmanifest-digest\t%s\nbaseline-sha\t%s\nfeature-sha\t%s\nparity-artifact\t%s\nreal-project-artifact\t%s\ncurrent-main-signatures\t%s\nfeature-signatures\t%s\n' \
+  "$approved_attempt_root" "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" \
+  "$(awk -F '\t' '$1 == "toolkit-before" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
+  "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" \
+  "$approved_attempt_root/final-parity-table.md" "$approved_attempt_root/rebased-real-projects.txt" \
+  "$approved_attempt_root/current-main-failure-signatures.txt" "$approved_attempt_root/rebased-feature-failure-signatures.txt" \
+  > "$approval_record"
+sha256sum "$approval_record" > "$approval_digest_path"
+printf 'Approved publication record: %s\n' "$approval_record"
+```
 
 - [ ] **Step 2: Refetch, require the recorded remote SHA, and merge only in a temporary integration worktree**
 
@@ -1747,11 +1823,27 @@ set -euo pipefail
 toolkit_root=~/d/science/.worktrees/sidecar-retirement
 recorded_origin_main_sha=a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
 revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
-integration_root=~/scratch/sidecar-publish-a7f3337e-"$(date -u +%Y%m%dT%H%M%SZ)"
-approved_feature_sha=$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-manifest.tsv")
-approved_after_sha=$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$attempt_root/task-6-manifest.tsv")
-test "$approved_feature_sha" = "$approved_after_sha" || { echo "HARD STOP: approved manifest feature SHA mismatch"; exit 1; }
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+approval_digest_path="$approval_record.sha256"
+test -s "$approval_record" && test -s "$approval_digest_path" || { echo "HARD STOP: missing explicit approval record"; exit 1; }
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_digest_path")" || { echo "HARD STOP: approval record changed"; exit 1; }
+approved_attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
+test "$approved_baseline_sha" = "$recorded_origin_main_sha" || { echo "HARD STOP: approval baseline SHA mismatch"; exit 1; }
+test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
+test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
+test "$(awk -F '\t' '$1 == "toolkit-after" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval after-toolkit SHA mismatch"; exit 1; }
+for artifact_path in \
+  "$(awk -F '\t' '$1 == "parity-artifact" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "real-project-artifact" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "current-main-signatures" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "feature-signatures" {print $2}' "$approval_record")"; do
+  test -s "$artifact_path" || { echo "HARD STOP: approved artifact drift at $artifact_path"; exit 1; }
+done
+integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+test ! -e "$integration_root" || { echo "HARD STOP: preserve prior publish worktree $integration_root"; exit 1; }
 test "$(git -C "$toolkit_root" rev-parse sidecar-retirement)" = "$approved_feature_sha" || {
   echo "HARD STOP: sidecar-retirement advanced after Task 6 approval"; exit 1;
 }
@@ -1778,24 +1870,53 @@ test "$second_parent_sha" = "$approved_feature_sha" || {
 ```bash
 set -euo pipefail
 revision_root=~/scratch/sidecar-baselines/a7f3337e98515bc289781ef0a1eae7b9c2fe73a5
-attempt_root=$(cat "$revision_root/latest-attempt.txt")
-integration_root=$(git -C ~/d/science/.worktrees/sidecar-retirement worktree list --porcelain | awk '/^worktree .*sidecar-publish-a7f3337e-/{print $2; exit}')
-test -n "$integration_root" || { echo "HARD STOP: missing integration worktree"; exit 1; }
-test -s "$attempt_root/task-6-manifest.sha256" || { echo "HARD STOP: missing Task 6 manifest SHA"; exit 1; }
-test "$(sha256sum "$attempt_root/task-6-manifest.tsv")" = "$(cat "$attempt_root/task-6-manifest.sha256")" || {
-  echo "HARD STOP: Task 6 manifest changed after approval"; exit 1;
-}
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+approval_digest_path="$approval_record.sha256"
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_digest_path")" || { echo "HARD STOP: approval record changed"; exit 1; }
+approved_attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+approved_manifest_digest=$(awk -F '\t' '$1 == "manifest-digest" {print $2}' "$approval_record")
+approved_baseline_sha=$(awk -F '\t' '$1 == "baseline-sha" {print $2}' "$approval_record")
+approved_feature_sha=$(awk -F '\t' '$1 == "feature-sha" {print $2}' "$approval_record")
+test "$approved_baseline_sha" = a7f3337e98515bc289781ef0a1eae7b9c2fe73a5 || { echo "HARD STOP: approval baseline SHA mismatch"; exit 1; }
+test "$(sha256sum "$approved_attempt_root/task-6-manifest.tsv" | awk '{print $1}')" = "$approved_manifest_digest" || { echo "HARD STOP: approved attempt changed"; exit 1; }
+test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$approved_attempt_root/task-6-manifest.tsv")" = "$approved_feature_sha" || { echo "HARD STOP: approval feature SHA mismatch"; exit 1; }
+for artifact_path in \
+  "$(awk -F '\t' '$1 == "parity-artifact" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "real-project-artifact" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "current-main-signatures" {print $2}' "$approval_record")" \
+  "$(awk -F '\t' '$1 == "feature-signatures" {print $2}' "$approval_record")"; do
+  test -s "$artifact_path" || { echo "HARD STOP: approved artifact drift at $artifact_path"; exit 1; }
+done
+integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+test -d "$integration_root" || { echo "HARD STOP: missing approved integration worktree"; exit 1; }
 merge_sha=$(git -C "$integration_root" rev-parse HEAD)
 git -C "$integration_root" push origin HEAD:main
 remote_main_sha=$(git -C "$integration_root" ls-remote origin refs/heads/main | awk '{print $1}')
 test "$remote_main_sha" = "$merge_sha" || { echo "HARD STOP: remote main is $remote_main_sha"; exit 1; }
-printf '%s\n' "$merge_sha" > "$attempt_root/published-main.sha"
+printf '%s\n' "$merge_sha" > "$approved_attempt_root/published-main.sha"
 git -C ~/d/science/.worktrees/sidecar-retirement worktree remove "$integration_root"
 git -C ~/d/science/.worktrees/sidecar-retirement branch -D sidecar-retirement-publish
 ```
 
 Expected: the merge commit's first parent is the recorded remote SHA and
 `git ls-remote` confirms that exact merge commit on `origin/main`.
+
+If publication stops before the successful cleanup, retain the immutable
+approval record and its SHA-256 file. Remove only the explicitly derived
+temporary worktree and branch before retrying with that same approval record:
+
+```bash
+set -euo pipefail
+toolkit_root=~/d/science/.worktrees/sidecar-retirement
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+integration_root=~/scratch/sidecar-publish-a7f3337e-"$(basename "$approval_record" .tsv)"
+if git -C "$toolkit_root" worktree list --porcelain | rg -Fqx "worktree $integration_root"; then
+  git -C "$toolkit_root" worktree remove --force "$integration_root"
+fi
+git -C "$toolkit_root" branch -D sidecar-retirement-publish 2>/dev/null || true
+git -C "$toolkit_root" worktree prune
+```
 
 ---
 
