@@ -242,6 +242,52 @@ UNHELD[("method", "version")] = (
     ),
 )
 
+# `search` (schema-closure slice, 2026-07-30). Untyped, like `concept`, so the gap is computed
+# against `ProjectEntity`. FIVE names, not six: `promoted_from` is absent because the mixin does
+# not admit it -- nothing promotes into `search`, so it never becomes admitted-but-undeclared.
+#
+# Swept for again rather than copied from `concept`/`method`. The two kind-agnostic facts were
+# re-confirmed against this kind specifically: `iter_entity_markdown` rglobs the whole `entities/`
+# tree (entity_scan.py:44), so `entities/searches/` is in scope for the `tags` reader; and the
+# `sources`/`version` keyed reads across the tree all consume something that is not a search
+# entity's frontmatter.
+UNHELD[("search", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter (`frontmatter.get('tags')`, labnote_export.py:861), kind-agnostic: "
+        "it walks every markdown under entities/ via iter_entity_markdown, so "
+        "entities/searches/*.md is in scope",
+    ),
+)
+UNHELD[("search", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("search", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("search", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "23 keyed `sources` reads exist across the tree -- uv config (tooling_dependency:73), a "
+        "dataset proxy (datasets_register:381), skill frontmatter (skills_lint.lint:184), prose "
+        "manifests (annotation.prose_health:105) -- and none reads a search entity's frontmatter"
+    ),
+)
+UNHELD[("search", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- the project config "
+        "(labnote_export:876, project_package.serialize:102), a fetched API record "
+        "(paper_fetch:494), or a migration journal (tasks_migrate:650). None is search "
+        "frontmatter. The commons `version` reader does not apply: it resolves a commons "
+        "canonical by id, and no search id resolves to one"
+    ),
+)
+
 for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,
