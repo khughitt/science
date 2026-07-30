@@ -48,6 +48,7 @@ class ValidateContext:
         strict: bool,
         verbose: bool,
         include_all_checks: bool = False,
+        project_sources: ProjectSources | None = None,
     ) -> "ValidateContext":
         root = project_root.resolve()
         manifest_path = project_config_path(root)
@@ -63,7 +64,7 @@ class ValidateContext:
         except ValueError as exc:
             raise ValidateContextError(str(exc)) from exc
         doc_dir = paths.doc_dir
-        return cls(
+        context = cls(
             project_root=root,
             doc_dir=doc_dir,
             specs_dir=paths.specs_dir,
@@ -75,6 +76,9 @@ class ValidateContext:
             verbose=verbose,
             include_all_checks=include_all_checks,
         )
+        if project_sources is not None:
+            context._resource_cache[("project_sources", True)] = project_sources
+        return context
 
     def _cache_key(self, path: Path) -> tuple[Path, int]:
         absolute = path.resolve()
@@ -122,16 +126,24 @@ class ValidateContext:
         strict_core_schema: bool = True,
         strict_identity: bool = True,
     ) -> ProjectSources:
-        from science_tool.graph.sources import load_project_sources
+        from science_tool.graph.sources import (
+            enforce_project_source_strictness,
+            load_project_sources,
+        )
 
-        return self.cached_resource(
-            ("project_sources", include_commons, strict_core_schema, strict_identity),
+        sources = self.cached_resource(
+            ("project_sources", include_commons),
             lambda: load_project_sources(
                 self.project_root,
                 include_commons=include_commons,
-                strict_core_schema=strict_core_schema,
-                strict_identity=strict_identity,
+                strict_core_schema=False,
+                strict_identity=False,
             ),
+        )
+        return enforce_project_source_strictness(
+            sources,
+            strict_core_schema=strict_core_schema,
+            strict_identity=strict_identity,
         )
 
     def graph_dataset(self, graph_path: Path) -> Dataset:

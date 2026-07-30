@@ -565,6 +565,7 @@ def _compile(
     stop_after: _Literal["audit"] | None = None,
     strict: bool = True,
     include_commons: bool = True,
+    sources: ProjectSources | None = None,
 ) -> CompilationResult:
     """Run the source-compiler phases: Load -> Audit -> Emit -> Derive -> Write.
 
@@ -581,7 +582,12 @@ def _compile(
     """
     project_root = project_root.resolve()
 
-    sources = load_project_sources(project_root, strict_identity=False, include_commons=include_commons)
+    if sources is None:
+        sources = load_project_sources(
+            project_root,
+            strict_identity=False,
+            include_commons=include_commons,
+        )
     verdict = _audit_phase(sources)
     if verdict.status == "unwired":
         raise ValueError(f"Source audit could not run ({verdict.code}): {verdict.reason}")
@@ -637,9 +643,13 @@ def materialize_graph(project_root: Path, *, strict: bool = True, include_common
     return result.trig_path
 
 
-def materialization_audit(project_root: Path) -> ValidationVerdict[dict[str, str]]:
+def materialization_audit(
+    project_root: Path,
+    *,
+    sources: ProjectSources | None = None,
+) -> ValidationVerdict[dict[str, str]]:
     """Audit a project root for unresolved canonical references."""
-    result = _compile(project_root, stop_after="audit")
+    result = _compile(project_root, stop_after="audit", sources=sources)
     audit_rows = [
         {
             "check": row["check"],

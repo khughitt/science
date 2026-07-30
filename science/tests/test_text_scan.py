@@ -2,7 +2,10 @@
 """The scannable-text surface: never hand a PNG to a UTF-8 read."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+import pytest
 
 from science_tool.text_scan import (
     MAX_SCANNABLE_BYTES,
@@ -74,6 +77,79 @@ def test_skip_dirs_are_honoured(tmp_path: Path) -> None:
     names = {p.name for p in iter_scannable_files(tmp_path)}
 
     assert names == {"keep.md"}
+
+
+def test_project_walk_prunes_skipped_directories_and_names(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.project_walk import iter_project_files
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "hidden.md").write_text("hidden\n", encoding="utf-8")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "worktrees").write_text("hidden\n", encoding="utf-8")
+    keep = tmp_path / "keep.md"
+    keep.write_text("keep\n", encoding="utf-8")
+
+    real_scandir = os.scandir
+    scanned_directories: list[Path] = []
+
+    def recording_scandir(path: str | bytes | os.PathLike[str] | os.PathLike[bytes]):
+        scanned_directories.append(Path(path))
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", recording_scandir)
+
+    assert iter_project_files(tmp_path) == [keep]
+    assert tmp_path / ".git" not in scanned_directories
+
+
+def test_project_walk_filters_suffix_before_file_stat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from science_tool.project_walk import iter_project_files
+
+    keep = tmp_path / "keep.md"
+    keep.write_text("keep\n", encoding="utf-8")
+    skipped = tmp_path / "skip.bin"
+    skipped.write_bytes(b"binary")
+    real_is_file = Path.is_file
+
+    def guarded_is_file(path: Path) -> bool:
+        if path == skipped:
+            raise AssertionError("suffix filtering happened after stat")
+        return real_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", guarded_is_file)
+
+    assert iter_project_files(tmp_path, suffixes=frozenset({".md"})) == [keep]
+
+
+def test_project_walk_does_not_follow_directory_symlinks(tmp_path: Path) -> None:
+    from science_tool.project_walk import iter_project_files
+
+    project = tmp_path / "project"
+    project.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = outside / "target.md"
+    target.write_text("target\n", encoding="utf-8")
+    hidden = outside / "hidden.md"
+    hidden.write_text("hidden\n", encoding="utf-8")
+    link_to_file = project / "link.md"
+    link_to_directory = project / "linked-directory"
+    try:
+        link_to_file.symlink_to(target)
+        link_to_directory.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+
+    files = iter_project_files(project)
+
+    assert link_to_file in files
+    assert all(path.name != "hidden.md" for path in files)
 
 
 def test_tool_managed_dirs_are_skipped(tmp_path: Path) -> None:

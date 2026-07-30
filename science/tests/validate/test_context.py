@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import yaml
 
 from science_tool.validate import ValidateContext
 from science_tool.validate.context import ValidateContextError
+from science_tool.graph.sources import (
+    ProjectSources,
+    SkippedEntity,
+    enforce_project_source_strictness,
+)
 
 
 def _project(root: Path) -> Path:
@@ -96,30 +102,82 @@ def test_frontmatter_reuses_parsed_value_for_same_absolute_path_and_mtime(
     assert calls == 1
 
 
-def test_project_sources_reuses_identical_load_parameters(
+def test_project_sources_loads_once_per_commons_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ctx = ValidateContext.from_project_root(_project(tmp_path), strict=False, verbose=False)
-    loaded = object()
-    calls = 0
+    loaded = cast(
+        ProjectSources,
+        SimpleNamespace(skipped_entities=[], arbitration_errors=[]),
+    )
+    calls: list[bool] = []
 
-    def counted_load_project_sources(project_root: Path, **kwargs: object) -> object:
-        nonlocal calls
-        calls += 1
+    def counted_load_project_sources(project_root: Path, **kwargs: Any) -> ProjectSources:
         assert project_root == ctx.project_root
+        calls.append(kwargs["include_commons"])
+        assert kwargs["strict_core_schema"] is False
+        assert kwargs["strict_identity"] is False
         return loaded
 
     monkeypatch.setattr("science_tool.graph.sources.load_project_sources", counted_load_project_sources)
 
+    for strict_core_schema in (False, True):
+        for strict_identity in (False, True):
+            assert (
+                ctx.project_sources(
+                    include_commons=True,
+                    strict_core_schema=strict_core_schema,
+                    strict_identity=strict_identity,
+                )
+                is loaded
+            )
     assert (
-        ctx.project_sources(include_commons=False, strict_core_schema=False, strict_identity=False)
+        ctx.project_sources(
+            include_commons=False,
+            strict_core_schema=False,
+            strict_identity=False,
+        )
         is loaded
     )
-    assert (
-        ctx.project_sources(include_commons=False, strict_core_schema=False, strict_identity=False)
-        is loaded
+    assert calls == [True, False]
+
+
+def test_project_source_strictness_projects_recorded_schema_failure() -> None:
+    sources = cast(
+        ProjectSources,
+        SimpleNamespace(
+            skipped_entities=[
+                SkippedEntity(
+                    path="entities/questions/bad.md",
+                    kind="question",
+                    reason="core_schema_validation_failed",
+                    details="missing required field 'title'",
+                )
+            ],
+            arbitration_errors=[],
+        ),
     )
-    assert calls == 1
+
+    assert (
+        enforce_project_source_strictness(
+            sources,
+            strict_core_schema=False,
+            strict_identity=False,
+        )
+        is sources
+    )
+    with pytest.raises(
+        ValueError,
+        match=(
+            "schema validation failed for registered entity kind 'question' "
+            "at entities/questions/bad.md: missing required field 'title'"
+        ),
+    ):
+        enforce_project_source_strictness(
+            sources,
+            strict_core_schema=True,
+            strict_identity=False,
+        )
 
 
 def test_graph_dataset_reuses_parsed_trig_for_same_path_and_mtime(

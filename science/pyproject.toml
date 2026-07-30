@@ -37,6 +37,11 @@ markers = [
   "git_source: exercises local Git dependencies and nested worktrees; slow, run explicitly with -m git_source",
   "packaging: builds and installs the wheel to verify packaged resources; slow, run explicitly with -m packaging",
 ]
+filterwarnings = [
+  'ignore:^Dataset\.default_context is deprecated, use Dataset\.default_graph instead\.$:DeprecationWarning',
+  'ignore:^Dataset\.contexts is deprecated, use Dataset\.graphs instead\.$:DeprecationWarning',
+  'ignore:^ConjunctiveGraph is deprecated, use Dataset instead\.$:DeprecationWarning',
+]
 
 [tool.ruff]
 line-length = 120

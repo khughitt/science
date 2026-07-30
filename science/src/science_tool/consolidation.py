@@ -152,7 +152,11 @@ class SupersessionInputs:
     audit: RelationAudit
 
 
-def load_supersession_inputs(project_root: Path) -> SupersessionInputs:
+def load_supersession_inputs(
+    project_root: Path,
+    *,
+    sources: ProjectSources | None = None,
+) -> SupersessionInputs:
     """Load the entries, the resolver, and the relation audit — from ONE `load_project_sources` pass.
 
     One pass because the resolver and the audit have to agree: an edge admitted against one snapshot
@@ -161,7 +165,8 @@ def load_supersession_inputs(project_root: Path) -> SupersessionInputs:
     from science_tool.graph.sources import load_project_sources
 
     entries = iter_entity_frontmatter(project_root)
-    sources = load_project_sources(project_root)
+    if sources is None:
+        sources = load_project_sources(project_root)
     return SupersessionInputs(
         entries=tuple(entries),
         resolution=_id_resolution(project_root, entries, sources),

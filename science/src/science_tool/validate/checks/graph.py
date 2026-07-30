@@ -216,7 +216,10 @@ def check_graph(ctx: ValidateContext) -> Iterator[CheckObservation]:
     peer_issues = validate_peers(ctx.project_root)
     yield from _peer_results(ctx, peer_issues)
 
-    audit_verdict = materialization_audit(ctx.project_root)
+    audit_verdict = materialization_audit(
+        ctx.project_root,
+        sources=ctx.project_sources(strict_identity=False),
+    )
     if audit_verdict.status == "unwired":
         yield _result(
             Severity.ERROR,

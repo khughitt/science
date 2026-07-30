@@ -38,6 +38,8 @@ from science_tool.validate.runtime import (
 )
 
 if TYPE_CHECKING:
+    from science_tool.graph.sources import ProjectSources
+
     HookName = Literal["pre_validation", "extra_checks", "post_validation"]
     ValidationProfile = Literal["full", "commit"]
 else:
@@ -114,6 +116,7 @@ def run(
     profile: ValidationProfile = "full",
     enable_python_sidecar: bool = True,
     include_all_checks: bool = False,
+    project_sources: ProjectSources | None = None,
 ) -> RunResult:
     checks = _checks_for_profile(profile)
     skipped_checks = _skipped_checks_for_profile(profile)
@@ -122,6 +125,7 @@ def run(
         strict=strict,
         verbose=verbose,
         include_all_checks=include_all_checks,
+        project_sources=project_sources,
     )
     registry = _validation_registry(ctx.project_root)
     producer_results: dict[str, FindingProducerResult] = {}

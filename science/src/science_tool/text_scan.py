@@ -1,10 +1,9 @@
 # science/src/science_tool/text_scan.py
 """Which files a corpus-wide text scan may decode.
 
-`entities._iter_reference_scan_files` returns EVERY file under the project root
-(rglob("*"), filtered only by directory name). That is correct for its caller,
-which greps for terms, but a rewriter that decodes each hit as UTF-8 will raise
-on the first PNG. This module is the surface a rewriter is allowed to touch.
+Entity removal scans every regular project file. A rewriter that decodes each
+hit as UTF-8 would raise on the first PNG, so this module narrows that shared
+project walk to text-like files.
 
 Three independent guards, because none is sufficient alone:
 
@@ -27,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from science_tool.entities import _REFERENCE_SCAN_SKIP_DIRS
+from science_tool.project_walk import iter_project_files
 
 # Prose and data: eligible for automatic rewriting.
 _PROSE_SUFFIXES: frozenset[str] = frozenset(
@@ -83,15 +82,8 @@ def iter_scannable_files(
     excluded = {p.resolve() for p in exclude}
     excluded.add((project_root / DEFAULT_GRAPH_PATH).resolve())
     files: list[Path] = []
-    for path in project_root.rglob("*"):
-        if not path.is_file():
-            continue
+    for path in iter_project_files(project_root, suffixes=TEXT_SUFFIXES):
         if path.resolve() in excluded:
-            continue
-        rel_parts = path.relative_to(project_root).parts
-        if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in rel_parts):
-            continue
-        if path.suffix.lower() not in TEXT_SUFFIXES:
             continue
         if path.stat().st_size > MAX_SCANNABLE_BYTES:
             continue

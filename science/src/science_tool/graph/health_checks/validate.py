@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from science_model.audit import ProducerMetrics
 
@@ -12,6 +13,9 @@ from science_tool.graph.health_checks.base import HealthCheck, HealthContext
 from science_tool.instruments import InstrumentResult
 from science_tool.validate.checks.prose_lints import NumericVerificationMetrics
 from science_tool.validate.runner import RunResult
+
+if TYPE_CHECKING:
+    from science_tool.graph.sources import ProjectSources
 
 
 PRODUCER = FindingProducer(
@@ -29,7 +33,11 @@ class ValidationHealthRun:
     producer_result: FindingProducerResult
 
 
-def execute_validation(project_root: Path) -> ValidationHealthRun:
+def execute_validation(
+    project_root: Path,
+    *,
+    project_sources: ProjectSources | None = None,
+) -> ValidationHealthRun:
     from science_tool.validate import runner as validate_runner
 
     run_result = validate_runner.run(
@@ -37,6 +45,7 @@ def execute_validation(project_root: Path) -> ValidationHealthRun:
         strict=False,
         verbose=False,
         enable_python_sidecar=False,
+        project_sources=project_sources,
     )
     unwired_producers = tuple(
         sorted(
@@ -64,7 +73,10 @@ def execute_validation(project_root: Path) -> ValidationHealthRun:
 
 
 def run_check(context: HealthContext) -> FindingProducerResult:
-    return execute_validation(context.project_root).producer_result
+    return execute_validation(
+        context.project_root,
+        project_sources=context.sources,
+    ).producer_result
 
 
 CHECK = HealthCheck(
