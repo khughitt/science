@@ -418,7 +418,6 @@ def _repo(tmp_path: Path) -> Path:
 
 
 UTF8_LOCALE = "en_US.UTF-8"
-FRENCH_LOCALE = "fr_FR.UTF-8"
 GREP_ARGV = ("grep", "-n", "-e", "[[:alpha:]]alpha", "HEAD")
 
 
@@ -463,20 +462,28 @@ def test_grep_output_does_not_depend_on_the_parent_locale(tmp_path: Path, monkey
 
 def test_a_missing_path_is_reported_in_a_pinned_locale(tmp_path: Path, monkeypatch):
     """The defined-miss classifier reads git's stderr. Localized text would not match,
-    and an ordinary absent path would halt the run instead of answering."""
+    and an ordinary absent path would halt the run instead of answering.
+
+    `fr_FR.UTF-8` is not what selects git's French catalogue -- `LANGUAGE` is, and it
+    works over any installed UTF-8 locale. `fr_FR.UTF-8` itself is not installed on every
+    machine that has git's French `.mo` file, so pinning the test to that locale name
+    would make the negative control skip even where the hazard is real. Using `LANGUAGE=fr`
+    over the UTF-8 locale this suite already depends on (`en_US.UTF-8`) reaches the same
+    catalogue without a second locale-generation dependency.
+    """
     root = _repo(tmp_path)
     missing = ("show", "HEAD:no-such-file.txt")
     english = _bare_git(root, {"LC_ALL": "C", "LANGUAGE": ""}, *missing).stderr
     translated = _bare_git(
-        root, {"LC_ALL": FRENCH_LOCALE, "LANGUAGE": "fr"}, *missing
+        root, {"LC_ALL": UTF8_LOCALE, "LANGUAGE": "fr"}, *missing
     ).stderr
     if english == translated:
         pytest.skip(
-            f"{FRENCH_LOCALE} message catalogues are unavailable here, so git's diagnostics "
-            "do not translate and the guard would pass vacuously"
+            "git's French message catalogue is unavailable here, so git's diagnostics do "
+            "not translate and the guard would pass vacuously"
         )
 
-    monkeypatch.setenv("LC_ALL", FRENCH_LOCALE)
+    monkeypatch.setenv("LC_ALL", UTF8_LOCALE)
     monkeypatch.setenv("LANGUAGE", "fr")
     completed = run_git(root, *missing)
 
@@ -498,9 +505,10 @@ Expected: both tests either FAIL or SKIP — never pass.
   implemented yet, so a green assertion means it is asserting something other than what it
   claims. Investigate before proceeding.
 
-If both tests skip, the locale work cannot be verified on this machine. Install the locale
-data (`locale-gen en_US.UTF-8 fr_FR.UTF-8`, or the distribution's equivalent) rather than
-implementing blind — a pin nobody has watched fail is a pin nobody has tested.
+If both tests skip, the locale work cannot be verified on this machine. Install the UTF-8
+locale (`locale-gen en_US.UTF-8`, or the distribution's equivalent) and git's translated
+message catalogues rather than implementing blind — a pin nobody has watched fail is a pin
+nobody has tested.
 
 - [ ] **Step 3: Pin the child environment**
 
@@ -878,6 +886,15 @@ def test_a_hostile_handle_is_refused_before_any_join(tmp_path, monkeypatch, host
         "2026-07-30-Lens-a3f1",    # agent is not a kebab-case slug
         "2026-07-30-lens_x-a3f1",  # underscore is not in the agent alphabet
         "2026-07-30--a3f1",        # empty agent
+        # The date field. `date.fromisoformat` accepts all three of these on Python 3.11+,
+        # so a check that calls it directly on `slug[:10]` passes them through; the last is
+        # the reason `_DATE_SHAPE_RE` exists, because `run_dir` would join it into TWO path
+        # components. `generate_run_id` emits strict `YYYY-MM-DD` and nothing else.
+        "2026-W31-4-lens-a3f1",    # ISO week notation, also exactly 10 characters
+        "20260730XY-lens-a3f1",    # basic format; characters 8-9 are discarded unread
+        "20260730/x-lens-a3f1",    # ...including when character 8 is a path separator
+        "2026-02-30-lens-a3f1",    # well-shaped but not a real date: the calendar check
+                                   # must survive the addition of the shape check
     ],
 )
 def test_a_handle_no_generate_run_id_call_could_produce_is_refused(
@@ -991,6 +1008,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import date
 from pathlib import Path
 
@@ -1007,6 +1025,14 @@ from science_tool.autonomy.baseline import reject_baseline_inside_project
 CONTROL_PLANE_ENV = "SCIENCE_CONTROL_PLANE"
 
 _DATE_LENGTH = len("YYYY-MM-DD")
+#: `date.fromisoformat` accepts far more than `YYYY-MM-DD` on Python 3.11+ -- ISO week
+#: notation (`2026-W31-4`), basic format with trailing characters ignored (`20260730XY`),
+#: even a path separator hiding past the digits it actually reads (`20260730/x`). None of
+#: those can come from `generate_run_id`, which builds the date via `date.isoformat()` --
+#: strict `YYYY-MM-DD`, always. The shape is checked here, BEFORE `fromisoformat` is asked
+#: whether the date is real, so `fromisoformat`'s leniency never gets a substring it wasn't
+#: shape-verified first.
+_DATE_SHAPE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ControlPlaneError(ValueError):
@@ -1041,9 +1067,20 @@ def control_plane_root(project_root: Path) -> Path:
     same function, and one failure should not have two names.
     """
     configured = os.environ.get(CONTROL_PLANE_ENV)
-    if configured:
+    if configured is not None and configured != "":
         root = _absolute_or_refuse(configured, CONTROL_PLANE_ENV)
+    elif configured == "":
+        # Unlike `XDG_STATE_HOME` below, this variable has no external spec granting an
+        # empty value the meaning "unset". `export SCIENCE_CONTROL_PLANE=` is a config
+        # error, not an absent one, and falling back silently would hide it.
+        raise ControlPlaneError(
+            f"{CONTROL_PLANE_ENV} is set but empty; unset it entirely to use the XDG "
+            "default, or set it to an absolute path"
+        )
     else:
+        # XDG_STATE_HOME: the XDG Base Directory spec requires an empty value here to be
+        # treated the same as unset, so `xdg_state_home` (falsy on "") intentionally falls
+        # through to the default below. Do not "fix" this to match the branch above.
         xdg_state_home = os.environ.get("XDG_STATE_HOME")
         base = (
             _absolute_or_refuse(xdg_state_home, "XDG_STATE_HOME")
@@ -1081,7 +1118,11 @@ def run_slug(handle: str) -> str:
     rather than by a looser shape test that would admit `2026-07-30-a`.
     """
     slug = handle.removeprefix(RUN_ID_PREFIX)
-    if len(slug) <= _DATE_LENGTH or slug[_DATE_LENGTH] != "-":
+    if (
+        len(slug) <= _DATE_LENGTH
+        or slug[_DATE_LENGTH] != "-"
+        or not _DATE_SHAPE_RE.match(slug[:_DATE_LENGTH])
+    ):
         raise ControlPlaneError(f"run handle must begin with a YYYY-MM-DD date, got {handle!r}")
     try:
         date.fromisoformat(slug[:_DATE_LENGTH])
