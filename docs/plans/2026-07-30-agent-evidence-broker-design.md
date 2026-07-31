@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 17)
+**Status:** partially implemented (revision 18)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,8 +13,8 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | the checker — §3.1's NFD close, the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 17, not implemented |
-| Plan 4b | the boundary — §4.2's invariants on the stored `Review`, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 17, not implemented |
+| Plan 4a | the checker — §3.1's NFD close, §3.2's shallow rule and payload bound, the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 18, not implemented |
+| Plan 4b | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 18, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -51,6 +51,36 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 18 comes from review of revision 17 and closes five defects, three of which would have
+voided plan 4 outright. They are worth reading as a set, because four of the five are one shape: **a
+claim about determinism or trust that held for the case the author had in mind and for no other.**
+
+1. **Identity was asserted by the reviewer** (§4.2, §5.4). `reviewer_kind` sat on `ReviewSubmission`
+   while §5.4 branched on it, so an agent could label itself `human` and skip §5 entirely — the whole
+   spec bypassed by one string — and could vary `reviewer_ref` or `lens` to mint several `review_id`s
+   from one run. §0's boundary 2 had already stated the rule ("recompute actor-supplied provenance at
+   the boundary rather than accepting it"); §5.4 had simply never applied it to the field that
+   decides whether the rest of the design runs. Identity moves to a `ReviewAttestation` and, for
+   agents, is cross-checked against the run record and the sealed instrument.
+2. **A pinned commit does not make `history` deterministic** (§3.2). It fixes ancestry only if the
+   repository *has* the ancestry. Reproduced here: identical commit, identical canonical argv, two
+   commits from a full clone and one from a `--depth 1` clone, both at exit 0. Replay in a different
+   clone would have called honest evidence `EXPOSURE_UNREPRODUCIBLE` and refused the review.
+3. **Served payloads were unbounded** (§3.2). Plan 3 derived a bound for the journal and left the
+   payload — the far larger quantity, held in memory by `run_git`, written to `served/`, and read
+   again at replay — with none at all.
+4. **Replay memoisation keyed on `(commit, op, target, pathspec)`** (§5.2), omitting the sealed
+   surface policy that changes both authorization and the exclusion pathspecs. Removed rather than
+   re-keyed: nothing here has been measured.
+5. **§5.2 and §5.4 contradicted each other about the baseline** (§5.2, §7), and §7's test list
+   encoded the wrong one. §5.4 governs.
+
+The fourth pattern below — a named component guaranteeing the opposite of what was wanted — has a
+sibling here worth naming on its own: **a guarantee inherited from the wrong axis.** The commit pin
+was treated as making every operation reproducible, when it fixes *content* and says nothing about
+*repository completeness*; and the journal's bound was treated as bounding the record, when it bounds
+one of the two files a run writes.
 
 Revision 17 designs the correspondence slice and, in doing so, closes the NFD residual §3.1 parked
 for plan 3 and plan 3 did not take. It is the first revision where a *parked* residual, rather than a
@@ -451,6 +481,56 @@ only once the revision is known good.
 not in '<commit>'` when it is present there. Both mean the same thing about the pinned tree, both exit
 128, and a classifier that recognises only one turns an ordinary absent path into a halted run for
 exactly the paths the actor happens to have created.
+
+**A pinned commit makes `read` and `search` deterministic; it does NOT make `history`
+deterministic** (revision 18). `git log` walks ancestry, and ancestry depends on what the repository
+*has*, not only on the commit named. Measured on this checkout: one repository, two commits touching
+a file; against the identical canonical argv and the identical commit, the full repository returned
+**two** commits and a `--depth 1` clone returned **one** — *both at exit 0*. Nothing in the output
+says which happened. An exposure sealed against a full clone and replayed in a shallow one would
+therefore reproduce different bytes and be classified `EXPOSURE_UNREPRODUCIBLE`, which §5.3
+**refuses** — the checker rejecting honest work, the exact failure mode §5.2 invokes to explain why
+replay is bound to a protocol version at all.
+
+`--no-replace-objects` is already pinned in `_HARDENING`, so grafts and replace refs are closed;
+completeness is what remains. The rule:
+
+- **`history` is refused in a shallow repository, at serving and at replay**, decided by
+  `git rev-parse --is-shallow-repository`. At serving this is an ordinary refusal — the requester is
+  told the operation is unavailable, spends its round, and the run continues on `read` and `search`.
+- **At replay, a shallow repository is `unwired` / `EXPOSURE_UNREACHABLE`, never `violated`.** The
+  environment could not answer the question; it did not answer it wrongly. Reaching for `violated`
+  here would be the could-not-check / checked-and-found-false confusion §5.3 exists to prevent, and
+  it would refuse reviews for the property of the machine replaying them.
+
+The same reasoning covers a git version or runtime whose `log` output differs: unreproducible for
+environmental reasons is `unwired`. `violated` is reserved for a record that disagrees with a
+repository that *could* answer.
+
+**Served payloads are bounded, and the bound is enforced before the bytes are held** (revision 18).
+`run_git` captures a child's entire stdout in memory and the session then writes it to `served/`,
+where replay reads it again — so a single large blob or a broad pattern is an unbounded allocation
+repeated at least twice, and `MAX_BUDGET` requests amplify it. Plan 3 bounded the *journal* and left
+the *payload* unbounded, which is the same omission in a different quantity.
+
+- `MAX_SERVED_BYTES` is per request, and is derived from what a reviewer could actually have
+  consumed rather than chosen for roundness: a payload no agent can read is not evidence of exposure,
+  and at roughly four bytes per token a mebibyte already exceeds the context of the reviewers this
+  program contemplates. `MAX_RUN_SERVED_BYTES = MAX_BUDGET * MAX_SERVED_BYTES` follows, and is the
+  disk a single run can occupy.
+- **`read` is pre-checked, not truncated:** `cat-file -s <commit>:<path>` yields the blob size before
+  any content is read, so an oversized read never allocates.
+- **`search` and `history` must be bounded during capture**, since their output size is unknown in
+  advance. `run_git` gains an explicit output ceiling; exceeding it terminates the child and refuses.
+  A cap that only checks after `communicate()` returns has already spent the memory it exists to
+  protect.
+- The refusal is a `Denial` with its own reason, distinct from a policy denial, and it is
+  **deterministic given the commit** — the same request refuses identically at replay, which is what
+  keeps §5.2 sound. Under §5.1 it contributes no coverage, like every other refusal.
+
+This is a change to what serving *does*, which is what §5.2's rule bumps `REPLAY_PROTOCOL_VERSION`
+for; revision 17 bumped it on a weaker argument about guarantees, and revision 18 makes the bump
+squarely the rule as written.
 
 **Defined misses are answers.** An absent path, a pattern with no matches, and a path with no commits
 are each served with an explicit marker, and each is distinguishable from its degenerate neighbour:
@@ -1076,14 +1156,19 @@ class Correspondence(_Base):
     code: str | None = None      # required when unwired
     reason: str | None = None
 
-class ReviewSubmission(_Base):
-    """What a producer offers. Carries NO correspondence field — not a field a
-    producer may leave blank, a field it cannot express."""
+class ReviewAttestation(_Base):
+    """Who is reviewing, asserted by the caller that KNOWS — never by the reviewer.
+    The exact counterpart of `IngestionProvenance` at `ingest_report`."""
     reviewer_kind: ReviewerKind
     reviewer_ref: ...
     lens: ...
     model: ...
     run_ref: ...
+
+class ReviewSubmission(_Base):
+    """What a producer offers: its FINDINGS, and nothing about its own identity.
+    Carries no correspondence field and no identity field — not fields a producer
+    may leave blank, fields it cannot express."""
     outcome: ...
     note: ...
     evidence: tuple[Evidence, ...] = ()
@@ -1100,6 +1185,32 @@ class ReviewSubmission(_Base):
 constrain a value's shape but can never establish its provenance. Making the submitted type structurally
 incapable of carrying a correspondence is stronger than checking that it did not: there is no check to
 forget. `AuditReport` versus `AuditFindingRecord` is the same split, for the same reason.
+
+**Revision 18 applies that same argument to identity, which revisions 1–17 left the producer to
+assert.** `reviewer_kind` sat on `ReviewSubmission` while §5.4 branched on it, so an agent could
+label itself `human` or `deterministic`, skip correspondence entirely, and count as full support —
+the whole of §5 bypassed by one string. The submission could also vary `reviewer_ref` or `lens` to
+mint several distinct `review_id`s from a single run, turning one reviewer into a quorum, because
+`review_id` hashes exactly those fields.
+
+The fix is not to validate the claim but to remove the producer's ability to make it. Identity moves
+to `ReviewAttestation`, supplied by the caller that actually knows — the same trust boundary
+`IngestionProvenance` already establishes for `ingest_report`, and the thing the previously
+unexplained `actor` parameter was gesturing at. §0's boundary 2 already required this of both
+writers: "both recompute actor-supplied provenance at the boundary rather than accepting it." §5.4
+simply had not applied its own rule to the field that selects whether §5 runs at all.
+
+**And for an agent, the attestation is itself cross-checked against sealed state**, because a
+trusted caller can still be wrong:
+
+- `reviewer_ref` must equal the run record's `agent`, and `model` its `model`. Both are sealed
+  fields on `AutonomousRunRecord` and neither is derivable from the submission.
+- `lens` must equal `exposure.instrument.ref`. The instrument is what defined the judgement
+  procedure and is sealed at §4.1; a review claiming a lens the run was not opened under is
+  describing a different run.
+
+Mismatch is an `IngestError`, not a weaker correspondence: this is not "could not check", it is a
+record disagreeing with the run it names.
 
 `Correspondence` mirrors `InstrumentResult`'s invariant — `unwired` requires a machine-readable code
 — so both ways this toolkit says "could not run" have one shape.
@@ -1419,8 +1530,18 @@ Inline entries are not in the tree and cannot be re-served; they are checked aga
 manifest is *declared* (§4.3) and the exposure is where it is *sealed* (§4.1); replay reads the sealed
 copy, and reaches for no control-plane file at all.
 
-Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
-read many of the same files.
+**No cross-exposure memoisation.** Revisions 1–17 memoised on `(commit, op, target, pathspec)` within
+an ingestion run, on the reasoning that reviews of sibling documents read many of the same files. That
+key is unsound: the surface policy is sealed per exposure (§4.1) and it changes both authorization and
+the exclusion pathspecs handed to `grep` and `log`, so one ingestion run spanning two runs with
+different deny policies would serve a cached payload from the wrong policy and classify an honest
+exposure as `EXPOSURE_UNREPRODUCIBLE`.
+
+Adding the policy to the key would be sound, but nothing here has been measured — replay is bounded by
+`MAX_BUDGET` requests per exposure, and a cache introduced ahead of a measurement is a correctness
+risk bought with a guess. Memoisation is therefore **within a single exposure only**, where the sealed
+policy is by construction one value. If cross-exposure replay is ever shown to be the bottleneck, the
+key includes the policy identity, and that is a change made against a number.
 
 **Replay performs no NFC check of its own.** §3.1's rule is enforced at session open against the
 pinned commit, and a commit's tree is immutable, so an exposure that exists at all was sealed against
@@ -1444,9 +1565,15 @@ checked-and-found-false, consistent with every other row of §5.3. Ordinary rele
 a real change to what serving means invalidates exactly the runs it should, loudly, with a code that
 says why.
 
-The exposure checked is the one belonging to `review.run_ref`, resolved by `append_review` from that
-run's record and baseline. A review checked against some other run's exposure is checked against
-nothing.
+The exposure checked is the one belonging to the attested `run_ref`, resolved by `append_review` from
+that **run's record — and from nothing else**. A review checked against some other run's exposure is
+checked against nothing.
+
+Revisions 5–17 said "that run's record and baseline" here while §5.4 said "the run record and nothing
+else. No baseline, no control-plane lookup, no session." Both could not be true, and the baseline
+spelling is the wrong one: §4.1 seals every replay input into the exposure precisely so this boundary
+needs no control-plane file, and re-admitting one would reintroduce the project-rename failure §4.1
+exists to close. §5.4 governs.
 
 ### 5.3 Outcomes
 
@@ -1481,10 +1608,17 @@ two would be the empty/unwired confusion one level up.
 ### 5.4 The append boundary
 
 ```python
-def append_review(project_root, finding_id, submission: ReviewSubmission, *, actor) -> Review
+def append_review(
+    project_root, finding_id, submission: ReviewSubmission,
+    *, attestation: ReviewAttestation, actor: str,
+) -> Review
 ```
 
-- **Branches on `reviewer_kind`.** Only an agent submission resolves a run record and runs
+`actor` is the writer of the record — the same nonblank, NUL-free string `ingest_report` demands —
+and is not a reviewer identity. `attestation` is the reviewer identity, and is the *only* source of
+one: revisions 1–17 conflated the two into a single unexplained parameter.
+
+- **Branches on the ATTESTED `reviewer_kind`, never a submitted one.** Only an agent review resolves a run record and runs
   `check_correspondence`. Human and deterministic submissions get `correspondence=None` and are stored.
   Revision 3 resolved a baseline for every submission, which would have made the boundary unusable for
   the two reviewer kinds §4.2.1 says are unaffected: a human review's `run_ref` need not name an
@@ -1644,8 +1778,13 @@ downgrade is a lie about what was checked.
   and refuses a lined one; **a search miss and an empty history contribute no coverage at all**; an
   inline target absent from the baseline manifest does not correspond; a policy narrowed between
   serving and replay does not silently re-serve denied hits; the vacuous `verified`.
-- **`append_review`** — a human submission is stored without a baseline existing at all; the same for
-  `deterministic`; an agent submission whose run has no baseline yields `unwired`, not a crash.
+- **`append_review`** — a human review is stored with no control-plane directory existing at all; the
+  same for `deterministic`; an agent review whose run record carries **no exposure** yields
+  `unwired`, not a crash. Plus attestation (revision 18): a submission cannot express a
+  `reviewer_kind` at all, so the `human`-labelled-agent bypass is unconstructible; an attested agent
+  whose `reviewer_ref` or `model` disagrees with the run record is an `IngestError`; the same for a
+  `lens` that is not `exposure.instrument.ref`; and two submissions under one run cannot mint two
+  `review_id`s, because every field the id hashes is attested rather than supplied.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
@@ -1672,6 +1811,11 @@ certified nothing.**
 | Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
 | Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
 | Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
+| Drop the shallow check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
+| Drop the shallow check at serving | `history` is refused in a shallow repository |
+| Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
+| Remove the `read` size pre-check | an oversized blob refuses without being read |
+| Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
 
 **The `Full`-supersedes-`Lines` row is the one to distrust**, and its fixture is specified here rather
 than left to an implementer: it needs a single exposure in which one path is **both read and
