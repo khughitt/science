@@ -332,5 +332,5 @@ def test_synthesize_refuses_pre_containment_record(tmp_path: Path) -> None:
               "reasoning_source": "llm-synth:m:proposition-synthesize-v1"}
 
     with pytest.raises(PersistedShapeError, match="legacy"):
-        _write_proposition("proposition:legacy", merged, root, date(2026, 7, 31))
+        _write_proposition(merged, root, date(2026, 7, 31))
     assert "title: ''" in dest.read_text(encoding="utf-8")   # untouched

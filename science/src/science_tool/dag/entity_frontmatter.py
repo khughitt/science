@@ -1,4 +1,4 @@
-"""Which frontmatter keys the workbench writers own, and how they render them.
+"""Which frontmatter keys each proposition / evidence-line writer owns, and how they render them.
 
 Governs every writer of `proposition` / `evidence-line`: the workbench (create + update via
 `workbench.compile_workbench` and `workbench_apply._entity_edit`) and the two annotation

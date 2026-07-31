@@ -407,7 +407,7 @@ def apply_synthesis(
         fm = dict(current[cand.proposition])
         fm.update(plan.writes)
         fm["reasoning_source"] = source            # a synthesis-owned write (stamped on real change)
-        _write_proposition(cand.proposition, fm, project_root, as_of)
+        _write_proposition(fm, project_root, as_of)
         report.updated += 1
         report.written_paths.append(str(entity_dest(cand.proposition, project_root)))
 
@@ -419,13 +419,17 @@ def apply_synthesis(
 
 
 def _write_proposition(
-    prop_ref: str, merged_fm: dict[str, Any], project_root: Path, as_of: date | None
+    merged_fm: dict[str, Any], project_root: Path, as_of: date | None
 ) -> None:
     """Contained frontmatter update: only synthesis-owned keys are overwritten.
 
     The typed reconstruction stays -- `render_update` renders owned keys from an entity. The
     body and the identity check now come from `read_existing_target` inside
-    `update_entity_file`, so there is exactly one reader of this file's frontmatter.
+    `update_entity_file`, which is the only writer-side reader of the destination. The planning
+    path in `cli.py` (`plan_writes`) still reads the same file separately, via
+    `entities._parse_markdown_file`, which parses frontmatter differently -- it splits on
+    `---\n` as a substring anywhere, where `split_frontmatter` requires the closing fence to
+    own its own line.
     """
     prop = PropositionEntity(**merged_fm)          # re-runs interlock validator
     update_entity_file(

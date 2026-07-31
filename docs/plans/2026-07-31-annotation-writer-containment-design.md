@@ -469,3 +469,13 @@ any failure at the merge-base before attributing it to this branch.
   307 must be resolved rather than deleted out from under the check.
 - **`compile_workbench`'s docstring** still says entities are "(re)written via the canonical
   entity-layer writer", which stopped being true when piece 1 landed. One-line fix.
+- **The workbench can silently invalidate synthesize's stamp.** `WORKBENCH_PROPOSITION` owns all
+  five `SYNTH_FIELDS`; `SYNTHESIZE_PROPOSITION` owns those five plus `reasoning_source`. Because
+  `_proposition_for_row` (`dag/workbench.py:285`) honours an authored `row.id`, a workbench row
+  can legitimately target a proposition that promote minted and synthesize later refined. A
+  recompile then overwrites `subject`/`object`/`predicate`/`polarity`/`claim_layer` with the
+  row's authored values while leaving `reasoning_source` stamped -- so the stamp attests to
+  values synthesize did not produce. This is pre-existing behaviour (the workbench ownership
+  sets were carried over verbatim by §4.1), but the per-writer ownership model is what makes it
+  legible. It needs a verdict: either the workbench should clear `reasoning_source` when it
+  overwrites a reasoning field, or the stamp's meaning needs narrowing.
