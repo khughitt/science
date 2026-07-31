@@ -20,7 +20,7 @@ output at `finish`; `evidence/cli.py` gives the actor exactly one command.
 
 Implements Spec 2a of the autonomous-audit program:
 [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-**revision 14** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
+**revision 15** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
 `served/`), §4.1 (run record), §4.3 (baseline), §6 (seal failure), and the §7 bullets named below.
 
 Plan 1 (`57b09bf0`) and plan 2 (`dab47dc3`) are merged. This is plan 3 of four.
@@ -133,8 +133,9 @@ by a component-by-component `O_NOFOLLOW` walk, and a `JournalHandle` carries tha
 journal's leaf name together through the lock, the count, the `served/` write and the append. No
 function in `journal.py` takes a path any more, which is what makes "nothing re-resolves a pathname"
 a property of the signatures instead of a rule to remember. Two new primitives —
-`open_dir_anchored` and `open_append_at` — go into `findings/paths.py`, where the walk already
-existed privately, rather than being copied into a second module.
+`open_dir_anchored`, `open_record_at`, `read_regular_fd` and `write_all` — go into
+`findings/paths.py`, where the walk already existed privately, rather than being copied into a
+second module.
 
 The round's three P2s are all bookkeeping the earlier rounds got wrong: Task 3's mutation list named
 one mutation that cannot compile (`append_request` moved above the point where its arguments exist)
@@ -144,11 +145,41 @@ added as a Global Constraint but applied to only one of six tasks, and its real 
 step's `git add science/src/...` resolving under `science/science/`; and Task 4 named a mutation whose
 casualty is the opposite test from the one stated.
 
+**A fifth round found seven, and the two P1s were — again — the same rule one step short.** Round
+four anchored the *directory* and kept reopening the journal by name inside it. That passes every
+check on both opens, because not-a-symlink, is-a-regular-file and one-link are claims about a
+name's current occupant and **none of them is a claim about identity**: `unlink` plus an ordinary
+new file defeats all three at once. The count would be taken from one inode and the append made to
+another, so the round already spent disappears from the record and the budget the count enforces
+stops being enforced. `JournalHandle` now carries the journal's own `O_RDWR | O_APPEND` descriptor,
+opened once. The second P1 is smaller and older: both `os.write` calls discarded the returned byte
+count, and a short write is legal and silent — a truncated line makes the whole journal unparseable,
+which is `UNWIRED`.
+
+Three of the five P2s are the same failure of self-checking in different clothes. Task 3's fixture
+omitted a required model field, so the suite would have died in setup. Three mutation instructions
+were *green against the defects they claimed to certify* — an unconditional `write_bytes` overwrites
+the truncated file, an `O_NOFOLLOW` reopen still refuses a final-component symlink, and a FIFO opened
+for writing with no reader fails `ENXIO` before `S_ISREG` is ever consulted, so that parametrization
+was measuring the kernel. And round four's own `-am` → `-m` change turned "stages things you did not
+name" into "drops things you forgot to name": two commit steps then omitted the modified
+implementation files entirely. **A fix that trades one failure mode for its mirror image is not
+finished until both directions are stated.**
+
+The remaining two are claims that outran their mechanism. `MAX_JOURNAL_BYTES` was a chosen megabyte
+with no relationship to what the model admits, so one long target produced a journal that could be
+written and never read — the fail-open arriving through arithmetic instead of a syscall; the bound is
+now derived from model-declared limits and the write side refuses first. And `create_journal` called
+`Path.mkdir(parents=True)` *before* the anchored walk, which is hazard 3 in `findings/paths.py`'s own
+header — mutating before validating — so a planted ancestor got directories created in its target
+before the refusal.
+
 **The compounding lesson: a fix is a new claim, and inherits none of the certification of what it
-replaced.** Four rounds, and each round's *fixes* were where the next round's findings landed. Its
-sharpest form is the descriptor rule, which has now been applied three times and been short by one
-component twice: it is not "protect the file", nor "protect the file's directory", but *hold a
-descriptor and never name a path again*.
+replaced.** Five rounds, and each round's *fixes* were where the next round's findings landed. Its
+sharpest form is the descriptor rule, which has now been applied four times and been one step short
+three times — the file's directory, then the directory's ancestors, then the file's *identity*. The
+rule is not "protect the file", nor "protect the file's directory": it is *hold a descriptor and
+never name the thing again*.
 
 ## Global Constraints
 
@@ -183,7 +214,12 @@ Every task's requirements implicitly include this section.
    them explicitly before committing, and check `git status --porcelain` is clean afterwards. A
    task that "committed" while leaving its module untracked passes its own tests and fails the
    next task's import. Where a step already runs an explicit `git add`, commit with `-m`, not
-   `-am`: the `-a` would also sweep in unrelated tracked edits the step never named.
+   `-am`: the `-a` would also sweep in unrelated tracked edits the step never named. **The two
+   halves of that rule cut opposite ways** — `-am` stages things you did not name, `-m` drops
+   things you forgot to name — so every `git add` must list *every* file the task touched,
+   created and modified alike, and every commit step ends with `git status --porcelain` returning
+   empty. A task whose implementation file is left unstaged passes its own tests from the working
+   tree and fails the next task's.
 
 ---
 
@@ -307,6 +343,19 @@ Append to `science/model/src/science_model/evidence_broker.py`:
 #: release is a signal people learn to ignore, and a mismatch REFUSES honest historical work.
 REPLAY_PROTOCOL_VERSION = 1
 
+#: THE THREE BOUNDS THAT MAKE THE JOURNAL'S SIZE KNOWABLE IN ADVANCE, and the reason they live
+#: here rather than in `journal.py`: the journal's read bound is DERIVED from them
+#: (`MAX_JOURNAL_BYTES = (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES`). A read bound chosen
+#: independently of what the model admits is a run that can write a journal it cannot read back --
+#: and since an unreadable journal is design §6's `UNWIRED`, that is a supervisor-side failure
+#: produced by an input the model accepted. Bound the inputs, then compute the bound.
+#:
+#: `MAX_TARGET_BYTES` is `PATH_MAX` on Linux, which is the largest path git could return anyway;
+#: a longer `target` is a usage error, not a probe, so refusing it discloses nothing.
+MAX_TARGET_BYTES = 4096
+MAX_BUDGET = 100
+MAX_INLINE_INPUTS = 100
+
 
 class Outcome(StrEnum):
     """What one request produced. Lives here, not in `serve.py`, because `ExposureEntry` is
@@ -340,7 +389,7 @@ class InlineInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    target: str
+    target: str = Field(max_length=MAX_TARGET_BYTES)
     sha256: str
     lines: int = Field(ge=0)
 
@@ -362,8 +411,8 @@ class ExposureEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     op: Literal["read", "search", "history", "inline"]
-    target: str
-    pathspec: str | None = None
+    target: str = Field(max_length=MAX_TARGET_BYTES)
+    pathspec: str | None = Field(default=None, max_length=MAX_TARGET_BYTES)
     commit: str
     sha256: str
     outcome: Outcome
@@ -381,11 +430,11 @@ class EvidenceExposure(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     commit: str
-    budget: int = Field(ge=0)
+    budget: int = Field(ge=0, le=MAX_BUDGET)
     requests_used: int = Field(ge=0)
     instrument: InstrumentIdentity
     surface_policy: SurfacePolicy
-    inline: tuple[InlineInput, ...] = ()
+    inline: tuple[InlineInput, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)
     replay_protocol: int
     entries: tuple[ExposureEntry, ...] = ()
 
@@ -443,10 +492,10 @@ class EvidenceSession(BaseModel):
     session_id: str
     journal_path: Path
     commit: str
-    budget: int = Field(ge=0)
+    budget: int = Field(ge=0, le=MAX_BUDGET)
     surface_policy: SurfacePolicy
     instrument: InstrumentIdentity
-    inline: tuple[InlineInput, ...] = ()
+    inline: tuple[InlineInput, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)
 
 
 class EvidenceSessionSpec(BaseModel):
@@ -459,10 +508,10 @@ class EvidenceSessionSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    budget: int = Field(ge=0)
+    budget: int = Field(ge=0, le=MAX_BUDGET)
     surface_policy: SurfacePolicy
     instrument: InstrumentIdentity
-    inline_paths: tuple[Path, ...] = ()
+    inline_paths: tuple[Path, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)
 ```
 
 Add to the module's imports: `from enum import StrEnum`, `from pathlib import Path`,
@@ -619,7 +668,7 @@ git commit -m "feat(evidence-broker): seal the exposure vocabulary"
 **Interfaces:**
 - Consumes: `ExposureEntry`, `InlineInput`, `Outcome` (Task 1);
   `reject_baseline_inside_project` (`autonomy/baseline.py`); `open_dir_anchored`,
-  `open_lock_at`, `open_append_at`, `create_regular_file_at`, `read_regular_file_at`
+  `open_lock_at`, `open_record_at`, `create_regular_file_at`, `read_regular_fd`, `write_all`
   (`findings/paths.py`).
 - Produces:
 
@@ -628,9 +677,10 @@ class JournalError(RuntimeError): ...
 
 
 class JournalHandle(NamedTuple):
-    """The captured run directory, and the journal's leaf name inside it."""
+    """The captured run directory, the OPEN journal, and the journal's leaf name."""
 
     dir_fd: int
+    fd: int
     name: str
 
 
@@ -690,16 +740,20 @@ implies the other, so `open_journal` does both, in that order.
 
 - [ ] **Step 0: Add the two missing anchored primitives**
 
-`findings/paths.py` already has everything the journal needs except two things: a walk that captures
-an absolute directory **without** claiming it is inside a project, and an anchored append. Add both
+`findings/paths.py` already has most of what the journal needs. Four things are missing: a walk
+that captures an absolute directory **without** claiming it is inside a project (and can create it
+one component at a time), a descriptor held open for both reading and appending, a bounded read from
+an already-open descriptor, and a write that does not lose bytes to a short write. Add all four
 there rather than in `journal.py` — a second private copy of a component-by-component security walk
 is exactly the duplication this branch keeps finding defects in.
+
+Add `stat` to the test module's imports alongside `os`; `write_all`'s test needs `monkeypatch`.
 
 First, factor the existing walk. `_open_project_root` currently does two jobs: validate a project
 root lexically, then walk it. Split them, so the walk is reusable and there is still only one of it:
 
 ```python
-def open_dir_anchored(directory: Path) -> int:
+def open_dir_anchored(directory: Path, *, create: bool = False) -> int:
     """Open an absolute directory one component at a time, following no link.
 
     Makes NO claim about where the directory is -- that is the whole point, and why this is
@@ -708,6 +762,13 @@ def open_dir_anchored(directory: Path) -> int:
     pathname back to the kernel. Callers outside a project root -- the autonomy control plane's
     run directory -- need that guarantee without the containment one, and design §3.4.1's
     objection to this module is to the containment claim, not to the walk.
+
+    `create=True` makes each missing component ONE AT A TIME, inside the parent already captured,
+    and stops AT a link having created nothing beyond it. This is why the flag exists here rather
+    than the caller reaching for `Path.mkdir(parents=True)` first: `mkdir(parents=True)` follows
+    links and creates directories in the LINK'S TARGET before any check runs, which is hazard 3
+    in this module's header -- mutating before validating. A later refusal does not un-create
+    them.
     """
     if not directory.is_absolute():
         raise PathSafetyError(f"{directory} must be absolute to be anchored")
@@ -722,8 +783,16 @@ def open_dir_anchored(directory: Path) -> int:
     try:
         for segment in directory.parts[1:]:
             walked = walked / segment
+            name = _leaf_name(segment)
+            if create:
+                try:
+                    os.mkdir(name, mode=0o755, dir_fd=parent_fd)
+                except FileExistsError:
+                    pass  # may be a real directory -- the O_NOFOLLOW reopen below decides
+                except OSError as exc:
+                    raise PathSafetyError(f"could not create {walked}: {exc}") from exc
             try:
-                child_fd = os.open(_leaf_name(segment), flags, dir_fd=parent_fd)
+                child_fd = os.open(name, flags, dir_fd=parent_fd)
             except OSError as exc:
                 raise PathSafetyError(
                     f"{directory} has a missing, inaccessible, symlink, or non-directory "
@@ -747,16 +816,28 @@ def _open_project_root(project_root: Path) -> tuple[Path, int]:
 scan and the single-POSIX-anchor requirement — and `open_dir_anchored` repeats the `..` and
 absoluteness checks because it is now a public entry point that callers reach without going through
 `_absolute_project_root` at all. A guard that holds only for one of two callers is not a guard.
+`_open_project_root` passes no `create`, so root capture keeps refusing an absent component exactly
+as it does today.
 
-Second, the anchored append:
+Second, an append-only *record* descriptor — one descriptor, held open, that is both read and
+appended:
 
 ```python
-def open_append_at(dir_fd: int, name: str) -> int:
-    """Open an EXISTING regular file for appending, inside an anchored directory.
+def open_record_at(dir_fd: int, name: str) -> int:
+    """Open an EXISTING regular file for reading AND appending, inside an anchored directory.
+
+    READING AND APPENDING THROUGH ONE DESCRIPTOR IS THE POINT, not a convenience. A caller that
+    opens the name to read it and opens the name again to append has anchored two operations to
+    the DIRECTORY while leaving them unanchored to the FILE: between the two, an actor with write
+    access to that directory can `unlink` the name and create an ordinary, single-link, non-symlink
+    regular file in its place. Every check below passes on both opens -- and they are checks on two
+    different inodes. Whatever the first open established (a count, a size, a parse) is no longer
+    true of the object the second one writes to. Hold the descriptor; `O_APPEND` guarantees each
+    write lands at the end of THAT inode however many other names come and go.
 
     Never creates. The journal is created exactly once, at `start`, when no actor yet exists to
-    have planted anything (design §3.4.2's temporal trust argument); an append that would *create*
-    the file is an append to a run whose record was never opened, and creating it here would
+    have planted anything (design §3.4.2's temporal trust argument); an open that would *create*
+    the file is an operation on a run whose record was never opened, and creating it here would
     silently repair the tampering it is meant to detect.
 
     Three separate hazards, three separate defenses, because no one of them implies another.
@@ -765,29 +846,81 @@ def open_append_at(dir_fd: int, name: str) -> int:
     and which would block or discard every write. `st_nlink == 1` refuses a hard link, which is
     neither a symlink nor an irregular file: an actor who unlinks the journal and hard-links a
     project file into its place defeats both of the others, and the link count is the only thing
-    that sees it. `O_NONBLOCK` on the open so the FIFO case is refused rather than waited on.
+    that sees it. `O_NONBLOCK` so the FIFO case is refused rather than waited on.
     """
     name = _leaf_name(name)
     try:
         descriptor = os.open(
-            name, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd
+            name, os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd
         )
     except OSError as exc:
-        raise PathSafetyError(f"could not open {name!r} for appending: {exc}") from exc
+        raise PathSafetyError(f"could not open record {name!r}: {exc}") from exc
     try:
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode):
-            raise PathSafetyError(f"{name!r} is not a regular file; refusing to append to it")
+            raise PathSafetyError(f"{name!r} is not a regular file; refusing to use it as a record")
         if info.st_nlink != 1:
             raise PathSafetyError(
-                f"{name!r} has {info.st_nlink} links; a hard-linked append target lets whoever "
-                "planted the link choose where these bytes also land"
+                f"{name!r} has {info.st_nlink} links; a hard-linked record lets whoever planted "
+                "the link choose where these bytes also land"
             )
     except BaseException:
         os.close(descriptor)
         raise
     return descriptor
+
+
+def read_regular_fd(descriptor: int, max_bytes: int) -> str:
+    """Read an ALREADY-OPEN regular file whole, from offset zero, without moving its offset.
+
+    `pread`, not `read`: the caller's descriptor is shared with an `O_APPEND` writer, and a
+    reader that advanced the offset would be reaching into the writer's state for no reason.
+    `read_regular_file_at` delegates here after its own open, so the size bound and the decode
+    contract have one implementation rather than two.
+    """
+    info = os.fstat(descriptor)
+    if not stat.S_ISREG(info.st_mode):
+        raise PathSafetyError("descriptor is not a regular file; refusing to read it")
+    if info.st_size > max_bytes:
+        raise PathSafetyError(f"{info.st_size} bytes exceeds {max_bytes}")
+    data = bytearray()
+    while len(data) <= max_bytes:
+        chunk = os.pread(descriptor, max_bytes + 1 - len(data), len(data))
+        if not chunk:
+            break
+        data.extend(chunk)
+    if len(data) > max_bytes:
+        raise PathSafetyError(f"record exceeds {max_bytes} bytes")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PathSafetyError(f"record is not valid UTF-8: {exc}") from exc
+
+
+def write_all(descriptor: int, payload: bytes) -> None:
+    """Write every byte, or raise. `os.write` is allowed to write FEWER.
+
+    A short write on a regular file is rare and entirely legal -- a signal arriving mid-write, a
+    filesystem boundary, a full device. `os.write` returns the count and raises nothing, so a
+    caller that discards the return value has written a TRUNCATED record while believing it wrote
+    a whole one. For an append-only journal that is the delivery fail-open in its purest form: a
+    half-written line makes the whole journal unparseable, which is design §6's `UNWIRED`, and a
+    half-written line that happens to remain valid JSON is worse still.
+    """
+    view = memoryview(payload)
+    while view:
+        try:
+            written = os.write(descriptor, view)
+        except OSError as exc:
+            raise PathSafetyError(f"could not write {len(view)} remaining bytes: {exc}") from exc
+        if written == 0:
+            raise PathSafetyError("write made no progress")
+        view = view[written:]
 ```
+
+`read_regular_file_at` keeps its own open (with `O_NOFOLLOW`/`O_NONBLOCK`/`S_ISREG`) and then
+delegates its body to `read_regular_fd`, so there is one bounded-read implementation. That is a
+refactor of shipped code — run the module's existing suite and expect it unchanged.
 
 In `science/tests/test_findings_paths.py`, add four tests and run them before writing the code:
 
@@ -813,34 +946,86 @@ def test_open_dir_anchored_refuses_a_relative_directory(tmp_path: Path) -> None:
         pytest.param(lambda d, t: os.mkfifo(d / "j"), id="fifo"),
     ],
 )
-def test_open_append_at_refuses_a_planted_target(tmp_path: Path, plant) -> None:
+def test_open_record_at_refuses_a_planted_target(tmp_path: Path, plant) -> None:
     """One test, three plants -- and all three must be present, because each defeats a
     different defense: the symlink defeats nothing but `O_NOFOLLOW`, the hard link defeats
-    `O_NOFOLLOW` and `S_ISREG` both, and the FIFO defeats `O_NOFOLLOW` and `st_nlink`."""
+    `O_NOFOLLOW` and `S_ISREG` both, and the FIFO defeats `O_NOFOLLOW` and `st_nlink`.
+
+    THE FIFO NEEDS A READER HELD OPEN, and without one this parametrization certifies nothing.
+    Opening a FIFO for writing with no reader fails `ENXIO` at the `os.open` itself, so the test
+    goes green whether or not `S_ISREG` is there -- it would be measuring a kernel behaviour
+    instead of the check we wrote. (`O_RDWR` avoids `ENXIO` on Linux, but that is
+    implementation-defined in POSIX, so do not rely on it either.) Hold a reader so the open
+    succeeds and `S_ISREG` is the only thing that can refuse.
+    """
     directory, target = tmp_path / "d", tmp_path / "target"
     directory.mkdir()
     target.write_text("", encoding="utf-8")
     plant(directory, target)
+    reader = None
+    if stat.S_ISFIFO(os.lstat(directory / "j").st_mode):
+        reader = os.open(directory / "j", os.O_RDONLY | os.O_NONBLOCK)
     fd = open_dir_anchored(directory)
     try:
         with pytest.raises(PathSafetyError):
-            open_append_at(fd, "j")
+            open_record_at(fd, "j")
     finally:
         os.close(fd)
+        if reader is not None:
+            os.close(reader)
     assert target.read_text(encoding="utf-8") == ""
 
 
-def test_open_append_at_does_not_create(tmp_path: Path) -> None:
+def test_open_record_at_does_not_create(tmp_path: Path) -> None:
     fd = open_dir_anchored(tmp_path)
     try:
         with pytest.raises(PathSafetyError):
-            open_append_at(fd, "absent")
+            open_record_at(fd, "absent")
     finally:
         os.close(fd)
     assert not (tmp_path / "absent").exists()
+
+
+def test_open_dir_anchored_create_stops_at_a_link_having_made_nothing(tmp_path: Path) -> None:
+    """Hazard 3 from this module's header: `Path.mkdir(parents=True)` follows links and creates
+    inside the TARGET before anything is checked. Creating one component at a time inside the
+    already-captured parent cannot: the link is refused where it sits."""
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(PathSafetyError, match="component at"):
+        open_dir_anchored(tmp_path / "link" / "a" / "b", create=True)
+    assert list((tmp_path / "elsewhere").iterdir()) == []
+
+
+def test_write_all_completes_a_short_write(tmp_path: Path, monkeypatch) -> None:
+    """`os.write` may write fewer bytes than it was given and raise nothing. The stub is scoped
+    BY DESCRIPTOR rather than replacing `os.write` wholesale, so pytest's own writes during the
+    patched window are untouched -- a global stub here makes the failure mode of this test the
+    failure mode of the test runner."""
+    target = tmp_path / "f"
+    target.write_bytes(b"")
+    descriptor = os.open(target, os.O_WRONLY | os.O_APPEND)
+    real = os.write
+
+    def one_byte_at_a_time(fd: int, data) -> int:
+        return real(fd, bytes(data)[:1]) if fd == descriptor else real(fd, data)
+
+    monkeypatch.setattr(os, "write", one_byte_at_a_time)
+    try:
+        write_all(descriptor, b"0123456789")
+    finally:
+        os.close(descriptor)
+    assert target.read_bytes() == b"0123456789"
 ```
 
-Then run the module's existing suite to confirm the `_open_project_root` refactor changed nothing:
+Certify these by mutation before moving on: drop `create=True`'s per-component `mkdir` for a
+`Path.mkdir(parents=True)` before the walk and confirm the create test fails; replace `write_all`'s
+loop with a single `os.write` and confirm the short-write test fails; delete `S_ISREG` from
+`open_record_at` and confirm the **`fifo`** parametrization fails (if it does not, the reader is not
+being held and the parametrization is vacuous).
+
+Then run the module's existing suite to confirm the `_open_project_root` and `read_regular_file_at`
+refactors changed nothing:
 
 Run: `(cd science && uv run --frozen pytest tests/test_findings_paths.py)`
 Expected: exit 0, with the four new tests passing and every pre-existing test unchanged.
@@ -866,7 +1051,9 @@ import pytest
 
 from science_model.evidence_broker import ExposureEntry, InlineInput, Outcome
 from science_tool.autonomy.baseline import BaselineError
+from science_model.evidence_broker import MAX_BUDGET, MAX_INLINE_INPUTS, MAX_TARGET_BYTES
 from science_tool.evidence_broker.journal import (
+    MAX_ENTRY_BYTES,
     MAX_JOURNAL_BYTES,
     JournalError,
     append_request,
@@ -941,16 +1128,21 @@ def test_a_refusal_is_counted(tmp_path: Path) -> None:
 def test_a_journal_replaced_after_creation_is_refused_not_followed(tmp_path: Path, plant) -> None:
     """The run directory is actor-writable, so `journal.jsonl` is an actor-controlled NAME.
 
-    Each plant redirects a path-taking append into the project tree, and each defeats a
-    different defense -- so all three must be here. The assertion is in two halves and both
-    matter: appending RAISES (fail closed, which `finish_run` turns into `UNWIRED`), and the
+    Each plant redirects a path-taking append to a file of the actor's choosing, and each
+    defeats a different defense -- so all three must be here. The assertion is in two halves and
+    both matter: appending RAISES (fail closed, which `finish_run` turns into `UNWIRED`), and the
     decoy is still empty (nothing was written through the redirect). A test that only checked
     the raise would pass against an implementation that wrote first and complained after.
+
+    THE DECOY IS DELIBERATELY OUTSIDE THE PROJECT. Aiming it inside would make
+    `reject_baseline_inside_project` refuse the `symlink` case before `O_NOFOLLOW` was ever
+    consulted, so that parametrization would certify the containment check rather than the guard
+    it is written for -- green for the wrong reason, which is this branch's recurring defect.
     """
     journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
     project.mkdir()
     (tmp_path / "run").mkdir()
-    decoy = project / "decoy.md"
+    decoy = tmp_path / "decoy.md"
     decoy.write_text("", encoding="utf-8")
     create_journal(journal, project_root=project, inline=())
     journal.unlink()
@@ -973,15 +1165,102 @@ def test_a_symlinked_run_directory_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_journal_larger_than_the_bound_is_an_error(tmp_path: Path) -> None:
-    """A bounded read is what keeps a planted multi-gigabyte file from being loaded whole.
-    Refusing is fail-closed: an unreadable journal is design §6's `UNWIRED`."""
+    """A bounded read is what keeps a planted enormous file from being loaded whole.
+    Refusing is fail-closed: an unreadable journal is design §6's `UNWIRED`.
+
+    `os.truncate` makes a SPARSE file, so this costs no disk and no time; writing
+    `MAX_JOURNAL_BYTES` of real bytes would put megabytes through a Dropbox-backed checkout on
+    every run of the suite.
+    """
     journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
     project.mkdir()
     (tmp_path / "run").mkdir()
     create_journal(journal, project_root=project, inline=())
-    journal.write_text("x" * (MAX_JOURNAL_BYTES + 1), encoding="utf-8")
+    os.truncate(journal, MAX_JOURNAL_BYTES + 1)
     with pytest.raises(JournalError):
         _read(journal, project)
+
+
+def test_an_entry_over_the_line_bound_is_refused_before_it_is_written(tmp_path: Path) -> None:
+    """THE OTHER HALF OF THE SAME BOUND, and without it the read bound is a trap rather than a
+    guard. A journal that can be WRITTEN past what can be READ means the first over-long entry
+    is accepted, and every later request plus the seal then fails on the oversized journal --
+    design §6 turns that into no record at all. So the write side refuses first, and the run
+    survives."""
+    journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
+    project.mkdir()
+    (tmp_path / "run").mkdir()
+    create_journal(journal, project_root=project, inline=())
+    with pytest.raises(JournalError, match="bound"):
+        _append(journal, project, _entry(target="a" * MAX_TARGET_BYTES))
+    assert _read(journal, project) == ()
+
+
+def test_the_read_bound_admits_a_maximally_sized_journal(tmp_path: Path) -> None:
+    """The derivation, asserted rather than trusted: `MAX_BUDGET` entries at `MAX_ENTRY_BYTES`
+    must fit under `MAX_JOURNAL_BYTES`. If someone later tunes one constant without the others,
+    this is what says so -- an arithmetic relationship nobody checks is an arithmetic
+    relationship that drifts."""
+    assert (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES <= MAX_JOURNAL_BYTES
+
+
+def test_the_journal_read_and_the_append_address_one_inode(tmp_path: Path) -> None:
+    """THE HANDLE PINS THE FILE, NOT ONLY ITS DIRECTORY.
+
+    Between the count and the append, the actor replaces `j.jsonl` with an ordinary, single-link,
+    non-symlink regular file. Every check `open_record_at` makes passes on both opens -- they are
+    just checks on two different inodes. A handle that reopened by name would count the old file
+    and append to the new one, so the round already spent would vanish from the record and the
+    budget it enforces would stop being enforced. Holding the descriptor makes the swap
+    irrelevant: `O_APPEND` writes to the inode that was opened, whatever now owns the name.
+    """
+    journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
+    project.mkdir()
+    (tmp_path / "run").mkdir()
+    create_journal(journal, project_root=project, inline=())
+    with open_journal(journal, project_root=project) as handle:
+        append_request(handle, _entry("first.md"))
+        assert count_requests(read_journal(handle)) == 1
+        journal.unlink()
+        journal.write_text("", encoding="utf-8")     # ordinary, single-link, not a symlink
+        append_request(handle, _entry("second.md"))
+        assert count_requests(read_journal(handle)) == 2
+    assert journal.read_text(encoding="utf-8") == ""  # the decoy never received a thing
+
+
+def test_a_short_write_does_not_truncate_an_entry(tmp_path: Path, monkeypatch) -> None:
+    """`os.write` may write fewer bytes than it is given and raise nothing. A caller that
+    discards the count records a TRUNCATED line while believing it recorded a whole one -- and a
+    truncated line makes the entire journal unparseable, which is `UNWIRED`. Scoped by
+    descriptor so pytest's own writes are untouched."""
+    journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
+    project.mkdir()
+    (tmp_path / "run").mkdir()
+    create_journal(journal, project_root=project, inline=())
+    real = os.write
+    with open_journal(journal, project_root=project) as handle:
+        def one_byte_at_a_time(fd: int, data) -> int:
+            return real(fd, bytes(data)[:1]) if fd == handle.fd else real(fd, data)
+
+        monkeypatch.setattr(os, "write", one_byte_at_a_time)
+        append_request(handle, _entry())
+        monkeypatch.undo()
+        assert count_requests(read_journal(handle)) == 1
+
+
+def test_create_makes_nothing_through_a_symlinked_ancestor(tmp_path: Path) -> None:
+    """`Path.mkdir(parents=True)` FOLLOWS LINKS and creates in the target before any check runs.
+    A refusal afterwards does not remove them, and directories are themselves a write in a tree
+    the path gate watches -- so "no bytes were written yet" is not a defence."""
+    project, elsewhere = tmp_path / "project", tmp_path / "elsewhere"
+    project.mkdir()
+    elsewhere.mkdir()
+    # NOT aimed at the project: `reject_baseline_inside_project` would refuse that first, and the
+    # parametrization would certify the containment check instead of the walk it is written for.
+    (tmp_path / "cp").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(JournalError, match="run directory"):
+        create_journal(tmp_path / "cp" / "run-x" / "j.jsonl", project_root=project, inline=())
+    assert list(elsewhere.iterdir()) == []
 
 
 def test_creating_over_an_existing_journal_refuses(tmp_path: Path) -> None:
@@ -1081,40 +1360,73 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple
 
-from science_model.evidence_broker import ExposureEntry, InlineInput, Outcome
+from science_model.evidence_broker import (
+    MAX_BUDGET,
+    MAX_INLINE_INPUTS,
+    MAX_TARGET_BYTES,
+    ExposureEntry,
+    InlineInput,
+    Outcome,
+)
 
 from science_tool.autonomy.baseline import reject_baseline_inside_project
 from science_tool.findings.paths import (
     PathExistsError,
     PathSafetyError,
     create_regular_file_at,
-    open_append_at,
     open_dir_anchored,
     open_lock_at,
-    read_regular_file_at,
+    open_record_at,
+    read_regular_fd,
+    write_all,
 )
 
 _LOCK_SUFFIX = ".lock"
 
-MAX_JOURNAL_BYTES = 1 << 20
-"""A journal is at most `budget` request lines plus the supervisor's inline seeding, each a
-fixed-shape JSON object of a few hundred bytes. A megabyte is thousands of them and nowhere near
-any honest run. The bound exists because `journal.jsonl` is an actor-controlled NAME in an
-actor-writable directory: without it, a planted multi-gigabyte file is read whole into memory.
+MAX_ENTRY_BYTES = 16 * MAX_TARGET_BYTES
+"""One encoded line's ceiling, and the factor is arithmetic rather than a guess.
+
+`MAX_TARGET_BYTES` is a pydantic `max_length`, which counts CHARACTERS, not bytes -- so the two
+bounded fields (`target`, `pathspec`) can each be 4096 characters, each character can escape to
+`\\uXXXX` (six bytes) in the JSON encoding, and 2 x 4096 x 6 = 49152. Sixteen times the character
+bound is 65536, which covers that with room for the fixed vocabulary, the 64-character digest and
+the 40-character commit. Getting this backwards -- assuming `max_length` bounds bytes -- would put
+`MAX_ENTRY_BYTES` below what the model admits, which is the same write-what-you-cannot-read defect
+one layer down."""
+
+MAX_JOURNAL_BYTES = (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES
+"""DERIVED, not chosen. A magic megabyte here would be a bound with no relationship to what the
+model permits, and the gap between the two is a live failure mode rather than slack: if the model
+admits inputs whose journal exceeds the read bound, a run can WRITE a journal it can never read
+back. The first over-long request is accepted and journaled without reaching git; every later
+request and the seal itself then fail on the oversized journal, and design §6 turns that into no
+record at all. So the read bound is computed from the same constants that gate what can be
+written, and `append_request` refuses any single line over `MAX_ENTRY_BYTES` before writing it.
+
+The bound is needed at all because `journal.jsonl` is an actor-controlled NAME in an
+actor-writable directory: without it, a planted enormous file is read whole into memory.
 Exceeding it raises, which is design §6's `UNWIRED` -- fail closed, not truncate and carry on."""
 
 
 class JournalHandle(NamedTuple):
-    """The captured run directory, and the journal's leaf name inside it.
+    """The captured run directory, the OPEN journal, and the journal's leaf name.
 
-    The two travel TOGETHER because separately they are two sources of truth for one file: a
-    caller holding a bare descriptor and a bare string can pair run A's directory with run B's
-    filename, and nothing would catch it. Every function below takes the handle; none takes a
-    path. That is what makes "no journal operation resolves a pathname" a property of the
-    module's type signatures rather than a rule its authors have to remember.
+    THREE FIELDS BECAUSE THERE ARE TWO OBJECTS TO PIN, NOT ONE. `dir_fd` anchors the directory,
+    which is what `served/` is created inside. `fd` anchors the JOURNAL ITSELF, and it is the
+    field a directory descriptor alone cannot substitute for: reopening `name` under `dir_fd` for
+    each operation passes every check every time and still addresses a DIFFERENT INODE if the
+    actor unlinks the name and drops an ordinary file in its place between them. The count would
+    then be taken from one file and the append made to another -- and since the count is what
+    enforces the budget, the spend simply disappears. `name` travels with them so a caller cannot
+    pair one run's directory with another run's filename.
+
+    Every function below takes the handle; none takes a path. That is what makes "no journal
+    operation resolves a pathname" a property of the module's type signatures rather than a rule
+    its authors have to remember.
     """
 
     dir_fd: int
+    fd: int
     name: str
 
 
@@ -1151,12 +1463,21 @@ def open_journal(path: Path, *, project_root: Path) -> Iterator[JournalHandle]:
     asks whether we can reach the directory without traversing something an actor planted --
     decided component by component with `O_NOFOLLOW`, because the pathname cannot answer it.
 
-    AND THEN NOTHING RE-RESOLVES THE PATHNAME. The descriptor, not the string, is what the lock,
-    the read, and the append are performed against. This is the module's reason for existing: a
-    run directory holds `served/` and is therefore actor-writable, so `journal.jsonl` is a name
-    an actor can replace between any two operations. A per-operation re-walk would still refuse
-    to traverse a link, but it would let the lock and the append land in two different
-    directories -- anchoring each step while leaving the sequence unanchored.
+    AND THEN NOTHING RE-RESOLVES ANY NAME -- not the directory's and not the journal's. Both
+    descriptors are opened here, once, and every operation is performed against them. A run
+    directory holds `served/` and is therefore actor-writable, so BOTH names are names an actor
+    can replace between any two operations, and the two failures are different:
+
+    * re-walking the DIRECTORY per operation would let the lock and the append land in two
+      different directories -- anchoring each step while leaving the sequence unanchored;
+    * re-opening the JOURNAL per operation passes every check both times and still reads one
+      inode and appends to another, because `unlink` plus a fresh ordinary file defeats
+      `O_NOFOLLOW`, `S_ISREG` and `st_nlink` simultaneously -- none of them is a claim about
+      identity. The count taken before the serve would then be a count of a file the append
+      never touches, and the budget it enforces would silently stop being enforced.
+
+    So the journal is opened ONCE, `O_RDWR | O_APPEND`, and both `read_journal` and
+    `append_request` use that descriptor.
     """
     reject_baseline_inside_project(path, project_root)
     try:
@@ -1164,7 +1485,14 @@ def open_journal(path: Path, *, project_root: Path) -> Iterator[JournalHandle]:
     except PathSafetyError as exc:
         raise JournalError(f"could not open the run directory {path.parent}: {exc}") from exc
     try:
-        yield JournalHandle(dir_fd=directory, name=path.name)
+        try:
+            record = open_record_at(directory, path.name)
+        except PathSafetyError as exc:
+            raise JournalError(f"could not open journal {path}: {exc}") from exc
+        try:
+            yield JournalHandle(dir_fd=directory, fd=record, name=path.name)
+        finally:
+            os.close(record)
     finally:
         os.close(directory)
 
@@ -1201,22 +1529,31 @@ def create_journal(path: Path, *, project_root: Path, inline: tuple[InlineInput,
 
     Design §3.4.2's trust argument is TEMPORAL -- this runs at `start`, before any actor of this
     run exists -- and it covers the journal file, not the directories above it, which persist
-    across runs and which a PREVIOUS run's actor could have redirected. So the `mkdir` is allowed
-    to be ordinary (it may create through a planted link, and no bytes have been written yet),
-    and the anchored walk that follows is what decides: if any component is a link,
-    `open_dir_anchored` refuses and nothing is created inside it. `create_regular_file_at` then
-    supplies `O_EXCL` (the "opened once" rule) and `O_NOFOLLOW` (no redirect on the leaf) in one
-    call, raising `PathExistsError` -- a `PathSafetyError` subclass -- for the already-exists
-    case specifically, so that case can be reported precisely instead of by string matching.
+    across runs and which a PREVIOUS run's actor could have redirected.
+
+    SO THE RUN DIRECTORY IS CREATED BY THE ANCHORED WALK, NOT BY `Path.mkdir(parents=True)`.
+    `mkdir(parents=True)` FOLLOWS LINKS: a planted symlink at any missing ancestor makes it
+    create the remaining directories inside the LINK'S TARGET, and a refusal afterwards does not
+    remove them. That is hazard 3 in `findings/paths.py`'s own header -- mutating before
+    validating -- and "no bytes were written" is not a defence, because the directories are
+    themselves a write, in a tree the path gate watches. `open_dir_anchored(create=True)` makes
+    one component at a time inside the parent it has already captured and stops AT a link having
+    created nothing beyond it. `create_regular_file_at` then supplies `O_EXCL` (the "opened once"
+    rule) and `O_NOFOLLOW` (no redirect on the leaf) in one call, raising `PathExistsError` -- a
+    `PathSafetyError` subclass -- for the already-exists case specifically, so that case can be
+    reported precisely instead of by string matching.
+
+    This does NOT go through `open_journal`, which opens an existing journal; here there is
+    none yet.
     """
     reject_baseline_inside_project(path, project_root)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
+        directory = open_dir_anchored(path.parent, create=True)
+    except PathSafetyError as exc:
         raise JournalError(f"could not create the run directory {path.parent}: {exc}") from exc
-    with open_journal(path, project_root=project_root) as handle:
+    try:
         try:
-            descriptor = create_regular_file_at(handle.dir_fd, handle.name)
+            descriptor = create_regular_file_at(directory, path.name)
         except PathExistsError as exc:
             raise JournalError(
                 f"{path} already holds a journal; a run's exposure record is opened once"
@@ -1225,41 +1562,49 @@ def create_journal(path: Path, *, project_root: Path, inline: tuple[InlineInput,
             raise JournalError(f"could not create journal {path}: {exc}") from exc
         try:
             for entry in inline:
-                os.write(descriptor, (_encode_inline(entry) + "\n").encode("utf-8"))
-        except OSError as exc:
+                write_all(descriptor, (_encode_inline(entry) + "\n").encode("utf-8"))
+        except PathSafetyError as exc:
             raise JournalError(f"could not seed journal {path}: {exc}") from exc
         finally:
             os.close(descriptor)
+    finally:
+        os.close(directory)
 
 
 def append_request(handle: JournalHandle, entry: ExposureEntry) -> None:
-    """One line, `O_APPEND`, through the captured directory. Appends never rewrite."""
+    """One line, `O_APPEND`, to the descriptor the count was taken from. Appends never rewrite.
+
+    `write_all`, not `os.write`: a short write leaves a truncated line, which makes the whole
+    journal unparseable -- design §6's `UNWIRED` -- while this function's caller believes the
+    exposure was recorded.
+    """
+    line = (_encode_request(entry) + "\n").encode("utf-8")
+    if len(line) > MAX_ENTRY_BYTES:
+        raise JournalError(
+            f"the encoded entry is {len(line)} bytes, over the {MAX_ENTRY_BYTES} bound that "
+            f"keeps a full journal under {MAX_JOURNAL_BYTES}"
+        )
     try:
-        descriptor = open_append_at(handle.dir_fd, handle.name)
+        write_all(handle.fd, line)
     except PathSafetyError as exc:
         raise JournalError(f"could not append to journal {handle.name}: {exc}") from exc
-    try:
-        os.write(descriptor, (_encode_request(entry) + "\n").encode("utf-8"))
-    except OSError as exc:
-        raise JournalError(f"could not append to journal {handle.name}: {exc}") from exc
-    finally:
-        os.close(descriptor)
 
 
 def read_journal(handle: JournalHandle) -> tuple[ExposureEntry, ...]:
     """Parse every line or raise. A journal we cannot read is design §6's `UNWIRED`.
 
-    `read_regular_file_at` carries the three properties a bare `read_text` does not: `O_NOFOLLOW`
-    so a planted symlink is refused rather than followed, `O_NONBLOCK` plus `S_ISREG` so a
-    planted FIFO is refused rather than blocking this process forever, and a byte bound so a
-    planted enormous file is refused rather than loaded.
+Read from `handle.fd` -- the descriptor `open_journal` opened and `append_request` writes to,
+    so the count this produces is a count of the inode that will be appended to. The safety
+    properties (`O_NOFOLLOW`, `O_NONBLOCK` plus `S_ISREG`, `st_nlink == 1`) were established once
+    at open time by `open_record_at`; `read_regular_fd` adds the byte bound, so a journal that
+    grew past `MAX_JOURNAL_BYTES` is refused rather than loaded.
 
     An `inline` event's `lines` is dropped rather than round-tripped: the authoritative line
     count is the sealed manifest's (`EvidenceSession.inline`), which is what §5.2 checks against,
     and a second copy in a field nothing validates is a value that can disagree.
     """
     try:
-        text = read_regular_file_at(handle.dir_fd, handle.name, MAX_JOURNAL_BYTES)
+        text = read_regular_fd(handle.fd, MAX_JOURNAL_BYTES)
     except PathSafetyError as exc:
         raise JournalError(f"could not read journal {handle.name}: {exc}") from exc
 
@@ -1323,17 +1668,22 @@ restoring between rows — a mutation left in place makes the next row's result 
 
 | Revert | Must fail | Why this mutation and not another |
 |---|---|---|
-| `create_regular_file_at(handle.dir_fd, handle.name)` → `os.open(path, os.O_WRONLY \| os.O_CREAT \| os.O_TRUNC)` | `test_creating_over_an_existing_journal_refuses` | drops `O_EXCL`; a non-exclusive create silently discards the record of whatever run owns the path |
+| `create_regular_file_at(directory, path.name)` → `os.open(path, os.O_WRONLY \| os.O_CREAT \| os.O_TRUNC)` | `test_creating_over_an_existing_journal_refuses` | drops `O_EXCL`; a non-exclusive create silently discards the record of whatever run owns the path |
 | wrap `json.loads` in `try: … except json.JSONDecodeError: continue` | `test_a_truncated_line_is_an_error_not_an_empty_journal` | a parser that skips damaged lines converts a tampered journal into a shorter honest one |
 | delete the `isinstance(event, dict)` check | every parametrization of `test_valid_json_of_the_wrong_shape_is_a_journal_error`, **with `TypeError`** | the point is the exception *type*: `TypeError` is what escapes `finish_run`'s handler |
-| `open_append_at(handle.dir_fd, handle.name)` → `Path(...).open("a")` (reconstructing the path) | all three parametrizations of `test_a_journal_replaced_after_creation_is_refused_not_followed` | this is the P1 itself; if only the `symlink` id fails, the implementation kept `O_NOFOLLOW` and dropped `S_ISREG`/`st_nlink`, and the roster is short again |
+| `open_record_at(directory, path.name)` → `Path(...).open("a")` inside `append_request` (reconstructing the path) | all three parametrizations of `test_a_journal_replaced_after_creation_is_refused_not_followed` | if only the `symlink` id fails, the implementation kept `O_NOFOLLOW` and dropped `S_ISREG`/`st_nlink`, and the roster is short again |
 | `open_dir_anchored(path.parent)` → `os.open(path.parent, os.O_RDONLY \| os.O_DIRECTORY)` | `test_a_symlinked_run_directory_is_refused` | leaf protection with a pathname-resolved parent is the shape this branch has now hit twice |
-| `read_regular_file_at(…, MAX_JOURNAL_BYTES)` → `path.read_text()` | `test_a_journal_larger_than_the_bound_is_an_error` **and** the `fifo` parametrization above | one revert, two failures — which is the tell that the bound and the `S_ISREG` refusal both live in this one call |
+| `read_regular_fd(handle.fd, MAX_JOURNAL_BYTES)` → `read_regular_fd(handle.fd, 1 << 40)` | `test_a_journal_larger_than_the_bound_is_an_error` | mutate the **bound**, not the call: swapping the call for `path.read_text()` would fail several tests at once and prove none of them separately |
+| delete `append_request`'s `len(line) > MAX_ENTRY_BYTES` check | `test_an_entry_over_the_line_bound_is_refused_before_it_is_written` | the write side of the bound; without it a run can journal what it can never read back |
+| make `JournalHandle` carry `dir_fd`/`name` only, reopening with `open_record_at` inside each of `read_journal` and `append_request` | `test_the_journal_read_and_the_append_address_one_inode` | **the round-five P1.** Every safety check still passes on both opens — they are checks on two different inodes, and none of them is a claim about identity |
+| `write_all(handle.fd, line)` → `os.write(handle.fd, line)` | `test_a_short_write_does_not_truncate_an_entry` | a short write raises nothing; the caller records a truncated line believing it recorded a whole one |
+| `open_dir_anchored(path.parent, create=True)` → `path.parent.mkdir(parents=True, exist_ok=True)` then `open_dir_anchored(path.parent)` | `test_create_makes_nothing_through_a_symlinked_ancestor` | `mkdir(parents=True)` follows links and creates inside the target *before* the refusal — mutating before validating |
 
-Two rows above are deliberately *conjunctive checks made separable*: the append row must fail on
-all three plants and the read row on two independent tests. A single failing parametrization means
-the guard was narrowed, not that it held. Record each row's actual result — including any row that
-surprises you — in the report.
+Three rows are deliberately *conjunctive checks made separable*: the `open_record_at` row must fail
+on all three plants, and the last two rows exist because the previous draft had one revert claiming
+two unrelated failures — which proves neither. A single failing parametrization means the guard was
+narrowed, not that it held. Record each row's actual result — including any row that surprises you —
+in the report.
 
 - [ ] **Step 6: Prove the lock actually serializes**
 
@@ -1392,8 +1742,13 @@ both values would be individually well-formed so no validator could catch it.
 In `science/tests/test_evidence_broker_session.py`. Build a real temporary git repository (follow
 `tests/test_evidence_broker_serve.py`'s existing fixture) and a `run_dir` under `tmp_path`.
 
+Import the module under test as `session_module`
+(`from science_tool.evidence_broker import session as session_module`), never as `session` — that
+name is a local variable in nearly every test below, and the shadowing would make the AST guard
+read `Session.__file__` off whatever object the last assignment left behind.
+
 **The fixture must create the journal**, and this is not incidental: `open_journal` walks the run
-directory's components and `open_append_at` refuses to create, so a session whose journal was never
+directory's components and `open_record_at` refuses to create, so a session whose journal was never
 opened raises rather than quietly starting one. That is the intended behaviour — an append to a run
 whose record was never opened is exactly what the `start`-time creation rule exists to prevent — but
 it means a fixture that only makes the directory produces a suite that fails everywhere for one
@@ -1417,6 +1772,10 @@ def session_model(project: Path, run_dir: Path) -> EvidenceSession:
     journal first would make them assert about a path the constructor already accepted.
     """
     return EvidenceSession(
+        # REQUIRED, and it must be the run slug without the `run:` prefix -- `RunBaseline`'s
+        # validator (Task 4) refuses a session that names a different run than the baseline
+        # holding it, so a fixture that omits or invents this fails at construction.
+        session_id=run_dir.name,
         journal_path=run_dir / "journal.jsonl",
         commit=head_of(project),
         budget=1,
@@ -1581,6 +1940,38 @@ def test_a_planted_DIRECTORY_symlink_is_refused(session_at, project, run_dir) ->
     assert session.requests_used() == 0        # nothing delivered, so nothing recorded
 
 
+def test_an_ancestor_swapped_inside_the_critical_section_is_not_followed(
+    session_at, project, tmp_path, monkeypatch
+) -> None:
+    """THE ONE THE `served`-SYMLINK TEST DOES NOT COVER, and the reason `_write_served` takes the
+    handle rather than reopening `self._run_dir`.
+
+    Planting a symlink at the FINAL `served` component is still refused by an `O_NOFOLLOW` reopen
+    of `self._served_dir` -- so that test cannot tell a pathname-resolved parent from an anchored
+    one. Swapping an ANCESTOR can: `os.open(self._served_dir, ...)` re-resolves every component
+    above `served`, lands in the project tree, and `O_NOFOLLOW` on the last one says nothing
+    about it.
+
+    The swap has to happen INSIDE the critical section, after the handle is captured -- doing it
+    beforehand just makes `open_journal` refuse, which proves a different guard. `_serve` is the
+    seam: it is called inside the lock and before `_write_served`, which is exactly the window.
+    """
+    session = session_at(budget=3)
+    (project / "run-x").mkdir()
+    control_plane = tmp_path / "control-plane"
+    inner = session_module._serve
+
+    def swap_then_serve(*args, **kwargs):
+        if not control_plane.is_symlink():
+            control_plane.rename(tmp_path / "control-plane-moved")
+            control_plane.symlink_to(project, target_is_directory=True)
+        return inner(*args, **kwargs)
+
+    monkeypatch.setattr(session_module, "_serve", swap_then_serve)
+    session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    assert list((project / "run-x").rglob("*")) == []
+
+
 def _raising_oserror(*_args: object, **_kwargs: object) -> Path:
     """A `_write_served` that dies between the serve and the append.
 
@@ -1645,7 +2036,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from science_model.evidence_broker import EvidenceSession, ExposureEntry, Outcome
+from science_model.evidence_broker import (
+    MAX_TARGET_BYTES,
+    EvidenceSession,
+    ExposureEntry,
+    Outcome,
+)
 
 from science_tool.autonomy.baseline import reject_baseline_inside_project
 from science_tool.evidence_broker.journal import (
@@ -1724,6 +2120,19 @@ class Session:
         record at all. An actor that simply kept asking would silently convert its run to
         `UNWIRED`, turning ordinary actor misbehaviour into a supervisor-side failure.
         """
+        # BOUNDS FIRST, BEFORE THE LOCK AND BEFORE THE SPEND. `ExposureEntry` caps `target` and
+        # `pathspec` so a full journal stays under `MAX_JOURNAL_BYTES`; checking that only at
+        # entry-construction time would mean the request is served, the round is spent, and THEN
+        # a `ValidationError` propagates out of a locked block -- an actor halting its own run
+        # with a long string. Refusing here costs nothing and is not an oracle: the answer is a
+        # property of the requester's own string, decided before the policy is consulted, so it
+        # discloses nothing about the tree or the deny list.
+        for field, value in (("target", request.target), ("pathspec", request.pathspec)):
+            if value is not None and len(value) > MAX_TARGET_BYTES:
+                raise SessionError(
+                    f"{field} is {len(value)} characters, over the {MAX_TARGET_BYTES} bound"
+                )
+
         with journal_lock(
             self._session.journal_path, project_root=self._project_root
         ) as handle:
@@ -1870,10 +2279,14 @@ not compile or does not change behaviour. Run one row at a time, restoring betwe
 | `>=` → `>` in the exhaustion check | some test | if none fails, the suite does not pin the off-by-one — add one asserting a budget of `N` permits exactly `N` requests, then re-run |
 | delete the `if served.outcome is not Outcome.REFUSED:` guard, making `path = self._write_served(...)` unconditional | `test_a_refusal_writes_no_served_file` | this is the guard that controls file creation. The *other* `if served.outcome is Outcome.REFUSED:` further down only chooses which `Receipt` to build, so deleting that one leaves the file behaviour untouched and the test green |
 | move the `append_request(...)` call *above* the `if served.outcome is not Outcome.REFUSED:` block | `test_a_failed_served_write_records_nothing` | the delivery-ordering rule. Both call sites exist at that point, so this one does run |
-| `create_regular_file_at` + `replace_at` → `(self._served_dir / digest).write_bytes(payload)` | `test_a_truncated_file_at_the_digest_name_is_replaced` **and** `test_a_planted_leaf_symlink_is_replaced_not_written_through` | one revert, two failures. `write_bytes` drops both atomicity and `O_NOFOLLOW`; a single failure means only one of the two was ever certified |
-| `self._open_served_dir(handle.dir_fd)` → `os.open(self._served_dir, os.O_RDONLY \| os.O_DIRECTORY \| os.O_NOFOLLOW)` | `test_a_planted_DIRECTORY_symlink_is_refused` | the P1 from round three, and the reason `_write_served` takes `handle` at all. Note the mutation *keeps* `O_NOFOLLOW` — that is the point: leaf protection with a pathname-resolved parent looks correct and is not |
+| `create_regular_file_at` + `replace_at` → `(self._served_dir / digest).write_bytes(payload)` | `test_a_planted_leaf_symlink_is_replaced_not_written_through` | `write_bytes` follows the link and modifies the victim. It does **not** fail the truncation test — an unconditional `write_bytes` overwrites the short file with the right bytes, so that test stays green and this row certifies only the symlink half |
+| the same, but guarded: `if not (self._served_dir / digest).exists(): (self._served_dir / digest).write_bytes(payload)` | `test_a_truncated_file_at_the_digest_name_is_replaced` | the existence-check defect specifically. This is the mutation the truncation test was written against, and the row above is not a substitute for it |
+| `self._open_served_dir(handle.dir_fd)` → `os.open(self._served_dir, os.O_RDONLY \| os.O_DIRECTORY \| os.O_NOFOLLOW)` | `test_an_ancestor_swapped_inside_the_critical_section_is_not_followed` | the round-three P1. It does **not** fail `test_a_planted_DIRECTORY_symlink_is_refused` — that test plants the *final* `served` component, which the mutation's own `O_NOFOLLOW` still refuses. Only swapping an **ancestor**, after the handle is captured, separates the two |
+| drop `O_NOFOLLOW` from `_open_served_dir`'s reopen | `test_a_planted_DIRECTORY_symlink_is_refused` | what that test actually certifies, now that the row above is aimed at the ancestor case |
 
-Record each row's actual result in the report, including any row that did not fail.
+Record each row's actual result in the report, including any row that did not fail. Two rows here
+exist because the previous draft named mutations that leave their claimed test green — a mutation
+that does not fail is not evidence the guard holds, it is evidence the pair was never checked.
 
 - [ ] **Step 6: Guard the unbudgeted path**
 
@@ -1908,7 +2321,7 @@ def _calls_journal_lock(expression: ast.expr) -> bool:
 
 
 def test_serving_happens_only_inside_request_s_locked_critical_section() -> None:
-    tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
+    tree = ast.parse(Path(session_module.__file__).read_text(encoding="utf-8"))
     calls = [
         node for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
@@ -2427,9 +2840,14 @@ is the conjunction defect plan 2 hit twice.
 
 ```bash
 (cd science && uv run ruff check && uv run pyright && uv run --frozen pytest tests/test_evidence_broker_cli.py)
-# `git add` explicitly: this task CREATES two files, and `commit -am` stages only tracked ones.
-git add science/src/science_tool/evidence_broker/cli.py science/tests/test_evidence_broker_cli.py
+# NAME EVERY FILE THE TASK TOUCHED, created AND modified. `-m` (not `-am`) means nothing is swept
+# in unnamed -- which also means anything omitted here is simply left behind. This task creates two
+# files and MODIFIES the CLI root that registers the group; without that third path the command
+# does not exist on `science` and the next task's tests cannot invoke it.
+git add science/src/science_tool/evidence_broker/cli.py science/tests/test_evidence_broker_cli.py \
+        science/src/science_tool/cli.py
 git commit -m "feat(evidence-broker): serve one request from a session handle"
+git status --porcelain      # must be empty
 ```
 
 ---
@@ -2665,9 +3083,12 @@ holds exactly one file. This is §7's integration bullet minus its `append` clau
 (cd science && uv run ruff check && uv run pyright)
 (cd science/model && uv run --frozen pytest)
 (cd science && uv run --frozen pytest)  # ~10 min; the top-level agent runs this, not a subagent
-# `git add` explicitly: this task CREATES a test file, and `commit -am` stages only tracked ones.
-git add science/tests/test_evidence_broker_seal.py
+# One created file and three MODIFIED ones. `-m` stages nothing unnamed, so an omitted path is
+# silently dropped: this task's whole implementation lives in `lifecycle.py` and `autonomy/cli.py`.
+git add science/tests/test_evidence_broker_seal.py science/tests/test_autonomy_lifecycle.py \
+        science/src/science_tool/autonomy/lifecycle.py science/src/science_tool/autonomy/cli.py
 git commit -m "feat(autonomy): seal a brokered run's exposure into its record"
+git status --porcelain      # must be empty
 ```
 
 ---

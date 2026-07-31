@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 14)
+**Status:** partially implemented (revision 15)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -49,6 +49,17 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 15 comes from a fifth round and is the *same* rule again, twice more, plus one claim that
+outran what the plan delivers. Anchoring the directory is not anchoring the file: a re-opened name
+passes every check on both opens because none of those checks is about identity, so a count taken
+from one inode and an append made to another silently un-spends a round. And §3.5's bound on the
+journal was a chosen constant with no relationship to what the model admits, which is a run able to
+*write* a journal it can never *read back* — the fail-open arriving through arithmetic rather than
+through a filesystem call. §3.5 now derives the bound from the model's own limits and refuses
+over-long input before the spend. Revision 14's claim that "every operation on `run_dir` is
+anchored" was also broader than the truth: `baseline.json` is still pathname-based, and that residual
+is now named rather than implied away.
 
 Revision 14 comes from a fourth review round on plan 3 and is the second pattern in its
 filesystem form. §3.5 said `served/` "is created under the same containment check as the journal" and
@@ -800,9 +811,11 @@ bytes cannot be aimed, and two requests that produce identical bytes coincide ha
 directory is created under the same containment check as the journal, so a relocated
 `SCIENCE_CONTROL_PLANE` cannot land it in the project tree.
 
-**Every operation on `run_dir` is anchored to a descriptor; none re-resolves a pathname.** This is a
-consequence of the table above rather than a separate rule, and it is stated here because it is the
-easiest thing in this design to implement almost-correctly. `served/` is actor-writable, and a
+**Every operation on the journal and on `served/` is anchored to a descriptor; none re-resolves a
+pathname.** This is a consequence of the table above rather than a separate rule, and it is stated
+here because it is the easiest thing in this design to implement almost-correctly. Note the scope:
+the rule as stated covers the two artifacts the *actor* can reach. `baseline.json` is discussed
+separately below. `served/` is actor-writable, and a
 directory an actor can write is a directory whose *entries are actor-controlled names* — including
 `journal.jsonl` beside it. A containment check on a pathname, followed by an `open()` of that same
 pathname, checks one object and opens another: between the two, `served`, `journal.jsonl`, or any
@@ -821,8 +834,32 @@ implies the other. The repository already has this discipline and its primitives
 `findings/paths.py`; §3.4.1's objection to that module is to its *project-containment* helpers, not
 to its descriptor-anchored ones.
 
-Plan 4's replay and correspondence work inherits this: anything that later reads `run_dir` reads it
-the same way.
+**And the journal's own descriptor, not just its directory's.** A directory descriptor plus a
+re-opened name is still two objects: `unlink` followed by an ordinary new file passes every check —
+not a symlink, a regular file, one link — on both opens, because none of those is a claim about
+*identity*. The count would be taken from one inode and the append made to another, which silently
+un-spends a round and disables the budget the count enforces. The journal is opened once,
+`O_RDWR | O_APPEND`, and read and appended through that descriptor for the life of the operation.
+
+**Bounds are declared where they can be enforced, and the read bound is derived from them.** The
+journal's maximum size is not a chosen constant: it is `(max budget + max inline inputs) × max entry
+size`, with `target` and `pathspec` length-bounded on the model. Choosing a read bound independently
+of what the model admits creates a run that can *write* a journal it can never *read back* — the
+first over-long entry is accepted, and every later request and the seal itself then fail on the
+oversized journal, which §6 turns into no record at all. Over-long input is refused before the lock
+and before the spend; it is decided on the requester's own string, before any policy is consulted,
+so it is not an oracle.
+
+**What this rule does not yet cover: `baseline.json`.** It is read by `finish_run` and written by
+`start_run` through pathnames, and `finish` runs while the actor may still exist. The exposure is
+bounded rather than absent — §3.4.2's argument applies, a redirected or forged baseline costs the
+actor its support rather than buying any, and `reject_baseline_inside_project` still governs where it
+may live — but the honest statement is that the anchoring rule is enforced for the journal and
+`served/` and not for the baseline. Recorded here rather than implied away; closing it is a change to
+plan 1's shipped `autonomy/baseline.py` and belongs to whichever slice next touches that module.
+
+Plan 4's replay and correspondence work inherits this: anything that later reads the journal or
+`served/` reads it the same way.
 
 **The served file is written before the journal line, not after.** The journal is the record of what
 the requester was *shown*, so an entry appended before delivery succeeded claims an exposure that may
