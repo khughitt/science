@@ -862,7 +862,7 @@ Expected: Ruff clean; Pyright reports 0 errors.
 
 - [ ] **Step 4: Verify history and worktree scope**
 
-From the repository root:
+From the implementation worktree root:
 
 ```bash
 git status --short
@@ -878,6 +878,10 @@ git diff HEAD~3 -- \
 ```
 
 Expected: clean status; three implementation commits after the plan commit; no whitespace errors; no corpus files or unrelated sources changed.
+
+After this gate, use `superpowers:finishing-a-development-branch` to present the merge, pull
+request, and keep-as-is choices. Integration is not a fifth implementation task and must not happen
+automatically.
 
 ---
 
