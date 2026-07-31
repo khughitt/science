@@ -31,7 +31,15 @@ def _configured_repo(tmp_path: Path, name: str, config: dict[str, str]) -> tuple
             ["git", "-C", str(root), "config", key, value], check=True, capture_output=True
         )
     # Non-ASCII, so `[[:alpha:]]` classifies differently under C and under UTF-8.
-    (root / "sample.txt").write_text("éalpha\nplain\nalpha.beta\n", encoding="utf-8")
+    # `alphaXbeta`, `alpha1` and `gammaadelta` are grammar-boundary bait for `GREP_PATTERNS`
+    # below -- `alpha.beta` alone cannot tell `fixed` from `basic` from `extended` from `perl`
+    # apart for this content, and the certification is worth nothing if it can't.
+    (root / "sample.txt").write_text(
+        "éalpha\nplain\nalpha.beta\nalphaXbeta\nalpha1\ngammaadelta\n", encoding="utf-8"
+    )
+    # A non-ASCII FILENAME, not merely non-ASCII content: `core.quotePath` has nothing to
+    # decide until a path itself contains a byte above 0x80.
+    (root / "café.txt").write_text("alpha.beta\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
     # DATES ARE PINNED. `_LOG_ARGV` renders `%aI`, so two fixture repositories built a
     # second apart would produce different bytes and the log comparison would fail for a
@@ -64,14 +72,39 @@ def _payload(tmp_path: Path, name: str, config: dict[str, str], request) -> byte
     return served.payload.replace(commit.encode(), b"<commit>")
 
 
+#: `grep.patternType=basic` and `core.quotePath=true` and `grep.lineNumber=false` are git's
+#: OWN DEFAULTS (measured, git 2.55: `git config --get` on each is unset in a fresh repo, and
+#: the documented default values are `basic` behaviour, `true`, and `false` respectively) --
+#: a repository "configured" to its own default is configurationally IDENTICAL to the
+#: baseline, so the row cannot fail for any pattern or content, and was proving nothing.
+#: `extended`, `false` and `true` below are the values that actually diverge from default.
 HOSTILE_GREP_CONFIGS = (
     ("fixed", {"grep.patternType": "fixed"}),
-    ("basic", {"grep.patternType": "basic"}),
+    ("extended", {"grep.patternType": "extended"}),
     ("perl", {"grep.patternType": "perl"}),
     ("colour", {"color.ui": "always", "color.grep": "always"}),
     ("column", {"grep.column": "true"}),
-    ("quote", {"core.quotePath": "true"}),
-    ("nolineno", {"grep.lineNumber": "false"}),
+    ("quote", {"core.quotePath": "false"}),
+    ("nolineno", {"grep.lineNumber": "true"}),
+)
+
+#: THREE PATTERNS, not one. `alpha.beta` alone cannot separate `fixed` from `basic` from
+#: `extended` from `perl` against this fixture, because `.` means "any character" in every
+#: one of those grammars -- a hostile `grep.patternType` this argv failed to pin could
+#: reproduce the baseline's bytes by COINCIDENCE rather than by being defeated, and the
+#: suite would never know the difference. Each pattern below isolates one grammar boundary,
+#: measured on git 2.55 against the fixture's `alphaXbeta` / `alpha1` / `gammaadelta` lines:
+#:   dot   -- `.` matches any character in fixed-vs-not only: `fixed` sees 1 line
+#:            (`alpha.beta` itself); `basic`/`extended`/`perl` all see 2 (+ `alphaXbeta`).
+#:   digit -- `\d` is a PCRE escape. `perl` matches `alpha1`; `basic`/`extended`/`fixed`
+#:            treat `\d` as a literal `d` and match nothing.
+#:   plus  -- `+` is a quantifier only outside basic regex. `extended`/`perl` match
+#:            `gammaadelta` (`a+` = one-or-more `a`); `basic`/`fixed` treat `+` as a literal
+#:            character and match nothing.
+GREP_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("dot", "alpha.beta"),
+    ("digit", r"alpha\d"),
+    ("plus", "gamma+delta"),
 )
 
 
@@ -82,8 +115,24 @@ def test_grep_renders_identically_under_hostile_configuration(
     """`grep.patternType` decides what the caller's PATTERN MEANS, not merely how output
     looks, so an inherited value makes one request two different queries. The rest change
     rendering. Replay compares bytes, so either kind refuses an honest run."""
-    baseline = _payload(tmp_path, "baseline", {}, _search("alpha.beta"))
-    assert _payload(tmp_path, name, config, _search("alpha.beta")) == baseline
+    for label, pattern in GREP_PATTERNS:
+        baseline = _payload(tmp_path, f"baseline-{label}", {}, _search(pattern))
+        assert _payload(tmp_path, f"{name}-{label}", config, _search(pattern)) == baseline
+
+
+def test_grep_dash_e_is_pinned_against_an_unconfigured_repository(tmp_path: Path):
+    """`-E` cannot be certified DIFFERENTIALLY at all: git's default grammar is basic, so an
+    unconfigured baseline and an unconfigured "hostile" repo degrade in lockstep the moment
+    `-E` is removed -- there is no comparison between two default repos that would ever
+    notice its absence. This is a NON-differential assertion instead: `gamma+delta` matches
+    `gammaadelta` only under extended-regex semantics (`+` is a literal character in basic
+    regex, which is what an unconfigured repo uses). If the served payload contains it at
+    all, something forced extended grammar -- and nothing in this repository's configuration
+    did.
+    """
+    root, commit = _configured_repo(tmp_path, "e-flag", {})
+    served = serve(root, commit, _search("gamma+delta"), OPEN)
+    assert b"gammaadelta" in served.payload
 
 
 HOSTILE_LOG_CONFIGS = (
@@ -110,7 +159,27 @@ def test_a_posix_class_replays_identically_across_parent_locales(
 ):
     """Run as a REPLAY across differing parent locales, since that is the failure being
     prevented: `[[:alpha:]]` matches a different character set under C than under UTF-8,
-    so an unpinned locale makes two honest replays of one query disagree."""
+    so an unpinned locale makes two honest replays of one query disagree.
+
+    THIS TEST'S DISCRIMINATING POWER DEPENDS ON THE RUNNER'S AMBIENT LOCALE, which is
+    documented nowhere else. `baseline` is built under whatever `LC_ALL`/`LANG` this process
+    already inherited -- on this machine, and on most UTF-8-default systems, that is a
+    UTF-8 locale. Under that ambient locale, the `C` and `fr_FR.UTF-8` parametrizations
+    discriminate (they force ASCII-only classification against a baseline that doesn't) and
+    `en_US.UTF-8` does not (it matches the ambient locale, so nothing splits) -- measured on
+    this runner. Under an ambient `LC_ALL=C`, it would run exactly backwards: `en_US.UTF-8`
+    would discriminate and `C` would not, because `C` would then be what the baseline already
+    used. Either way `run_git`'s own `LC_ALL=C`/`LANG=C` pin is what makes every parametrization
+    pass regardless of the ambient locale, which is the property under test -- the point is
+    not that all three rows discriminate on every machine, but that none of them needs to,
+    since the pin removes the parent's locale from the outcome entirely.
+
+    `fr_FR.UTF-8` is not installed here (`locale -a` lists no `fr_FR` variant), so glibc
+    silently falls back to `C` for it -- measured identical to the `C` row's own behaviour.
+    It is not a third, independently-verified locale on this machine, only a duplicate of
+    the `C` row; kept rather than dropped because `LC_ALL=C` still has to defeat whatever the
+    parent set, and on a machine where `fr_FR.UTF-8` *is* installed this row tests something
+    the `C` row does not."""
     baseline = _payload(tmp_path, "locale-baseline", {}, _search("[[:alpha:]]alpha"))
     monkeypatch.setenv("LC_ALL", locale)
     monkeypatch.setenv("LANG", locale)
@@ -140,32 +209,54 @@ def _package_dir() -> Path:
 
 
 def _module_asts() -> dict[str, ast.Module]:
-    """EVERY module in the package. A guard that parses one file has already decided where
-    the defect will be, which is the assumption a new module exists to violate."""
+    """EVERY module in the package, RECURSIVELY. A guard that parses only the top level has
+    already decided no defect will arrive through a subpackage, which is exactly the
+    assumption a subpackage exists to violate -- plan 3 adds modules to this package, so
+    this is not hypothetical. Keyed by path relative to the package root rather than by bare
+    filename, since `rglob` can otherwise collide two `__init__.py` files onto one key."""
     return {
-        path.name: ast.parse(path.read_text(encoding="utf-8"))
-        for path in sorted(_package_dir().glob("*.py"))
+        str(path.relative_to(_package_dir())): ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted(_package_dir().rglob("*.py"))
     }
+
+
+def _run_git_callers(tree: ast.Module) -> set[str]:
+    """Every scope a bare `run_git(...)` call sits in: a function or async function's name,
+    or `"<module level>"` for a call inside neither.
+
+    A per-`FunctionDef` walk that asks "is this call inside a function" has no case for
+    "inside nothing at all" -- a module-level `run_git(...)` statement, reachable on import,
+    would be invisible to it. It also has no case for `async def`, which `isinstance(...,
+    ast.FunctionDef)` alone does not match. This walks the tree once, tracking the nearest
+    enclosing (async or sync) function by name as it descends, so both gaps close together.
+    """
+    callers: set[str] = set()
+
+    def visit(node: ast.AST, scope: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Name)
+                and child.func.id == "run_git"
+            ):
+                callers.add(scope)
+            visit(child, scope)
+
+    visit(tree, "<module level>")
+    return callers
 
 
 def test_every_git_call_in_the_package_sits_in_a_known_helper():
     """Derived from the code, not from a list someone maintains -- same spirit as
-    `tests/test_instrument_boundary.py`. A `run_git` call added to `policy.py`, or to a
-    module that does not exist yet, fails here rather than quietly acquiring an unaudited
-    path to git."""
-    callers: dict[str, set[str]] = {}
-    for name, tree in _module_asts().items():
-        callers[name] = {
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-            and any(
-                isinstance(inner, ast.Call)
-                and isinstance(inner.func, ast.Name)
-                and inner.func.id == "run_git"
-                for inner in ast.walk(node)
-            )
-        }
+    `tests/test_instrument_boundary.py`. A `run_git` call added to `policy.py`, to a module
+    that does not exist yet, to a subpackage, to module scope, or inside an `async def`,
+    fails here rather than quietly acquiring an unaudited path to git."""
+    callers: dict[str, set[str]] = {
+        name: _run_git_callers(tree) for name, tree in _module_asts().items()
+    }
     assert callers.pop("serve.py") == set(GIT_TOUCHING)
     assert all(not found for found in callers.values()), f"git reached from: {callers}"
 
@@ -210,7 +301,12 @@ def test_authorize_precedes_every_git_call_in_serve():
 #: check ignores the receiver entirely -- so `os.spawnvp`, `o.system` under an aliased import,
 #: and a bare `system(...)` after `from os import system` all land the same way.
 _SPAWNING_MODULES = frozenset({"subprocess", "pty", "multiprocessing"})
-_SPAWNING_PREFIXES = ("exec", "spawn", "popen", "posix_spawn", "fork")
+#: NOT the bare prefix `"exec"`: it rejects an innocuous `execute_plan()` (measured --
+#: plan 3 adds a CLI handler to this package, so that false positive is a landmine, not a
+#: hypothetical). Every `os` exec function is `exec` + `l` or `v` (+ optional `p`/`e`):
+#: `execl`, `execle`, `execlp`, `execlpe`, `execv`, `execve`, `execvp`, `execvpe`. Narrowing
+#: to `execl`/`execv` keeps all eight and drops everything that merely starts with `exec`.
+_SPAWNING_PREFIXES = ("execl", "execv", "spawn", "popen", "posix_spawn", "fork")
 #: `import_module` and `__import__` are here because a dynamic import defeats the import check
 #: above: without them, `importlib.import_module("subprocess").run(...)` passes.
 _SPAWNING_NAMES = frozenset({"system", "startfile", "import_module", "__import__"})
@@ -236,7 +332,13 @@ def test_the_broker_makes_no_direct_subprocess_call():
     process launch. That is worth asserting because it is the spelling a refactor or a
     convenience helper would actually use.
     """
-    for name, tree in _module_asts().items():
+    modules = _module_asts()
+    # Otherwise this guard (and every other one that reads `_module_asts()`) passes
+    # vacuously over zero modules if package discovery ever breaks -- it never asserted it
+    # saw the modules it claims to cover. Measured: an empty directory passes every loop
+    # below with nothing to check.
+    assert {"serve.py", "policy.py"} <= set(modules)
+    for name, tree in modules.items():
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
