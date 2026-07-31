@@ -181,6 +181,80 @@ def test_GATE_2_every_armed_project_mixin_pins_its_own_kind() -> None:
             )
 
 
+_SUPERSESSION_CARRIERS = ("relations", "superseded_by")
+
+
+def _armed_supersedable_mixins() -> list[tuple[int, str, str]]:
+    """(generation, kind, packaged filename) for every ARMED, SUPERSEDABLE kind's selected mixin.
+
+    DERIVED from `supersedable` crossed with the generation rows -- never a hand-written list of
+    kinds. A guard that enumerates its own scope has a hole by construction, and this gate exists
+    precisely because `method` fell through one: hypothesis and finding were each given both
+    carriers by their own slice author, and `method` was not, with nothing ranging over the three
+    to notice the odd one out.
+    """
+    supersedable = {k.name for k in SHIPPED_KINDS if k.supersedable}
+    available = _packaged_schema_names()
+    out = []
+    for generation, row in _MIXIN_VERSION_BY_GENERATION.items():
+        for kind, version in row.items():
+            name = f"mixin-{kind}-{version}.json"
+            if kind in supersedable and kind in PROJECT_MIXIN_NAMES and name in available:
+                out.append((generation, kind, name))
+    return out
+
+
+def test_GATE_5_an_armed_supersedable_kind_admits_BOTH_supersession_carriers() -> None:
+    # LEG 1 of the D4 supersedable gate, generalized from hypothesis to every kind that claims it.
+    #
+    # `supersedable=True` puts a kind into `DECLARED_SUPERSEDABLE` and therefore into the frozen
+    # `supported_kinds` policy `mark_superseded` reads (consolidation.py:641). That writer is
+    # kind-agnostic over that set: it stamps `status: superseded` + `superseded_by` on any member
+    # of a linear chain. So an armed kind that declares itself supersedable and does NOT admit
+    # both the canonical carrier (`relations`, holding `predicate: sci:supersedes`) and the derived
+    # inverse (`superseded_by`) has declared a terminal status it cannot reach by any supported
+    # path -- and `_prepare_write` runs the composed schema, so the operation does not corrupt a
+    # record, it REFUSES outright.
+    #
+    # BOTH, not either. `superseded_by` alone stays unproducible because nothing can author the
+    # edge it inverts; `relations` alone lets the edge build and then refuses the inverse the
+    # writer derives from it. This is exactly how the F7 filing came up one key short: it named
+    # the inverse it had seen a writer stamp, not the carrier whose absence made the stamp
+    # unreachable.
+    armed = _armed_supersedable_mixins()
+    assert armed, "no armed supersedable kinds -- this gate would be vacuous"
+    for generation, kind, name in armed:
+        schema = json.loads(files("science_model.schemas").joinpath(name).read_text())
+        properties = schema.get("properties", {})
+        missing = [c for c in _SUPERSESSION_CARRIERS if c not in properties]
+        assert not missing, (
+            f"generation {generation}: {kind} is supersedable and armed, but {name} "
+            f"does not admit {missing} -- `superseded` is unreachable for this kind"
+        )
+
+
+def test_GATE_5_is_falsifiable_against_the_historical_method_mixin() -> None:
+    # The gate's negative control, and it needs no fabricated fixture: mixin-method-1.0 is still
+    # packaged (armed by no row), and it is the exact artifact the gate was written to reject.
+    # Without this, a bug that made `_armed_supersedable_mixins` return [] would leave the gate
+    # green over nothing -- the failure mode the `assert armed` line above only half covers.
+    schema = json.loads(files("science_model.schemas").joinpath("mixin-method-1.0.json").read_text())
+    properties = schema.get("properties", {})
+    assert [c for c in _SUPERSESSION_CARRIERS if c not in properties] == list(
+        _SUPERSESSION_CARRIERS
+    ), "mixin-method-1.0 was expected to admit NEITHER carrier -- it is the defect this gate catches"
+
+
+def test_GATE_5_ranges_over_every_armed_supersedable_kind_in_both_generations() -> None:
+    # Pins the population so a kind silently dropping out of the gate's scope is a failure here
+    # rather than a quiet loss of coverage. Three supersedable kinds are armed today, and both
+    # generation rows select a mixin for each.
+    assert {(g, k) for g, k, _ in _armed_supersedable_mixins()} == {
+        (2, "hypothesis"), (2, "method"), (2, "finding"),
+        (3, "hypothesis"), (3, "method"), (3, "finding"),
+    }
+
+
 def test_GATE_4_a_closed_kind_declares_entity_class_and_home() -> None:
     # An IMPLICATION, not an equality: many deliberately open kinds already declare both. A kind
     # with no `home` cannot be located in order to be validated.

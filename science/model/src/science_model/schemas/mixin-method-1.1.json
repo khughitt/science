@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-method-1.1.json",
+  "title": "science entity method mixin",
+  "$comment": "Supersedes mixin-method-1.0, which is retained on disk as a historical version armed by no generation row (test_GATE_2_every_ARMED_component_resolves_to_a_packaged_file is deliberately not biconditional). The ONLY changes are the two supersession carriers, `relations` and `superseded_by`; everything else is byte-for-byte 1.0, including the field set frozen by docs/plans/2026-07-29-schema-closure-method-slice-inventory.md over 51 authored records in mm30 (25), protein-landscape (13), health/processes/post-acute-infection (6), seq-feats (5) and cbioportal (2). Filed as F7 against 1.0 -- which named only `superseded_by`, one key short of the defect. `superseded_by` was unreachable BECAUSE `relations` was: with no `relations` declaration and `unevaluatedProperties: false`, the canonical `sci:supersedes` edge could not be authored on a method at all, so the writer that derives the inverse could never be reached. This is LEG 1 of the D4 supersedable gate, the same defect mixin-hypothesis-1.0 was written to close, arriving on `method` because the method slice declared `supersedable=True` and a `superseded` terminal status without admitting either carrier. PROSPECTIVE, not corrective: all 38 live method records (mm30 25, protein-landscape 13) carry zero `relations`, zero `superseded_by` and zero `status: superseded`, so no record changes meaning under this bump.",
+  "type": "object",
+  "$defs": {
+    "authored_relation": {
+      "$comment": "AuthoredTargetedRelation (source_contracts.py) — predicate/target/graph_layer, and nothing else. `additionalProperties: false` because a typo'd key INSIDE a relation is silently dropped today, which is the class of defect this arc exists to end. `graph_layer` defaults to `graph/knowledge` in the model; it is optional here, and never required. Copied VERBATIM from mixin-hypothesis-2.0's $defs, on the same reasoning mixin-finding-1.0 records: the projection is shared, so a kind-local variant would make this schema vouch for a shape the one projection does not preserve.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate", "target"],
+      "properties": {
+        "predicate": {"type": "string", "pattern": "\\S"},
+        "target": {"type": "string", "pattern": "\\S"},
+        "graph_layer": {"type": "string"}
+      }
+    }
+  },
+  "required": ["id", "kind", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^method:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity, so this stops `id: dataset:foo` passing on a method while deliberately not inventing a slug pattern. health_checks/identity_policy.py:207 already reports kebab-case violations for this kind as a finding."
+    },
+    "kind": {"const": "method"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum, deliberately -- and this is where the method slice departs from mixin-concept-1.0. The descriptor (profiles/core.py:504) declares active/superseded/retired/archived, but `method` is NOT in _CERTIFIED_KINDS (validate/kind_severity.py:24), so `method.status-vocabulary` is a WARN by policy and status_vocabulary.py rules that an uncertified instrument may not fail anyone's build. A schema enum fails it HARDER than a validate ERROR: it refuses the record at load with no warning stage. cbioportal's method:length-aware-geneset-enrichment carries `status: proposed` today, and the same module records that when this check first shipped, ~3 of every 4 errors were the VOCABULARY being wrong rather than the entity. Third reason, independent of the other two: status_vocabulary.py:20-22 rules there is deliberately no second per-kind table because the two would drift -- a JSON enum here is exactly that second table, versioned on a different axis. A mixin may enum-lock `status` once its kind joins _CERTIFIED_KINDS, and not before (mixin-hypothesis-2.0 is the certified case, not a counterexample)."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "AUTHORED and honored, same as mixin-hypothesis-2.0 and mixin-concept-1.0. 4 of 51 methods carry it, all `local`, all in protein-landscape. ProjectEntity's default is `core`, a value NO method record carries -- a probe asserting `profile == 'core'` would be passing on the model default, not on authored data."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "stochasticity": {
+      "enum": ["deterministic", "seedable", "nondeterministic"],
+      "$comment": "ZERO records author this, and it is admitted anyway -- the procedure's zero-occurrence case, exactly. It is prescribed by templates/method.md as `{ omit: true }` (templates.py:243: declared in the kind's frontmatter contract, not rendered), declared on MethodEntity, and read by seed_policy_derivation.py, datasets_stochasticity.py, validate/checks/methods.py and validate/checks/workflow_steps.py. Omitting it would close the kind against the whole shipped method-stochasticity program: the first author to classify a method would find the record refused at load. Mirrors science_model.entities.Stochasticity. Explicit `null` is NOT admitted -- the model types it `Stochasticity | None = None` and ABSENCE already means unclassified, so admitting null would be a second spelling of absence, the defect mixin-hypothesis-2.0 refuses by name when it excludes `proposed`/`under-investigation` from `verdict`."
+    },
+    "seed_params": {
+      "type": "array",
+      "items": {"type": "string"},
+      "$comment": "Zero records author it; admitted for the same three-surface reason as `stochasticity`. NO minItems: `seedable` with an empty seed_params is the state every seedable method in the live corpus is in, and validate/checks/methods.py reports it as a WARN. The schema must not promote that warning to a hard failure."
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "datasets": {"type": "array", "items": {"type": "string"}},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "relations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/authored_relation"},
+      "$comment": "LEG 1 of the D4 supersedable gate, ADDED IN 1.1. The CANONICAL supersession edge is a `relations:` entry with `predicate: sci:supersedes` (consolidation.py:7-12) — NOT top-level `supersedes:`, which is silently dropped (fb-2026-07-11-017). With `unevaluatedProperties: false` and no declaration in 1.0, the ONLY carrier the toolkit reads was rejected outright, making `superseded` a terminal status this kind could not reach through any supported path. Measured, not argued: `mark_superseded` over a two-method chain on a pinned project raised at `entities/methods/0002-new.md: 'relations' was unexpected` under 1.0, before it ever reached the inverse the F7 filing named."
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^method:",
+      "$comment": "The DERIVED inverse, ADDED IN 1.1 alongside its carrier. `method` is supersedable=True, so it is in `DECLARED_SUPERSEDABLE` and therefore in the frozen `supported_kinds` policy `mark_superseded` reads (consolidation.py:641) -- the writer is kind-agnostic over that set and will stamp this key onto a method. consolidation.py:147 rules markdown frontmatter is 'the only place an authored superseded_by can live'. Admitted with its carrier and not before: declaring the inverse alone would leave the key legal and still unproducible, since nothing can author the edge it inverts."
+    },
+    "schema_profile": false
+  }
+}

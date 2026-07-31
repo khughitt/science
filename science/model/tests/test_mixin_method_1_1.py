@@ -1,9 +1,18 @@
-"""Probes for the `mixin-method-1.0` schema.
+"""Probes for the ARMED `mixin-method-1.1` schema.
 
-Authored at step 2 of the method slice, while the mixin was dormant, and armed at
-step 7. The four assertions under "armed" below were written inverted and flipped in
-the arming commit, so the two-line edit that turns enforcement on could not land
-without this file changing with it.
+Grew out of step 2 of the method slice, which authored `mixin-method-1.0`. That version
+admitted NEITHER supersession carrier while the descriptor declared `supersedable=True`
+and a `superseded` terminal status, so `superseded` was a status `method` could not
+reach by any supported path -- LEG 1 of the D4 supersedable gate, the same defect
+`mixin-hypothesis-1.0` was written to close. 1.1 adds `relations` and `superseded_by`
+and changes nothing else (verified property-by-property, not asserted). 1.0 stays on
+disk as a historical version armed by no generation row, so this file follows the
+version the toolkit actually selects and there is no 1.0 probe file -- a probe against
+a schema nothing can select would be an assertion that cannot fail.
+
+The four assertions under "armed" below were written inverted at step 2 and flipped in
+the method slice's arming commit, so the two-line edit that turns enforcement on could
+not land without this file changing with it.
 
 Every strict probe composes the candidate profile through the REAL
 `EntityValidator._compose` (via `validate_as`). Hand-rolling
@@ -48,7 +57,7 @@ SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schem
 
 CANDIDATE = ProfileString(
     base=ProfileComponent(BASE_NAME, "2.0"),
-    mixin=ProfileComponent("method", "1.0"),
+    mixin=ProfileComponent("method", "1.1"),
     extensions=(),
 )
 
@@ -68,7 +77,7 @@ PROMOTED_FROM_ORACLE = {
 
 
 def _mixin() -> dict:
-    return json.loads((SCHEMAS / "mixin-method-1.0.json").read_text())
+    return json.loads((SCHEMAS / "mixin-method-1.1.json").read_text())
 
 
 def _record(**overrides) -> dict:
@@ -121,11 +130,12 @@ def test_both_generation_rows_select_the_method_mixin(generation):
 
     All five method-carrying projects pin generation 3, but `sources.py:1704` calls
     `default_profile_for_kind(entity.kind)` with no generation argument and therefore
-    always resolves row 2. The two rows agreeing on `1.0` is what keeps that call site
-    consistent with the projects it is resolving for.
+    always resolves row 2. The two rows agreeing on `1.1` is what keeps that call site
+    consistent with the projects it is resolving for. The 1.0 -> 1.1 bump had to move
+    BOTH rows for the same reason the original arming did.
     """
     profile = default_profile_for_kind("method", generation=generation)
-    assert profile.render() == "science-entity-base/2.0+method/1.0"
+    assert profile.render() == "science-entity-base/2.0+method/1.1"
 
 
 def test_the_mixin_is_now_reachable_as_a_mixin():
@@ -279,6 +289,115 @@ def test_non_string_seed_param_is_refused(strict):
     _refuses(strict, _record(seed_params=[3]))
 
 
+# --- the supersession carriers, added in 1.1 --------------------------------------
+#
+# ZERO of the 38 live method records (mm30 25, protein-landscape 13) carry `relations`,
+# `superseded_by` or `status: superseded`, so every probe below is prospective. That is
+# the whole reason the defect survived the slice: no corpus can contain a key that would
+# have refused the record carrying it, so a corpus sweep could never have found this.
+# The inventory question that does find it is "which kind-agnostic MUTATORS can write to
+# this kind's frontmatter?" -- and `mark_superseded` is one, over every kind in
+# `DECLARED_SUPERSEDABLE`.
+
+
+def test_the_canonical_supersedes_edge_validates(strict):
+    """LEG 1. Under 1.0 this record was refused outright: `'relations' was unexpected`.
+
+    This is the ONLY spelling the toolkit reads (consolidation.py:7-12). Top-level
+    `supersedes:` is silently dropped (fb-2026-07-11-017), so with `relations` refused
+    there was no second path to fall back to.
+    """
+    strict.validate_as(
+        _record(relations=[{"predicate": "sci:supersedes", "target": "method:0002-new"}]),
+        CANDIDATE,
+    )
+
+
+def test_the_derived_inverse_validates(strict):
+    """What `mark_superseded` stamps (consolidation.py:680) on a superseded member."""
+    strict.validate_as(
+        _record(status="superseded", superseded_by="method:0002-new"), CANDIDATE
+    )
+
+
+def test_a_relations_entry_may_carry_graph_layer(strict):
+    strict.validate_as(
+        _record(
+            relations=[
+                {
+                    "predicate": "sci:supersedes",
+                    "target": "method:0002-new",
+                    "graph_layer": "graph/knowledge",
+                }
+            ]
+        ),
+        CANDIDATE,
+    )
+
+
+def test_a_foreign_prefix_inverse_is_refused(strict):
+    """`^method:`. `mark_superseded` refuses cross-kind supersession pairs upstream, and
+    the pattern is the second, independent leg of that refusal."""
+    _refuses(strict, _record(status="superseded", superseded_by="hypothesis:0001-x"))
+
+
+def test_a_scalar_inverse_target_is_refused(strict):
+    """One superseder, not a list. A chain records the IMMEDIATE superseder only."""
+    _refuses(strict, _record(superseded_by=["method:0002-new", "method:0003-c"]))
+
+
+def test_an_undeclared_key_inside_a_relation_is_refused(strict):
+    """`additionalProperties: false` inside `$defs/authored_relation`.
+
+    `AuthoredTargetedRelation` is `extra="ignore"`, so a typo'd key here is silently
+    discarded by the projection. The finding slice measured exactly this happening to 3
+    records authoring `relations[].note`.
+    """
+    _refuses(
+        strict,
+        _record(
+            relations=[
+                {"predicate": "sci:supersedes", "target": "method:0002-new", "note": "why"}
+            ]
+        ),
+    )
+
+
+def test_a_relation_missing_its_target_is_refused(strict):
+    _refuses(strict, _record(relations=[{"predicate": "sci:supersedes"}]))
+
+
+def test_a_scalar_relations_value_is_refused(strict):
+    _refuses(strict, _record(relations={"predicate": "sci:supersedes", "target": "method:x"}))
+
+
+def test_authored_relation_is_copied_verbatim_from_hypothesis_2_0():
+    """A method-local variant would make this schema vouch for a shape the ONE shared
+    projection does not preserve -- the same reasoning `mixin-finding-1.0` records."""
+    hypothesis = json.loads((SCHEMAS / "mixin-hypothesis-2.0.json").read_text())
+    mine = _mixin()["$defs"]["authored_relation"]
+    theirs = hypothesis["$defs"]["authored_relation"]
+    assert {k: v for k, v in mine.items() if k != "$comment"} == {
+        k: v for k, v in theirs.items() if k != "$comment"
+    }
+
+
+def test_authored_relation_matches_the_projection_it_vouches_for():
+    """The non-tautological anchor. The test above compares two MIXINS, which would let
+    both drift to the same wrong shape together; this compares against the pydantic model
+    the projection actually runs."""
+    from science_model.source_contracts import AuthoredTargetedRelation
+
+    declared = _mixin()["$defs"]["authored_relation"]
+    assert set(declared["properties"]) == set(AuthoredTargetedRelation.model_fields)
+    required = {
+        name
+        for name, field in AuthoredTargetedRelation.model_fields.items()
+        if field.is_required()
+    }
+    assert set(declared["required"]) == required
+
+
 # --- mutation probes: what the closed schema must refuse -------------------------
 
 
@@ -303,7 +422,7 @@ def test_missing_status_is_refused(strict):
 
 def test_authored_schema_profile_is_refused(strict):
     """The narrowing: `profile` is the authored field, `schema_profile` its derived one."""
-    _refuses(strict, _record(schema_profile=f"{BASE_NAME}/2.0+method/1.0"))
+    _refuses(strict, _record(schema_profile=f"{BASE_NAME}/2.0+method/1.1"))
 
 
 def test_empty_promoted_from_is_refused(strict):
@@ -445,5 +564,32 @@ def test_mixin_declares_exactly_the_frozen_field_set():
         "source_refs",
         "datasets",
         "aliases",
+        "relations",
+        "superseded_by",
         "schema_profile",
     }
+
+
+def test_1_1_differs_from_1_0_in_THE_TWO_CARRIERS_ALONE():
+    """The bump's whole claim, mechanized rather than asserted in a `$comment`.
+
+    A bump that quietly carried a third change would be indistinguishable from this one
+    by its version number. `$id` and `$comment` are excluded because they are REQUIRED
+    to differ -- comparing them would make this test unfailable in the wrong direction.
+    `$defs` is excluded from the top-level comparison and asserted separately, because it
+    arrives WITH `relations` (which `$ref`s it) and is meaningless without it.
+    """
+    previous = json.loads((SCHEMAS / "mixin-method-1.0.json").read_text())
+    current = _mixin()
+    ignored = {"$id", "$comment", "properties", "$defs"}
+    assert {k: v for k, v in previous.items() if k not in ignored} == {
+        k: v for k, v in current.items() if k not in ignored
+    }
+    differing = {
+        key
+        for key in set(previous["properties"]) | set(current["properties"])
+        if previous["properties"].get(key) != current["properties"].get(key)
+    }
+    assert differing == {"relations", "superseded_by"}
+    assert "$defs" not in previous
+    assert set(current["$defs"]) == {"authored_relation"}

@@ -6,15 +6,23 @@ deliberately the same so they read as one pattern rather than three.
 
 `method` is the only tranche kind with a typed subclass. `CORE_KIND_MODELS` maps it to
 `MethodEntity`, so the shared surface below is the intersection of the composed schema
-with `MethodEntity` -- 17 fields, including the two this kind adds (`stochasticity`,
-`seed_params`) that no other tranche kind has to reconcile.
+with `MethodEntity` -- 18 fields, including the two this kind adds (`stochasticity`,
+`seed_params`) that no other tranche kind has to reconcile, and `relations`, admitted by
+mixin-method-1.1.
 
-Six admitted fields fall OUTSIDE that intersection (`promoted_from`, `contributors`,
-`licenses`, `sources`, `tags`, `version`): the model declares none of them and preserves
-them as `extra="allow"` extras. They are not in the battery because there is no model
-opinion to reconcile a schema opinion against -- their shapes are probed in
-`test_mixin_method_1_0.py`, and their survival in
+SEVEN admitted fields fall OUTSIDE that intersection (`promoted_from`, `contributors`,
+`licenses`, `sources`, `tags`, `version`, `superseded_by`): the model declares none of
+them and preserves them as `extra="allow"` extras. They are not in the battery because
+there is no model opinion to reconcile a schema opinion against -- their shapes are
+probed in `test_mixin_method_1_1.py`, and their survival in
 `science/tests/test_method_slice_contract_reconciliation.py`.
+
+`superseded_by` joined that list with 1.1 and is the interesting case: it is admitted,
+undeclared, and held by a READER rather than a model field --
+`graph.materialize._live_lineage_targets` -- which is what
+`science/tests/test_kind_reconciliation.py`'s UNHELD manifest exists to record. Its
+CARRIER `relations` IS declared, so the two halves of one supersession sit on opposite
+sides of this intersection.
 
 That includes `promoted_from`, which 20 of the 51 records carry. Its absence here is not
 an oversight; it is what "admitted but undeclared" means.
@@ -96,6 +104,13 @@ def _model_accepts(field: str, value: Any) -> bool:
         return False
 
 
+# Fields whose projection ADDS a declared model default to each authored item. Straight
+# equality would report preservation loss where a default was materialized. Carried over from
+# `test_finding_entity.py`, which established the rule and the two guards below that keep it
+# from being an unfalsifiable escape hatch.
+_MODEL_DEFAULTS_MATERIALIZED: dict[str, set[str]] = {"relations": {"graph_layer"}}
+
+
 def _model_preserves(field: str, value: Any) -> bool:
     try:
         entity = MethodEntity.model_validate(_model_payload(**{field: value}))
@@ -106,7 +121,17 @@ def _model_preserves(field: str, value: Any) -> bool:
     # authored ISO string and reports preservation loss where there is none. It matters for
     # `stochasticity` too -- that one projects onto a StrEnum member, not the authored str.
     dumped = entity.model_dump(mode="json")
-    return field in dumped and dumped[field] == value
+    if field not in dumped:
+        return False
+    if field not in _MODEL_DEFAULTS_MATERIALIZED:
+        return dumped[field] == value
+    allowed = _MODEL_DEFAULTS_MATERIALIZED[field]
+    for authored_item, dumped_item in zip(value, dumped[field], strict=True):
+        if any(dumped_item.get(k) != v for k, v in authored_item.items()):
+            return False  # an authored value was changed or dropped
+        if set(dumped_item) - set(authored_item) - allowed:
+            return False  # a key appeared that is not a declared default
+    return True
 
 
 # Every value here is one the MODEL has an opinion about; the point is to make the schema
@@ -149,6 +174,24 @@ _BATTERY: dict[str, list[Any]] = {
         "nondeterministic",
     ],
     "seed_params": [42, "random_state", [42], [], ["random_state", "seed"]],
+    # Added by mixin-method-1.1. Zero records author it; it is the CARRIER of the canonical
+    # `sci:supersedes` edge, without which `superseded` was a status this kind could not
+    # reach. The scalar and the bare-predicate entry are the shape controls; the last two are
+    # the shapes `mark_superseded` and `materialize` actually consume.
+    "relations": [
+        42,
+        {"predicate": "sci:supersedes", "target": "method:0002-new"},
+        [{"predicate": "sci:supersedes"}],
+        [],
+        [{"predicate": "sci:supersedes", "target": "method:0002-new"}],
+        [
+            {
+                "predicate": "sci:supersedes",
+                "target": "method:0002-new",
+                "graph_layer": "graph/knowledge",
+            }
+        ],
+    ],
 }
 
 
@@ -231,3 +274,33 @@ def test_the_status_shape_is_checked_without_the_vocabulary(generation: int) -> 
     for value in ("active", "superseded", "retired", "archived", "proposed"):
         assert _schema_accepts("status", value, profile), value
     assert not _schema_accepts("status", 42, profile)
+
+
+def test_the_relations_default_is_an_ADDITION_not_a_substitution() -> None:
+    """Pins `_MODEL_DEFAULTS_MATERIALIZED`'s premise instead of trusting the exemption.
+
+    Without this, the relaxed preservation rule above would be an unfalsifiable escape
+    hatch: any projection change to `relations` would pass as "a default was materialized".
+    Here the authored keys are asserted to survive UNCHANGED and the added key is asserted
+    to be exactly `graph_layer` with exactly the model's declared default.
+    """
+    authored = {"predicate": "sci:supersedes", "target": "method:0002-new"}
+    entity = MethodEntity.model_validate(_model_payload(relations=[authored]))
+    dumped = entity.model_dump(mode="json")["relations"]
+
+    assert len(dumped) == 1
+    assert dumped[0]["predicate"] == "sci:supersedes"
+    assert dumped[0]["target"] == "method:0002-new"
+    assert set(dumped[0]) - set(authored) == {"graph_layer"}
+    assert dumped[0]["graph_layer"] == "graph/knowledge"
+
+
+def test_an_authored_graph_layer_is_not_overwritten_by_the_default() -> None:
+    """The other half: materializing a default must never SUBSTITUTE for an authored value."""
+    authored = {
+        "predicate": "sci:supersedes",
+        "target": "method:0002-new",
+        "graph_layer": "graph/local",
+    }
+    entity = MethodEntity.model_validate(_model_payload(relations=[authored]))
+    assert entity.model_dump(mode="json")["relations"][0]["graph_layer"] == "graph/local"

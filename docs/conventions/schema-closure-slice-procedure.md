@@ -502,7 +502,7 @@ is why the shape is recorded rather than just the title.
 | F4 | `render_update`'s stale-owned-key hole | `final.pop(key, None)`, but that also drops the `legacy_*` triple, so it needs its own pass rather than a one-liner. | No |
 | F5 | Six unclosed core kinds carrying `promoted_from` | Resolved by their own slices; no separate work. | No |
 | F6 | `science validate` writes to the project it validates | Creates local topic entities duplicating commons overlays (one per run) and appends to tracked task files. Needs the topic-materialisation path traced to its writer; `validate` should be read-only. | Not a blocker, but it makes step-4/6 measurement untrustworthy unless the tree is restored between runs |
-| F7 | `mixin-method-1.0` omits `superseded_by` on a `supersedable` kind | Versioned bump to `mixin-method-1.1`, exactly like `mixin-concept-1.1`. `mark_superseded` stamps the key into frontmatter (`consolidation.py:147` rules frontmatter is "the only place an authored `superseded_by` can live"), and `method` is `supersedable=True`, so the writer can produce a record its own mixin refuses — verified. `mixin-hypothesis-2.0` already admits it. `search`/`concept` are `supersedable=False`, so their refusal is correct. **Still open for `method`.** The `finding` slice applied the lesson prospectively — `mixin-finding-1.0` admits `superseded_by` at zero occurrences precisely because `finding` is `supersedable=True` — so `method` is now the only armed supersedable kind whose mixin refuses a key its own writer stamps. | No, but it is a **reachable defect in shipped work**, like the `consolidated_into` one the `observation` slice fixed |
+| F7 | ~~`mixin-method-1.0` omits `superseded_by` on a `supersedable` kind~~ | **CLOSED** 2026-07-30 by `mixin-method-1.1`, a versioned bump exactly like `mixin-concept-1.1` (new file, 1.0 retained as a historical version armed by no row, both generation rows repointed, probe file renamed). **The filing was one key short.** 1.0 admitted neither `superseded_by` *nor* `relations`, and the inverse was unreachable *because* its carrier was: with no `relations` declaration under `unevaluatedProperties: false`, the canonical `sci:supersedes` edge could not be authored on a method at all, so `mark_superseded` raised at the **superseder's** file (`'relations' was unexpected`) before it ever reached the member it wanted to stamp. That is LEG 1 of the D4 supersedable gate — the same defect `mixin-hypothesis-1.0` was written to close. Prospective, not corrective: all 38 live methods carry zero `relations`, zero `superseded_by`, zero `status: superseded`. Generalized into **GATE 5** (`test_schema_closed_gate.py`), which derives its scope from `supersedable ∧ schema_closed` and asserts both carriers, so the remaining 47 kinds cannot repeat it. | No, but it was a **reachable defect in shipped work**, like the `consolidated_into` one the `observation` slice fixed |
 | F9 | `_STRUCTURED_INJECTED_KEYS`' comment generalizes a per-kind fact | `sources.py:122-125` justifies exposing `profile`, `aliases`, `ontology_terms`, `related`, `source_refs` as authored because they "are admitted (measured)". Measured across all 16 packaged schemas: `ontology_terms` is base-wide; `related`/`source_refs` are admitted by all five armed mixins; **`profile` is not admitted by `observation`**, and **`aliases` is not admitted by `concept`, `search` or `observation`**, nor by any base or overlay. Fix is to widen the frozenset or restate the comment as the per-kind claim it is. | Not today — no armed kind but `finding` takes the structured path, and `finding` admits both keys. Blocks the **next** kind that takes it without authoring them |
 | F10 | `interpretation` records author `relations[].note` | 19 records in `~/d/natural-systems`, the same silently-discarded key the `finding` slice migrated out of 3 records. That slice deliberately left them: each kind's slice owns its own corpus. Needs the same duplicate check (is the note restated in the body?) rather than copying the ruling. | No — `interpretation` is not a tranche kind and is not armed |
 | F8 | `~/d/health/processes/cycles` cannot be loaded | Its aggregate task store predates the storage split; the fix is `science tasks migrate-storage --apply` in that project. Fails on `main` too, so it is not slice-induced. | Not a slice blocker, but it cost the `observation` slice the end-to-end half of step 6 for the only project holding its corpus, and will cost `finding` the same wherever it overlaps |
@@ -515,3 +515,25 @@ the outside without opening `validate_canonical_markdown_record`. In both cases 
 artifact was written from a plausible model rather than a read. **Where a population is
 uniform or a fix is described rather than traced, reason from the declaration and the
 code, not from the measurement.**
+
+**What closing F7 added to that (2026-07-30).** The filing named `superseded_by` because
+that is the key someone had *watched a writer stamp*. It did not name `relations`, because
+nothing observable pointed at it — the carrier's absence produces no stamped key to notice,
+only an operation that fails earlier and elsewhere. Reproducing the defect took thirty
+lines and found the real shape in one run; reasoning from the filing would have shipped a
+`1.1` that admitted the inverse and left the kind exactly as unsupersedable as before, with
+a green test suite over it.
+
+Two rules follow, and the second is the general one:
+
+1. **Reproduce a filed defect before fixing it, even when the filing looks precise.** A
+   filing records the symptom its author reached, not the boundary of the defect. F7 was
+   written by the `finding` slice, which was doing everything right and still under-named
+   the thing by half.
+2. **A capability flag is a claim about a whole path, so check the whole path.**
+   `supersedable=True` asserts that a kind can be superseded — which needs the carrier, the
+   endpoint pair, the writer, the terminal status, *and* the schema admitting both ends.
+   Checking any one leg proves nothing about the others. GATE 5 now holds the schema half
+   of this for every armed kind, derived from the flag rather than enumerated, because a
+   guard that lists its scope has a hole by construction — and `method` fell through exactly
+   such a hole while `hypothesis` and `finding` sat beside it with both carriers.
