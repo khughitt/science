@@ -1,18 +1,20 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 16)
+**Status:** partially implemented (revision 17)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
-**Implementation status.** This design ships as **four** plans, not the three its section grouping
-suggests; the boundary was drawn by tracing module dependencies rather than section headings.
+**Implementation status.** This design ships as **five** plans, not the three its section grouping
+suggests; the boundary was drawn by tracing module dependencies rather than section headings. The
+fourth split in two at revision 17, on the seam between producing a `Correspondence` and storing one.
 
 | Plan | Owns | State |
 |---|---|---|
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4 | correspondence — §5 entire, §4.2, §4.2.1 | not designed |
+| Plan 4a | the checker — §3.1's NFD close, the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 17, not implemented |
+| Plan 4b | the boundary — §4.2's invariants on the stored `Review`, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 17, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -49,6 +51,44 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 17 designs the correspondence slice and, in doing so, closes the NFD residual §3.1 parked
+for plan 3 and plan 3 did not take. It is the first revision where a *parked* residual, rather than a
+review finding, turned out to be load-bearing for the section that came after it.
+
+Revision 11 recorded the residual as one failure — `search` serving past a deny prefix — because it
+read §3.1 against §3.2. Read against §5.1 instead, the same root cause has **three** directions, and
+only the first was ever written down:
+
+1. *Leak.* `:(top,literal,exclude)café` in NFC excludes no NFD tree entry, so `search` serves what the
+   policy denies.
+2. *False refusal.* `LocationEvidence.path` is forced to NFC, so an honest citation into an NFD path
+   can never match a served map keyed on the tree's own bytes. §5.3 classifies that as
+   `CITATION_UNSERVED`, which **refuses the review**. The checker built to catch fabrication would
+   have rejected honest work instead.
+3. *False absence.* A `read` of the NFC spelling against an NFD tree entry returns `MISS_ABSENT`,
+   which §5.1 defines as "the path is not at the commit, and that was served as the answer" and makes
+   citable. An agent could claim a file does not exist, be wrong, and be certified `verified`.
+
+Direction 3 is the one that decides the design. It involves no collision, no deny prefix and no
+search — one NFD path anywhere in the tree is enough — so no filter on the serving side reaches it.
+**The session therefore refuses at open any pinned tree holding a path that is not valid UTF-8 or not
+already NFC**, verified by one `git ls-tree -r -z --name-only` pass. All three directions become
+unreachable at once, in the one layer that can still refuse, instead of three guards in three layers.
+The serve-time post-filter that revision 17 first proposed came back out: it defended direction 1
+only, and it would have read as coverage.
+
+Two properties are worth stating because they are what make one check sufficient. The pinned commit's
+tree is immutable, so a session that opened without a violation can never develop one and **replay
+inherits the guarantee without re-checking it**. And a colliding pair — `café` and `café` both
+present, which is what makes an NFC-keyed served map unsound — is subsumed, since at least one member
+of any such pair is non-NFC.
+
+`REPLAY_PROTOCOL_VERSION` goes to 2 even though no serving byte changes. §5.2's rule bumps on a
+change to serving or parsing; here the *guarantee* changed, since a v1 exposure may come from an NFD
+tree and a v2 one may not. Measured at design time: no control-plane directory exists on this machine
+and no stored record anywhere carries an exposure, so the bump invalidates nothing, and a stale v1
+control plane reads as `unwired` / `REPLAY_PROTOCOL_MISMATCH` rather than being silently trusted.
 
 Revision 16 comes from a sixth review round and closes three gaps in revision 15's fixes. The
 "derived" journal bound counted one `\\uXXXX` escape per Python character, but a non-BMP character
@@ -164,7 +204,7 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4 undesigned** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4a/4b designed at revision 17** |
 | Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
@@ -337,16 +377,28 @@ pathspecs byte-exactly. So a policy and a repository can be spelled differently 
   meant the author's spelling never reached git and the policy they wrote was not the policy they
   got. `SurfacePolicy` now **refuses** a prefix whose NFC form differs from what was written, so the
   caller learns the policy cannot express what they meant. Failing early beats a silent weakening.
-- *Repository side, OPEN and deliberately parked.* Against a tree holding an NFD path
-  (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling the model accepts — denies under
-  `read` and **still serves under `search`**, because `:(top,literal,exclude)café` in NFC matches no
-  NFD tree entry. Measured on git 2.55. Closing it honestly means `serve` inspecting the tree's own
-  path bytes, which is a traversal the serving surface has no place for; the natural home is the
-  session layer of plan 3, which already walks served paths.
+- *Repository side, CLOSED at revision 17 by refusing the tree rather than filtering the results.*
+  Against a tree holding an NFD path (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling
+  the model accepts — denies under `read` and **still serves under `search`**, because
+  `:(top,literal,exclude)café` in NFC matches no NFD tree entry. Measured on git 2.55.
 
-Recorded rather than hidden: a non-ASCII, NFD-authored repository (macOS-authored trees routinely
-are) can be searched past a policy that `read` honours. Any consumer relying on `deny_prefixes` as a
-confidentiality boundary needs this closed first.
+  Revisions 11–16 parked this as that one leak and nominated `serve` inspecting the tree's own path
+  bytes as the fix. Both were wrong. The leak is one of three directions (header, revision 17), and
+  the decisive one — a `read` returning `MISS_ABSENT` for a path that exists under another spelling,
+  certifying a **false absence claim** — is reachable with no deny prefix and no search at all, so no
+  amount of filtering on the serving side closes it.
+
+  **The session refuses at open any pinned tree containing a path that is not valid UTF-8 or not
+  already NFC**, established by one `git ls-tree -r -z --name-only` pass at the pinned commit. UTF-8
+  travels with NFC in the same check because a path that does not decode cannot be spelled as a
+  `LocationEvidence.path` either, so it can never be cited honestly and refusing it is the same rule
+  in the same place. `serve` is unchanged: with the tree guaranteed NFC, git's own pathspec matching
+  is byte-exact against the only spelling the model can produce.
+
+The cost, stated rather than buried: a genuinely NFD-authored repository cannot be brokered until it
+renames. That is narrower than it sounds — git on macOS sets `core.precomposeunicode=true` by
+default, so macOS-authored *trees* are usually already NFC even where the working filesystem is not,
+and revisions 11–16 overstated the exposure by treating filesystem behaviour as tree content.
 
 The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
 are opened: the baseline, the journal, the control-plane root, and the `served/` directory of §3.5.
@@ -878,7 +930,7 @@ may live — but the honest statement is that the anchoring rule is enforced for
 `served/` and not for the baseline. Recorded here rather than implied away; closing it is a change to
 plan 1's shipped `autonomy/baseline.py` and belongs to whichever slice next touches that module.
 
-Plan 4's replay and correspondence work inherits this: anything that later reads the journal or
+Plan 4a's replay and correspondence work inherits this: anything that later reads the journal or
 `served/` reads it the same way.
 
 **The served file is written before the journal line, not after.** The journal is the record of what
@@ -1052,6 +1104,14 @@ forget. `AuditReport` versus `AuditFindingRecord` is the same split, for the sam
 `Correspondence` mirrors `InstrumentResult`'s invariant — `unwired` requires a machine-readable code
 — so both ways this toolkit says "could not run" have one shape.
 
+**Revision 17 strengthens that to: `code` is required whenever `status != "verified"`.** Revisions
+1–16 required it only under `unwired`, which was coherent while `violated` was refused at
+`append_review` and never stored. It stops being coherent once §5's checker (plan 4a) ships ahead of
+that boundary (plan 4b): `check_correspondence` returns a `violated` result to a caller, and without
+this the §5.3 codes `EXPOSURE_UNREPRODUCIBLE` and `CITATION_UNSERVED` would be unrepresentable on the
+value that carries them — recoverable only as prose in an error message. `verified` remains the one
+status with nothing to explain.
+
 `evidence` is bounded by the existing `MAX_EVIDENCE_ENTRIES`.
 
 **Invariants on the stored `Review`:**
@@ -1220,6 +1280,13 @@ def check_correspondence(review, exposure, *, repo) -> Correspondence
 
 The live session is gone from the signature: everything replay needs is sealed into `exposure`.
 
+**Modules (plan 4a).** `evidence_broker/hits.py` parses `git grep -n -z` output into hits and runs no
+git of its own — pure bytes in, `(path, line)` out — so the NUL-record contract of §5.1 can be
+certified against real `git grep` output without an exposure, a repository or a review in the
+picture. That isolation is worth a module because revisions 1–9 stated the format wrongly in prose
+and nothing caught it. `evidence_broker/correspondence.py` holds the served map and the check.
+`serve.py` is untouched by this slice; §3.1's NFC rule lands in the session's open path.
+
 ### 5.1 The served set — coverage, not paths
 
 Revision 1 built a set of paths. That certified a whole file from a single grep hit: a match on line 1
@@ -1265,10 +1332,41 @@ matched lines are recoverable from the served bytes — **NUL-separated, not col
 Revisions 1–9 said `<commit>:<path>:<line>:` here while §3.2.1's own table pinned `-z`, which
 changes the separator. A parser written to the colon spelling recovers no line numbers at all, so
 every search-derived citation would be `CITATION_UNSERVED` and §5.3 would refuse an honest review.
-The NUL form is what ships and what plan 3 must parse; a path is unambiguous under it, which is why
-`-z` is pinned in the first place — which is a second reason replay is not optional, since
-the journal stores only a hash of them. Where a path is both read and searched, `FULL` supersedes
-`LINES`.
+The NUL form is what ships and what **plan 4a** parses — plan 3 was named here through revision 16
+and shipped without touching it; a path is unambiguous under it, which is why `-z` is pinned in the
+first place — which is a second reason replay is not optional, since the journal stores only a hash
+of them. Where a path is both read and searched, `FULL` supersedes `LINES`.
+
+**The pinned argv makes the record format tighter than "NUL-separated", in two ways a plausible
+parser gets wrong.** `_GREP_ARGV` pins `-a` and `--no-column`, so every record is exactly
+`<commit>:<path>` NUL `<line>` NUL `<matched content>` LF, and there is no `Binary file … matches`
+variant to special-case — `-a` means even a binary file yields ordinary numbered hits.
+
+- **Split each record on NUL with `maxsplit=2`; never split the whole payload on NUL.** Because `-a`
+  serves binary content as text, matched content can itself contain NUL bytes. `maxsplit=2` makes
+  them inert; a whole-payload split silently invents fields from them.
+- **Remove the `<commit>:` prefix by exact string removal, not by splitting on `:`.** The commit is
+  known to the parser, and a path may legitimately contain a colon.
+
+Records are LF-delimited, and matched content cannot contain LF because a matched line ends at one.
+
+**Two definitions this section left implicit, which is where off-by-one defects live.** `line_count`
+is the number of LF-terminated lines plus one if any bytes follow the final LF; an empty payload is
+`line_count = 0`, so every line citation into an empty file fails rather than passing by vacuity. And
+`ABSENT` is the strongest claim the table can express — it is what certifies "this file does not
+exist at this commit" — which is why §3.1's NFC rule has to hold for it to mean anything at all.
+
+**`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
+`Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
+never stored, so putting it in `science_model` beside the sealed types would advertise a durability
+it does not have. `Correspondence`, which *is* returned across the boundary, does ship in
+`science_model` (§4.2).
+
+**The cited set.** `line` and `span` are already mutually exclusive on `LocationEvidence`, so a
+citation cites `{line}`, or every line from `span.start_line` to `span.end_line` inclusive, with
+columns ignored. A `LocationEvidence` bearing no `line`, `span` or `pointer` is a bare path citation
+and corresponds under any coverage present in the map, `ABSENT` included — "this file is not here" is
+a path-only claim and is exactly the finding §5.1 ends by protecting.
 
 A `LocationEvidence` corresponds iff:
 
@@ -1324,6 +1422,11 @@ copy, and reaches for no control-plane file at all.
 Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
 read many of the same files.
 
+**Replay performs no NFC check of its own.** §3.1's rule is enforced at session open against the
+pinned commit, and a commit's tree is immutable, so an exposure that exists at all was sealed against
+a tree that satisfied it. Re-checking here would be a second guard for a property already
+established — and a second place to get it wrong.
+
 **Replay is bound to a `REPLAY_PROTOCOL_VERSION`, not to `toolkit_revision`.** Reproducing a hash
 depends on the serving implementation — the defined-miss markers, the canonical argv of §3.2.1, the
 hit-line parsing. A later toolkit that changes any of them would recompute different bytes and classify
@@ -1355,6 +1458,15 @@ nothing.
 | Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
 | Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
 | Replay ran; everything corresponded | `verified` | yes | yes |
+
+**The rows are ordered, and the order is load-bearing.** The three `unwired` conditions are decided
+first, before any git call — a protocol mismatch in particular short-circuits, since re-serving under
+a protocol whose meaning has changed produces bytes that answer no question. Then **replay integrity
+is checked in full, and any entry that fails to reproduce short-circuits to
+`EXPOSURE_UNREPRODUCIBLE`; citations are never evaluated.** A served map built from entries that did
+not reproduce is not a map of anything, so reporting `CITATION_UNSERVED` off it would name a symptom
+as the cause and point an operator at the reviewer instead of at the record. Only against a fully
+reproduced exposure are citations checked.
 
 The checker reproduces the distinction it exists to enforce: *could not check* is not *checked and
 found false*. A journal that fails to reproduce at a pinned commit under a canonical invocation is not
@@ -1543,6 +1655,29 @@ downgrade is a lie about what was checked.
 closed downstream survived a green suite until it was negative-tested, and four of the six defects in
 revision 1 of this document were guards that looked right on the page. A guard nobody has watched fail
 is a guard nobody has tested.
+
+**Plan 4a's roster is written as pairs — the mutation beside the test it must turn red — because
+across plans 2 and 3 the recurring finding was a mutation that left its test green and therefore
+certified nothing.**
+
+| Mutation | Test that must fail |
+|---|---|
+| Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
+| Key the served map on the tree's raw path bytes | an honest citation into a non-ASCII path corresponds |
+| Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
+| Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
+| `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |
+| Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
+| Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
+| Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
+| Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
+| Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
+
+**The `Full`-supersedes-`Lines` row is the one to distrust**, and its fixture is specified here rather
+than left to an implementer: it needs a single exposure in which one path is **both read and
+searched**. Against a fixture where every path is read or searched but never both, the mutation stays
+green and the row certifies nothing — the precise shape of the vacuous parametrizations found in
+plan 2.
 
 ## 8. Consequences
 
