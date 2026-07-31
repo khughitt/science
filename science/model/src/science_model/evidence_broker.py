@@ -8,7 +8,11 @@ control plane.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from enum import StrEnum
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from science_model.audit.subjects import SubjectError, normalize_project_path, normalize_utf8_nfc
 
@@ -62,3 +66,159 @@ class SurfacePolicy(BaseModel):
                     "nothing from `search` while `read` denied the same path"
                 )
         return prefixes
+
+
+#: Bumped only when serving or parsing changes: defined misses, canonical argv, or hit parsing.
+#: It is not the toolkit revision; a signal that fires on every release is ignored.
+REPLAY_PROTOCOL_VERSION = 1
+
+#: Character bounds make the journal's byte ceiling derivable before it is read. Pydantic counts
+#: characters, not bytes; journal encoding accounts separately for the worst-case byte expansion.
+MAX_TARGET_CHARS = 4096
+MAX_BUDGET = 100
+MAX_INLINE_INPUTS = 100
+MAX_INLINE_LINES = (1 << 63) - 1
+
+COMMIT_PATTERN = r"^[0-9a-f]{40}$"
+ENTRY_COMMIT_PATTERN = r"^(?:[0-9a-f]{40})?$"
+SHA256_PATTERN = r"^[0-9a-f]{64}$"
+
+
+class Outcome(StrEnum):
+    """What one request produced.
+
+    This lives in the model package because sealed entries use it and ``science_model`` cannot
+    import ``science_tool``.
+    """
+
+    SERVED = "served"
+    MISS_ABSENT = "miss-absent"
+    MISS_NO_MATCH = "miss-no-match"
+    MISS_NO_COMMITS = "miss-no-commits"
+    REFUSED = "refused"
+
+
+class InstrumentIdentity(BaseModel):
+    """What defined the judgement procedure."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: str
+    sha256: str
+    prompt_hash: str
+
+
+class InlineInput(BaseModel):
+    """One input the opening prompt already supplied.
+
+    ``lines`` is carried because inline bytes are not in the tree and cannot be re-derived later.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    target: str = Field(max_length=MAX_TARGET_CHARS)
+    sha256: str = Field(pattern=SHA256_PATTERN)
+    lines: int = Field(ge=0, le=MAX_INLINE_LINES)
+
+
+class ExposureEntry(BaseModel):
+    """One journal event, sealed.
+
+    Matched line numbers stay unstored and are re-derived during replay. Outcome is stored because
+    replay checks it; without it, a refusal's empty payload is indistinguishable from a served empty
+    file and can be misclassified as full coverage.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    op: Literal["read", "search", "history", "inline"]
+    target: str = Field(max_length=MAX_TARGET_CHARS)
+    pathspec: str | None = Field(default=None, max_length=MAX_TARGET_CHARS)
+    commit: str = Field(pattern=ENTRY_COMMIT_PATTERN)
+    sha256: str = Field(pattern=SHA256_PATTERN)
+    outcome: Outcome
+
+
+class EvidenceExposure(BaseModel):
+    """The sealed record of what an agent was shown.
+
+    It contains every input replay needs so a repository and the record are sufficient to recheck a
+    run after its control-plane directory has gone.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    commit: str = Field(pattern=COMMIT_PATTERN)
+    budget: int = Field(ge=0, le=MAX_BUDGET)
+    requests_used: int = Field(ge=0)
+    instrument: InstrumentIdentity
+    surface_policy: SurfacePolicy
+    inline: tuple[InlineInput, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)
+    replay_protocol: int
+    entries: tuple[ExposureEntry, ...] = ()
+
+    @model_validator(mode="after")
+    def _spend_is_derived_then_bounded(self) -> EvidenceExposure:
+        """Recompute the spend before applying its bound."""
+        counted = len([entry for entry in self.entries if entry.op != "inline"])
+        if self.requests_used != counted:
+            raise ValueError(
+                f"requests_used is {self.requests_used} but {counted} non-inline entries are "
+                "recorded; the spend is derived from the log, not asserted beside it"
+            )
+        if self.requests_used > self.budget:
+            raise ValueError(f"requests_used {self.requests_used} exceeds budget {self.budget}")
+        return self
+
+    @model_validator(mode="after")
+    def _one_evidence_surface(self) -> EvidenceExposure:
+        """A run that read two trees did not have one evidence surface."""
+        for entry in self.entries:
+            if entry.commit != self.commit:
+                raise ValueError(
+                    f"entry {entry.target!r} is at commit {entry.commit} but the exposure is at "
+                    f"{self.commit}"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _inline_entries_were_served(self) -> EvidenceExposure:
+        """Inline entries are supervisor seeding and therefore served by construction."""
+        for entry in self.entries:
+            if entry.op == "inline" and entry.outcome is not Outcome.SERVED:
+                raise ValueError(
+                    f"inline entry {entry.target!r} carries outcome {entry.outcome}; the "
+                    "supervisor's own seeding is served by construction"
+                )
+        return self
+
+
+class EvidenceSession(BaseModel):
+    """The live session declared in a run baseline.
+
+    None of these values is actor-settable on the command line.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_id: str
+    journal_path: Path
+    commit: str = Field(pattern=COMMIT_PATTERN)
+    budget: int = Field(ge=0, le=MAX_BUDGET)
+    surface_policy: SurfacePolicy
+    instrument: InstrumentIdentity
+    inline: tuple[InlineInput, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)
+
+
+class EvidenceSessionSpec(BaseModel):
+    """The supervisor's declaration, read from JSON at run start.
+
+    Inline paths are paths rather than claimed hashes: run start reads and measures the bytes.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    budget: int = Field(ge=0, le=MAX_BUDGET)
+    surface_policy: SurfacePolicy
+    instrument: InstrumentIdentity
+    inline_paths: tuple[Path, ...] = Field(default=(), max_length=MAX_INLINE_INPUTS)

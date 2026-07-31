@@ -4,10 +4,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from science_model.evidence_broker import SurfacePolicy
+from science_model.evidence_broker import Outcome, SurfacePolicy
 
 from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest, authorize
-from science_tool.evidence_broker.serve import Outcome, ServeError, serve, verify_commit
+from science_tool.evidence_broker.serve import ServeError, serve, verify_commit
 
 OPEN = SurfacePolicy(notice="withheld")
 CLOSED = SurfacePolicy(deny_prefixes=("private", "notes/a[b].md"), notice="withheld")
@@ -68,6 +68,7 @@ def test_read_serves_the_blob(tmp_path: Path):
     served = serve(root, commit, _read("a.txt"), OPEN)
     assert served.outcome is Outcome.SERVED
     assert served.payload == b"alpha\nbeta\n"
+    assert served.target == "a.txt"
 
 
 def test_an_empty_file_is_served_not_missed(tmp_path: Path):
@@ -84,6 +85,7 @@ def test_an_absent_path_is_a_defined_miss(tmp_path: Path):
     served = serve(root, commit, _read("nope.txt"), OPEN)
     assert served.outcome is Outcome.MISS_ABSENT
     assert served.payload  # the marker, so the hash covers the answer
+    assert served.target == "nope.txt"
 
 
 def test_an_absent_path_that_exists_on_disk_is_the_same_miss(tmp_path: Path):
@@ -172,6 +174,7 @@ def test_a_denied_read_makes_no_git_call_at_all(tmp_path: Path, monkeypatch):
     assert served.outcome is Outcome.REFUSED
     assert served.denial is not None
     assert served.payload == b""
+    assert served.target == "private/x.txt"
 
 
 def test_a_history_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path):
@@ -284,6 +287,7 @@ def test_the_normalized_path_is_what_git_reads(tmp_path: Path):
     served = serve(root, commit, _read("a\\b"), OPEN)
     assert served.outcome is Outcome.MISS_ABSENT
     assert served.payload != b"raw\n"
+    assert served.target == "a/b"
 
 
 def test_the_normalized_path_is_what_history_walks(tmp_path: Path):
@@ -296,6 +300,7 @@ def test_the_normalized_path_is_what_history_walks(tmp_path: Path):
     root, commit = _repo(tmp_path)
     served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a\\b"), OPEN)
     assert served.outcome is Outcome.MISS_NO_COMMITS
+    assert served.target == "a/b"
 
 
 def test_the_normalized_path_is_what_search_is_restricted_to(tmp_path: Path):
@@ -307,6 +312,8 @@ def test_the_normalized_path_is_what_search_is_restricted_to(tmp_path: Path):
     root, commit = _repo(tmp_path)
     served = serve(root, commit, _search("raw", pathspec="a\\b"), OPEN)
     assert served.outcome is Outcome.MISS_NO_MATCH
+    assert served.target == "raw"
+    assert served.pathspec == "a/b"
 
 
 def test_search_hits_carry_commit_path_and_line(tmp_path: Path):
@@ -330,6 +337,7 @@ def test_a_malformed_pattern_is_refused_not_raised(tmp_path: Path):
     assert served.outcome is Outcome.REFUSED
     assert served.denial is not None
     assert served.denial.reason == "pattern-malformed"
+    assert served.target == "a["
 
 
 def test_search_carries_the_policy_exclusions_even_with_no_pathspec(tmp_path: Path):
