@@ -11,7 +11,7 @@ suggests; the boundary was drawn by tracing module dependencies rather than sect
 |---|---|---|
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
-| [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **planned**, not implemented |
+| [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
 | Plan 4 | correspondence — §5 entire, §4.2, §4.2.1 | not designed |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
@@ -164,7 +164,7 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–2 merged, 3 planned, 4 undesigned** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4 undesigned** |
 | Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
