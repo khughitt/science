@@ -27,6 +27,15 @@ replay at review-append time. Each section was locally coherent, which is why ei
 section-by-section review did not surface it — and it was slicing-relevant, since a replaying seal
 would have dragged §5's replay machinery into the session slice. A fifth pattern, below.
 
+Revision 9 carries two further corrections, both from probing git 2.55 while planning the serving
+slice rather than from reading. `read` was spelled `git show <commit>:<path>`, which serves a
+*directory* as a tree listing at exit 0 — indistinguishable from a file read, so `FULL` coverage would
+have been recorded over a listing (§3.2). And §3.2's account of why search pathspecs need `literal` was
+invented: the non-literal spelling does not leak denied material, it over-excludes material that was
+never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
+are instances of the second pattern below — a claim that outran its mechanism — and the second is its
+sharpest form yet, since the recommendation it argued for was correct all along.
+
 Five patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
 
@@ -230,7 +239,7 @@ Containment is checked **before** any prefix, because a prefix check alone is wa
 **A git path is normalized lexically and the filesystem is never consulted.** Revisions 1–4 borrowed
 `reject_baseline_inside_project`'s dual as-spelled/resolved idiom wholesale, which is the wrong tool
 here: it follows symlinks in the mutable working tree, while the served surface is
-`git show <commit>:<path>` — a blob read that never touches the working tree at all. Replacing a
+`git cat-file blob <commit>:<path>` — a blob read that never touches the working tree at all. Replacing a
 base-commit file with a working-tree symlink would therefore deny a request that was entirely safe,
 and resolving would buy no security in exchange, because there is no filesystem lookup to protect.
 
@@ -264,14 +273,31 @@ CLI has no flag for it.
 
 ### 3.2 Serving
 
-Three operations, all resolved at a pinned commit: `read` (`git show <commit>:<path>`), `search`
-(`git grep`), `history` (`git log`). Reads go through the commit rather than the filesystem so the
-surface is the frozen tree even when the working tree has moved on.
+Three operations, all resolved at a pinned commit: `read` (`git cat-file blob <commit>:<path>`),
+`search` (`git grep`), `history` (`git log`). Reads go through the commit rather than the filesystem so
+the surface is the frozen tree even when the working tree has moved on.
+
+**`read` is `cat-file blob`, not `show`, because `show` serves a directory as content.** Revisions 1–8
+spelled it `git show <commit>:<path>`. Measured against git 2.55: for a path naming a *directory*, that
+command exits 0 and prints a tree listing — `tree <commit>:<path>`, a blank line, then the entry names.
+Nothing distinguishes that from a file read, so the served map would record `FULL` coverage with a line
+count over a directory listing, and a reviewer could then cite `private:3` in support of a claim about
+what a file under `private/` contains, having been shown no file at all. The citation would correspond
+mechanically while resting on nothing, which is the exact failure §5.1 exists to prevent.
+`cat-file blob` refuses a tree outright — `fatal: git cat-file <commit>:<path>: bad file` — and emits
+byte-identical output for a blob. It is a subcommand `autonomy/git.py` has not probed, so §3.2.1's rule
+applies to it before it ships.
 
 **`verify_commit()` runs once before any request is served, and the ordering is load-bearing.** For a
 well-formed but nonexistent commit, git reports `path 'x' exists on disk, but not in '<commit>'` —
 the same sentence it emits for a path added after the pinned commit. Miss classification is sound
 only once the revision is known good.
+
+**The read miss has two spellings and the classifier must know both.** `path 'x' does not exist in
+'<commit>'` when the path is absent from the working tree as well, and `path 'x' exists on disk, but
+not in '<commit>'` when it is present there. Both mean the same thing about the pinned tree, both exit
+128, and a classifier that recognises only one turns an ordinary absent path into a halted run for
+exactly the paths the actor happens to have created.
 
 **Defined misses are answers.** An absent path, a pattern with no matches, and a path with no commits
 are each served with an explicit marker, and each is distinguishable from its degenerate neighbour:
@@ -292,14 +318,31 @@ repository fact, and is refused as retryable rather than treated as instrument f
 the caller supplied a pathspec of its own. Search is the one operation that never names a path, so
 denying a directory to `read` while `git grep` returns hits from inside it denies nothing.
 
-**`literal` is load-bearing, not decoration.** `normalize_project_path` refuses `..`, absolute paths
-and NUL, and permits everything else — including `*`, `?` and `[]`, which are ordinary characters in a
-filename and wildmatch syntax in a pathspec. A directory literally named `private/[drafts]` is denied
-by `read`, where the prefix is compared as text, and *not* excluded by a bare
-`:(exclude)private/[drafts]`, where `[drafts]` is a character class matching one letter. The deny
-policy would then hold on one operation and leak on the other, silently, for exactly the paths whose
-names happen to contain punctuation. `literal` disables wildmatch; `top` anchors to the repository root
-so the exclusion does not drift with the caller's pathspec.
+**`literal` is load-bearing, not decoration — but not for the reason revisions 1–8 gave.**
+`normalize_project_path` refuses `..`, absolute paths and NUL, and permits everything else — including
+`*`, `?` and `[]`, which are ordinary characters in a filename and wildmatch syntax in a pathspec.
+Revisions 1–8 asserted that a bare `:(exclude)private/[drafts]` would read `[drafts]` as a character
+class, fail to match the literal directory, and *leak* denied material into search results.
+
+**Measured against git 2.55, that is not what happens, in either direction.** Across four constructed
+cases — a directory and a file whose names carry `[]`, each with an innocent sibling the glob matches,
+including a `[!a]` class that cannot match its own literal spelling — the non-literal spelling **never
+under-excluded**: git's pathspec matcher also tries a literal prefix match, so the denied path was
+excluded under every spelling tested. What the non-literal spelling did instead was **over-exclude**:
+`:(exclude)notes/a[b].md` also removed the innocent sibling `notes/ab.md`, which the policy never
+denied and which `read` serves without objection.
+
+So the hazard is the mirror image of the one previously claimed, and it is still disqualifying. The
+exclusion set becomes a function of glob syntax rather than of the policy text, and the two operations
+disagree: a file `read` will serve is a file `search` cannot see. No false citation results — §5.1
+admits a search miss into no coverage at all — but "I searched for `X` across the corpus and found
+nothing", which §5.1 names as a legitimate and often decisive finding, becomes false for reasons no
+one can see from the policy. `literal` disables wildmatch; `top` anchors to the repository root so the
+exclusion does not drift with the caller's pathspec.
+
+The correction is recorded rather than quietly applied because the conclusion survived and the reason
+did not, which is the harder case to notice: a paragraph whose recommendation is right and whose
+mechanism is invented reads exactly like one that was checked.
 
 The deeper requirement is that the two operations agree. `read` denial and `search` exclusion are
 independent implementations of one policy, so §7 tests them **against each other** on the same inputs:
@@ -334,7 +377,7 @@ the argv the broker builds, so that determinism does not depend on a config file
 |---|---|
 | `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
 | `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
-| `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
+| `cat-file blob <commit>:<path>` | nothing further — a blob read; a new subcommand to `git.py`, so probed under §3.2.1's rule before it ships |
 | all three | `LC_ALL=C`, `LANG=C` in the child environment |
 
 **What was probed, and what actually executes.** Against git 2.55.0 in a scratch
@@ -1098,10 +1141,16 @@ downgrade is a lie about what was checked.
   process under `C`, under a UTF-8 locale, and under a translated locale; the defined-miss classifier
   recognises an absent path in all three. Run as a replay across differing parent locales, since that
   is the failure being prevented.
-- **Pathspec translation** — a directory literally named `private/[drafts]` is excluded from search, not
-  interpreted as a character class; `private` denies `private/x` and does not deny `privateer/x`; and
+- **Pathspec translation** — under `literal`, a deny prefix `notes/a[b].md` excludes that file and
+  leaves the sibling `notes/ab.md` searchable, which is the measured divergence from the bare
+  `:(exclude)` spelling (§3.2); `private` denies `private/x` and does not deny `privateer/x`; and
   the `read` denial and the `search` exclusion are asserted to **agree** on the same table of inputs,
-  because two mechanisms for one policy is how a policy comes to be half enforced.
+  because two mechanisms for one policy is how a policy comes to be half enforced. The over-exclusion
+  case is asserted directly and not only through the agreement table, since it is the one that
+  motivates `literal` at all.
+- **`read` refuses a directory** — a path naming a tree is refused, not served, and the refusal is
+  distinguishable from an absent path; asserted against a real tree, since `git show` would have
+  answered it with a listing at exit 0 (§3.2).
 - **Session handle** — `--session ../../elsewhere` is refused before any path join; a handle that parses
   but whose baseline carries a different `run_id` is refused after loading.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused lexically; **a
