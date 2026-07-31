@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from science_model.evidence_broker import SurfacePolicy
 
-from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest, authorize
 from science_tool.evidence_broker.serve import Outcome, ServeError, serve, verify_commit
 
 OPEN = SurfacePolicy(notice="withheld")
@@ -19,6 +19,7 @@ def _repo(tmp_path: Path) -> tuple[Path, str]:
     (root / "private").mkdir(parents=True)
     (root / "privateer").mkdir()
     (root / "notes").mkdir()
+    (root / "src").mkdir()
     for args in (
         ("init", "-q"),
         ("config", "user.email", "p@example.invalid"),
@@ -31,6 +32,11 @@ def _repo(tmp_path: Path) -> tuple[Path, str]:
     (root / "privateer" / "p.txt").write_text("secret\n", encoding="utf-8")
     (root / "notes" / "a[b].md").write_text("secret\n", encoding="utf-8")
     (root / "notes" / "ab.md").write_text("secret\n", encoding="utf-8")
+    # Every AGREEMENT row must be a REAL FILE WITH SEARCHABLE CONTENT, or the search half of
+    # the table passes vacuously on the rows whose paths do not exist -- green while asserting
+    # nothing. `src/main.py` and `privateer/x.txt` exist only for that.
+    (root / "src" / "main.py").write_text("secret\n", encoding="utf-8")
+    (root / "privateer" / "x.txt").write_text("secret\n", encoding="utf-8")
     # A directory whose NAME is git's own miss sentence, so a substring classifier reports
     # it absent. It is committed, so `cat-file -t` must answer `tree`.
     (root / "does not exist in").mkdir()
@@ -468,3 +474,124 @@ def test_a_wellformed_malformed_pattern_naming_a_different_pattern_is_not_a_refu
     monkeypatch.setattr(serve_module, "run_git", _fake)
     with pytest.raises(ServeError, match="could not be classified"):
         serve(root, commit, _search("alpha"), OPEN)
+
+
+def _sabotage_the_object_store(root: Path) -> None:
+    """Make git warn on stderr before every verdict, through a channel `-c` cannot reach.
+
+    `.git/objects/info/alternates` is untracked, actor-writable, and has NO config key, so
+    `run_git`'s `-c` hardening does not touch it. MEASURED, git 2.55: with a nonexistent path
+    written there, `cat-file -t` for an absent path answers
+
+        error: unable to normalize alternate object path: /nonexistent/objects
+        fatal: path 'nope.txt' does not exist in '<commit>'
+
+    and `grep` with a bad pattern gets the same warning above its own diagnostic. The repository
+    still resolves every object it needs -- this is a warning, not a broken store -- so the
+    honest answer is still available and only the classifier's view of stderr changed.
+    """
+    alternates = root / ".git" / "objects" / "info" / "alternates"
+    alternates.parent.mkdir(parents=True, exist_ok=True)
+    alternates.write_text("/nonexistent/objects\n", encoding="utf-8")
+
+
+def test_an_absent_path_is_still_a_miss_under_an_actor_written_stderr_warning(tmp_path: Path):
+    """A comparison against the WHOLE of stderr lets the actor convert every defined miss into
+    a halted run: two lines match neither absent sentence, `_serve_read` raises, and §5.1's
+    "frequently the decisive finding" -- an absent path -- becomes unrecordable at the audited
+    repository's discretion. Anchoring on the verdict LINE keeps the whole-sentence comparison
+    while letting git warn.
+    """
+    root, commit = _repo(tmp_path)
+    _sabotage_the_object_store(root)
+    served = serve(root, commit, _read("nope.txt"), OPEN)
+    assert served.outcome is Outcome.MISS_ABSENT
+
+
+def test_a_malformed_pattern_is_still_a_refusal_under_an_actor_written_stderr_warning(
+    tmp_path: Path,
+):
+    """The SEARCH half of the same lever: the `startswith` anchor is defeated by anything
+    printed above git's verdict, turning a retryable refusal into a halt."""
+    root, commit = _repo(tmp_path)
+    _sabotage_the_object_store(root)
+    served = serve(root, commit, _search("a["), OPEN)
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "pattern-malformed"
+    # The notice goes to a BLINDED requester. The warning names a filesystem path the actor
+    # chose; the verdict line echoes only the pattern the requester itself sent.
+    assert served.denial.notice == "fatal: -e option, 'a[': Invalid regular expression"
+    assert "alternate" not in served.denial.notice
+
+
+# THE AGREEMENT TABLE. Two mechanisms for one policy is how a policy comes to be half enforced,
+# so the READ denial and the SEARCH exclusion are asserted against ONE set of inputs rather than
+# each against its own expectations. Both halves below are parametrized over this tuple, which
+# is the point: a table consumed by one mechanism is not an agreement table, it is that
+# mechanism's own expectations with a misleading name.
+#
+# Every path here is a real file in `_repo` with `secret` as its content, so no row can pass the
+# search half vacuously. `private` is the exception BY CONSTRUCTION -- it is the deny prefix
+# itself and is a directory, so the search half reads it as "nothing at or beneath this path is
+# served", which is the only reading a directory admits and is not vacuous.
+AGREEMENT: tuple[tuple[str, bool], ...] = (
+    ("private/x.txt", True),
+    ("private", True),
+    ("privateer/x.txt", False),
+    ("notes/a[b].md", True),
+    ("notes/ab.md", False),
+    ("src/main.py", False),
+)
+
+
+@pytest.mark.parametrize("path,denied", AGREEMENT)
+def test_read_denial_matches_the_table(path: str, denied: bool):
+    assert (authorize(_read(path), CLOSED).denial is not None) is denied
+
+
+def _searched_paths(payload: bytes, commit: str) -> set[str]:
+    """The paths `grep` reported. `-z` records are `<commit>:<path>\\0<line-number>\\0<line>`,
+    one per line, and the record prefix is asserted rather than assumed -- a payload this helper
+    could not parse would otherwise be reported as an empty result set, which reads as "denied"
+    for every row and makes the table pass on a broken search.
+    """
+    prefix = f"{commit}:".encode()
+    paths: set[str] = set()
+    for record in payload.split(b"\n"):
+        if not record:
+            continue
+        assert record.startswith(prefix), f"unparsed grep record: {record!r}"
+        paths.add(record[len(prefix) :].split(b"\x00")[0].decode("utf-8"))
+    return paths
+
+
+@pytest.mark.parametrize("path,denied", AGREEMENT)
+def test_search_exclusion_matches_the_table(tmp_path: Path, path: str, denied: bool):
+    """The half that was missing. `authorize` and `exclude_pathspecs` are independent
+    implementations of one policy, and the one that was never checked against the table is the
+    one that can drift: the exclusion's PATHSPEC MAGIC decides what git matches, and a change
+    there is invisible to a table only `read` consumes.
+
+    MEASURED, git 2.55, by mutation: rewriting `literal` to `glob` in `exclude_pathspecs` fails
+    the `notes/ab.md` row here while all six rows of `test_read_denial_matches_the_table` stay
+    green -- `glob` leaves `[b]` a character class, so the exclusion for `notes/a[b].md` also
+    withholds a sibling the policy never denied and `read` serves without objection. That is the
+    divergence, in the over-excluding direction.
+
+    NOT EVERY EXCLUSION MUTATION IS BEHAVIOURAL, and the table should not be credited with more
+    than it has. Also measured against this fixture: dropping `top`, and adding `icase`, change
+    NOTHING -- `run_git` passes `-C <repo_root>`, so the pathspecs are already rooted and `top`
+    is inert, and the fixture holds no case-variant paths for `icase` to reach. Those two
+    spellings are pinned by `test_exclusions_are_top_literal_and_exclude`, textually, which is
+    the only way a no-op spelling CAN be pinned.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("secret"), CLOSED)
+    assert served.outcome is Outcome.SERVED
+    reported = _searched_paths(served.payload, commit)
+    beneath = {seen for seen in reported if seen == path or seen.startswith(f"{path}/")}
+    if denied:
+        assert not beneath, f"`read` denies {path!r}; `search` served {sorted(beneath)}"
+    else:
+        assert path in reported, f"`read` allows {path!r}; `search` withheld it"

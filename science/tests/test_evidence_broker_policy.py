@@ -120,19 +120,10 @@ def test_an_empty_policy_excludes_nothing():
     assert exclude_pathspecs(SurfacePolicy(notice="n")) == ()
 
 
-# The agreement table. Two mechanisms for one policy is how a policy comes to be half
-# enforced, so the READ denial and the SEARCH exclusion are asserted against each other on
-# one set of inputs rather than each against its own expectations.
-AGREEMENT = (
-    ("private/x.txt", True),
-    ("private", True),
-    ("privateer/x.txt", False),
-    ("notes/a[b].md", True),
-    ("notes/ab.md", False),
-    ("src/main.py", False),
-)
-
-
-@pytest.mark.parametrize("path,denied", AGREEMENT)
-def test_read_denial_matches_the_table(path: str, denied: bool):
-    assert (authorize(_read(path), POLICY).denial is not None) is denied
+# THE AGREEMENT TABLE LIVES IN `test_evidence_broker_serve.py`. It used to sit here and drove
+# only the READ half, while its comment claimed both -- so changing the search exclusion's
+# pathspec magic could stop `private` from excluding while READ went on denying it, and the
+# table stayed green through the divergence it was written to catch. The SEARCH half cannot be
+# asserted without running git (a pure test would have to reimplement git's pathspec matching,
+# which proves agreement with the reimplementation and nothing else), so the table moved to the
+# module that has git rather than the search half being faked to keep it here.

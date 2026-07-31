@@ -40,11 +40,21 @@ class Denial:
     """Two strings, for two audiences.
 
     `reason` is categorised and stays parent-side, for the audit. `notice` is what the requester
-    sees. For a policy denial it is the policy's OWN notice, never a specific reason invented
-    here: a specific reason would confirm that the denied thing exists, which a blinding study
-    cannot afford. The malformed-pattern denial is the one case where `notice` instead carries
-    git's own diagnostic -- that diagnostic echoes only the requester's own pattern back at
-    them, so it reveals no repository fact and the same non-disclosure rule still holds.
+    sees. FOUR THINGS AUTHOR IT, and only the first is about the repository:
+
+    * `_judge_path`, on a policy denial -- the policy's OWN notice, never a specific reason
+      invented here: a specific reason would confirm that the denied thing exists, which a
+      blinding study cannot afford.
+    * `_judge_path`, on a path the normalizer refuses -- `str(exc)` from `SubjectError`. It
+      describes the requester's own string (absolute, a `..` segment, a NUL), so it discloses
+      nothing about the tree.
+    * `_judge_pattern`, on a pattern that cannot cross the argv boundary -- notices authored
+      here for the NUL and non-encodable cases, since git is never reached to produce one.
+    * `serve._serve_search`, on a pattern git itself rejected -- git's own diagnostic, taken as
+      the VERDICT LINE rather than the whole of stderr (see `serve._verdict_line`).
+
+    The last three are all about input the requester supplied, so each echoes only what was
+    sent back at the sender and the non-disclosure rule holds across all four.
     """
 
     reason: str

@@ -4,6 +4,15 @@ Determinism is the whole product: two honest replays of one request against one 
 produce identical bytes, because §5.3 refuses a review on disagreement. That needs three things
 at once -- the commit pin, the canonical argv below, and the environment `run_git` pins -- and
 losing any one of them silently converts an honest run into a refused one.
+
+THE ATTRIBUTE STACK IS A SECOND ACTOR-OWNED CHANNEL, DISTINCT FROM `.git/config`, and it is not
+reachable by the `-c` hardening `run_git` applies. A working-tree `.gitattributes` need not be
+committed to take effect, and `$GIT_DIR/info/attributes` has no config key at all;
+`--attr-source` replaces only the tracked-`.gitattributes` layer, so neither is neutralized
+there. MEASURED, git 2.55: either layer carrying `* binary` makes `grep` answer
+`Binary file <commit>:a.txt matches` at exit 0 instead of the `-z` record with a line number and
+the matched content -- `SERVED`, reported as a success, carrying no evidence. `-a` in `_GREP_ARGV`
+is what neutralizes the attribute stack for `grep`, and it is the only lever that does.
 """
 
 from __future__ import annotations
@@ -81,10 +90,40 @@ def _malformed_pattern_prefix(pattern: str) -> bytes:
     return f"fatal: -e option, '{pattern}': ".encode()
 
 
+def _verdict_line(stderr: bytes) -> bytes:
+    """git's LAST non-empty stderr line, which is where its verdict lands.
+
+    THE WHOLE OF STDERR IS NOT THE VERDICT, and treating it as one hands the actor a switch that
+    converts every defined miss into a halted run. `.git/objects/info/alternates` is untracked,
+    actor-writable, and outside `.git/config`, so no `-c` override in `run_git` reaches it.
+    MEASURED, git 2.55, with `/nonexistent/objects` written there:
+
+        error: unable to normalize alternate object path: /nonexistent/objects
+        fatal: path 'nope.txt' does not exist in '<commit>'
+
+    Compared whole, that matches neither absent sentence and neither malformed-pattern prefix,
+    so an ordinary absent path -- §5.1 calls it "frequently the decisive finding" -- raises
+    `ServeError`, and a retryable malformed pattern does too. Anchoring on the LAST line keeps
+    the interpolated, whole-sentence comparison that `_absent_sentences` documents (a substring
+    search over stderr is the defect it exists to prevent) while letting git warn about anything
+    it likes first.
+    """
+    lines = [line for line in stderr.strip().splitlines() if line.strip()]
+    return lines[-1].strip() if lines else b""
+
+
 #: `grep` renders through config unless argv says otherwise; `-E` is passed explicitly so
 #: `grep.patternType` cannot decide what the caller's pattern MEANS.
+#:
+#: `-a` treats every blob as text, defeating the attribute stack described in the module
+#: docstring. THE TRADE-OFF IS DELIBERATE AND WAS ACCEPTED: a genuinely binary blob's raw bytes
+#: now enter the served payload. Determinism is the property replay depends on, and a payload
+#: the actor can empty at will is worse than one that is occasionally raw. `-I` is not an
+#: alternative -- it would skip "binary" files, and binary-ness is itself attribute-derived, so
+#: the actor would still decide what the auditor is shown.
 _GREP_ARGV: tuple[str, ...] = (
     "grep",
+    "-a",
     "-n",
     "-z",
     "-E",
@@ -95,12 +134,20 @@ _GREP_ARGV: tuple[str, ...] = (
 
 #: `log.showSignature=false` is already in `run_git`'s `_HARDENING` -- it EXECUTES, so it is
 #: neutralized there rather than pinned here. What argv owns is rendering.
+#:
+#: `--no-follow` pins WHICH COMMITS ARE SELECTED, not how they render, which is why it belongs
+#: here rather than among the inert keys. MEASURED, git 2.55: against a repository where
+#: `old.txt` was renamed to `new.txt`, history for `new.txt` reports two commits by default and
+#: three under `log.follow=true`. Follow arms only when exactly one pathspec is given, so a
+#: policy with any deny prefix already disarms it by handing `log` its exclusions -- an EMPTY
+#: deny policy is legitimate, is what most of the suite uses, and is exactly where this bites.
 _LOG_ARGV: tuple[str, ...] = (
     "log",
     "--pretty=format:%H %aI",
     "--no-decorate",
     "--no-notes",
     "--no-abbrev-commit",
+    "--no-follow",
 )
 
 
@@ -116,13 +163,18 @@ def _miss(outcome: Outcome) -> Served:
 
 
 def verify_commit(repo_root: Path, commit: str) -> str:
-    """Resolve `commit` to a full object name, or halt.
+    """Resolve `commit` to a full object name, or raise `ServeError`.
 
-    RUNS ONCE BEFORE ANY REQUEST, and the ordering is load-bearing. For a well-formed but
-    nonexistent commit git reports `path 'x' exists on disk, but not in '<commit>'` -- the same
-    sentence it emits for a path added after the pinned commit. Miss classification is sound only
-    once the revision is known good, so a broker that verified lazily would answer "absent at
-    commit" for every path in a bogus revision.
+    `serve` calls this ONCE PER REQUEST, after `authorize` and before any dispatch, and that
+    position is load-bearing. For a well-formed but nonexistent commit git reports
+    `path 'x' exists on disk, but not in '<commit>'` -- the same sentence it emits for a path
+    added after the pinned commit. Miss classification is sound only once the revision is known
+    good, so a broker that verified lazily would answer "absent at commit" for every path in a
+    bogus revision.
+
+    The resolved full object name, not the caller's spelling, is what every helper below is
+    handed: `_absent_sentences` interpolates the commit into the sentence it compares, and git
+    spells that sentence with the revision as given.
     """
     completed = run_git(repo_root, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}")
     if completed.returncode != 0:
@@ -142,7 +194,7 @@ def _serve_read(repo_root: Path, commit: str, target: str) -> Served:
     """
     typed = run_git(repo_root, "cat-file", "-t", f"{commit}:{target}")
     if typed.returncode != 0:
-        if typed.stderr.strip() in _absent_sentences(commit, target):
+        if _verdict_line(typed.stderr) in _absent_sentences(commit, target):
             return _miss(Outcome.MISS_ABSENT)
         raise ServeError(
             f"read of {target!r} at {commit} could not be classified: "
@@ -182,15 +234,22 @@ def _serve_search(
     if completed.returncode == 1:
         return _miss(Outcome.MISS_NO_MATCH)
     stderr = completed.stderr
-    if stderr.startswith(_malformed_pattern_prefix(pattern)):
+    verdict = _verdict_line(stderr)
+    if verdict.startswith(_malformed_pattern_prefix(pattern)):
         # The requester's own input. It carries no repository fact, so it is retryable rather
         # than an instrument failure -- halting an honest run over a typo would be worse.
+        #
+        # THE NOTICE IS THE VERDICT LINE, NOT ALL OF STDERR. The diagnostic may be given a
+        # `Denial.notice` precisely because it echoes only the requester's own pattern back at
+        # them; the actor-written warnings that can precede it (see `_verdict_line`) name
+        # repository paths, and handing those to a blinded requester would disclose exactly what
+        # the policy's uniform notice exists to withhold.
         return Served(
             outcome=Outcome.REFUSED,
             payload=b"",
             denial=Denial(
                 reason="pattern-malformed",
-                notice=stderr.decode("utf-8", "replace").strip(),
+                notice=verdict.decode("utf-8", "replace"),
             ),
         )
     raise ServeError(

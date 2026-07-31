@@ -135,6 +135,44 @@ def test_grep_dash_e_is_pinned_against_an_unconfigured_repository(tmp_path: Path
     assert b"gammaadelta" in served.payload
 
 
+#: The attribute stack, which `.git/config` does not reach and `-c` therefore cannot harden.
+#: BOTH LAYERS, because they are neutralized by nothing in common: `.gitattributes` need not be
+#: committed to take effect (so the path gate never sees it) and `$GIT_DIR/info/attributes` has
+#: no config key at all. `--attr-source` replaces only the tracked-`.gitattributes` layer, so it
+#: answers neither.
+HOSTILE_ATTRIBUTE_LAYERS: tuple[tuple[str, str], ...] = (
+    ("worktree", ".gitattributes"),
+    ("info", ".git/info/attributes"),
+)
+
+
+@pytest.mark.parametrize("name,relative", HOSTILE_ATTRIBUTE_LAYERS)
+def test_grep_serves_the_baseline_bytes_under_a_hostile_attribute_stack(
+    tmp_path: Path, name: str, relative: str
+):
+    """MEASURED, git 2.55: with `* binary` in either layer, `git grep` answers
+    `Binary file <commit>:sample.txt matches` AT EXIT 0 instead of the `-z` record carrying a
+    line number and the matched line. `_serve_search` sees a zero exit and returns SERVED, so
+    the broker reports success over a payload with no line numbers and no content -- the actor
+    decides what the auditor is shown, and nothing in the design notices.
+
+    This asserts the SERVED BYTES against the baseline repository's, not merely that some
+    payload came back: `Binary file ... matches` is itself a payload, and a test that only
+    checked the outcome would pass against the very defect it names.
+    """
+    baseline = _payload(tmp_path, f"attr-baseline-{name}", {}, _search("alpha.beta"))
+    root, commit = _configured_repo(tmp_path, f"attr-hostile-{name}", {})
+    blinding = root / relative
+    blinding.parent.mkdir(parents=True, exist_ok=True)
+    blinding.write_text("* binary\n", encoding="utf-8")
+    # NOT committed, and not `git add`ed: the working-tree layer takes effect as it lies on
+    # disk, so the path gate and every tracked-content check are blind to it by construction.
+    served = serve(root, commit, _search("alpha.beta"), OPEN)
+
+    assert served.outcome is Outcome.SERVED
+    assert served.payload.replace(commit.encode(), b"<commit>") == baseline
+
+
 HOSTILE_LOG_CONFIGS = (
     ("date", {"log.date": "rfc"}),
     ("decorate", {"log.decorate": "full"}),
@@ -151,6 +189,71 @@ def test_log_renders_identically_under_hostile_configuration(
     request = EvidenceRequest(op=EvidenceOp.HISTORY, target="sample.txt")
     baseline = _payload(tmp_path, "log-baseline", {}, request)
     assert _payload(tmp_path, name, config, request) == baseline
+
+
+#: `log.follow` needs its own fixture, because follow is about a RENAME and `_configured_repo`
+#: has none -- against a repository where nothing was ever renamed the key is inert, and a row
+#: added to `HOSTILE_LOG_CONFIGS` would have passed no matter what `_LOG_ARGV` said.
+HOSTILE_FOLLOW_CONFIGS = (("follow", {"log.follow": "true"}),)
+
+
+def _renamed_repo(tmp_path: Path, name: str, config: dict[str, str]) -> tuple[Path, str]:
+    """`old.txt` renamed to `new.txt`, then modified. Three commits, DATES PINNED for the same
+    reason `_configured_repo` pins them: `%aI` renders into the compared bytes."""
+    root = tmp_path / name
+    root.mkdir()
+    dated = {
+        **os.environ,
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00+00:00",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00+00:00",
+    }
+
+    def _git(*args: str, env: dict[str, str] | None = None) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+
+    for args in (("init", "-q"), ("config", "user.email", "p@example.invalid"), ("config", "user.name", "P")):
+        _git(*args)
+    for key, value in config.items():
+        _git("config", key, value)
+    (root / "old.txt").write_text("first\n", encoding="utf-8")
+    _git("add", "-A")
+    _git("commit", "-q", "-m", "before the rename", env=dated)
+    _git("mv", "old.txt", "new.txt")
+    _git("commit", "-q", "-m", "the rename", env=dated)
+    (root / "new.txt").write_text("first\nsecond\n", encoding="utf-8")
+    _git("add", "-A")
+    _git("commit", "-q", "-m", "after the rename", env=dated)
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True
+    ).stdout.decode().strip()
+    return root, commit
+
+
+@pytest.mark.parametrize("name,config", HOSTILE_FOLLOW_CONFIGS)
+def test_log_selects_the_same_commits_under_a_hostile_follow_configuration(
+    tmp_path: Path, name: str, config: dict[str, str]
+):
+    """`log.follow` decides WHICH COMMITS ARE SELECTED, not how they render -- the only row in
+    this file that changes the answer rather than its spelling. MEASURED, git 2.55: history for
+    `new.txt` reports two commits by default and three under `log.follow=true`, so one honest
+    replay would carry the pre-rename commit and the other would not, and §5.3 refuses on
+    disagreement.
+
+    THE POLICY IS `OPEN` ON PURPOSE. Follow arms only when exactly one pathspec is given, so any
+    policy with a deny prefix hands `log` its exclusions and disarms the key by accident. An
+    empty deny policy is legitimate, is what most of this suite uses, and is the case where the
+    key bites -- a test written against `CLOSED` would pass with `--no-follow` removed.
+    """
+    request = EvidenceRequest(op=EvidenceOp.HISTORY, target="new.txt")
+    root, commit = _renamed_repo(tmp_path, "follow-baseline", {})
+    baseline = serve(root, commit, request, OPEN).payload
+    hostile_root, hostile_commit = _renamed_repo(tmp_path, name, config)
+    served = serve(hostile_root, hostile_commit, request, OPEN)
+
+    assert served.outcome is Outcome.SERVED
+    # Same content and same pinned dates, so the two repositories' commits are the same objects
+    # and the payloads are comparable byte for byte.
+    assert served.payload == baseline
 
 
 @pytest.mark.parametrize("locale", ["C", UTF8_LOCALE, "fr_FR.UTF-8"])
@@ -220,8 +323,24 @@ def _module_asts() -> dict[str, ast.Module]:
     }
 
 
+def _names_run_git(func: ast.expr) -> bool:
+    """`run_git(...)` and `git.run_git(...)` are the same call and must land the same way.
+
+    MEASURED: a module doing `from science_tool.autonomy import git` and then
+    `git.run_git(repo_root, "cat-file", "blob", ...)` passed BOTH derived guards --
+    `test_every_git_call_in_the_package_sits_in_a_known_helper`, because the call's `func` is an
+    `ast.Attribute` rather than an `ast.Name`, and `test_the_broker_makes_no_direct_subprocess_
+    call`, because `science_tool` is not a spawning module and `run_git` is not a spawning name.
+    An unauthorized, unaudited path to git, admitted silently by both. The receiver is ignored
+    for the same reason the spawn check ignores it: the import spelling is not the hazard.
+    """
+    if isinstance(func, ast.Name):
+        return func.id == "run_git"
+    return isinstance(func, ast.Attribute) and func.attr == "run_git"
+
+
 def _run_git_callers(tree: ast.Module) -> set[str]:
-    """Every scope a bare `run_git(...)` call sits in: a function or async function's name,
+    """Every scope a `run_git(...)` call sits in: a function or async function's name,
     or `"<module level>"` for a call inside neither.
 
     A per-`FunctionDef` walk that asks "is this call inside a function" has no case for
@@ -237,11 +356,7 @@ def _run_git_callers(tree: ast.Module) -> set[str]:
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit(child, child.name)
                 continue
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Name)
-                and child.func.id == "run_git"
-            ):
+            if isinstance(child, ast.Call) and _names_run_git(child.func):
                 callers.add(scope)
             visit(child, scope)
 
@@ -252,8 +367,9 @@ def _run_git_callers(tree: ast.Module) -> set[str]:
 def test_every_git_call_in_the_package_sits_in_a_known_helper():
     """Derived from the code, not from a list someone maintains -- same spirit as
     `tests/test_instrument_boundary.py`. A `run_git` call added to `policy.py`, to a module
-    that does not exist yet, to a subpackage, to module scope, or inside an `async def`,
-    fails here rather than quietly acquiring an unaudited path to git."""
+    that does not exist yet, to a subpackage, to module scope, inside an `async def`, or
+    spelled `git.run_git(...)` through a module import, fails here rather than quietly
+    acquiring an unaudited path to git."""
     callers: dict[str, set[str]] = {
         name: _run_git_callers(tree) for name, tree in _module_asts().items()
     }
@@ -306,7 +422,20 @@ _SPAWNING_MODULES = frozenset({"subprocess", "pty", "multiprocessing"})
 #: hypothetical). Every `os` exec function is `exec` + `l` or `v` (+ optional `p`/`e`):
 #: `execl`, `execle`, `execlp`, `execlpe`, `execv`, `execve`, `execvp`, `execvpe`. Narrowing
 #: to `execl`/`execv` keeps all eight and drops everything that merely starts with `exec`.
-_SPAWNING_PREFIXES = ("execl", "execv", "spawn", "popen", "posix_spawn", "fork")
+#:
+#: `create_subprocess` is `asyncio`'s pair, `create_subprocess_exec` and
+#: `create_subprocess_shell`. Neither matches any other prefix or name here, and `asyncio` is
+#: not a spawning MODULE (it is a legitimate import for reasons having nothing to do with
+#: launching processes), so without this prefix both spellings passed every check in this file.
+_SPAWNING_PREFIXES = (
+    "execl",
+    "execv",
+    "spawn",
+    "popen",
+    "posix_spawn",
+    "fork",
+    "create_subprocess",
+)
 #: `import_module` and `__import__` are here because a dynamic import defeats the import check
 #: above: without them, `importlib.import_module("subprocess").run(...)` passes.
 _SPAWNING_NAMES = frozenset({"system", "startfile", "import_module", "__import__"})
