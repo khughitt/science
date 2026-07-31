@@ -31,7 +31,7 @@ from science_tool.annotation.synthesize import (
     statement_context,
     validate_candidate,
 )
-from science_tool.entities import _parse_markdown_file, write_entity_file
+from science_tool.entities import _parse_markdown_file
 
 
 def _ann(frag, atype, exact, *, body, promoted_to=None, status=Status.OPEN):
@@ -281,9 +281,15 @@ def _project(tmp_path: Path) -> Path:
 
 def _write_prop(root: Path, slug: str, *, title: str, body: str = "# t\n\n## Claim\n\nKEEP-ME\n",
                 **fields) -> str:
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION, create_entity_file
+
     ref = f"proposition:{slug}"
-    write_entity_file(PropositionEntity(id=ref, title=title, **fields),
-                      project_root=root, body=body)
+    create_entity_file(
+        PropositionEntity(id=ref, title=title, **fields),
+        project_root=root,
+        ownership=WORKBENCH_PROPOSITION,
+        create_body=body,
+    )
     return ref
 
 

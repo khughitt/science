@@ -289,3 +289,45 @@ def test_forced_mint_and_link_leave_the_same_state(tmp_path: Path) -> None:
     assert mint_dest.read_text(encoding="utf-8") == link_dest.read_text(encoding="utf-8")
     assert (mint_report.minted, mint_report.linked) == (link_report.minted, link_report.linked)
     assert mint_report.written_paths == link_report.written_paths
+
+
+def test_synthesize_ownership_is_derived_from_synth_fields() -> None:
+    """Derived in code, not retyped: a hand-copied five-element tuple silently diverges the
+    first time a field is added."""
+    from science_tool.annotation.synthesize import SYNTH_FIELDS, SYNTHESIZE_PROPOSITION
+
+    assert SYNTHESIZE_PROPOSITION.owned == set(SYNTH_FIELDS) | {"reasoning_source"}
+    # An update-only writer claims no create-only keys.
+    assert SYNTHESIZE_PROPOSITION.create_only == frozenset()
+
+
+def test_synthesize_refuses_pre_containment_record(tmp_path: Path) -> None:
+    """§5.6 + §6: a REJECTION, not a backfill. This slice repairs no existing records."""
+    from science_tool.dag.entity_frontmatter import PersistedShapeError
+    from science_tool.annotation.synthesize import _write_proposition
+
+    root = _seed(tmp_path)
+    dest = root / "entities" / "propositions" / "legacy.md"
+    dest.write_text(
+        "---\n"
+        "id: proposition:legacy\n"
+        "kind: proposition\n"
+        "title: ''\n"                      # the 697-record defect
+        "status: active\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "---\n"
+        "\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    merged = {"id": "proposition:legacy", "kind": "proposition", "title": "",
+              "subject": "concept:a", "object": "concept:b", "predicate": "affects",
+              "polarity": "unsigned",
+              "reasoning_source": "llm-synth:m:proposition-synthesize-v1"}
+
+    # PropositionEntity.title is `str = ""`, so the entity CONSTRUCTS fine and the refusal
+    # comes from certify_persisted -- not from pydantic.
+    with pytest.raises(PersistedShapeError, match="legacy"):
+        _write_proposition("proposition:legacy", merged, root, date(2026, 7, 31))
+    assert "title: ''" in dest.read_text(encoding="utf-8")   # untouched
