@@ -1,6 +1,6 @@
 # Annotation writer containment — design
 
-**Status:** design, awaiting implementation plan
+**Status:** design, ready for the implementation plan (revision 2 — §2.3 measurement corrected)
 **Branch:** `annotation-writer-containment`, forked from `main` at `0c7a6ba6`
 **Program:** schema-first closure, piece 3 (first slice)
 
@@ -60,10 +60,22 @@ keys whose "deleting them is piece 3's corpus migration". Measured:
 
 - In mm30, empty-title ⟺ legacy-triple **exactly** for propositions: 307 and 307, with
   zero records on either side alone. The triple is a perfect marker of the old generation.
-- Its validator, `dag/validate.py:_check_legacy_dag_metadata`, is **already inert**: mm30
-  contains **zero `.dot` files**, so `per_dag_edges` is empty and the check `continue`s on
-  every record. Deleting the field would retire nothing that currently runs — but it also
-  means the check's silence today is not evidence of health.
+- Its validator, `dag/validate.py:_check_legacy_dag_metadata`, is **live, and currently
+  failing on every one of the 307 records**. An earlier revision of this design claimed the
+  opposite ("mm30 contains zero `.dot` files, so `per_dag_edges` is empty and the check
+  `continue`s on every record"). Re-measured 2026-07-31, that is wrong in every clause: mm30
+  holds **105 `.dot` files** under `doc/figures/dags` (16 after `_discover_dot_files` excludes
+  `-auto` / `-numbered`), and **all 15 distinct `legacy_patch` values match a `.dot` stem**, so
+  every record passes the `continue` at `validate.py:275` and reaches the subject/object
+  cross-check. Running `validate_project` on mm30:
+
+  ```
+  findings by rule: {'proposition_edge_missing': 362, 'acyclicity': 1,
+                     'legacy_dag_edge_unresolved': 307}
+  ```
+
+  307 findings, severity `error`. Deleting `legacy_patch` would retire a check that runs — and
+  fails — on the whole population. The check is not silent; it is unread.
 - `graph/materialize.py:2082-2087` still emits `sci:legacyPatch` and `sci:legacyEdgeId`
   into the graph. That output *is* live.
 - `legacy_relation_label` holds **243 distinct values across 307 records** — the only
@@ -72,12 +84,21 @@ keys whose "deleting them is piece 3's corpus migration". Measured:
   It is also **still consumed**: `dag/proposition_edges.py:69` maps it to `original_label`,
   which `dag/render.py:242` uses to build rendered edge labels. Deleting it would both
   destroy information and change rendered DAG output.
-- `legacy_patch`, by contrast, has 15 distinct values and is near-redundant with `discusses`
-  (9 of 15 map to exactly one `discusses` set; the remaining 6 map to two).
+- `legacy_patch`, by contrast, carries little *information*: 15 distinct values, near-redundant
+  with `discusses` (9 of 15 map to exactly one `discusses` set; the remaining 6 map to two).
+  But it is the field with the **most** machinery attached — it keys both the graph emitter and
+  the live `.dot` cross-check. Low information content is not low coupling, and the migration
+  should not mistake the first for the second.
 
-**The inert validator does not make these outputs inert.** Two of the three fields still
-materialize into the provenance graph and the third still renders; only the `.dot`
-cross-check has fallen silent. Each field needs its own verdict.
+**All three fields are load-bearing, and none of the consumers is inert.** Two materialize
+into the provenance graph, the third renders as an edge label, and the `.dot` cross-check runs
+on every legacy record. Each field needs its own verdict.
+
+The correction matters beyond bookkeeping: the retired-reading said the triple could be
+deleted cheaply because nothing consumed it. The measured reading is that deleting
+`legacy_patch` would silence 307 live errors rather than resolve them, which is the opposite
+kind of migration. **Start the migration design from this measurement, not from the retired
+one.**
 
 **Ruling: out of scope here.** The triple's fate belongs to the migration design, which
 should start from these measurements rather than from "just delete them".
@@ -178,16 +199,22 @@ SYNTHESIZE_PROPOSITION  = Ownership(
 must be **derived from that tuple in code**, not retyped — a hand-copied duplicate of a
 five-element tuple silently diverges the first time a field is added.
 
+The two new sets omit `created` / `updated`, which the carried-over workbench sets contain.
+That asymmetry is deliberate and harmless: both renderers stamp the two keys unconditionally
+after the allowlist filter (`entity_frontmatter.py:129-130` and `:188-189`), so membership
+changes nothing. The workbench sets keep them only because §4.1 carries those frozensets over
+verbatim. Do not "fix" the new sets by adding them — and do not read their absence as a bug.
+
 `render_create` and `render_update` take `ownership: Ownership` explicitly and stop calling
 `owned_keys`. A `workbench_ownership(kind)` helper retains today's fail-early raise on an
 unsupported kind for the workbench's two-kind dispatch.
 
-### 4.2 One upsert helper, replacing a copy
+### 4.2 Three operation-named entry points, replacing a copy
 
 `workbench._write_entity_file` already performs the full dance:
 
 ```
-dest = project_root / resolve_path_policy(kind).root / f"{local_part}.md"
+dest = project_root / resolve_path_policy(kind, project_root=project_root).root / f"{local_part}.md"
 if dest.exists():
     fm, body, _ = read_existing_target(dest, entity)   # ADMIT FIRST
     text = render_update(entity, existing_frontmatter=fm, body=body,
@@ -254,31 +281,77 @@ So:
 `PROMOTE_PROPOSITION` therefore never reaches `render_update`, which is why §4.1 marks it
 create-only.
 
+**The report must follow the behaviour, and that changes `MintFn`.** `apply_candidates:380-383`
+currently does `report.minted += 1` and `written_paths.append(...)` unconditionally on the MINT
+branch, because `MintFn` returns a bare `str`:
+
+```python
+MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], str]   # promote.py:247
+```
+
+A mint that accrued would then report as a mint, and name a path nothing wrote. The ruling:
+
+- **an accrual counts as `linked`**, not minted — one behaviour, one counter, matching §4.3's
+  "an identical claim arriving from a second source is provenance accrual, not a rewrite";
+- **no `accrued` counter** — a third bucket would re-introduce the distinction the ruling
+  collapses;
+- **`written_paths` gains an entry only when a file is created.**
+
+So `MintFn` returns the entity id *and* whether it created, and `apply_candidates` branches on
+that instead of assuming. **All three mint implementations carry the contract** —
+`_mint_proposition` returns created-or-accrued, and both `_mint_numeric` closures
+(`question`, `hypothesis`) always report created, since `reserve_entity` + the template render
+have no accrual path. Threading it through only the proposition mint would leave the other two
+returning a value the caller must special-case, which is how the unconditional `+= 1` got there
+in the first place.
+
 **`synthesize._write_proposition`** calls
 `update_entity_file(..., ownership=SYNTHESIZE_PROPOSITION)`. Its destination always exists —
 it updates in-scope propositions — so it takes the update-only entry point, and
-`read_existing_target` raising `MalformedTargetError` on a missing or wrong-identity record
-is the fail-early replacement for today's silent `PropositionEntity(**merged_fm)`
-reconstruction.
+`read_existing_target` raising `MalformedTargetError` on a wrong-identity or undated record is
+the fail-early admission check the path has never had.
 
-The `_parse_markdown_file` body read in `_write_proposition` is dropped: `read_existing_target`
-returns the body, and having two readers of the same file disagree about what its frontmatter
-is, is the defect `read_existing_target` exists to prevent.
+The `PropositionEntity(**merged_fm)` reconstruction **stays** — `render_update` renders owned
+keys from a typed entity, so one must be built. What `read_existing_target` replaces is the
+`_parse_markdown_file` body read and the absent identity check, not the construction. Two
+readers of the same file disagreeing about what its frontmatter is, is the defect
+`read_existing_target` exists to prevent.
 
-### 4.4 The guard
+That the reconstruction survives is what makes test 6 land where it does. `PropositionEntity.title`
+is `str = ""` (`model/src/science_model/propositions.py:48`), so an empty-title pre-containment
+record **constructs without complaint** and is refused later, by `certify_persisted`, with
+`PersistedShapeError`. Test 6 must assert that error and not a pydantic `ValidationError`; if
+the model ever makes `title` required, the failure moves earlier and that test's premise moves
+with it.
+
+### 4.4 Delete the writer; guard the symbol, not its callers
 
 After this slice `entities.write_entity_file` has **zero** production callers (measured: the
-only two are the ones being contained; its docstring's claim that it is "also used by
-`dag.workbench`" is already stale). It is retained as a general any-kind writer — the
-contained renderers support only `proposition` and `evidence-line`, so deleting it would
-leave no general facility — but nothing must silently re-acquire it.
+only two are the ones being contained; its docstring at `entities.py:486` claiming it is "also
+used by `dag.workbench`" is already stale). **It is deleted, not retained.**
 
-Add an AST test that walks **every** `.py` file under `science/src/science_tool/` and asserts
-no reference to `write_entity_file` outside its own definition in `entities.py`, catching both
-`from ... import write_entity_file` and `entities.write_entity_file(...)` attribute access.
+An earlier revision kept it as a general any-kind writer, reasoning that the contained
+renderers cover only `proposition` and `evidence-line` so deleting it would leave no general
+facility. Measurement refutes the premise: the other two promotable kinds never used it.
+`_mint_numeric` (`promote.py:307-345`) renders `question` and `hypothesis` through
+`Renderer().render()` + `_atomic_replace_text`, on a template-faithful path that predates this
+design and is untouched by it. No production path wants a general full-model dump — that dump
+*is* the defect, and `exclude_none=True` at `entities.py:466` is what §2.4 reproduced.
+
+Keeping a callerless function alive plus a guard asserting nobody calls it is also two
+mechanisms where one will do, and it is the "legacy layer nobody asked for" the repo
+conventions rule out.
+
+So the guard becomes a **symbol-absence assertion**: `write_entity_file` is not defined in
+`science_tool.entities` and does not appear anywhere under `science/src/science_tool/`. That is
+strictly stronger than the caller guard it replaces — a caller cannot re-acquire a symbol that
+does not exist — and it cannot be satisfied by a re-definition under another name reached
+through the same dump.
 
 The scope is **derived from a tree walk, never an enumerated module list**. A guard that lists
 its own scope has a hole by construction, and this program has already been bitten by one.
+
+Deleting it moves the three *test* callers (§5.9), which are the only remaining references.
 
 ## 5. Testing
 
@@ -288,11 +361,12 @@ its own scope has a hole by construction, and this program has already been bitt
 2. **The workbench is unchanged** — its two ownership constants equal today's frozensets, and
    its existing conformance and apply suites pass untouched. Ownership equality is by
    construction; everything else on that path is not, so the implementation plan must carry
-   **all four renderer call sites** through the signature change explicitly:
-   `workbench._write_entity_file:372/381` and `workbench_apply:178` (`render_create`),
-   `:196` (the **unchanged-timestamp no-op probe**, whose result depends on `render_update`'s
-   output) and `:206` (the final `render_update`). The no-op probe is the one most likely to
-   change behaviour silently and needs a test asserting a no-op edit still writes nothing.
+   **all five renderer call sites** through the signature change explicitly:
+   `workbench._write_entity_file:372` (`render_update`) and `:380` (`render_create`);
+   `workbench_apply:178` (`render_create`), `:196` (the **unchanged-timestamp no-op probe**,
+   whose result depends on `render_update`'s output) and `:206` (the final `render_update`).
+   The no-op probe is the one most likely to change behaviour silently and needs a test
+   asserting a no-op edit still writes nothing.
 3. **The §2.4 regression test** — enrich a proposition, then force a same-slug MINT of the
    identical claim, and assert that `predicate`, `polarity`, `claim_layer`,
    `reasoning_source`, the curated body, **the pre-existing `source_refs` (accrued, not
@@ -301,9 +375,9 @@ its own scope has a hole by construction, and this program has already been bitt
    implementation would still fail — they are the point of §4.3, not incidental coverage.
 4. **No skeleton keys** — a minted proposition's frontmatter contains no `datapackage`,
    `local_path`, `accessions`, `siblings`, `parent_dataset`, or `license`.
-5. **Guard falsifiability** — mutation-test by reverting one call site to
-   `write_entity_file` and confirming the AST test goes red. A guard that has never failed
-   is an assertion, not a check.
+5. **Guard falsifiability** — mutation-test by re-introducing a `write_entity_file` definition
+   in `entities.py` and confirming the symbol-absence test goes red, then again with a call
+   site added. A guard that has never failed is an assertion, not a check.
 6. **`certify_persisted` on the annotation path** — a synthesize update targeting a
    pre-containment empty-title record raises `PersistedShapeError` naming the record and
    `title`, rather than rewriting it.
@@ -311,7 +385,19 @@ its own scope has a hole by construction, and this program has already been bitt
    accepts no `create_body`; `create_entity_file` refuses an existing one. Asserted rather
    than assumed, since these refusals are what keep the unreachable branches unreachable.
 8. **Promotion accrual matches LINK** — a same-slug MINT of an identical claim and a `LINK`
-   to the same record leave the file in the same state. One behaviour, two routes to it.
+   to the same record leave the file in the same state **and the same `ApplyReport`**:
+   `linked` incremented, `minted` not, and no `written_paths` entry (§4.3). One behaviour, two
+   routes to it — asserting only the file state would let the report diverge unnoticed, which
+   is the hole the unconditional `report.minted += 1` opened.
+9. **The fixtures move off the deleted writer** — `tests/test_proposition_synthesize.py`'s
+   `_write_prop` helper (`:283-286`) currently builds its records *with* `write_entity_file`,
+   as do `test_entity_writer.py` and `test_workbench_apply.py`. §4.4 deletes it, so they must
+   be rewritten onto the contained path. This is not mechanical: the full-model dump seeds
+   skeleton keys that `render_update` preserves (they are not owned) and `certify_persisted`
+   does not reject (base 2.0 deliberately omits `unevaluatedProperties`, per its docstring).
+   Left alone, the synthesize suite would certify containment against inputs only the
+   uncontained writer could produce — and test 4's "no skeleton keys" would pass over records
+   whose skeleton keys came from the fixture, not the writer under test.
 
 Validation per `AGENTS.md`: `cd science && uv run --frozen pytest`, `cd science/model &&
 uv run --frozen pytest`, `uv run ruff check` in both packages, `uv run pyright` from
@@ -335,10 +421,13 @@ any failure at the merge-base before attributing it to this branch.
 - **The legacy triple has three separate consumers and needs three verdicts**, not one:
   `sci:legacyPatch` / `sci:legacyEdgeId` still materialize into the provenance graph
   (`materialize.py:2082-2087`), `legacy_relation_label` still renders as an edge label
-  (`proposition_edges.py:69` → `render.py:242`), and only the `.dot` cross-check is inert.
-  Retiring any of them changes an output, and belongs with the migration.
-- **`_check_legacy_dag_metadata` is inert wherever the `.dot` corpus is gone.** A check that
-  cannot fire is worth either restoring or retiring, and its silence should not be read as
-  health.
+  (`proposition_edges.py:69` → `render.py:242`), and `legacy_patch` additionally keys the
+  `.dot` cross-check, which runs on all 307 records (§2.3). Every one of them is live.
+  Retiring any changes an output, and belongs with the migration.
+- **mm30's DAG validation is red and nobody is reading it.** `validate_project` returns 670
+  findings — 362 `proposition_edge_missing`, 307 `legacy_dag_edge_unresolved`, 1 `acyclicity`
+  — all severity `error`, so `report.ok` is `False` today. That is a project-health finding
+  this design surfaced in passing and does not own; it needs triage on its own terms, and the
+  307 must be resolved rather than deleted out from under the check.
 - **`compile_workbench`'s docstring** still says entities are "(re)written via the canonical
   entity-layer writer", which stopped being true when piece 1 landed. One-line fix.
