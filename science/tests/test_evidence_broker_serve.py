@@ -429,3 +429,42 @@ def test_unrecognised_search_output_raises(tmp_path: Path, monkeypatch):
 
     assert calls[0][0] == "rev-parse"
     assert len(calls) > 1
+
+
+def test_a_wellformed_malformed_pattern_naming_a_different_pattern_is_not_a_refusal(
+    tmp_path: Path, monkeypatch
+):
+    """The SEARCH sibling of `test_a_wellformed_miss_naming_a_different_path_is_not_a_miss`.
+    Certifies the ANCHORED prefix in `_malformed_pattern_prefix` against a fake, for the same
+    reason that one needed a fake: live git never hands this module a malformed-pattern
+    diagnostic naming any pattern OTHER than the one just sent, so there is no reachable
+    counterexample to point real git at.
+
+    THE FAKE ANSWERS `rev-parse` TRUTHFULLY (so the call reaches the search classifier) and
+    then reports a well-formed malformed-pattern diagnostic naming a DIFFERENT pattern than
+    the one requested: the request sends `alpha`, but stderr complains about `other-pattern`.
+    Real code must raise `ServeError`, because git is not actually refusing the pattern this
+    request sent. An unanchored classifier that merely checked for `-e option` or `Invalid
+    regular expression` anywhere in stderr would call this a REFUSAL of `alpha` and hand back
+    a denial for a request that was never malformed -- which is exactly the failure mode
+    `_absent_sentences`' anchoring exists to prevent on the `read` side.
+    """
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    real_run_git = serve_module.run_git
+
+    def _fake(repo_root, *args, **kwargs):
+        if args[0] == "rev-parse":
+            return real_run_git(repo_root, *args, **kwargs)
+
+        class _Strange:
+            returncode = 128
+            stdout = b""
+            stderr = b"fatal: -e option, 'other-pattern': Invalid regular expression\n"
+
+        return _Strange()
+
+    monkeypatch.setattr(serve_module, "run_git", _fake)
+    with pytest.raises(ServeError, match="could not be classified"):
+        serve(root, commit, _search("alpha"), OPEN)
