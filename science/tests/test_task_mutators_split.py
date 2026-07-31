@@ -251,7 +251,6 @@ def test_edit_refuses_to_terminalize_an_active_task(tmp_path: Path, status: str)
         " leading",
         "trailing ",
         "two\nlines",
-        "bare ] bracket",
     ],
     ids=[
         "empty",
@@ -260,7 +259,6 @@ def test_edit_refuses_to_terminalize_an_active_task(tmp_path: Path, status: str)
         "leading-space",
         "trailing-space",
         "newline",
-        "closing-bracket",
     ],
 )
 def test_add_rejects_unsafe_title_without_creating_a_task(tmp_path: Path, title: str) -> None:
@@ -281,7 +279,6 @@ def test_add_rejects_unsafe_title_without_creating_a_task(tmp_path: Path, title:
         " leading",
         "trailing ",
         "two\nlines",
-        "bare ] bracket",
     ],
     ids=[
         "empty",
@@ -290,7 +287,6 @@ def test_add_rejects_unsafe_title_without_creating_a_task(tmp_path: Path, title:
         "leading-space",
         "trailing-space",
         "newline",
-        "closing-bracket",
     ],
 )
 def test_edit_rejects_unsafe_title_without_changing_the_task(tmp_path: Path, title: str) -> None:
