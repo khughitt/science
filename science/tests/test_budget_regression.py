@@ -26,10 +26,11 @@ TASK_IDS = {f"t{i:03d}" for i in range(400)}
 DATA_RECORD_PATHS = {f"data/stranded-record-with-a-long-name-{i:05d}.md" for i in range(3_000)}
 
 
-@pytest.fixture
-def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
-    active_dir = tmp_path / "tasks" / "active"
+@pytest.fixture(scope="module")
+def project_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("budget-project")
+    (root / "science.yaml").write_text("id: demo\nname: demo\n")
+    active_dir = root / "tasks" / "active"
     active_dir.mkdir(parents=True)
     for i in range(400):
         task = Task(
@@ -51,24 +52,74 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             task_module.render_task_file(task),
             encoding="utf-8",
         )
-    entities = tmp_path / "entities" / "questions"
+    entities = root / "entities" / "questions"
     entities.mkdir(parents=True)
     for i in range(300):
         entity_id = "question:q0000-a-long-question-slug" if i == 0 else f"question:q{i:04d}"
         (entities / f"{i:04d}-q.md").write_text(
             f"---\nid: {entity_id}\nkind: question\ntitle: Question {i}\n---\n\n" + ("body " * 300)
         )
-    hypotheses = tmp_path / "entities" / "hypotheses"
+    hypotheses = root / "entities" / "hypotheses"
     hypotheses.mkdir()
     (hypotheses / "0000-h.md").write_text(
         "---\nid: hypothesis:h0000-another-long-slug\nkind: hypothesis\ntitle: Referenced hypothesis\n---\n\n"
     )
-    data_dir = tmp_path / "data"
+    data_dir = root / "data"
     data_dir.mkdir()
     for i in range(3_000):
         (data_dir / f"stranded-record-with-a-long-name-{i:05d}.md").write_text("x")
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
+    return root
+
+
+@pytest.fixture(scope="module")
+def project_cache() -> dict[str, dict[tuple[object, ...], object]]:
+    return {"health": {}, "tasks": {}}
+
+
+@pytest.fixture
+def project(
+    project_root: Path,
+    project_cache: dict[str, dict[tuple[object, ...], object]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    from science_tool.graph import health as health_module
+
+    real_health = health_module.execute_health_report
+    real_read_active = task_module._read_active
+
+    def execute_health_once(
+        project_root: Path,
+        *,
+        ingestion_ref: str,
+        generated_at: str,
+        collect_timings: bool = False,
+        checks: set[str] | frozenset[str] | None = None,
+        skip_checks: set[str] | frozenset[str] | None = None,
+        fast: bool = False,
+    ):
+        key = (project_root.resolve(), collect_timings, checks, skip_checks, fast)
+        if key not in project_cache["health"]:
+            project_cache["health"][key] = real_health(
+                project_root,
+                ingestion_ref=ingestion_ref,
+                generated_at=generated_at,
+                collect_timings=collect_timings,
+                checks=checks,
+                skip_checks=skip_checks,
+                fast=fast,
+            )
+        return project_cache["health"][key]
+
+    def read_active_once(tasks_dir: Path, *, require_split: bool = True):
+        key = (tasks_dir.resolve(), require_split)
+        if key not in project_cache["tasks"]:
+            project_cache["tasks"][key] = real_read_active(tasks_dir, require_split=require_split)
+        return list(project_cache["tasks"][key])
+
+    monkeypatch.setattr(health_module, "execute_health_report", execute_health_once)
+    monkeypatch.setattr(task_module, "_read_active", read_active_once)
+    monkeypatch.chdir(project_root)
+    return project_root
 
 
 def _invoke(args: list[str]):
@@ -126,8 +177,8 @@ def _data_record_paths(text: str) -> set[str]:
     return set(re.findall(r"data/stranded-record-with-a-long-name-\d{5}\.md", text))
 
 
-def test_tasks_json_output_file_is_complete(project: Path) -> None:
-    target = project / "tasks.json"
+def test_tasks_json_output_file_is_complete(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "tasks.json"
     result = _invoke(["tasks", "list", "--all", "--format", "json", "--output", str(target)])
     assert result.exit_code == 0, result.output
 
@@ -139,8 +190,8 @@ def test_tasks_json_output_file_is_complete(project: Path) -> None:
     assert "truncation" not in payload
 
 
-def test_tasks_table_output_file_is_complete(project: Path) -> None:
-    target = project / "tasks.txt"
+def test_tasks_table_output_file_is_complete(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "tasks.txt"
     result = _invoke(["tasks", "list", "--all", "--output", str(target)])
     assert result.exit_code == 0, result.output
 
@@ -150,8 +201,8 @@ def test_tasks_table_output_file_is_complete(project: Path) -> None:
     assert "complete output:" not in written
 
 
-def test_health_json_output_file_is_complete_and_unprojected(project: Path) -> None:
-    target = project / "health.json"
+def test_health_json_output_file_is_complete_and_unprojected(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "health.json"
     result = _invoke(["health", "--format", "json", "--output", str(target)])
     assert result.exit_code == 0, result.output
 
@@ -167,8 +218,8 @@ def test_health_json_output_file_is_complete_and_unprojected(project: Path) -> N
     assert "displayed_issues" not in written
 
 
-def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> None:
-    target = project / "health.txt"
+def test_health_table_output_file_is_complete_and_unprojected(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "health.txt"
     result = _invoke(["health", "--output", str(target)])
     assert result.exit_code == 0, result.output
 
@@ -178,8 +229,8 @@ def test_health_table_output_file_is_complete_and_unprojected(project: Path) -> 
     assert "Findings displayed:" in written
 
 
-def test_inventory_output_file_contains_every_entity(project: Path) -> None:
-    target = project / "inventory.json"
+def test_inventory_output_file_contains_every_entity(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
     result = _invoke(
         [
             "entities",
@@ -200,8 +251,8 @@ def test_inventory_output_file_contains_every_entity(project: Path) -> None:
     assert sum(entity["kind"] == "hypothesis" for entity in payload["entities"]) == 1
 
 
-def test_data_audit_text_output_file_contains_every_record(project: Path) -> None:
-    target = project / "audit.txt"
+def test_data_audit_text_output_file_contains_every_record(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "audit.txt"
     result = _invoke(["data", "audit", "--output", str(target)])
     assert result.exit_code == 1, result.output
 
@@ -210,8 +261,8 @@ def test_data_audit_text_output_file_contains_every_record(project: Path) -> Non
     assert written.count("data/stranded-record-with-a-long-name-") == 3_000
 
 
-def test_data_audit_json_output_file_contains_every_record(project: Path) -> None:
-    target = project / "audit.json"
+def test_data_audit_json_output_file_contains_every_record(project: Path, tmp_path: Path) -> None:
+    target = tmp_path / "audit.json"
     result = _invoke(["data", "audit", "--format", "json", "--output", str(target)])
     assert result.exit_code == 1, result.output
 
@@ -237,7 +288,11 @@ def test_data_audit_json_output_file_contains_every_record(project: Path) -> Non
     ],
 )
 def test_no_success_message_when_the_command_fails(
-    project: Path, args: list[str], target_name: str, monkeypatch: pytest.MonkeyPatch
+    project: Path,
+    tmp_path: Path,
+    args: list[str],
+    target_name: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The sole payload-sink bypass must follow a successful flush, not sit in `finally`."""
     from science_tool.budget import sink as sink_module
@@ -246,7 +301,7 @@ def test_no_success_message_when_the_command_fails(
         raise RuntimeError("render failed")
 
     monkeypatch.setattr(sink_module.BoundedSink, "flush", _boom)
-    result = _invoke([*_scope_project(args, project), "--output", str(project / target_name)])
+    result = _invoke([*_scope_project(args, project), "--output", str(tmp_path / target_name)])
     assert result.exit_code != 0
     assert "wrote" not in result.output
 
@@ -279,10 +334,11 @@ def test_escape_hint_extension_tracks_the_output_format(project: Path) -> None:
 )
 def test_file_success_control_notices_are_single_line_and_bounded(
     project: Path,
+    tmp_path: Path,
     args: list[str],
     target_name: str,
 ) -> None:
-    target = project / target_name
+    target = tmp_path / target_name
     result = _invoke([*_scope_project(args, project), "--output", str(target)])
     assert result.exit_code in {0, 1}, result.output
     assert result.output.count("\n") == 1
@@ -348,8 +404,11 @@ def test_graph_audit_output_file_is_complete_and_stdout_is_a_control_notice(
     assert "truncation" not in payload
 
 
-def test_project_index_output_file_is_complete_and_stdout_is_a_control_notice(project: Path) -> None:
-    target = project / "index.json"
+def test_project_index_output_file_is_complete_and_stdout_is_a_control_notice(
+    project: Path,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "index.json"
     result = _invoke(["project", "index", "--format", "json", "--output", str(target)])
     assert result.exit_code == 0, result.output
     assert result.output.count("\n") == 1

@@ -39,6 +39,18 @@ def _invoke(args: list[str]):
     return CliRunner().invoke(main, args, prog_name="science")
 
 
+def _reuse_collection(monkeypatch: pytest.MonkeyPatch, module, name: str) -> None:
+    collect = getattr(module, name)
+    result = []
+
+    def collect_once(*args, **kwargs):
+        if not result:
+            result.append(collect(*args, **kwargs))
+        return result[0]
+
+    monkeypatch.setattr(module, name, collect_once)
+
+
 def _assert_document_refuses(command_path: str, base_args: list[str], *, sentinel: str) -> None:
     """A DOCUMENT over budget refuses on stdout: nonzero exit, names --output, leaks nothing."""
     result = _invoke(base_args)
@@ -97,12 +109,15 @@ def _assert_report_projection(command_path, base_args, out_dir, *, expected_exit
 
 
 def test_curate_inventory_refuses_and_completes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.curate import cli as curate_cli
+
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     # One record per entity: 900 entities makes the inventory JSON ~340k chars, far over 20,000.
     _seed_entities(tmp_path, "question", "questions", 300)
     _seed_entities(tmp_path, "interpretation", "interpretations", 300)
     _seed_entities(tmp_path, "discussion", "discussions", 300)
     monkeypatch.chdir(tmp_path)
+    _reuse_collection(monkeypatch, curate_cli, "collect_inventory")
     # A seeded artifact id proves nothing partial leaks when the DOCUMENT refuses on stdout.
     _assert_document_refuses("curate inventory", ["curate", "inventory"], sentinel="discussion:d0000")
     payload = _assert_document_file_complete(
@@ -125,9 +140,12 @@ def _seed_prose_hits(root: Path, count: int) -> None:
 
 
 def test_prose_lint_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool import prose_lint_cli
+
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     _seed_prose_hits(tmp_path, 400)
     monkeypatch.chdir(tmp_path)
+    _reuse_collection(monkeypatch, prose_lint_cli, "scan_root")
     _assert_report_projection(
         "prose lint", ["prose", "lint"], tmp_path,
         expected_exit=0,  # no --strict -> prose lint never fails the run
@@ -142,6 +160,8 @@ def test_prose_lint_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.
 
 def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import yaml
+
+    from science_tool import consolidation_candidates
 
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     folder = tmp_path / "entities" / "interpretations"
@@ -164,6 +184,7 @@ def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkey
                                "title": f"New {i}", "status": "open",
                                "relations": [{"predicate": "sci:supersedes", "target": f"interpretation:old{i:04d}"}]})
     monkeypatch.chdir(tmp_path)
+    _reuse_collection(monkeypatch, consolidation_candidates, "detect_consolidation_candidates")
     _assert_report_projection(
         "curate consolidation-candidates", ["curate", "consolidation-candidates"], tmp_path,
         expected_exit=0,  # read-only report
@@ -178,6 +199,8 @@ def test_consolidation_candidates_is_bounded_and_complete(tmp_path: Path, monkey
 
 
 def test_validate_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from science_tool.validate import cli as validate_cli
+
     (tmp_path / "science.yaml").write_text("id: demo\nname: demo\n")
     # Many unresolved references produce many validation findings. Seed entities whose
     # `related:` points at nonexistent targets. Confirmed against source: 20 such entities
@@ -192,6 +215,7 @@ def test_validate_is_bounded_and_complete(tmp_path: Path, monkeypatch: pytest.Mo
             f"related: [hypothesis:h{i:04d}-does-not-exist-anywhere-in-this-project]\n---\n\nbody\n"
         )
     monkeypatch.chdir(tmp_path)
+    _reuse_collection(monkeypatch, validate_cli, "run")
     _assert_report_projection(
         "validate", ["validate"], tmp_path,
         expected_exit=1,  # errors present -> ctx.exit(1) on the full result
