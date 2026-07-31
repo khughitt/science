@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 20)
+**Status:** partially implemented (revision 21)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 20, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 20, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 20, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 21, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 21, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 21, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -52,6 +52,35 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 21 closes four defects in revision 20, two of them in revision 20's own fixes.
+
+1. **The `run_git` ceiling gave one disposition to four different conditions** (§3.2). Revision 20
+   wrote "each fails the same way", which journals an overflow of `stderr` or the `config --list`
+   preflight — both governed by mutable repository state, not by the pinned commit. An entry served
+   before `.git/config` grew would refuse at replay, fail to match, and return
+   `EXPOSURE_UNREPRODUCIBLE`: **an honest review refused because the actor edited a file afterwards.**
+   That is the defect revision 20 had just removed from `history`, rebuilt one paragraph later in the
+   fix for something else. Disposition now follows determinism: served stdout is a journaled
+   `Denial`; `stderr` and the preflight fail the invocation; the tree scan refuses to open the
+   session.
+2. **`check_correspondence` could not produce its own first outcome** (§5). The signature required an
+   `EvidenceExposure` while §5.3's first row is `NO_EXPOSURE`. `EvidenceExposure | None` — the same
+   defect as revision 20's lens precondition, one slice over, and the second time a slice was handed
+   an outcome it structurally could not reach.
+3. **`Correspondence` had two homes and the checker module had two names** (§2). §2 placed it in
+   `audit/record.py`, revision 20 claimed 4b touches no audit-record model, and §2's tree said
+   `correspond.py` against §5's `correspondence.py`. It ships in `evidence_broker.py` beside
+   `Outcome`, which moved there for the same reason: it is the broker's verdict vocabulary, and
+   `audit/record.py` imports it. 4c must know this before it can store the type.
+4. **A roster row certified nothing** (§7). With 4a guaranteeing an NFC tree, keying the served map on
+   "raw path bytes" is either identical after decoding or a bytes-vs-str type error, so the row
+   measured neither normalization nor coverage. Deleted; 4a's tree tests own normalization. A vacuous
+   parametrization inside the roster written to prevent vacuous parametrizations is worth recording
+   plainly.
+
+**§5.3's three columns are set in two slices**, now stated: 4b owns the classification, while
+"Stored?" and "Counts as support?" are `append_review` and `confirmation_count`, both 4c.
 
 Revision 20 comes from review of revision 19 and closes four defects, three blocking. Three of them
 are **failures of the split itself** — not of the design that was split — which is the lesson worth
@@ -381,14 +410,17 @@ science/src/science_tool/evidence_broker/     # NEW
     serve.py      three git ops at a pinned commit; defined-miss vs raise
     journal.py    append-only per-run log, outside the project tree
     session.py    budget-enforcing session over policy + serve + journal
-    correspond.py the join, the replay, the coverage-aware outcome
+    hits.py       `git grep -n -z` record parsing; pure bytes -> (path, line)
+    correspondence.py  the join, the replay, the coverage-aware outcome
     cli.py        `science evidence serve`   # the only actor-facing command; §3.4.1, §3.5
 
 science/model/src/science_model/
     evidence_broker.py   SurfacePolicy (shipped, plan 2); + Outcome, ExposureEntry,
-                         InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure
+                         InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure;
+                         + Correspondence (plan 4b)
     autonomous_runs.py   + AutonomousRunRecord.evidence
-    audit/record.py      + Uncertainty, Correspondence, ReviewSubmission; two Review fields;
+    audit/record.py      + Uncertainty, ReviewAttestation, ReviewSubmission; two Review fields
+                           (one importing Correspondence from evidence_broker.py);
                            confirmation_count() gains a correspondence term
 
 science/src/science_tool/
@@ -601,10 +633,27 @@ the *payload* unbounded, which is the same omission in a different quantity.
   - **The §3.1 tree scan.** `ls-tree -r -z --name-only` over a whole tree is proportional to the
     repository, not to any request, and it too runs before a session is allowed to open.
 
-  Each is bounded by the same ceiling and fails the same way: exceeding it is a refusal, not a
-  truncation. Truncating any of the three would be worse than refusing — a truncated config listing
-  silently under-blanks filter drivers, a truncated tree scan silently declares an unscanned tree
-  NFC, and both are fail-opens dressed as robustness.
+  **They share the ceiling and must NOT share the disposition** (revision 21). Revision 20 said
+  "each fails the same way", which put environment-dependent overflow into the journal and thereby
+  rebuilt the defect revision 20 had just removed from `history`. What a refusal may be recorded as
+  depends on whether the condition is **fixed by the pinned commit**:
+
+  | Overflow | Determined by | Disposition |
+  |---|---|---|
+  | served stdout (`read`, `search`, `history`) | the pinned commit | a journaled `Denial` — replays identically |
+  | `stderr`, on any call | mutable repository and runtime state | **fail the git invocation**; never journaled |
+  | the `config --list` preflight | `.git/config`, which the actor may edit at any time | **fail the git invocation**; never journaled |
+  | the §3.1 tree scan | the pinned commit, but runs before a run exists | **refuse to open the session** |
+
+  Journaling an environment-dependent refusal is a fail-open with a delay: an entry served before
+  `.git/config` grew would refuse at replay, the bytes would not match, and §5.3 would return
+  `EXPOSURE_UNREPRODUCIBLE` — **refusing an honest review for a file the actor edited afterwards.**
+  Failing the invocation instead reaches §6 as `unwired`, which is what a condition the environment
+  controls is supposed to produce.
+
+  In all four rows, exceeding the ceiling **refuses rather than truncates**. A truncated config
+  listing silently under-blanks filter drivers, and a truncated tree scan silently declares an
+  unscanned tree NFC; both are fail-opens dressed as robustness.
 - The refusal is a `Denial` with its own reason, distinct from a policy denial, and it is
   **deterministic given the commit** — the same request refuses identically at replay, which is what
   keeps §5.2 sound. Under §5.1 it contributes no coverage, like every other refusal.
@@ -1480,9 +1529,22 @@ and under `--broker-spec` it is derived from `control_plane.run_dir()` rather th
 
 ```python
 def check_correspondence(
-    evidence: Sequence[Evidence], exposure: EvidenceExposure, *, repo: Path
+    evidence: Sequence[Evidence], exposure: EvidenceExposure | None, *, repo: Path
 ) -> Correspondence
 ```
+
+**`| None` is what lets 4b own the whole of §5.3** (revision 21). Its first row is
+`unwired` / `NO_EXPOSURE`, and a signature requiring an exposure cannot produce the outcome defined by
+there not being one — the same defect as revision 20's lens precondition, one slice over. The absent
+case is a classification, so it belongs with the classifier; the alternative has `append_review`
+constructing `Correspondence` values on one path and delegating on another, which is two producers
+of one verdict.
+
+**4b owns §5.3's *classification* column and nothing else.** "Stored?" is `append_review`'s behaviour
+and "Counts as support?" is `confirmation_count`'s — both 4c. The table reads as one rule per row
+because the three answers move together, but they are set in two different slices, and a 4b
+implementer who reads the storage column as a requirement will build a boundary 4c then has to
+unbuild.
 
 The live session is gone from the signature: everything replay needs is sealed into `exposure`.
 
@@ -1574,8 +1636,9 @@ exist at this commit" — which is why §3.1's NFC rule has to hold for it to me
 **`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
 `Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
 never stored, so putting it in `science_model` beside the sealed types would advertise a durability
-it does not have. `Correspondence`, which *is* returned across the boundary, does ship in
-`science_model` (§4.2).
+it does not have. `Correspondence`, which *is* returned across the boundary, ships in
+`science_model/evidence_broker.py` — beside `Outcome`, which moved there for the same reason — and
+`audit/record.py` imports it for the stored `Review` field (§4.2).
 
 **The cited set.** `line` and `span` are already mutually exclusive on `LocationEvidence`, so a
 citation cites `{line}`, or every line from `span.start_line` to `span.end_line` inclusive, with
@@ -1914,7 +1977,8 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Exempt the `config --list` preflight | a repository whose `include.path` yields an oversized listing refuses |
 | 4a | Exempt the tree scan | an oversized `ls-tree` refuses instead of declaring the tree NFC |
 | 4a | Truncate instead of refusing at the ceiling | an over-ceiling config listing does not silently under-blank filter drivers |
-| 4b | Key the served map on the tree's raw path bytes | an honest citation into a non-ASCII path corresponds |
+| 4a | Journal a `stderr` or preflight overflow as a `Denial` | an entry served before `.git/config` grew still replays, rather than becoming `EXPOSURE_UNREPRODUCIBLE` |
+| 4a | Make a tree-scan overflow a `Denial` instead of refusing to open | an oversized tree opens no session |
 | 4b | Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
 | 4b | Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
 | 4b | `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |
