@@ -26,6 +26,7 @@ from datetime import date
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 from science_model.entities import EvidenceLineEntity
 from science_model.entity_schema import EntityValidationError, EntityValidator
 from science_model.frontmatter import split_frontmatter
@@ -42,6 +43,10 @@ class FrontmatterRenderError(ValueError):
 
 RENDERER_DERIVED_KEYS: frozenset[str] = frozenset(
     ("canonical_id", "content_preview", "content", "file_path", "type")
+)
+
+TYPED_VALIDATION_SKELETON_KEYS: frozenset[str] = frozenset(
+    {"project", "ontology_terms", "related", "source_refs", "content_preview", "file_path"}
 )
 
 PROPOSITION_OWNED_KEYS: frozenset[str] = frozenset(
@@ -117,11 +122,11 @@ def render_from_frontmatter(frontmatter: dict[str, object], body: str) -> str:
 
 
 class PersistedShapeError(ValueError):
-    """A write was refused because its result would not satisfy the durable base shape."""
+    """A write was refused because its result would not satisfy the durable typed shape."""
 
 
 def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
-    """Refuse to render or plan a write whose result would fail the durable base shape.
+    """Refuse a rendered result that fails the durable base or merged typed shape.
 
     On create this catches a writer regression; on update it catches a record that predates
     containment -- deliberately a REJECTION, not a backfill (design §5.4): a workbench update must
@@ -137,9 +142,15 @@ def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
     frontmatter, _body = split_frontmatter(text)
     try:
         EntityValidator().validate_persisted_base_shape(frontmatter)
-    except EntityValidationError as exc:
+        entity_dump = entity.model_dump(mode="json")
+        typed_frontmatter = dict(frontmatter)
+        for key in TYPED_VALIDATION_SKELETON_KEYS:
+            if key not in typed_frontmatter:
+                typed_frontmatter[key] = entity_dump[key]
+        type(entity).model_validate(typed_frontmatter)
+    except (EntityValidationError, ValidationError) as exc:
         raise PersistedShapeError(
-            f"{entity.id} would not satisfy the durable base shape and was NOT written\n"
+            f"{entity.id} would not satisfy the durable typed shape and was NOT written\n"
             f"  {exc}\n"
             f"  If this record predates writer containment, repair it directly; the workbench "
             f"will not backfill it."

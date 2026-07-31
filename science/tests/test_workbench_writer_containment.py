@@ -263,6 +263,86 @@ def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
     assert edit.path.read_text(encoding="utf-8").count("title: ''") == 1  # and wrote nothing
 
 
+def test_typed_certification_rejects_an_invalid_merged_proposition() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_model.reasoning import Predicate
+
+    from science_tool.dag.entity_frontmatter import (
+        Ownership,
+        PersistedShapeError,
+        render_update,
+    )
+
+    existing = {
+        "id": "proposition:x",
+        "kind": "proposition",
+        "title": "A affects B",
+        "status": "active",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "created": "2026-07-01",
+        "updated": "2026-07-01",
+    }
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="A binds B",
+        subject="concept:a",
+        object="concept:b",
+        predicate=Predicate.BINDS,
+    )
+    # This synthetic future writer changes predicate but does not own polarity, so the stale
+    # signed value survives the merge. No live writer has this ownership shape after Task 3.
+    ownership = Ownership(
+        frozenset({"id", "kind", "subject", "object", "predicate", "created", "updated"})
+    )
+
+    with pytest.raises(PersistedShapeError, match="sign-less"):
+        render_update(
+            entity,
+            ownership=ownership,
+            existing_frontmatter=existing,
+            body="\n# Affects\n",
+            created="2026-07-01",
+            updated="2026-07-31",
+        )
+
+
+def test_evidence_line_typed_certification_fills_only_unpersisted_skeleton() -> None:
+    from science_model.entities import EvidenceLineEntity
+    from science_model.frontmatter import split_frontmatter
+
+    from science_tool.dag.entity_frontmatter import (
+        TYPED_VALIDATION_SKELETON_KEYS,
+        WORKBENCH_EVIDENCE_LINE,
+        certify_persisted,
+        render_create,
+    )
+
+    line = _evidence_line_for_stub(
+        EvidenceStub(stance="supports", source="paper:S"),
+        target_id="proposition:0001-x",
+        index=0,
+    )
+    text = render_create(
+        line,
+        ownership=WORKBENCH_EVIDENCE_LINE,
+        body="\n# Evidence\n",
+        created="2026-07-01",
+        updated="2026-07-01",
+    )
+    frontmatter, _body = split_frontmatter(text)
+
+    with pytest.raises(ValidationError) as exc:
+        EvidenceLineEntity.model_validate(frontmatter)
+    missing = {error["loc"][0] for error in exc.value.errors() if error["type"] == "missing"}
+    assert missing == TYPED_VALIDATION_SKELETON_KEYS
+
+    certify_persisted(line, text)
+    assert not (set(frontmatter) & TYPED_VALIDATION_SKELETON_KEYS)
+
+
 def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
     # Both create paths, not just the risky-looking one. Neutralize the title derivation and the
     # create path must refuse to plan a write rather than emit an empty-title file.
