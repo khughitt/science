@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 8)
+**Status:** proposed (revision 9)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -20,7 +20,23 @@ build on: the journal was to be created through `findings/paths.py`, whose every
 *inside* a project root, while the journal is deliberately outside one (§3.4.1). A fifth instance of
 the fourth pattern — the named component was real, and guaranteed the opposite of what was wanted.
 
-Four patterns run through what review kept finding, and each predicts where the implementation will go
+Revision 9 removes replay from the seal (§3.4.1). It is the first defect found by reading three
+sections *against each other* rather than any one of them closely: §3.4.1 said `finish_run` replays the
+journal, §6 enumerated a missing or unreadable journal as the only way a seal fails, and §5.2 placed
+replay at review-append time. Each section was locally coherent, which is why eight revisions of
+section-by-section review did not surface it — and it was slicing-relevant, since a replaying seal
+would have dragged §5's replay machinery into the session slice. A fifth pattern, below.
+
+Revision 9 carries two further corrections, both from probing git 2.55 while planning the serving
+slice rather than from reading. `read` was spelled `git show <commit>:<path>`, which serves a
+*directory* as a tree listing at exit 0 — indistinguishable from a file read, so `FULL` coverage would
+have been recorded over a listing (§3.2). And §3.2's account of why search pathspecs need `literal` was
+invented: the non-literal spelling does not leak denied material, it over-excludes material that was
+never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
+are instances of the second pattern below — a claim that outran its mechanism — and the second is its
+sharpest form yet, since the recommendation it argued for was correct all along.
+
+Five patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
 
 **Guards narrower than the rule they enforce.** `any(location)` where the rule was "everything was
@@ -46,6 +62,13 @@ in-tree write — the run's own report (`autonomy/path_gate.py`). Every served f
 gate denial. Six review rounds inside one document cannot find that, because the contradiction is not
 in the document. It is between the document and the system it runs inside, and it surfaced the moment
 the two were placed in one program (§0, §3.5).
+
+**Locally coherent, globally contradictory.** The seal replayed in §3.4.1, did not in §5.2, and could
+fail for exactly one non-replay reason in §6. No section was wrong on its own terms; the document was
+wrong only as a whole. Review that reads a section closely cannot find this, and neither can a reader
+who trusts the section nearest to hand — which, for an implementer, is whichever one the task cites.
+The countermeasure is to read every section that touches a mechanism together before building it, and
+to state the mechanism once, in the section that owns it, with the others pointing at it.
 
 Hence §7's discipline, and three additions to it: where the document *claims* a property, the suite
 establishes that property **under the condition the claim names** — replay with the control-plane
@@ -216,13 +239,32 @@ Containment is checked **before** any prefix, because a prefix check alone is wa
 **A git path is normalized lexically and the filesystem is never consulted.** Revisions 1–4 borrowed
 `reject_baseline_inside_project`'s dual as-spelled/resolved idiom wholesale, which is the wrong tool
 here: it follows symlinks in the mutable working tree, while the served surface is
-`git show <commit>:<path>` — a blob read that never touches the working tree at all. Replacing a
+`git cat-file blob <commit>:<path>` — a blob read that never touches the working tree at all. Replacing a
 base-commit file with a working-tree symlink would therefore deny a request that was entirely safe,
 and resolving would buy no security in exchange, because there is no filesystem lookup to protect.
 
 `normalize_project_path` is already the right function and is already what `LocationEvidence` uses:
 it refuses `..` rather than collapsing it, refuses absolute paths, refuses NUL, and normalizes UTF-8.
 Deny prefixes are then matched against the normalized form.
+
+**Unicode normalization is where the two mechanisms can still disagree, and only half of it is
+closed.** `normalize_project_path` maps a path to NFC; git stores path bytes verbatim and matches
+pathspecs byte-exactly. So a policy and a repository can be spelled differently and both be right:
+
+- *Authoring side, CLOSED.* A deny prefix written in NFD used to be silently stored as NFC, which
+  meant the author's spelling never reached git and the policy they wrote was not the policy they
+  got. `SurfacePolicy` now **refuses** a prefix whose NFC form differs from what was written, so the
+  caller learns the policy cannot express what they meant. Failing early beats a silent weakening.
+- *Repository side, OPEN and deliberately parked.* Against a tree holding an NFD path
+  (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling the model accepts — denies under
+  `read` and **still serves under `search`**, because `:(top,literal,exclude)café` in NFC matches no
+  NFD tree entry. Measured on git 2.55. Closing it honestly means `serve` inspecting the tree's own
+  path bytes, which is a traversal the serving surface has no place for; the natural home is the
+  session layer of plan 3, which already walks served paths.
+
+Recorded rather than hidden: a non-ASCII, NFD-authored repository (macOS-authored trees routinely
+are) can be searched past a policy that `read` honours. Any consumer relying on `deny_prefixes` as a
+confidentiality boundary needs this closed first.
 
 The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
 are opened: the baseline, the journal, the control-plane root, and the `served/` directory of §3.5.
@@ -250,14 +292,31 @@ CLI has no flag for it.
 
 ### 3.2 Serving
 
-Three operations, all resolved at a pinned commit: `read` (`git show <commit>:<path>`), `search`
-(`git grep`), `history` (`git log`). Reads go through the commit rather than the filesystem so the
-surface is the frozen tree even when the working tree has moved on.
+Three operations, all resolved at a pinned commit: `read` (`git cat-file blob <commit>:<path>`),
+`search` (`git grep`), `history` (`git log`). Reads go through the commit rather than the filesystem so
+the surface is the frozen tree even when the working tree has moved on.
+
+**`read` is `cat-file blob`, not `show`, because `show` serves a directory as content.** Revisions 1–8
+spelled it `git show <commit>:<path>`. Measured against git 2.55: for a path naming a *directory*, that
+command exits 0 and prints a tree listing — `tree <commit>:<path>`, a blank line, then the entry names.
+Nothing distinguishes that from a file read, so the served map would record `FULL` coverage with a line
+count over a directory listing, and a reviewer could then cite `private:3` in support of a claim about
+what a file under `private/` contains, having been shown no file at all. The citation would correspond
+mechanically while resting on nothing, which is the exact failure §5.1 exists to prevent.
+`cat-file blob` refuses a tree outright — `fatal: git cat-file <commit>:<path>: bad file` — and emits
+byte-identical output for a blob. It is a subcommand `autonomy/git.py` has not probed, so §3.2.1's rule
+applies to it before it ships.
 
 **`verify_commit()` runs once before any request is served, and the ordering is load-bearing.** For a
 well-formed but nonexistent commit, git reports `path 'x' exists on disk, but not in '<commit>'` —
 the same sentence it emits for a path added after the pinned commit. Miss classification is sound
 only once the revision is known good.
+
+**The read miss has two spellings and the classifier must know both.** `path 'x' does not exist in
+'<commit>'` when the path is absent from the working tree as well, and `path 'x' exists on disk, but
+not in '<commit>'` when it is present there. Both mean the same thing about the pinned tree, both exit
+128, and a classifier that recognises only one turns an ordinary absent path into a halted run for
+exactly the paths the actor happens to have created.
 
 **Defined misses are answers.** An absent path, a pattern with no matches, and a path with no commits
 are each served with an explicit marker, and each is distinguishable from its degenerate neighbour:
@@ -278,14 +337,31 @@ repository fact, and is refused as retryable rather than treated as instrument f
 the caller supplied a pathspec of its own. Search is the one operation that never names a path, so
 denying a directory to `read` while `git grep` returns hits from inside it denies nothing.
 
-**`literal` is load-bearing, not decoration.** `normalize_project_path` refuses `..`, absolute paths
-and NUL, and permits everything else — including `*`, `?` and `[]`, which are ordinary characters in a
-filename and wildmatch syntax in a pathspec. A directory literally named `private/[drafts]` is denied
-by `read`, where the prefix is compared as text, and *not* excluded by a bare
-`:(exclude)private/[drafts]`, where `[drafts]` is a character class matching one letter. The deny
-policy would then hold on one operation and leak on the other, silently, for exactly the paths whose
-names happen to contain punctuation. `literal` disables wildmatch; `top` anchors to the repository root
-so the exclusion does not drift with the caller's pathspec.
+**`literal` is load-bearing, not decoration — but not for the reason revisions 1–8 gave.**
+`normalize_project_path` refuses `..`, absolute paths and NUL, and permits everything else — including
+`*`, `?` and `[]`, which are ordinary characters in a filename and wildmatch syntax in a pathspec.
+Revisions 1–8 asserted that a bare `:(exclude)private/[drafts]` would read `[drafts]` as a character
+class, fail to match the literal directory, and *leak* denied material into search results.
+
+**Measured against git 2.55, that is not what happens, in either direction.** Across four constructed
+cases — a directory and a file whose names carry `[]`, each with an innocent sibling the glob matches,
+including a `[!a]` class that cannot match its own literal spelling — the non-literal spelling **never
+under-excluded**: git's pathspec matcher also tries a literal prefix match, so the denied path was
+excluded under every spelling tested. What the non-literal spelling did instead was **over-exclude**:
+`:(exclude)notes/a[b].md` also removed the innocent sibling `notes/ab.md`, which the policy never
+denied and which `read` serves without objection.
+
+So the hazard is the mirror image of the one previously claimed, and it is still disqualifying. The
+exclusion set becomes a function of glob syntax rather than of the policy text, and the two operations
+disagree: a file `read` will serve is a file `search` cannot see. No false citation results — §5.1
+admits a search miss into no coverage at all — but "I searched for `X` across the corpus and found
+nothing", which §5.1 names as a legitimate and often decisive finding, becomes false for reasons no
+one can see from the policy. `literal` disables wildmatch; `top` anchors to the repository root so the
+exclusion does not drift with the caller's pathspec.
+
+The correction is recorded rather than quietly applied because the conclusion survived and the reason
+did not, which is the harder case to notice: a paragraph whose recommendation is right and whose
+mechanism is invented reads exactly like one that was checked.
 
 The deeper requirement is that the two operations agree. `read` denial and `search` exclusion are
 independent implementations of one policy, so §7 tests them **against each other** on the same inputs:
@@ -318,9 +394,30 @@ the argv the broker builds, so that determinism does not depend on a config file
 
 | Op | Pinned |
 |---|---|
-| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
-| `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
-| `show <commit>:<path>` | nothing further — a blob read, already covered by `git.py`'s existing analysis |
+| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` (which makes `core.quotePath` inert — pinning the config key as well was measured to be unnecessary, so it is not passed); `-a`; `--no-recurse-submodules` |
+| `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `--no-follow`; `log.showSignature=false` |
+
+**`-c` hardening does not reach every actor-owned channel, and this table's first nine revisions
+assumed it did.** Two channels sit outside `.git/config` entirely and were found only by a
+whole-branch review, after all four per-task reviews passed:
+
+- **The attribute stack.** An *untracked* `.gitattributes`, or `$GIT_DIR/info/attributes`, carrying
+  `* binary` turns every grep hit into `Binary file <commit>:<path> matches` at exit 0 — a served
+  payload with no line numbers and no content, reported as success. There is no config key to pin
+  and `--attr-source` replaces only the tracked layer. `-a` neutralizes it, at the cost of raw bytes
+  for genuinely binary blobs. `-I` is not an alternative: binary-ness would still be
+  attribute-derived, which is to say actor-controlled.
+- **`.git/objects/info/alternates`.** An unresolvable path there makes git prepend
+  `error: unable to normalize alternate object path: …` to stderr on an otherwise ordinary command.
+  Any classifier comparing the *whole* stderr buffer then fails to recognize a defined miss and
+  halts the run — so a hostile repository can guarantee the auditor never records an absent path,
+  which §5.1 calls frequently the decisive finding. Classify against the last line, not the buffer.
+
+The rule that produced §3.2.1 — *only what was shown to execute is neutralized* — is sound, but its
+scope was the set of channels someone thought to probe. `log.follow` was missed the same way: it
+changes served history whenever exactly one pathspec is given, which is any policy with no deny
+prefixes.
+| `cat-file blob <commit>:<path>` | nothing further — a blob read; a new subcommand to `git.py`, so probed under §3.2.1's rule before it ships |
 | all three | `LC_ALL=C`, `LANG=C` in the child environment |
 
 **What was probed, and what actually executes.** Against git 2.55.0 in a scratch
@@ -466,10 +563,20 @@ cross-process and needs a contract rather than an object.
 - **Spend.** `requests_used` is **derived by counting `request` events**, not stored as mutable state.
   There is no counter to reset. Truncating the journal to buy rounds destroys the entries that make
   the truncator's own citations correspond, so the move is self-defeating rather than merely detected.
-- **Seal.** `finish_run` reads the journal, replays it, and copies it into the run record as
-  `EvidenceExposure`. After sealing, the record is self-sufficient (§4.1): re-checking needs the record
-  and a repository. The journal is retained as the supervisor's own copy of what it served, not as an
-  input anything later depends on.
+- **Seal.** `finish_run` reads the journal and copies it into the run record as `EvidenceExposure`.
+  After sealing, the record is self-sufficient (§4.1): re-checking needs the record and a repository.
+  The journal is retained as the supervisor's own copy of what it served, not as an input anything
+  later depends on.
+
+  **The seal does not replay.** Revisions 1–8 said it did, contradicting §6 — which enumerates a
+  *missing or unreadable* journal as the only condition under which a seal fails — and contradicting
+  §5.2, which places replay at review-append time. A replaying seal would refuse a forged-but-readable
+  journal by writing no record at all, so a run would vanish for a reason §6's table does not list; and
+  it would strip §5.3's `violated`/`EXPOSURE_UNREPRODUCIBLE` row of nearly all its reach, since after
+  sealing every `sha256` replay compares against is one this toolkit wrote itself. The forgeable-journal
+  argument of §5.2 is not answered by replaying at seal time: a forged hash copied into the exposure is
+  caught when the exposure is replayed against the pinned commit, which is exactly where §5.2 puts it.
+  Sealing is a copy; checking is §5's.
 
 `Session` is also usable in-process, without the CLI, so 2b can hold sessions in the supervisor where
 its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
@@ -906,8 +1013,13 @@ legitimate and often decisive review finding that this design cannot mechanicall
 checkable needs a `SearchEvidence` variant carrying the pattern and pathspec, which belongs with the
 consumer that needs it (2c) rather than being speculatively added here.
 
-`git grep -n <pattern> <commit>` prefixes every hit with `<commit>:<path>:<line>:`, so the matched
-lines are recoverable from the served bytes — which is a second reason replay is not optional, since
+`git grep -n -z <pattern> <commit>` prefixes every hit with `<commit>:<path>\0<line>\0`, so the
+matched lines are recoverable from the served bytes — **NUL-separated, not colon-separated.**
+Revisions 1–9 said `<commit>:<path>:<line>:` here while §3.2.1's own table pinned `-z`, which
+changes the separator. A parser written to the colon spelling recovers no line numbers at all, so
+every search-derived citation would be `CITATION_UNSERVED` and §5.3 would refuse an honest review.
+The NUL form is what ships and what plan 3 must parse; a path is unambiguous under it, which is why
+`-z` is pinned in the first place — which is a second reason replay is not optional, since
 the journal stores only a hash of them. Where a path is both read and searched, `FULL` supersedes
 `LINES`.
 
@@ -1074,10 +1186,16 @@ downgrade is a lie about what was checked.
   process under `C`, under a UTF-8 locale, and under a translated locale; the defined-miss classifier
   recognises an absent path in all three. Run as a replay across differing parent locales, since that
   is the failure being prevented.
-- **Pathspec translation** — a directory literally named `private/[drafts]` is excluded from search, not
-  interpreted as a character class; `private` denies `private/x` and does not deny `privateer/x`; and
+- **Pathspec translation** — under `literal`, a deny prefix `notes/a[b].md` excludes that file and
+  leaves the sibling `notes/ab.md` searchable, which is the measured divergence from the bare
+  `:(exclude)` spelling (§3.2); `private` denies `private/x` and does not deny `privateer/x`; and
   the `read` denial and the `search` exclusion are asserted to **agree** on the same table of inputs,
-  because two mechanisms for one policy is how a policy comes to be half enforced.
+  because two mechanisms for one policy is how a policy comes to be half enforced. The over-exclusion
+  case is asserted directly and not only through the agreement table, since it is the one that
+  motivates `literal` at all.
+- **`read` refuses a directory** — a path naming a tree is refused, not served, and the refusal is
+  distinguishable from an absent path; asserted against a real tree, since `git show` would have
+  answered it with a listing at exit 0 (§3.2).
 - **Session handle** — `--session ../../elsewhere` is refused before any path join; a handle that parses
   but whose baseline carries a different `run_id` is refused after loading.
 - **`policy.py`** — containment before prefix; `..` and absolute paths refused lexically; **a

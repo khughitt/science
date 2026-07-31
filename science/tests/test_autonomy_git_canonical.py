@@ -169,3 +169,83 @@ def test_run_git_never_reaches_signature_verification(tmp_path: Path):
     assert not marker.exists()
     assert completed.stderr == b""
     assert len(completed.stdout.splitlines()) == 2  # the signed commit and its parent
+
+
+def _filtered_repo(tmp_path: Path) -> tuple[Path, str, bytes]:
+    """A repository whose configuration WOULD mangle a checkout, and its committed bytes."""
+    root = tmp_path / "filtered"
+    root.mkdir()
+    for args in (
+        ("init", "-q"),
+        ("config", "user.email", "probe@example.invalid"),
+        ("config", "user.name", "Probe"),
+        ("config", "core.autocrlf", "true"),
+        ("config", "filter.probe.smudge", "sed s/alpha/MANGLED/"),
+        ("config", "filter.probe.clean", "cat"),
+        ("config", "diff.probe.textconv", "sed s/alpha/MANGLED/"),
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    (root / ".gitattributes").write_text("a.txt diff=probe filter=probe\n", encoding="utf-8")
+    committed = b"alpha\nbeta\n"
+    (root / "a.txt").write_bytes(committed)
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", "seed"], check=True, capture_output=True
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True
+    ).stdout.decode().strip()
+    return root, commit, committed
+
+
+def test_cat_file_blob_serves_the_object_not_a_filtered_checkout(tmp_path: Path):
+    """`read` must serve what the commit holds, not what a checkout would produce.
+
+    The repository configures a smudge filter, a textconv driver and `core.autocrlf`, all
+    reachable through `.gitattributes` and all owned by the actor. `cat-file blob` is a raw
+    object read, so none of them applies -- which is why `read` can be a pure function of the
+    commit. The control below proves the configuration is genuinely live, so that INERT here
+    means "this command ignores it" rather than "the fixture forgot to set it".
+    """
+    root, commit, committed = _filtered_repo(tmp_path)
+
+    completed = run_git(root, "cat-file", "blob", f"{commit}:a.txt")
+
+    assert completed.returncode == 0
+    assert completed.stdout == committed
+    assert completed.stderr == b""
+
+
+def test_cat_file_type_is_unaffected_by_the_same_configuration(tmp_path: Path):
+    """The other half of `read`. Production runs BOTH spellings, so both are held to the
+    module's rule -- a probe of a subcommand that merely resembles the one that ships is
+    not a probe of the one that ships."""
+    root, commit, _committed = _filtered_repo(tmp_path)
+
+    completed = run_git(root, "cat-file", "-t", f"{commit}:a.txt")
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == b"blob"
+    assert completed.stderr == b""
+
+
+def test_the_filter_fixture_is_live(tmp_path: Path):
+    """Negative control for the test above: a checkout DOES mangle, so INERT is a finding.
+
+    The working-tree file is unlinked first. Without that, git's stat-cache optimism
+    considers `a.txt` already up to date with the index and skips rewriting it -- even
+    under `checkout-index -f` -- so the smudge filter never runs and this control would
+    pass for a reason that has nothing to do with the configuration under test.
+    """
+    root, _commit, committed = _filtered_repo(tmp_path)
+    (root / "a.txt").unlink()
+    subprocess.run(
+        ["git", "-C", str(root), "checkout", "--", "a.txt"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "checkout-index", "-f", "--", "a.txt"],
+        check=True,
+        capture_output=True,
+    )
+
+    assert (root / "a.txt").read_bytes() != committed
