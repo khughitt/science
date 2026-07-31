@@ -49,6 +49,14 @@ TYPED_VALIDATION_SKELETON_KEYS: frozenset[str] = frozenset(
     {"project", "ontology_terms", "related", "source_refs", "content_preview", "file_path"}
 )
 
+PROPOSITION_REASONING_FIELDS: tuple[str, ...] = (
+    "subject",
+    "object",
+    "predicate",
+    "polarity",
+    "claim_layer",
+)
+
 PROPOSITION_OWNED_KEYS: frozenset[str] = frozenset(
     (
         "id", "kind", "subject", "object", "predicate", "polarity",
@@ -72,7 +80,7 @@ CREATE_ONLY_KEYS: frozenset[str] = frozenset(("title", "status"))
 
 @dataclass(frozen=True)
 class Ownership:
-    """Which frontmatter keys ONE writer owns.
+    """Which frontmatter keys ONE writer can write or clear when invalidated.
 
     Per-writer, not per-kind: three writers mint propositions and each owns a different set.
     Widening a shared per-kind allowlist to their union would give the workbench ownership of
@@ -81,13 +89,27 @@ class Ownership:
 
     `create_only` defaults to EMPTY, not to CREATE_ONLY_KEYS: an update-only writer creates
     nothing and must not claim `title`.
+
+    `owned` can write while `clear_on_change` can only remove an invalidated attestation.
     """
 
     owned: frozenset[str]
     create_only: frozenset[str] = frozenset()
+    change_triggers: frozenset[str] = frozenset()
+    clear_on_change: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        overlap = self.owned & self.clear_on_change
+        if overlap:
+            raise ValueError(f"owned and clear_on_change overlap: {sorted(overlap)}")
 
 
-WORKBENCH_PROPOSITION = Ownership(PROPOSITION_OWNED_KEYS, CREATE_ONLY_KEYS)
+WORKBENCH_PROPOSITION = Ownership(
+    PROPOSITION_OWNED_KEYS,
+    CREATE_ONLY_KEYS,
+    change_triggers=frozenset(PROPOSITION_REASONING_FIELDS),
+    clear_on_change=frozenset({"reasoning_source"}),
+)
 WORKBENCH_EVIDENCE_LINE = Ownership(EVIDENCE_LINE_OWNED_KEYS, CREATE_ONLY_KEYS)
 
 
@@ -223,6 +245,12 @@ def render_update(
     for key in ownership.owned:
         if key in generated:
             final[key] = generated[key]
+    if any(
+        existing_frontmatter.get(key) != final.get(key)
+        for key in ownership.change_triggers
+    ):
+        for key in ownership.clear_on_change:
+            final.pop(key, None)
     final["created"] = created
     final["updated"] = updated
     text = render_from_frontmatter(final, body)

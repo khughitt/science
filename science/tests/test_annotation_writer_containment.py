@@ -361,6 +361,8 @@ def test_synthesize_ownership_is_derived_from_synth_fields() -> None:
     assert SYNTHESIZE_PROPOSITION.owned == set(SYNTH_FIELDS) | {"reasoning_source"}
     # An update-only writer claims no create-only keys.
     assert SYNTHESIZE_PROPOSITION.create_only == frozenset()
+    assert SYNTHESIZE_PROPOSITION.change_triggers == frozenset()
+    assert SYNTHESIZE_PROPOSITION.clear_on_change == frozenset()
 
 
 def test_synthesize_refuses_pre_containment_record(tmp_path: Path) -> None:

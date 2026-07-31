@@ -35,6 +35,126 @@ def _row(**over) -> WorkbenchRow:
     return WorkbenchRow(**{**base, **over})
 
 
+_SYNTH_STAMP = "llm-synth:m:proposition-synthesize-v1"
+
+
+def _reasoning_frontmatter() -> dict[str, object]:
+    return {
+        "id": "proposition:x",
+        "kind": "proposition",
+        "title": "A affects B",
+        "status": "active",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "claim_layer": "causal_effect",
+        "identification_strength": "observational",
+        "reasoning_source": _SYNTH_STAMP,
+        "created": "2026-07-01",
+        "updated": "2026-07-01",
+    }
+
+
+def _rendered_frontmatter(entity, ownership) -> dict[str, object]:
+    from science_model.frontmatter import split_frontmatter
+    from science_tool.dag.entity_frontmatter import render_update
+
+    text = render_update(
+        entity,
+        ownership=ownership,
+        existing_frontmatter=_reasoning_frontmatter(),
+        body="\n# Body\n",
+        created="2026-07-01",
+        updated="2026-07-31",
+    )
+    frontmatter, _body = split_frontmatter(text)
+    return frontmatter
+
+
+def test_ownership_rejects_owned_clear_overlap_at_construction() -> None:
+    from science_tool.dag.entity_frontmatter import Ownership
+
+    with pytest.raises(ValueError, match="owned and clear_on_change overlap.*reasoning_source"):
+        Ownership(
+            frozenset({"reasoning_source"}),
+            clear_on_change=frozenset({"reasoning_source"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"subject": "concept:a2"}, id="subject"),
+        pytest.param({"object": "concept:b2"}, id="object"),
+        pytest.param({"predicate": "regulates"}, id="predicate"),
+        pytest.param({"polarity": "negative"}, id="polarity"),
+        pytest.param({"claim_layer": "structural_claim"}, id="claim-layer"),
+    ],
+)
+def test_each_effective_reasoning_change_clears_synthesis_stamp(change) -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION
+
+    values = {
+        "id": "proposition:x",
+        "title": "ignored",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "claim_layer": "causal_effect",
+        "identification_strength": "observational",
+    }
+    entity = PropositionEntity(**(values | change))
+
+    frontmatter = _rendered_frontmatter(entity, WORKBENCH_PROPOSITION)
+
+    assert "reasoning_source" not in frontmatter
+
+
+def test_preserved_omitted_reasoning_field_does_not_clear_stamp() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION
+
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="ignored",
+        subject="concept:a",
+        object="concept:b",
+        predicate="affects",
+        polarity="positive",
+        claim_layer=None,
+        identification_strength="interventional",
+    )
+
+    frontmatter = _rendered_frontmatter(entity, WORKBENCH_PROPOSITION)
+
+    assert frontmatter["claim_layer"] == "causal_effect"
+    assert frontmatter["identification_strength"] == "interventional"
+    assert frontmatter["reasoning_source"] == _SYNTH_STAMP
+
+
+def test_empty_change_triggers_clear_nothing() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import Ownership, PROPOSITION_OWNED_KEYS
+
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="ignored",
+        subject="concept:a2",
+        object="concept:b",
+        predicate="affects",
+        polarity="positive",
+        claim_layer="causal_effect",
+    )
+
+    frontmatter = _rendered_frontmatter(entity, Ownership(PROPOSITION_OWNED_KEYS))
+
+    assert frontmatter["subject"] == "concept:a2"
+    assert frontmatter["reasoning_source"] == _SYNTH_STAMP
+
+
 def test_proposition_title_is_the_triple() -> None:
     # THE RULING (design §5.2). Deterministic generation, not a required input field: `WorkbenchRow`
     # is extra="forbid" and carries no `title`, so requiring one would widen the authored-input
@@ -409,17 +529,22 @@ def test_workbench_ownership_carries_todays_sets_verbatim() -> None:
     from science_tool.dag.entity_frontmatter import (
         CREATE_ONLY_KEYS,
         EVIDENCE_LINE_OWNED_KEYS,
+        PROPOSITION_REASONING_FIELDS,
         PROPOSITION_OWNED_KEYS,
         WORKBENCH_EVIDENCE_LINE,
         WORKBENCH_PROPOSITION,
         workbench_ownership,
     )
 
-    # Ownership SEMANTICS are unchanged by construction -- that is the point of §4.1.
+    # Write allowlists are unchanged; invalidation authority is asserted separately.
     assert WORKBENCH_PROPOSITION.owned == PROPOSITION_OWNED_KEYS
     assert WORKBENCH_PROPOSITION.create_only == CREATE_ONLY_KEYS
+    assert WORKBENCH_PROPOSITION.change_triggers == frozenset(PROPOSITION_REASONING_FIELDS)
+    assert WORKBENCH_PROPOSITION.clear_on_change == frozenset({"reasoning_source"})
     assert WORKBENCH_EVIDENCE_LINE.owned == EVIDENCE_LINE_OWNED_KEYS
     assert WORKBENCH_EVIDENCE_LINE.create_only == CREATE_ONLY_KEYS
+    assert WORKBENCH_EVIDENCE_LINE.change_triggers == frozenset()
+    assert WORKBENCH_EVIDENCE_LINE.clear_on_change == frozenset()
 
     assert workbench_ownership("proposition") is WORKBENCH_PROPOSITION
     assert workbench_ownership("evidence-line") is WORKBENCH_EVIDENCE_LINE
