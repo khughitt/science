@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule and the shallow refusal, both at `start_run`; §3.2's payload bound and the `run_git` ceiling; the protocol bump | designed at revision 23, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 23, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 23, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` pin plus the shallow diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 24, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 24, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 24, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -77,6 +77,35 @@ Revision 23 closes four defects in §2.2 itself, two of them in the contract's o
 replaces.** A contract stated as a *path* fails exactly as a guard stated as a *roster* does: the ban
 on `audit/*` would have forced `Correspondence` into the cycle, because the rule it stood for —
 **4b changes no stored-record model** — was never the rule that got written down.
+
+Revision 24 closes three, all inside revision 23's own fixes, and the first is the sharpest defect
+this design has had.
+
+1. **The shallow refusal was a check on mutable state, and check-then-use is the shape this design
+   has rejected three times.** `.git/shallow` is an ordinary file in the actor-owned `.git`
+   directory: an actor writes it *after* the run opens and `git log` answers short at exit 0 —
+   **measured, one `echo`, 3 commits become 2** against an unchanged pinned commit. Revision 23
+   placed the guarantee at open and left the window wide. The fix is not an earlier check or a
+   tighter one: `GIT_SHALLOW_FILE=/dev/null` in `_ENVIRONMENT` makes the file unreadable to git, and
+   a genuinely shallow repository then **fails at exit 128 rather than answering short**. The
+   open-time check survives as a diagnostic. Same doctrine as `-c` over `.git/config`, one directory
+   over.
+2. **The forward guarantee said "complete clone", which is not observable.** `is_shallow() == False`
+   is a statement about one file; the pin converts truncation into failure. Neither certifies
+   completeness. §2.2 now states three clauses, the third of them about *truncation*, not
+   *completeness*. Third attempt at that sentence — see the note there.
+3. **The import-cycle mutation probed the direction that works.** `import science_model.audit.record`
+   initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
+   executing anything at all. It must spawn a fresh interpreter on
+   `import science_model.evidence_broker`.
+
+**Revision 23's first defect and revision 24's first defect are one lesson, one axis apart.** Both
+took a property that is *true at a moment* for a property that is *fixed*: a commit pin fixes
+content but not repository completeness (revision 18); an open-time scan fixes what was true at open
+but not what is true at request N. `.git/config` was already known to be actor-owned and mutable —
+the whole of `autonomy/git.py` exists to say so — and `.git/shallow` sits beside it. **When a defense
+reads an actor-owned file, the question is never "when do we check it" but "how do we stop git from
+reading it."**
 
 Revision 22 adds **§2.2, the slice contracts** — what each of 4a/4b/4c may assume, may not assume,
 creates, modifies, must not touch, and owns in §5.3. It exists because revisions 19, 20 and 21 found
@@ -519,25 +548,36 @@ may reach backwards**, and each is independently mergeable.
 | | **4a — serving hardening** | **4b — the checker** | **4c — the boundary** |
 |---|---|---|---|
 | **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
-| **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that any exposure predates 4a |
+| **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that it may classify an exposure itself — outcome, coverage and protocol are 4b's, and 4c calls `check_correspondence` for all three |
 | **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_correspondence.py` |
 | **Modifies** | `autonomy/lifecycle.py` (tree scan + shallow check, at `start_run`), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
 | **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py` |
 | **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
 
-**The guarantee 4a hands forward, stated as one sentence because 4b is entitled to rely on all of
-it:** every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2` was served from a **complete** clone of
-a tree whose every path is valid UTF-8 and already NFC, under a per-request byte ceiling.
+**The guarantee 4a hands forward, stated as three clauses because 4b is entitled to rely on each and
+on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`:
 
-Revision 22 phrased the last clause as "no `history` **entry** originating in a shallow repository",
-which was false: revision 18 journaled shallow-history refusals, so such entries existed — refused,
-but present and replayed. The guarantee is about the *run*, not about which entries it contains, and
-saying it the other way invited a 4b implementer to trust something 4a was not delivering.
+1. was served from a tree whose every path is valid UTF-8 and already NFC;
+2. was served under a per-request byte ceiling, with overflow refusing rather than truncating; and
+3. carries `history` payloads produced only by a traversal git did not silently truncate — a
+   repository unable to supply an ancestor **fails the invocation** instead of answering short
+   (§3.2).
 
-That is what licenses 4b to key its served map on the decoded path without re-normalising, and to
-perform no tree scan of its own (§5.2). A 4b implementer who adds a normalisation guard "to be safe"
-is not adding safety — they are adding a second place for the rule to be stated and a second place
-for it to drift.
+Clause 3 is deliberately not "was served from a complete clone." Revisions 22 and 23 both claimed
+more than the mechanism delivers: `is_shallow() == False` is a statement about one file, and the
+`GIT_SHALLOW_FILE` pin converts truncation into failure — neither certifies that every object is
+present, and a partial or damaged repository remains possible. What 4b may rely on is that a short
+answer is not among the outcomes; a repository broken some other way surfaces as a non-zero exit and
+reads `unwired`, which 4b already handles. **Ask what a guarantee is *about*, not what it is near** —
+revision 22 said "no `history` entry originating in a shallow repository" (false, because revision 18
+journaled such refusals); revision 23 said "complete clone" (unobservable). Three tries at one
+sentence, each overshooting in the same direction.
+
+Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising.
+
+It is also what licenses 4b to perform no tree scan of its own (§5.2). A 4b implementer who adds a
+normalisation guard "to be safe" is not adding safety — they are adding a second place for the rule
+to be stated and a second place for it to drift.
 
 **"Session open" is `start_run`, not `Session`.** There is no `open_run`: a brokered run is opened by
 `autonomy/lifecycle.py::start_run`, which is where the journal is created and the `EvidenceSession`
@@ -558,6 +598,9 @@ needed on both sides of the seam, and each would otherwise be written twice with
 - **`autonomy/git.py::is_shallow(repo) -> bool`** — 4a refuses to open a run, 4b classifies a replay
   environment. Revision 22 declared it shared without naming a module, which is how one mechanism
   becomes two functions.
+- **`GIT_SHALLOW_FILE=/dev/null` in `_ENVIRONMENT`** (§3.2). 4b inherits it by calling `serve.py`,
+  and inherits it *silently* — which is the point: replay is deterministic in history because the
+  environment is pinned, not because 4b remembered to check anything.
 - The `run_git` output ceiling, including its refuse-not-truncate discipline.
 - `MAX_SERVED_BYTES` and `MAX_RUN_SERVED_BYTES`, in `science_model/evidence_broker.py` with the
   other bounds.
@@ -696,21 +739,60 @@ therefore reproduce different bytes and be classified `EXPOSURE_UNREPRODUCIBLE`,
 replay is bound to a protocol version at all.
 
 `--no-replace-objects` is already pinned in `_HARDENING`, so grafts and replace refs are closed;
-completeness is what remains. The rule:
+completeness is what remains.
 
-- **A brokered run refuses to open against a shallow repository**, decided by
+**A check at open cannot deliver this, and revision 23 asserted that it could.** Shallowness is not a
+property of the pinned commit and not a property fixed at open: it lives in `.git/shallow`, an
+ordinary file in the actor-owned `.git` directory. Writing it takes no fetch. **Measured, git 2.55**,
+one repository, three commits, one pinned commit: `git log` returned **3**; after a single
+`echo <sha> > .git/shallow`, the identical argv against the identical commit returned **2** — *both
+at exit 0*. This is `.git/config`'s vector with a different filename, and the module docstring in
+`autonomy/git.py` already states the doctrine that answers it: the actor owns the file, so the
+defense is an input git no longer reads, not a check racing the write.
+
+- **`GIT_SHALLOW_FILE=/dev/null` joins `LC_ALL` and `LANG` in `_ENVIRONMENT`.** It stands to
+  `.git/shallow` exactly as `-c` stands to `.git/config`: it outranks the repository-local file and
+  cannot be un-set from inside the worktree. Measured across both cases that matter:
+
+  | repository | default | under the pin |
+  |---|---|---|
+  | `.git/shallow` planted, objects present | 2 of 3, **exit 0** | 3 of 3, exit 0 |
+  | genuine `--depth 1`, objects absent | 1 of 3, **exit 0** | **exit 128**, `fatal: Failed to traverse parents` |
+
+  Both rows move the right way. A planted boundary is ignored, and a repository that genuinely cannot
+  supply an ancestor **stops answering short and starts failing**, which is this design's standing
+  preference: `run_git` returns non-zero, no defined-miss message matches, the run halts `unwired`.
+  No new disposition rule is needed — §3.2's table already routes it. The pin is a no-op in a normal
+  repository, where neither location holds a boundary.
+
+- **A brokered run still refuses to open against a shallow repository**, decided by
   `autonomy/git.py::is_shallow` (`git rev-parse --is-shallow-repository`), in `start_run` beside the
-  §3.1 tree scan. Revision 18 made this a per-request refusal that spent a round and was journaled;
-  revision 23 moves it to open, because a journaled refusal is **not deterministic given the pinned
-  commit** — it is determined by what the clone happens to hold. Replaying that honest exposure in a
-  *complete* clone re-serves real history, the outcome no longer matches, and §5.3 returns
-  `EXPOSURE_UNREPRODUCIBLE`: the reciprocal of the case revision 18 set out to fix, created by its
-  own fix. Refusing at open removes both directions at once and needs no sealed term to tell them
-  apart.
+  §3.1 tree scan — but it is now a **diagnostic, not the guarantee**. It reports a genuinely shallow
+  clone as an operator error at open, with a sentence naming the cause, rather than as a
+  `Failed to traverse parents` in the middle of a run. The two mechanisms cover disjoint intervals
+  and neither depends on the other: at `start_run` no actor exists yet (§3.4.2's temporal argument),
+  so a boundary present then is genuine; a boundary appearing later is the actor's and the pin
+  neutralizes it. **`--is-shallow-repository` does not honour `GIT_SHALLOW_FILE`** — measured: it
+  reads `true` under the pin in both rows above — so the detector keeps working through hardened
+  `run_git` with no special case.
+
+  Revision 18 made this a per-request refusal that spent a round and was journaled; revision 23 moved
+  it to open, because a journaled refusal is **not deterministic given the pinned commit** — it is
+  determined by what the clone happens to hold. Replaying that honest exposure in a *complete* clone
+  re-serves real history, the outcome no longer matches, and §5.3 returns `EXPOSURE_UNREPRODUCIBLE`:
+  the reciprocal of the case revision 18 set out to fix, created by its own fix. That reasoning
+  stands; what revision 23 got wrong was believing one open-time check *finished* the job.
 - **At replay, a shallow repository is `unwired` / `EXPOSURE_UNREACHABLE`, never `violated`.** The
   environment could not answer the question; it did not answer it wrongly. Reaching for `violated`
   here would be the could-not-check / checked-and-found-false confusion §5.3 exists to prevent, and
   it would refuse reviews for the property of the machine replaying them.
+
+  The pin narrows what this rule has to catch but does not retire it. Under `GIT_SHALLOW_FILE` a
+  shallow replay host fails at exit 128, which reaches `unwired` through §5.3's "replay cannot run"
+  row anyway — so the two agree, and 4b's explicit `is_shallow` check earns its place by naming the
+  cause rather than by changing the verdict. That is worth keeping: `EXPOSURE_UNREACHABLE` on a
+  history exposure is the one `unwired` an operator can actually fix, and "clone was shallow" is
+  repairable advice where "git exited 128" is not.
 
 **This reasoning does NOT extend to a git version or runtime whose output differs, and revision 18
 wrote that it did** (corrected at revision 20). Shallowness is checkable: `--is-shallow-repository`
@@ -2107,9 +2189,10 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | Slice | Mutation | Test that must fail |
 |---|---|---|
 | 4a | Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
-| 4a | Drop the shallow check at open | a brokered run against a shallow clone opens |
+| 4a | Drop `GIT_SHALLOW_FILE` from `_ENVIRONMENT` | `history` served after `.git/shallow` is written mid-run does not match the same request served before it |
+| 4a | Drop the shallow check at open | a brokered run against a genuinely shallow clone opens |
 | 4a | Journal a shallow-`history` refusal instead of refusing at open | an exposure sealed in a shallow clone and replayed in a complete one is not `EXPOSURE_UNREPRODUCIBLE` |
-| 4b | Import `Correspondence` from `evidence_broker.py` | `import science_model.audit.record` raises `ImportError` |
+| 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
 | 4a | Bound stdout only | an oversized `stderr` refuses |
@@ -2132,6 +2215,22 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Skip the agent cross-check against the run record | an attested agent whose `model` disagrees with its run record is stored |
 | 4c | Skip the lens cross-check | an attested `lens` that is not `exposure.instrument.ref` is stored |
 | 4c | Apply the lens cross-check unconditionally | an agent review whose run has **no** exposure stores as `unwired`, not `IngestError` |
+
+**The import-cycle row must run in a subprocess, and the direction is not symmetric.** Written as an
+in-process `import science_model.audit.record`, the assertion probes the *safe* direction: it
+initialises `audit` first, after which importing `evidence_broker` succeeds — and under pytest it is
+worse than useless, because collection has almost certainly imported one of the two already and
+`sys.modules` returns a hit without executing anything. The failing direction is a **fresh
+interpreter** entering `science_model.evidence_broker`, which reaches `audit/__init__` and loops back
+into a partially initialised `audit.record`. Spawn it; do not trust the ambient module cache. This is
+the general form: *a cycle test that shares a process with its own test runner tests the runner's
+import order.*
+
+**The two shallow rows are not redundant, and the first is the one that carries the guarantee.**
+Dropping the env pin leaves the open-time check green — the run opens against a clean repository,
+exactly as intended — and the defect appears only once an actor writes `.git/shallow` after opening.
+A fixture that checks shallowness at open and never mutates it certifies neither row. Write the
+mutation as: serve one `history` request, write `.git/shallow`, serve the identical request, compare.
 
 **The first 4c row is a different kind of pair and must not be graded like the others.** Identity is
 prevented structurally, not checked, so on the fixed tree there is no behaviour to negative-test —
