@@ -1,16 +1,17 @@
 # Finding Convergence — Design
 
-> **Status:** revision 26. **Plans 1–3 are implemented.**
-> **Spec 1 of three** in the autonomous-audit program,
+> **Status:** revision 27. **Plans 1–3 are implemented.**
+> **Spec 1** of the autonomous-audit program,
 > and a prerequisite for the autonomy envelope's S5 harness slice. **Spec 1 ships no
 > agent** and adds no autonomy: it converges the deterministic audit surface onto one
-> emitted contract so that Spec 2 (unattended lens agents) consumes a type already
+> emitted contract so that the lens agents of Spec 2 consume a type already
 > exercised across the full deterministic variety, rather than becoming the experiment
 > that discovers the type is incomplete.
 >
-> Spec 2 (unattended harness, Pi actor + supervisor, lens agents emitting findings at
-> `report-only` tier) and Spec 3 (second-pass validation, confirmation counts,
-> promotion to task) are out of scope here and consume this contract.
+> Spec 2 — since sliced into **2a** (evidence broker), **2b** (dispatch harness) and
+> **2c** (the first lens agent) — and Spec 3 (second-pass validation, confirmation
+> counts, promotion to task) are out of scope here and consume this contract. 2a's
+> design carries the current program map.
 >
 > **Revision 2** closed seven contract gaps found in review of revision 1: arrival-order
 > dependence in `AuditFindingRecord` (§4), an unserializable `rule` field and an unfrozen
@@ -244,6 +245,11 @@
 > valid legacy matcher that ran against a complete finding stream and matched nothing.
 > This mirrors §10.2's health distinction between `legacy-shape` and `invalid-entry`
 > instead of discarding it at the migration boundary.
+>
+> **Revision 27 records one amendment made from outside.** Spec 2a splits this
+> document's Spec 3 reservation: eligibility of an agent confirmation is 2a's,
+> the threshold and promotion authority remain Spec 3's (Out of scope). Nothing
+> shipped for Spec 1 changes.
 
 ## Motivation
 
@@ -1953,9 +1959,13 @@ class AuditReport(TypedDict):
 
 ## Out of scope
 
-- Any agent, lens, harness, or unattended execution (Spec 2).
+- Any agent, lens, harness, or unattended execution (Spec 2, sliced into 2a/2b/2c).
 - Review eligibility rules, the confirmation threshold, and promotion authority
-  (Spec 3). Spec 1 fixes only the storage shape these use.
+  (Spec 3). Spec 1 fixes only the storage shape these use. **Amended by Spec 2a**
+  (`2026-07-30-agent-evidence-broker-design.md` §0, §4.2.1): *eligibility* of an
+  agent confirmation — whether testimony nobody could check counts as support at
+  all — is 2a's, because it is a question about the broker; Spec 3 keeps the
+  threshold and promotion authority.
 - **Converting measurements themselves into findings.** A coverage fraction, a lag count,
   or a corpus tally stays a metric; making the shared type carry measurements would make
   it broad enough to mean nothing. This does **not** exclude the enumerated
