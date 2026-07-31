@@ -108,8 +108,14 @@ def path_gate_command(
 @click.option(
     "--baseline-out",
     type=click.Path(path_type=Path),
-    required=True,
+    default=None,
     help="Where to write the baseline. MUST be outside the project root.",
+)
+@click.option(
+    "--broker-spec",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=None,
+    help="EvidenceSessionSpec JSON. Mutually exclusive with --baseline-out.",
 )
 @click.option(
     "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
@@ -120,7 +126,8 @@ def path_gate_command(
     help="Output format. `--json` is kept as a convenience alias.",
 )
 def start_command(
-    agent: str, model: str, tier: str, short_id: str, baseline_out: Path,
+    agent: str, model: str, tier: str, short_id: str, baseline_out: Path | None,
+    broker_spec: Path | None,
     project_root: Path, as_json: bool, output_format: str,
 ) -> None:
     """Open a run: capture the belief basis and write the supervisor's baseline.
@@ -132,23 +139,38 @@ def start_command(
     """
     from datetime import UTC, datetime
 
+    from pydantic import ValidationError
     from science_model.autonomous_runs import RunRecordError
+    from science_model.evidence_broker import EvidenceSessionSpec
 
     from science_tool.autonomy.baseline import BaselineError
     from science_tool.autonomy.extract import ExtractError
     from science_tool.autonomy.lifecycle import RepositoryStateError, start_run
     from science_tool.autonomy.toolkit import ToolkitError
+    from science_tool.evidence_broker.journal import JournalError
 
     effective_format = "json" if as_json else output_format
     try:
+        evidence = None
+        if broker_spec is not None:
+            evidence = EvidenceSessionSpec.model_validate_json(broker_spec.read_text(encoding="utf-8"))
         baseline = start_run(
             project_root, agent=agent, model=model, tier=RunTier(tier), short_id=short_id,
-            started=datetime.now(UTC), baseline_out=baseline_out,
+            started=datetime.now(UTC), baseline_out=baseline_out, evidence=evidence,
         )
     # `ExtractError` too: `assert_repository_is_at` asks git through `extract._git`, which
     # fails closed on any non-zero exit -- a `--project-root` that is not a repository at
     # all arrives here, and without it `start` tracebacks instead of exiting 2.
-    except (RunRecordError, ToolkitError, RepositoryStateError, BaselineError, ExtractError) as exc:
+    except (
+        RunRecordError,
+        ToolkitError,
+        RepositoryStateError,
+        BaselineError,
+        ExtractError,
+        OSError,
+        ValidationError,
+        JournalError,
+    ) as exc:
         message = f"could not start: {exc}"
         emit(
             output_format=effective_format,
@@ -157,6 +179,8 @@ def start_command(
         )
         sys.exit(2)
 
+    directory = None if baseline.evidence is None else baseline.evidence.journal_path.parent
+    written_baseline = baseline_out if directory is None else directory / "baseline.json"
     payload = {
         "started": True,
         "run_id": baseline.run_id,
@@ -164,13 +188,14 @@ def start_command(
         "base_commit": baseline.base_commit,
         "toolkit_revision": baseline.toolkit_revision,
         "basis_digest": baseline.snapshot.digest,
-        "baseline_path": str(baseline_out),
+        "baseline_path": str(written_baseline),
+        "run_dir": None if directory is None else str(directory),
     }
     emit(
         output_format=effective_format,
         payload=payload,
         render_text=lambda: click.echo(
-            f"started {baseline.run_id} (base {baseline.base_commit[:12]}) -> {baseline_out}"
+            f"started {baseline.run_id} (base {baseline.base_commit[:12]}) -> {written_baseline}"
         ),
     )
     sys.exit(0)

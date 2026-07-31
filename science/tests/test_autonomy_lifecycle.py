@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from science_model.audit import LocationEvidence
 from science_model.autonomous_runs import RunDisposition, RunTier
+from science_model.evidence_broker import (
+    EvidenceSessionSpec,
+    InstrumentIdentity,
+    SurfacePolicy,
+)
 
 from science_tool.autonomy import lifecycle as lifecycle_module
 from science_tool.autonomy import toolkit as toolkit_module
+from science_tool.autonomy.baseline import BaselineError
 from science_tool.autonomy.lifecycle import finish_run, start_run
 
 AGENT = "curation-sweep"
@@ -125,6 +133,135 @@ def _finish(project: Path, baseline_path: Path):
         project, baseline_path=baseline_path, head=_git(project, "rev-parse", "HEAD"),
         ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC), tokens=100, wall_clock_seconds=1800.0,
     )
+
+
+def _spec(*, inline_paths: tuple[Path, ...] = ()) -> EvidenceSessionSpec:
+    return EvidenceSessionSpec(
+        budget=2,
+        surface_policy=SurfacePolicy(deny_prefixes=("private",), notice="withheld"),
+        instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
+        inline_paths=inline_paths,
+    )
+
+
+def test_broker_spec_and_baseline_out_are_mutually_exclusive(
+    project: Path, baseline_path: Path
+) -> None:
+    with pytest.raises(BaselineError, match="mutually exclusive"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            baseline_out=baseline_path,
+            evidence=_spec(),
+        )
+
+
+def test_one_of_baseline_out_or_broker_spec_is_required(project: Path) -> None:
+    with pytest.raises(BaselineError, match="requires"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            baseline_out=None,
+            evidence=None,
+        )
+
+
+def test_brokered_start_computes_inline_manifest_and_creates_journal(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.evidence_broker.journal import open_journal, read_journal
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    seed = project / "private" / "rubric.md"
+    seed.parent.mkdir()
+    seed.write_text("one\ntwo\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "seed inline")
+    baseline = start_run(
+        project,
+        agent=AGENT,
+        model="test-model",
+        tier=RunTier.BELIEF_NEUTRAL,
+        short_id="a3f1",
+        started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        evidence=_spec(inline_paths=(Path("private/rubric.md"),)),
+    )
+    assert baseline.evidence is not None
+    (inline,) = baseline.evidence.inline
+    assert (inline.target, inline.lines) == ("private/rubric.md", 2)
+    assert inline.sha256 == hashlib.sha256(seed.read_bytes()).hexdigest()
+    assert LocationEvidence(path=inline.target).path == inline.target
+    with open_journal(baseline.evidence.journal_path, project_root=project) as handle:
+        assert [entry.op for entry in read_journal(handle)] == ["inline"]
+
+
+def test_an_inline_path_outside_the_project_is_refused(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    outside = tmp_path / "prompt.md"
+    outside.write_text("x\n", encoding="utf-8")
+    with pytest.raises(BaselineError, match="project-relative"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            evidence=_spec(inline_paths=(outside,)),
+        )
+
+
+def test_the_journal_is_created_before_the_baseline(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.autonomy.control_plane import run_dir
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+
+    def _raising(*args, **kwargs):
+        raise BaselineError("baseline write failed")
+
+    monkeypatch.setattr(lifecycle_module, "write_baseline", _raising)
+    with pytest.raises(BaselineError, match="baseline write failed"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            evidence=_spec(),
+        )
+    assert (run_dir(project, "run:2026-07-25-curation-sweep-a3f1") / "journal.jsonl").exists()
+
+
+def test_a_second_brokered_start_for_the_same_run_is_refused(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.evidence_broker.journal import JournalError
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    kwargs = {
+        "agent": AGENT,
+        "model": "test-model",
+        "tier": RunTier.BELIEF_NEUTRAL,
+        "short_id": "a3f1",
+        "started": datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        "evidence": _spec(),
+    }
+    start_run(project, **kwargs)
+    with pytest.raises((BaselineError, JournalError)):
+        start_run(project, **kwargs)
 
 
 def test_the_fixture_has_a_non_empty_basis(project: Path):

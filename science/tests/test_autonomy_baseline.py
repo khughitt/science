@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from science_model.autonomous_runs import PolicyIdentity, RunTier
+from science_model.evidence_broker import EvidenceSession, InstrumentIdentity, SurfacePolicy
 
 from science_tool.autonomy.baseline import (
     BaselineError,
@@ -156,3 +158,16 @@ def test_the_baseline_is_frozen_and_closed(tmp_path: Path):
     baseline = _baseline()
     with pytest.raises(ValidationError):
         baseline.run_id = "run:other"  # type: ignore[misc]
+
+
+def test_a_baseline_whose_session_names_another_run_is_refused() -> None:
+    session = EvidenceSession(
+        session_id="2026-07-25-curation-sweep-other",
+        journal_path=Path("/tmp/journal.jsonl"),
+        commit="a" * 40,
+        budget=0,
+        surface_policy=SurfacePolicy(notice="withheld"),
+        instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
+    )
+    with pytest.raises(ValidationError, match="session names"):
+        RunBaseline.model_validate(_baseline().model_dump() | {"evidence": session})

@@ -11,10 +11,12 @@ otherwise.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
+from science_model.audit.subjects import SubjectError, normalize_project_path
 from science_model.autonomous_runs import (
     AutonomousRunRecord,
     PolicyIdentity,
@@ -22,6 +24,7 @@ from science_model.autonomous_runs import (
     RunDisposition,
     RunTier,
 )
+from science_model.evidence_broker import EvidenceSession, EvidenceSessionSpec, InlineInput
 
 from science_tool.autonomy.baseline import (
     BaselineError,
@@ -29,6 +32,7 @@ from science_tool.autonomy.baseline import (
     read_baseline,
     write_baseline,
 )
+from science_tool.autonomy.control_plane import run_dir, run_slug
 from science_tool.autonomy.extract import ExtractError, _git, extract_change_set
 from science_tool.autonomy.marks import MarkIssue, verify_marks
 from science_tool.autonomy.path_gate import Denial, GateInputError, evaluate
@@ -53,6 +57,7 @@ from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.identity import graph_uri
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
+from science_tool.evidence_broker.journal import create_journal
 
 
 class RepositoryStateError(ValueError):
@@ -125,7 +130,8 @@ def start_run(
     tier: RunTier,
     short_id: str,
     started: datetime,
-    baseline_out: Path,
+    baseline_out: Path | None = None,
+    evidence: EvidenceSessionSpec | None = None,
 ) -> RunBaseline:
     """Open a run and return its baseline.
 
@@ -139,12 +145,32 @@ def start_run(
     there is nothing to be `unwired` about -- the caller reports the failure and exits.
     """
     run_id = generate_run_id(started.date(), agent, short_id)
+    if (baseline_out is None) == (evidence is None):
+        raise BaselineError(
+            "start requires exactly one of a baseline path or a broker spec; they are mutually "
+            "exclusive because a brokered run's baseline is derived from the control plane"
+        )
     assert_gate_is_external(project_root)
     base_commit = assert_repository_is_at(project_root)
 
     result = _capture(project_root)
     if result.status == "unwired":
         raise BaselineError(f"no belief basis to open a run against: ({result.code}) {result.reason}")
+
+    session: EvidenceSession | None = None
+    if evidence is not None:
+        directory = run_dir(project_root, run_id)
+        baseline_out = directory / "baseline.json"
+        session = EvidenceSession(
+            session_id=run_slug(run_id),
+            journal_path=directory / "journal.jsonl",
+            commit=base_commit,
+            budget=evidence.budget,
+            surface_policy=evidence.surface_policy,
+            instrument=evidence.instrument,
+            inline=_read_inline_manifest(evidence.inline_paths, project_root=project_root),
+        )
+        create_journal(session.journal_path, project_root=project_root, inline=session.inline)
 
     baseline = RunBaseline(
         run_id=run_id,
@@ -159,9 +185,34 @@ def start_run(
         ),
         started=started,
         snapshot=build_snapshot(result.rows),
+        evidence=session,
     )
+    assert baseline_out is not None
     write_baseline(baseline_out, baseline, project_root=project_root)
     return baseline
+
+
+def _read_inline_manifest(
+    paths: tuple[Path, ...], *, project_root: Path
+) -> tuple[InlineInput, ...]:
+    manifest: list[InlineInput] = []
+    for path in paths:
+        try:
+            target = normalize_project_path(str(path))
+        except SubjectError as exc:
+            raise BaselineError(f"inline input {path} is not a project-relative path: {exc}") from exc
+        try:
+            payload = (project_root / target).read_bytes()
+        except OSError as exc:
+            raise BaselineError(f"could not read inline input {target}: {exc}") from exc
+        manifest.append(
+            InlineInput(
+                target=target,
+                sha256=hashlib.sha256(payload).hexdigest(),
+                lines=len(payload.splitlines()),
+            )
+        )
+    return tuple(manifest)
 
 
 def finish_run(

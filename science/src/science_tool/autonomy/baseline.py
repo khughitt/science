@@ -17,8 +17,9 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError
-from science_model.autonomous_runs import PolicyIdentity, RunTier
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from science_model.autonomous_runs import RUN_ID_PREFIX, PolicyIdentity, RunTier
+from science_model.evidence_broker import EvidenceSession
 
 from science_tool.graph.belief_basis import BasisSnapshot, SnapshotIntegrityError, load_snapshot
 
@@ -40,6 +41,17 @@ class RunBaseline(BaseModel):
     policy_identity: PolicyIdentity
     started: datetime
     snapshot: BasisSnapshot
+    evidence: EvidenceSession | None = None
+
+    @model_validator(mode="after")
+    def _session_names_this_run(self) -> RunBaseline:
+        if self.evidence is not None and self.evidence.session_id != self.run_id.removeprefix(
+            RUN_ID_PREFIX
+        ):
+            raise ValueError(
+                f"the session names {self.evidence.session_id!r} but the run is {self.run_id!r}"
+            )
+        return self
 
 
 def _containment_spellings(path: Path) -> tuple[Path, Path]:
