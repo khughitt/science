@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 import rdflib
 from click.testing import CliRunner
-from rdflib import Dataset, URIRef
+from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF
 
 from science_tool.cli import main
 from science_tool.graph.composite import assemble_composite_graph
-from science_tool.graph.io import read_revision_manifest
+from science_tool.graph.io import SCHEMA_NS, read_revision_manifest
 from science_tool.peers import PeerUnresolved
 from science_tool.registry.config import ensure_registered, load_global_config
 
@@ -97,6 +97,35 @@ def test_composite_unions_peers_local_graphs(tmp_path: Path) -> None:
     assert any(subject == "cancer://peer-a" for subject, _ in derived_from)
     assert any(subject == "cancer://peer-b" for subject, _ in derived_from)
     assert all(obj.endswith("/knowledge/graph.trig") for _, obj in derived_from)
+
+
+def test_composite_qualifies_same_overlay_source_uri_by_peer_graph(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    peer_a = tmp_path / "peer-a"
+    peer_b = tmp_path / "peer-b"
+    _write_project(host, "host", [("peer-a", peer_a), ("peer-b", peer_b)])
+    _write_project(peer_a, "peer-a")
+    _write_project(peer_b, "peer-b")
+    _write_local_graph(host, "host")
+
+    source = URIRef("http://example.org/project/source/overlays_papers_shared.md")
+    identifier = Literal("overlays/papers/shared.md")
+    for root, project_id in ((peer_a, "peer-a"), (peer_b, "peer-b")):
+        _write_local_graph(root, project_id)
+        path = root / "knowledge" / "graph.trig"
+        dataset = _load_dataset(path)
+        dataset.graph(URIRef(f"https://example.org/{project_id}/graph/provenance")).add(
+            (source, SCHEMA_NS.identifier, identifier)
+        )
+        dataset.serialize(destination=path, format="trig")
+
+    composite = _load_dataset(assemble_composite_graph(host))
+    contexts = {
+        str(graph)
+        for _, _, _, graph in composite.quads((source, SCHEMA_NS.identifier, identifier, None))
+    }
+
+    assert contexts == {"cancer://peer-a", "cancer://peer-b"}
 
 
 def test_composite_skips_peer_with_no_local_graph(tmp_path: Path) -> None:

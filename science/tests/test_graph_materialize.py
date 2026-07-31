@@ -462,8 +462,28 @@ relevance: "central to this project"
     assert any(str(scope) == "cross-project" for scope in scopes)
     assert derived_source_identifiers == {
         str(commons_root / "topics" / "single-cell-foundation-models.md"),
-        str(overlay_path),
+        "overlays/topics/single-cell-foundation-models.md",
     }
+
+
+def test_relative_overlay_paths_rejects_path_outside_project_root(tmp_path: Path) -> None:
+    from science_tool.graph.entity_registry import EntityRegistry
+    from science_tool.graph.materialize import _relative_overlay_paths
+    from science_tool.graph.sources import KnowledgeProfiles, ProjectSources
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    sources = ProjectSources(
+        project_name="demo",
+        project_root=str(project_root),
+        profiles=KnowledgeProfiles(),
+        entities=[],
+        registry=EntityRegistry.with_core_types(),
+        commons_overlay_paths={"topic:x": str(tmp_path / "outside.md")},
+    )
+
+    with pytest.raises(ValueError, match="outside project root"):
+        _relative_overlay_paths(sources)
 
 
 def test_add_entity_emits_two_provenance_triples_when_overlay_path_present() -> None:

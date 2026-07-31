@@ -330,6 +330,21 @@ class EmitResult:
     pre_registration_targets: dict[URIRef, list[URIRef]]
 
 
+def _relative_overlay_paths(sources: ProjectSources) -> dict[str, str]:
+    project_root = Path(sources.project_root).resolve()
+    relative: dict[str, str] = {}
+    for canonical_id, raw_path in sources.commons_overlay_paths.items():
+        overlay_path = Path(raw_path).resolve()
+        try:
+            path = overlay_path.relative_to(project_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"overlay path {overlay_path} is outside project root {project_root}"
+            ) from exc
+        relative[canonical_id] = path.as_posix()
+    return relative
+
+
 def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) -> EmitResult:
     """Emit the base authored graph and build the context Derive consumes.
 
@@ -370,12 +385,13 @@ def _emit_phase(sources: ProjectSources, *, archive_active: dict | None = None) 
         if d.participation_mode == ParticipationMode.EXTERNAL_REFERENCE and d.canonical_id not in owned_ids
     }
 
+    overlay_paths = _relative_overlay_paths(sources)
     for entity in sources.entities:
         _add_entity(
             entity=entity,
             knowledge=knowledge,
             provenance=provenance,
-            overlay_paths=sources.commons_overlay_paths,
+            overlay_paths=overlay_paths,
             reference_only_ids=reference_only_ids,
         )
 
