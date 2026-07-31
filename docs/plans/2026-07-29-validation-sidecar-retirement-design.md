@@ -1,7 +1,7 @@
 # Validation sidecar retirement — design
 
 **Date:** 2026-07-29
-**Status:** approved, awaiting implementation plan
+**Status:** implemented and published
 **Amends:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md)
 **Supersedes:** [`2026-07-28-finding-convergence-plan-2-producer-cutover.md`](2026-07-28-finding-convergence-plan-2-producer-cutover.md) Step 3, sidecar paragraph
 **Sequenced after:** `finding-convergence-plan-3` (§6)
@@ -305,15 +305,17 @@ promoted:
 ### 4.2 Rollout must be atomic per consumer
 
 A consumer that deletes its sidecar before installing the toolkit that carries
-the replacement has no policy at all in the interval. Three of the four pin the
-toolkit by revision, so deletion and adoption are separate acts that must not be
-separated:
+the replacement has no policy at all in the interval. Health/meta already pins
+the toolkit by revision; evolution and protein-landscape historically declare
+unqualified Git sources and rely on their locks for the resolved revision. The
+rollout converts both of those declarations to explicit `rev` pins, so deletion
+and adoption are separate acts that must not be separated:
 
 | project | pin site | current revision |
 |---|---|---|
 | `~/d/health/meta` | explicit `rev` in `pyproject.toml` `[tool.uv.sources]`, plus `uv.lock` | `3b72db60` (pre–Plan 2) |
-| `~/d/cancer/mechanisms/evolution` | unqualified Git source; revision resolved in `uv.lock` | `ed6b50dc` |
-| `~/d/protein-landscape` | unqualified Git source; revision resolved in `uv.lock` | `ed6b50dc` |
+| `~/d/cancer/mechanisms/evolution` | historical: unqualified Git source, revision resolved in `uv.lock`; rollout: explicit `rev` plus `uv.lock` | historical: `ed6b50dc`; rollout: `d30556954cb01451f5e5b145479edd06f73ed704` |
+| `~/d/protein-landscape` | historical: unqualified Git source, revision resolved in `uv.lock`; rollout: explicit `rev` plus `uv.lock` | historical: `ed6b50dc`; rollout: `d30556954cb01451f5e5b145479edd06f73ed704` |
 | `~/d/science/meta` | editable, in-repository | n/a |
 
 The rollout therefore requires, in order:
@@ -323,6 +325,16 @@ The rollout therefore requires, in order:
    revision, so no consumer commit may be authored before the push lands.
 2. Each consumer's change is **one commit**: pin and/or lock update, sidecar
    deletion, and documentation change together. Never a commit that only deletes.
+
+For evolution and protein-landscape, `d30556954cb01451f5e5b145479edd06f73ed704`
+is the approval-derived published toolkit SHA and is written explicitly to both
+`pyproject.toml` and `uv.lock`. This is deliberate: with uv 0.12.0, `uv lock
+--upgrade-package science` reproducibly retains the old locked `ed6b50dc`
+revision (the verbose resolver trace inserts `DefaultBranch` at that locked
+commit), while a temporary explicit `rev` immediately relocks to the approved
+SHA. Explicit pins and a normal `uv lock && uv sync` are therefore the
+deterministic rollout procedure; do not edit `uv.lock` directly or use a global
+`--upgrade`.
 
 Science/meta is exempt from the pin step — its toolkit source is editable and
 in-repository, so toolkit and consumer change move together by construction. Its
@@ -393,6 +405,16 @@ comparison is defined in two parts:
 
    Notices are not carried in `--format json`. Where a notice is the expected
    output, assert it through `RunResult.notices` or verbose text rendering.
+
+   Consumer rollout preserves the frozen canonical validator outcome; it does
+   not require unrelated corpus findings to disappear. In the approved capture,
+   strict validation exits 1 for all three external consumers: health/meta has
+   16 errors and 139 warnings, evolution has 18 errors and 41 warnings, and
+   protein-landscape has 13 errors and 642 warnings. Their migration gates must
+   compare the complete, unbudgeted after-report to the approved canonical
+   report exactly and retain that exit status. Expecting exit 0 would tune the
+   verification instrument to contradict its own baseline.
+
 2. **Intended-policy evaluation.** Evaluate the promoted check of §3.3 separately,
    against the corpus, on its own terms. It has no predecessor output to match,
    because its predecessor never observed its subject.

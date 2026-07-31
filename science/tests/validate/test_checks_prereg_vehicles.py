@@ -360,6 +360,20 @@ def test_git_query_maps_any_other_exit_to_none(project: Path) -> None:
     assert _git_query(project, "ls-files", "--error-unmatch", "--", "../outside") is None
 
 
+def test_prereg_git_queries_do_not_run_repo_local_fsmonitor(project: Path) -> None:
+    from science_tool.validate.checks.prereg_vehicles import _nondurable_state
+
+    sentinel = project / ".git" / "fsmonitor-fired"
+    program = project / ".git" / "fsmonitor.sh"
+    program.write_text(f'#!/bin/sh\ntouch "{sentinel}"\n', encoding="utf-8")
+    program.chmod(0o755)
+    _git(project, "config", "core.fsmonitor", str(program))
+    _write_vehicle(project, "inputs/a.json")
+
+    assert _nondurable_state(project, "inputs/a.json") == "untracked"
+    assert not sentinel.exists(), "prereg validation executed the repository's fsmonitor"
+
+
 def test_candidate_paths_accepts_a_bare_backticked_path() -> None:
     from science_tool.validate.checks.prereg_vehicles import _candidate_paths
 

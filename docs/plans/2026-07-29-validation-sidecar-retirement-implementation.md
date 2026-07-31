@@ -2649,21 +2649,41 @@ Record in `AGENTS.md` that the reviews-are-not-evidence guardrail is now a toolk
 - [ ] **Step 4: Verify, capturing status before parsing**
 
 ```bash
-uv run --frozen science validate --all --strict --format json > /tmp/hm-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 - <<'PY'
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "health-meta-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
+test -f "$canonical_report" || { echo "HARD STOP: approved health/meta canonical report missing"; exit 1; }
+set +e
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/hm-after-complete.json > /tmp/hm-after.json
+validation_status=$?
+set -e
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
 import json
-d = json.load(open("/tmp/hm-after.json"))
-print(d["summary"])
-rules = {r.get("rule") for r in d["results"]}
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/hm-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from approved canonical baseline"
+rules = {r.get("rule") for r in actual["results"]}
 assert "validate.python-sidecar-removed" not in rules
 assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
 print("OK")
 PY
 ```
 
-Expected: no `FAIL` line and `OK`. The nine background papers are cited under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance records already carry `evidence_tier: background` and `review_typed_source: true`.
+Expected: status `1`, summary `16 errors / 139 warnings`, exact complete-report
+parity with the approved canonical baseline, and `OK`. Strict validation already
+failed at the frozen consumer snapshot for unrelated corpus findings; changing
+that to zero would falsify the parity gate. The nine background papers are cited
+under `source_refs`, not `evidence_refs`, and both `paper:Tasci2022` provenance
+records already carry `evidence_tier: background` and
+`review_typed_source: true`.
 
 - [ ] **Step 5: Commit atomically, merge, clean up**
 
@@ -2710,7 +2730,9 @@ This repo has **no GitHub remote** — commit and merge only, never push. It is 
 
 ### Task 9: Migrate `~/d/cancer/mechanisms/evolution` atomically
 
-**Files:** `uv.lock:3062`, `AGENTS.md`; delete `validate_local.py`
+**Files:** `pyproject.toml:29`, `uv.lock:3062`, `AGENTS.md`,
+`entities/plans/0006-guardrail-reviews-are-not-evidence.md`,
+`entities/themes/0002-methodology-guardrails.md`; delete `validate_local.py`
 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
@@ -2770,7 +2792,11 @@ else
 fi
 ```
 
-Unqualified Git source; the revision lives only in `uv.lock`, currently `ed6b50dc`.
+Historical state: the Git source is unqualified and its `ed6b50dc` revision
+lives only in `uv.lock`. This rollout makes the approved published SHA an
+explicit `rev` in `pyproject.toml` and then regenerates `uv.lock`. With uv
+0.12.0, `uv lock --upgrade-package science` retains the old locked revision;
+the explicit pin and normal relock below are required.
 
 - [ ] **Step 1: Isolated worktree**
 
@@ -2785,50 +2811,128 @@ test "$(git branch --show-current)" = sidecar-retirement || {
 }
 ```
 
-- [ ] **Step 2: Relock to the Task 7 SHA**
+- [ ] **Step 2: Pin the approved Task 7 SHA and relock**
 
 ```bash
 read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-uv lock --upgrade-package science && uv sync
-rg -A2 '^name = "science"' uv.lock
-rg -q "#$published_main_sha" uv.lock || { echo "FAIL: lock did not pin published SHA"; exit 1; }
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+test "$published_main_sha" = "$expected_toolkit_sha" || {
+  echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
+}
 ```
 
-- [ ] **Step 3: Delete the sidecar and update `AGENTS.md`**
+Use the patch tool, not a shell command, from this consumer worktree to apply
+exactly:
+
+```
+*** Begin Patch
+*** Update File: pyproject.toml
+@@
+-science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
++science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
+*** End Patch
+```
+
+Then run the normal relock and assertions:
+
+```bash
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+uv lock && uv sync
+rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
+rg -F "#$expected_toolkit_sha" uv.lock || {
+  echo "FAIL: uv.lock did not pin approved published SHA"; exit 1;
+}
+```
+
+- [ ] **Step 3: Delete the sidecar and update current ownership docs**
 
 ```bash
 git rm validate_local.py
 ```
 
+Update `AGENTS.md` to remove project-local sidecar ownership and state that the
+reviews-are-not-evidence guardrail is enforced by canonical toolkit checks
+during `science validate`.
+
+Update the two active entities
+`entities/plans/0006-guardrail-reviews-are-not-evidence.md` and
+`entities/themes/0002-methodology-guardrails.md` in the same atomic migration.
+Replace their present-tense claims that `validate.local.sh`,
+`validate_local.py`, or another project-local sidecar provides automated
+enforcement with the current ownership boundary: the canonical Science toolkit
+enforces the guardrail during `science validate`.
+Preserve the historical origin context — the earlier project work did introduce
+the local sidecar, and this migration supersedes that mechanism. Do not rewrite
+the past as though the toolkit-owned check existed at that time.
+
+Leave `tasks/done/2026-05.md` unchanged. It is a completed task record and
+therefore remains historical.
+
 - [ ] **Step 4: Run the exact original command that crashed**
 
 ```bash
+set +e
 uv run --frozen science validate --all --strict --format json > /tmp/evo-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 - <<'PY'
+validation_status=$?
+set -e
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
+canonical_report=$(awk -F '\t' '$1 == "artifact" && $2 == "evolution-canonical" {print $3}' "$attempt_root/task-6-manifest.tsv")
+test -f "$canonical_report" || { echo "HARD STOP: approved evolution canonical report missing"; exit 1; }
+set +e
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/evo-after-complete.json > /tmp/evo-after-rendered.json
+complete_status=$?
+set -e
+test "$complete_status" -eq 1 || {
+  echo "FAIL: complete-report validator exited $complete_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
 import json
-d = json.load(open("/tmp/evo-after.json"))
-print(d["summary"])
-rules = {r.get("rule") for r in d["results"]}
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/evo-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from approved canonical baseline"
+rules = {r.get("rule") for r in actual["results"]}
 assert "validate.python-sidecar-removed" not in rules
 assert not any(str(r or "").startswith("papers.background-review") for r in rules), rules
 print("OK")
 PY
 ```
 
-Expected: no `FAIL` line, `OK`, no traceback. This is the Task 1 Step 2 reproduction now resolved.
+Expected: both commands exit `1`, summary `18 errors / 41 warnings`, exact
+complete-report parity with the approved canonical baseline, `OK`, and no
+traceback. Strict validation already failed at the frozen consumer snapshot for
+unrelated corpus findings; the resolved regression is the traceback, not those
+findings. The first command is the exact Task 1 Step 2 reproduction.
 
 - [ ] **Step 5: Confirm the notice out-of-band**
 
 ```bash
-uv run --frozen science validate --all --strict --verbose | rg 'no status:background papers'
+set +e
+uv run --frozen science validate --all --strict --verbose \
+  --output /tmp/evo-after-verbose-complete.txt > /tmp/evo-after-verbose-rendered.txt
+verbose_status=$?
+set -e
+test "$verbose_status" -eq 1 || {
+  echo "FAIL: validator exited $verbose_status, expected approved baseline status 1"; exit 1;
+}
+rg 'no status:background papers' /tmp/evo-after-verbose-complete.txt
 ```
 
 Expected: a match — all 15 papers are active, so a notice and zero warnings.
+`--output` is required because the verbose report exceeds the 30,000-visible-
+character rendered-output ceiling; without a complete output destination, the
+validator prints no report and only instructs the caller to use `--output`.
 
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
@@ -2873,13 +2977,29 @@ git -C "$source_root" worktree remove .worktrees/sidecar-retirement
 
 ### Task 10: Migrate `~/d/protein-landscape` atomically
 
-**Files:** `uv.lock:4412`, `AGENTS.md`; delete `validate_local.py`
+**Files:** `pyproject.toml:74`, `uv.lock:4412`, `AGENTS.md`; delete
+`validate_local.py`
 
 **Entry gate:** Paste the exact immutable approval-record path from Task 7;
 never discover authorization through `latest-attempt.txt`. Derive the attempt,
-baseline, feature, published SHA, manifest digest, and exact clean consumer
-snapshot from that record. No migration is authorized after drift. Capture the
-primary checkout's exact nonempty branch in the approved attempt before
+baseline, feature, published SHA, manifest digest, and approved protein
+baseline from that record. On 2026-07-30, current remote main
+`7b7197021848b1cf67d5c20054e0e0809f2988be` was assessed: published
+`d30556954cb01451f5e5b145479edd06f73ed704` remains its ancestor and the
+retirement runtime and dedicated test are unchanged. This is a recorded
+assessment, not a pin: the durable requirement is that `d305` remains an
+ancestor of live remote main.
+
+The manifest-approved protein baseline remains
+`6796628c06a562ff45029f317a0f0fdf1a2fec9e`. The sole authorized successor is
+the clean `14716f027bb4b51233e97edf7eb26234469bb082`, after the exact
+name-status gate below proves that it contains only the observed Labnote export
+cleanup. Task 10 files are unchanged, but the `.gitignore` boundary and current
+corpus findings change the report. The old Task 6 protein canonical is
+superseded for Task 10 only by the checksummed detached-worktree artifacts
+below; Tasks 6--9 remain complete. Retain the `d305` dependency pin. Any other
+SHA, path, or status is a hard stop. Capture the primary checkout's exact
+nonempty branch and authorized source head in the approved attempt before
 creating the migration worktree.
 
 ```bash
@@ -2897,12 +3017,52 @@ test "$(awk -F '\t' '$1 == "feature-branch" {print $2}' "$attempt_root/task-6-ma
 source_root=~/d/protein-landscape
 required_head=$(awk -F '\t' '$1 == "consumer" && $2 == "protein-landscape" {print $4}' "$attempt_root/task-6-manifest.tsv")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-test "$(git -C ~/d/science/.worktrees/sidecar-retirement ls-remote origin refs/heads/main | awk '{print $1}')" = "$published_main_sha" || { echo "HARD STOP: published main is not recorded SHA"; exit 1; }
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+test "$published_main_sha" = "$expected_toolkit_sha" || {
+  echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
+}
+git -C ~/d/science/.worktrees/sidecar-retirement fetch origin main || {
+  echo "HARD STOP: could not refresh origin/main"; exit 1;
+}
+live_main_sha=$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse origin/main)
+git -C ~/d/science/.worktrees/sidecar-retirement merge-base --is-ancestor "$expected_toolkit_sha" "$live_main_sha" || {
+  echo "HARD STOP: d305 is no longer an ancestor of live origin/main"; exit 1;
+}
 test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^1")" = "$approved_baseline_sha" || { echo "HARD STOP: published first parent is not approved baseline"; exit 1; }
 test "$(git -C ~/d/science/.worktrees/sidecar-retirement rev-parse "$published_main_sha^2")" = "$approved_feature_sha" || { echo "HARD STOP: published second parent is not approved feature"; exit 1; }
 test "$required_head" = 6796628c06a562ff45029f317a0f0fdf1a2fec9e || { echo "HARD STOP: protein-landscape missing from manifest"; exit 1; }
 test -z "$(git -C "$source_root" status --porcelain)" || { echo "HARD STOP: protein-landscape source drift"; exit 1; }
-test "$(git -C "$source_root" rev-parse HEAD)" = "$required_head" || { echo "HARD STOP: protein-landscape HEAD drift; recapture Task 6"; exit 1; }
+authorized_source_head=14716f027bb4b51233e97edf7eb26234469bb082
+test "$(git -C "$source_root" rev-parse HEAD)" = "$authorized_source_head" || { echo "HARD STOP: protein-landscape HEAD is not the sole authorized successor"; exit 1; }
+git -C "$source_root" merge-base --is-ancestor "$required_head" "$authorized_source_head" || {
+  echo "HARD STOP: approved protein baseline is not an ancestor of authorized source HEAD"; exit 1;
+}
+expected_drift=$'M\t.gitignore\nD\t.labnote/app_export/entities/index.json\nD\t.labnote/app_export/export_diagnostics.json\nD\t.labnote/app_export/export_stamp.json\nD\t.labnote/app_export/links/index.json\nD\t.labnote/app_export/manifest.json\nD\t.labnote/app_export/project.json\nD\t.labnote/app_export/prose_bundles/entity_prose_bundles.json\nD\t.labnote/app_export/references/index.json\nD\t.labnote/app_export/views.json'
+actual_drift=$(git -C "$source_root" diff --name-status "$required_head..$authorized_source_head")
+test "$actual_drift" = "$expected_drift" || {
+  echo "HARD STOP: protein-landscape drift exceeds the authorized Labnote export cleanup"; exit 1;
+}
+before_report=~/d/science/.worktrees/sidecar-retirement/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/task-10-protein-before-worktree-14716f0-d305.json
+canonical_report=~/d/science/.worktrees/sidecar-retirement/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/task-10-protein-canonical-worktree-14716f0-d305.json
+test -f "$before_report" && test ! -L "$before_report" || { echo "HARD STOP: refreshed protein before report missing or not regular"; exit 1; }
+test -f "$canonical_report" && test ! -L "$canonical_report" || { echo "HARD STOP: refreshed protein canonical report missing or not regular"; exit 1; }
+test "$(sha256sum "$before_report" | awk '{print $1}')" = 02486fdb360fd3fcda73cbdccd115d3a8e3dec7f2fcb2c629f2814ee391ccc60 || { echo "HARD STOP: refreshed protein before report drift"; exit 1; }
+test "$(sha256sum "$canonical_report" | awk '{print $1}')" = 3549dcf7bd97c4cf794f30cd96065b9b4729b317d34423de2dbdcfc40e04fc4a || { echo "HARD STOP: refreshed protein canonical report drift"; exit 1; }
+python3 - "$before_report" "$canonical_report" <<'PY'
+import copy
+import json
+import sys
+
+raw = json.load(open(sys.argv[1]))
+projected = json.load(open(sys.argv[2]))
+retirement = "validate.python-sidecar-removed"
+assert sum(result.get("rule") == retirement for result in raw["results"]) == 1
+expected = copy.deepcopy(raw)
+expected["results"] = [result for result in raw["results"] if result.get("rule") != retirement]
+expected["summary"]["errors"] -= 1
+assert projected == expected, "projected canonical is not raw minus the retirement finding"
+print("OK")
+PY
 intended_source_branch=$(git -C "$source_root" symbolic-ref --quiet --short HEAD) || {
   echo "HARD STOP: protein-landscape primary checkout is detached"; exit 1;
 }
@@ -2910,8 +3070,8 @@ test -n "$intended_source_branch" || { echo "HARD STOP: protein-landscape primar
 branch_state_path="$attempt_root/consumer-primary-branch-protein-landscape.tsv"
 branch_state_digest_path="$branch_state_path.sha256"
 approval_record_digest=$(sha256sum "$approval_record" | awk '{print $1}')
-expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
-  "$attempt_root" "$approval_record_digest" "$source_root" "$intended_source_branch")
+expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nsource-head\t%s\nbranch\t%s' \
+  "$attempt_root" "$approval_record_digest" "$source_root" "$authorized_source_head" "$intended_source_branch")
 if [[ -e "$branch_state_path" || -L "$branch_state_path" || -e "$branch_state_digest_path" || -L "$branch_state_digest_path" ]]; then
   test -f "$branch_state_path" && test ! -L "$branch_state_path" &&
     test -f "$branch_state_digest_path" && test ! -L "$branch_state_digest_path" || {
@@ -2935,9 +3095,10 @@ fi
 
 Its check is **not** promoted — the expensive-artifact check becomes a project-owned command with nothing enforcing it (design §4).
 
-- [ ] **Step 1: Isolated worktree, relock**
+- [ ] **Step 1: Isolated worktree, explicit pin, and relock**
 
 ```bash
+set -euo pipefail
 cd ~/d/protein-landscape && git worktree add .worktrees/sidecar-retirement -b sidecar-retirement
 cd .worktrees/sidecar-retirement
 test "$(git branch --show-current)" = sidecar-retirement || {
@@ -2947,9 +3108,34 @@ read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval
 test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
 attempt_root=$(awk -F '\t' '$1 == "attempt-root" {print $2}' "$approval_record")
 published_main_sha=$(cat "$attempt_root/published-main.sha")
-uv lock --upgrade-package science && uv sync
-rg -A2 '^name = "science"' uv.lock
-rg -q "#$published_main_sha" uv.lock || { echo "FAIL: lock did not pin published SHA"; exit 1; }
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+test "$published_main_sha" = "$expected_toolkit_sha" || {
+  echo "HARD STOP: approval-derived published SHA is not $expected_toolkit_sha"; exit 1;
+}
+```
+
+Use the patch tool, not a shell command, from this consumer worktree to apply
+exactly:
+
+```
+*** Begin Patch
+*** Update File: pyproject.toml
+@@
+-science = { git = "https://github.com/khughitt/science.git", subdirectory = "science" }
++science = { git = "https://github.com/khughitt/science.git", subdirectory = "science", rev = "d30556954cb01451f5e5b145479edd06f73ed704" }
+*** End Patch
+```
+
+Then run the normal relock and assertions:
+
+```bash
+set -euo pipefail
+expected_toolkit_sha=d30556954cb01451f5e5b145479edd06f73ed704
+uv lock && uv sync
+rg -F "science = { git = \"https://github.com/khughitt/science.git\", subdirectory = \"science\", rev = \"$expected_toolkit_sha\" }" pyproject.toml
+rg -F "#$expected_toolkit_sha" uv.lock || {
+  echo "FAIL: uv.lock did not pin approved published SHA"; exit 1;
+}
 ```
 
 - [ ] **Step 2: Delete the wrapper only**
@@ -2968,27 +3154,72 @@ State plainly: this check no longer runs as part of `science validate`, it is no
 uv run --frozen python code/scripts/check_expensive_artifacts.py
 ```
 
+Run it from the clean primary checkout that contains the ignored artifacts,
+not from the isolated migration worktree.
+
 - [ ] **Step 4: Confirm the standalone checker runs**
 
 ```bash
-uv run --frozen python code/scripts/check_expensive_artifacts.py
-status=$?
-test "$status" -eq 0 || { echo "FAIL: artifact checker exited $status"; exit 1; }
+set -euo pipefail
+source_root=~/d/protein-landscape
+authorized_source_head=14716f027bb4b51233e97edf7eb26234469bb082
+test -z "$(git -C "$source_root" status --porcelain)" || {
+  echo "HARD STOP: protein-landscape primary checkout is dirty before artifact check"; exit 1;
+}
+test "$(git -C "$source_root" rev-parse HEAD)" = "$authorized_source_head" || {
+  echo "HARD STOP: protein-landscape primary checkout moved before artifact check"; exit 1;
+}
+set +e
+(
+  cd "$source_root" || exit 1
+  uv run --frozen python code/scripts/check_expensive_artifacts.py
+)
+checker_status=$?
+set -e
+test "$checker_status" -eq 0 || { echo "FAIL: artifact checker exited $checker_status"; exit 1; }
 ```
+
+The isolated migration worktree omits the ignored expensive artifacts, so its
+missing-artifact exit is an environmental diagnostic, not the acceptance target.
+Return to the migration worktree for Step 5.
 
 - [ ] **Step 5: Verify validation**
 
 ```bash
-uv run --frozen science validate --all --strict --format json > /tmp/pl-after.json
-status=$?
-test "$status" -eq 0 || { echo "FAIL: validator exited $status, expected 0"; exit 1; }
-python3 -c "
-import json; d=json.load(open('/tmp/pl-after.json')); print(d['summary'])
-assert 'validate.python-sidecar-removed' not in {r.get('rule') for r in d['results']}
-print('OK')"
+set -euo pipefail
+read -r -p 'Paste the exact approval record printed by Task 7 Step 1: ' approval_record
+test "$(sha256sum "$approval_record")" = "$(cat "$approval_record.sha256")" || { echo "HARD STOP: approval record changed"; exit 1; }
+canonical_report=~/d/science/.worktrees/sidecar-retirement/.superpowers/sdd/2026-07-29-validation-sidecar-retirement-implementation/task-10-protein-canonical-worktree-14716f0-d305.json
+test -f "$canonical_report" && test ! -L "$canonical_report" || { echo "HARD STOP: refreshed protein canonical report missing or not regular"; exit 1; }
+test "$(sha256sum "$canonical_report" | awk '{print $1}')" = 3549dcf7bd97c4cf794f30cd96065b9b4729b317d34423de2dbdcfc40e04fc4a || { echo "HARD STOP: refreshed protein canonical report drift"; exit 1; }
+set +e
+uv run --frozen science validate --all --strict --format json \
+  --output /tmp/pl-after-complete.json > /tmp/pl-after.json
+validation_status=$?
+set -e
+test "$validation_status" -eq 1 || {
+  echo "FAIL: validator exited $validation_status, expected approved baseline status 1"; exit 1;
+}
+python3 - "$canonical_report" <<'PY'
+import json
+import sys
+
+expected = json.load(open(sys.argv[1]))
+actual = json.load(open("/tmp/pl-after-complete.json"))
+print(actual["summary"])
+assert actual == expected, "complete result differs from refreshed projected canonical"
+assert "validate.python-sidecar-removed" not in {
+    r.get("rule") for r in actual["results"]
+}
+print("OK")
+PY
 ```
 
-Expected: no `FAIL` line, `OK`, no traceback — the crash in the method-slice inventory is resolved.
+Expected: status `1`, summary `13 errors / 643 warnings / 0 infos`, exact
+complete-report parity with the refreshed projected canonical, `OK`, and no
+traceback. The Task 6 protein canonical is superseded here only; the detached
+before artifact establishes the one retirement finding removed by this
+migration.
 
 - [ ] **Step 6: Commit atomically, merge, clean up**
 
@@ -3011,8 +3242,12 @@ test "$(sha256sum "$branch_state_path")" = "$(cat "$branch_state_digest_path")" 
 }
 intended_source_branch=$(awk -F '\t' '$1 == "branch" {print $2}' "$branch_state_path")
 test -n "$intended_source_branch" || { echo "HARD STOP: saved protein-landscape primary branch is empty"; exit 1; }
-expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nbranch\t%s' \
-  "$attempt_root" "$(sha256sum "$approval_record" | awk '{print $1}')" "$source_root" "$intended_source_branch")
+authorized_source_head=$(awk -F '\t' '$1 == "source-head" {print $2}' "$branch_state_path")
+test "$authorized_source_head" = 14716f027bb4b51233e97edf7eb26234469bb082 || {
+  echo "HARD STOP: saved protein-landscape source head is not the authorized successor"; exit 1;
+}
+expected_branch_state=$(printf 'consumer\tprotein-landscape\nattempt-root\t%s\napproval-record-digest\t%s\nsource-root\t%s\nsource-head\t%s\nbranch\t%s' \
+  "$attempt_root" "$(sha256sum "$approval_record" | awk '{print $1}')" "$source_root" "$authorized_source_head" "$intended_source_branch")
 test "$(cat "$branch_state_path")" = "$expected_branch_state" || {
   echo "HARD STOP: saved protein-landscape branch state is malformed or belongs to another task"; exit 1;
 }
@@ -3024,6 +3259,9 @@ test "$current_source_branch" = "$intended_source_branch" || {
 }
 test -z "$(git -C "$source_root" status --porcelain)" || {
   echo "HARD STOP: protein-landscape primary checkout is dirty before merge"; exit 1;
+}
+test "$(git -C "$source_root" rev-parse HEAD)" = "$authorized_source_head" || {
+  echo "HARD STOP: protein-landscape primary checkout moved after entry gate"; exit 1;
 }
 git -C "$source_root" merge --no-ff sidecar-retirement
 git -C "$source_root" worktree remove .worktrees/sidecar-retirement

@@ -107,6 +107,24 @@ def test_tracked_ignored_sees_global_excludes(tmp_path: Path):
     assert hits[0].source.endswith("gi")
 
 
+def test_tracked_ignored_does_not_run_repo_local_fsmonitor(tmp_path: Path):
+    repo = _repo(tmp_path / "repo")
+    _write(repo, "tracked.txt")
+    _write(repo, ".gitignore", "*.txt\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", "tracked.txt"], check=True)
+    sentinel = tmp_path / "fsmonitor-fired"
+    program = tmp_path / "fsmonitor.sh"
+    program.write_text(f'#!/bin/sh\ntouch "{sentinel}"\n', encoding="utf-8")
+    program.chmod(0o755)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.fsmonitor", str(program)],
+        check=True,
+    )
+
+    assert [hit.path for hit in tracked_ignored(repo)] == ["tracked.txt"]
+    assert not sentinel.exists(), "boundary validation executed the repository's fsmonitor"
+
+
 def test_governed_files_exclude_untracked_and_info_exclude(tmp_path: Path):
     repo = _repo(tmp_path)
     _write(repo, ".gitignore", "/data/**\n!/data/**/\n")

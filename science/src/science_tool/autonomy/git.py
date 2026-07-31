@@ -118,11 +118,16 @@ def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) ->
 
 
 def _run(
-    repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]
+    repo_root: Path,
+    overrides: tuple[str, ...],
+    args: tuple[str, ...],
+    *,
+    input: bytes | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     try:
         return subprocess.run(
             _argv(repo_root, overrides, args),
+            input=input,
             capture_output=True,
             env={**os.environ, **_ENVIRONMENT},
         )
@@ -188,7 +193,11 @@ def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
     )
 
 
-def run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+def run_git(
+    repo_root: Path,
+    *args: str,
+    input: bytes | None = None,
+) -> subprocess.CompletedProcess[bytes]:
     """Run one hardened git command against `repo_root`.
 
     Returns the completed process instead of deciding about its exit status, because the
@@ -202,6 +211,11 @@ def run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     documented codes read as `quarantined`.
 
     Bytes, not text: `extract` has to detect non-UTF-8 blobs rather than have them
-    silently replaced.
+    silently replaced. `input` is passed to git's stdin for NUL-framed queries.
     """
-    return _run(repo_root, (*_HARDENING, *_filter_driver_overrides(repo_root)), args)
+    return _run(
+        repo_root,
+        (*_HARDENING, *_filter_driver_overrides(repo_root)),
+        args,
+        input=input,
+    )
