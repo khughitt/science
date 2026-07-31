@@ -1351,17 +1351,17 @@ toothless.
 cd science && uv run --frozen pytest tests/test_write_entity_file_retired_guard.py -v
 ```
 
-Expected: FAIL. The offender list at this point is **four** entries, not one — Tasks 4 and 5
-removed the two *code* callers, but prose references survive:
+Expected: FAIL. The offender list at this point is **three** entries, not one — Tasks 4 and 5
+removed the two *code* callers and Task 4 already rewrote `_mint_proposition`'s docstring
+(`promote.py:267`), but two prose references survive alongside the definition:
 
 | file:line | what it is |
 |---|---|
 | `entities.py:477` | the definition — deleted in Step 3 |
 | `dag/entity_frontmatter.py:6` | module docstring naming the deferred work this slice closed |
 | `dag/workbench.py:355` | `_write_entity_file`'s docstring: "Deliberately NOT `entities.write_entity_file`" |
-| `annotation/promote.py:267` | `_mint_proposition`'s docstring — **already fixed in Task 4** |
 
-Confirm the list matches. If a fifth appears, a code caller was missed; find it before
+Confirm the list matches. If a fourth appears, a code caller was missed; find it before
 proceeding.
 
 - [ ] **Step 3: Delete the function and fix the test references**
@@ -1417,8 +1417,8 @@ Expected: PASS.
 
 - [ ] **Step 5: Certify the guard by mutation (§5.5)**
 
-A guard that has never failed is an assertion, not a check. Run both mutations and confirm RED
-each time, then revert:
+A guard that has never failed is an assertion, not a check. Run three mutations and confirm the
+expected colour each time, then revert:
 
 Make each mutation as a **normal file edit, then revert it by editing the file back** — do not
 use `printf >>` or `git checkout` to stage and undo them. Appending via shell can corrupt the
@@ -1518,9 +1518,14 @@ done
 ```
 
 Expected: **empty under every heading**. This slice repairs no records (§6); any modification
-here is a bug. Note `science validate` WRITES entity files as a side effect — if you ran it
-during this task, `git -C <repo> checkout entities/` before reading this result, and never commit
-a run's `graph.trig`.
+here is a bug.
+
+**Do not run `science validate` against these three projects during this slice.** It WRITES
+entity files as a side effect, which would both dirty the trees this step reads and destroy the
+evidence that the slice left the corpus alone. Nothing in this plan needs it: every behavioural
+claim is covered by the `science/tests/` suite, and §2.3's corpus measurements are already
+recorded in the design. If a tree does come back dirty, stop and report it — do not clean it up,
+because the diff is the finding.
 
 ---
 
@@ -1533,10 +1538,6 @@ a run's `graph.trig`.
 3. mm30's DAG validation is red with 670 error-severity findings (362
    `proposition_edge_missing`, 307 `legacy_dag_edge_unresolved`, 1 `acyclicity`). Surfaced by
    this design, owned by neither it nor this plan.
-
-One in-scope doc fix, if you want it in Task 6: `compile_workbench`'s docstring still says
-entities are "(re)written via the canonical entity-layer writer", which stopped being true when
-piece 1 landed and is now actively wrong.
 
 **When measuring anything in a Science project**, exclude `.worktrees` as well as `.git` —
 projects carry nested checkouts of themselves and a bare `find` multiplies every count. Prefer
