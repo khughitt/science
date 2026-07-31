@@ -152,6 +152,21 @@ def _scrub_public_prose_internal_paths(text: str) -> str:
     return INTERNAL_PUBLIC_PROSE_PATH_RE.sub("[private path removed]", text)
 
 
+def _scrub_internal_paths(value: Any) -> Any:
+    """Scrub internal paths from every string leaf, preserving structure.
+
+    Unlike _scrub_public_semantic_detail_value this does not filter keys or
+    values: entity frontmatter is exported as authored, minus private paths.
+    """
+    if isinstance(value, str):
+        return _scrub_public_prose_internal_paths(value)
+    if isinstance(value, list):
+        return [_scrub_internal_paths(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _scrub_internal_paths(item) for key, item in value.items()}
+    return value
+
+
 TYPE_DIR_MAP = {
     "hypotheses": "hypothesis",
     "propositions": "proposition",
@@ -851,15 +866,17 @@ def _discover_entities(
                 entity_type,
                 "epistemic" if entity_type in FINDING_TYPES else "source",
             ),
-            "display_name": _title_from_frontmatter(frontmatter, entity_id),
-            "summary": frontmatter.get("summary"),
+            "display_name": _scrub_internal_paths(
+                _title_from_frontmatter(frontmatter, entity_id)
+            ),
+            "summary": _scrub_internal_paths(frontmatter.get("summary")),
             "status": frontmatter.get("status"),
             "route": None,
             "source_path": source_path,
-            "metadata": metadata,
-            "aliases": frontmatter.get("aliases") or [],
-            "tags": frontmatter.get("tags") or [],
-            "source_refs": frontmatter.get("source_refs") or [],
+            "metadata": _scrub_internal_paths(metadata),
+            "aliases": _scrub_internal_paths(frontmatter.get("aliases") or []),
+            "tags": _scrub_internal_paths(frontmatter.get("tags") or []),
+            "source_refs": _scrub_internal_paths(frontmatter.get("source_refs") or []),
         }
         exported.append(ExportedEntity(record=record, markdown=body, frontmatter=frontmatter, source_path=source_path))
     return exported, restricted_present, restricted_ids

@@ -2263,3 +2263,53 @@ def test_export_stamped_by_the_current_exporter_version_is_skipped(tmp_path: Pat
     export_labnote_package(project_root=project_root, out_dir=out)
 
     assert export_labnote_package(project_root=project_root, out_dir=out)["skipped"] is True
+
+
+def test_entity_index_scrubs_internal_paths_from_nested_frontmatter(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    out = tmp_path / "out"
+    write_minimal_project(project_root)
+    write_text(
+        project_root / "entities" / "interpretations" / "0001-funnel.md",
+        """
+        ---
+        id: interpretation:0001-funnel
+        kind: interpretation
+        title: Funnel from /data/proj/example/run.json
+        summary: Derived from /mnt/ssd/example/summary.tsv in the pilot run.
+        sensitivity: public
+        aliases:
+          - /data/proj/example/alias.md
+        input: /data/proj/example/run.json
+        tags:
+          - /mnt/ssd/example/tag
+        source_refs:
+          - /home/keith/example/ref.md
+        execution_trace:
+          pinned_outputs:
+            - /data/proj/example/pinned.jsonl
+        ---
+        Body text with no path.
+        """,
+    )
+
+    export_labnote_package(project_root=project_root, out_dir=out)
+
+    index_path = out / "entities" / "index.json"
+    index_text = index_path.read_text(encoding="utf-8")
+    assert "/data/proj" not in index_text
+    assert "/mnt/ssd" not in index_text
+    assert "/home/keith" not in index_text
+
+    row = next(
+        entity
+        for entity in read_json(index_path)["entities"]
+        if entity["id"] == "interpretation:0001-funnel"
+    )
+    assert row["display_name"] == "Funnel from [private path removed]"
+    assert row["summary"] == "Derived from [private path removed] in the pilot run."
+    assert row["metadata"]["input"] == "[private path removed]"
+    assert row["metadata"]["execution_trace"]["pinned_outputs"] == ["[private path removed]"]
+    assert row["aliases"] == ["[private path removed]"]
+    assert row["tags"] == ["[private path removed]"]
+    assert row["source_refs"] == ["[private path removed]"]
