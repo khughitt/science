@@ -2,7 +2,10 @@
 
 Keeping the decision out of the serving module is what makes design §7's agreement table
 possible: the `read` denial and the `search` exclusion are independent implementations of one
-policy, and they can only be tested against each other while both are pure functions.
+policy, and they are still checked against each other on one set of inputs -- but that check
+runs in `test_evidence_broker_serve.py`, where git runs, because the search half cannot be
+asserted without it: a pure comparison would have to reimplement git's pathspec matching, which
+proves agreement with the reimplementation rather than with git.
 """
 
 from __future__ import annotations

@@ -43,7 +43,17 @@ def test_a_non_nfc_prefix_is_refused_rather_than_silently_weakened():
 
 def test_an_nfc_prefix_carrying_the_same_characters_is_accepted():
     """The control. Refusing every non-ASCII prefix would be a stricter-looking rule that
-    withdraws a legitimate policy: the NFC spelling reaches git byte-exactly and works."""
+    withdraws a legitimate policy: the NFC spelling reaches git byte-exactly and works --
+    against a tree whose paths are themselves NFC.
+
+    That qualifier is load-bearing. Against a tree holding an NFD path (git stores whatever
+    bytes were committed; it does not normalize), this same NFC prefix is the ONLY spelling
+    `SurfacePolicy` accepts, and MEASURED against git 2.55 it produces an exclusion pathspec
+    that matches nothing -- `git grep` goes on to serve that file and its content, while
+    `read` of the same path still denies it. Rejecting a non-NFC prefix at construction closes
+    the authoring side only; an NFD-authored repository can still be searched past the policy.
+    That residual is accepted and parked by this design, not fixed here.
+    """
     nfc = unicodedata.normalize("NFC", "café")
     assert SurfacePolicy(deny_prefixes=(nfc,), notice="withheld").deny_prefixes == (nfc,)
 
