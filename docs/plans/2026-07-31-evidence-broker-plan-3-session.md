@@ -100,6 +100,25 @@ The lesson worth carrying into implementation: **rewriting a guard does not cert
 Each of these passed a careful reading. Only mutation finds them, which is why every guard below
 names the specific mutations that must fail it.
 
+**A third round found eight more, and the pattern held a third time.** The atomic-write fix from
+round two protected the temporary *leaf* with `O_NOFOLLOW` while still re-resolving the
+actor-controlled `served/` **parent** by pathname on every operation — so planting `served ->
+<project>` after construction put both files in-tree anyway. That is the repository's own
+descriptor-anchoring doctrine, and round two's fix had adopted half of it. The `finish` binding
+added in round two was placed in the CLI while the authoritative `read_baseline` stayed inside
+`finish_run`, so it constrained a value the attestation never used. And `baseline.py` importing
+`control_plane.run_slug` is a **cycle** — `control_plane` already imports `baseline` — which fails
+at module initialization, not at call time.
+
+Two of round two's new tests could not have run at all: `monkeypatch.setattr(io.BufferedWriter,
+"write", …)` raises `TypeError: cannot set 'write' attribute of immutable type` (verified in this
+venv), and the concurrent budget test deadlocks if given the barrier that would make it
+deterministic — thread A holds the lock and waits at the barrier for thread B, which is blocked
+acquiring that lock. Both are replaced with deterministic forms below.
+
+**The compounding lesson: a fix is a new claim, and inherits none of the certification of what it
+replaced.** Three rounds, and each round's *fixes* were where the next round's findings landed.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section.
