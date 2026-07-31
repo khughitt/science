@@ -16,7 +16,9 @@ def _mint(kind, claim, project_root, slug="claim-slug"):
         decision="MINT", slug=slug, reason="new entity", kind=kind,
     )
     target = numeric_target(kind)
-    return target.mint(c, ["paper:p", c.ref], project_root, date(2026, 6, 16))
+    outcome = target.mint(c, ["paper:p", c.ref], project_root, date(2026, 6, 16))
+    assert outcome.created is True   # numeric kinds reserve a number; they never accrue
+    return outcome.entity_id
 
 
 def test_mint_question_is_template_faithful(tmp_path):

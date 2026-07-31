@@ -16,6 +16,11 @@ from science_model.templates import Renderer
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import Status, TextualBody
 from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
+from science_tool.dag.entity_frontmatter import (
+    CREATE_ONLY_KEYS,
+    Ownership,
+    create_entity_file,
+)
 from science_tool.entities import (
     EntityCommandError,
     _atomic_replace_text,
@@ -25,7 +30,6 @@ from science_tool.entities import (
     resolve_path_policy,
     slug_for_claim_text,
     validate_slug,
-    write_entity_file,
 )
 from science_tool.entity_reservation import reserve_entity
 
@@ -243,8 +247,25 @@ def _proposition_body(claim: str) -> str:
 
 PROMOTABLE_KINDS: tuple[str, ...] = ("proposition", "question", "hypothesis")
 
-# (candidate, source_refs, project_root, as_of) -> minted entity id "<kind>:<local_part>"
-MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], str]
+# `source_refs` is owned at CREATE only; promote never updates a record (§4.3), so this
+# ownership never reaches `render_update`. `created`/`updated` are omitted deliberately --
+# both renderers stamp them unconditionally after the allowlist filter.
+PROMOTE_PROPOSITION = Ownership(
+    frozenset(("id", "kind", "subject", "object", "source_refs")), CREATE_ONLY_KEYS
+)
+
+
+@dataclass(frozen=True)
+class MintOutcome:
+    """What a mint did. `created` is False when an identical claim already existed and the
+    mint accrued provenance onto it instead (§4.3) -- provenance accrual, not a rewrite."""
+
+    entity_id: str
+    created: bool
+
+
+# (candidate, source_refs, project_root, as_of) -> MintOutcome
+MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], MintOutcome]
 
 
 @dataclass(frozen=True)
@@ -263,25 +284,38 @@ def entity_dest(entity_id: str, project_root: Path) -> Path:
 
 def _mint_proposition(
     c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
-) -> str:
-    """4a proposition mint: slug-addressed write_entity_file + never-overwrite guard."""
+) -> MintOutcome:
+    """4a proposition mint: create-only, with provenance accrual on an identical claim (§4.3)."""
     assert c.slug is not None
     prop_ref = f"proposition:{c.slug}"
     dest = entity_dest(prop_ref, project_root)
-    # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
-    # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
     if dest.exists():
+        # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
+        # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
         existing_fm, _ = _parse_markdown_file(dest)
         if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
             raise PromotionApplyError(
                 f"refusing to overwrite {dest.name}: it holds a different proposition"
             )
+        # Same claim from a second source: ACCRUE, exactly as the LINK path does. Rendering it
+        # as an update would replace source_refs with only this paper's refs and overwrite the
+        # subject/object refinements synthesize owns.
+        for ref in source_refs:
+            append_entity_source_ref(dest, ref, as_of=as_of)
+        return MintOutcome(entity_id=prop_ref, created=False)
+
     prop = PropositionEntity(
         id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
         source_refs=list(source_refs),
     )
-    write_entity_file(prop, project_root=project_root, body=_proposition_body(c.claim), as_of=as_of)
-    return prop_ref
+    create_entity_file(
+        prop,
+        project_root=project_root,
+        ownership=PROMOTE_PROPOSITION,
+        create_body=_proposition_body(c.claim),
+        as_of=as_of,
+    )
+    return MintOutcome(entity_id=prop_ref, created=True)
 
 
 def proposition_target() -> PromotionTarget:
@@ -307,7 +341,9 @@ def _insert_claim_into_lead(rendered: str, section_name: str, claim: str) -> str
 def _mint_numeric(kind: str) -> MintFn:
     lead = _LEAD_SECTION[kind]
 
-    def mint(c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None) -> str:
+    def mint(
+        c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
+    ) -> MintOutcome:
         assert c.slug is not None
         today = (as_of or date.today()).isoformat()
         # (1) Preflight the template (pure read, no number consumed). Raises if the packaged
@@ -342,7 +378,7 @@ def _mint_numeric(kind: str) -> MintFn:
             raise PromotionApplyError(
                 f"failed to write {kind} {reservation.entity_id}: {exc}"
             ) from exc
-        return reservation.entity_id
+        return MintOutcome(entity_id=reservation.entity_id, created=True)
 
     return mint
 
@@ -377,10 +413,13 @@ def apply_candidates(
 
     for c in candidates:
         if c.decision == "MINT":
-            new_id = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
-            report.written_paths.append(str(entity_dest(new_id, project_root)))
-            report.minted += 1
-            backlinks[c.frag] = new_id
+            outcome = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
+            if outcome.created:
+                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
+                report.minted += 1
+            else:
+                report.linked += 1
+            backlinks[c.frag] = outcome.entity_id
         elif c.decision == "LINK":
             assert c.slug is not None  # "<kind>:<local_part>"
             dest = entity_dest(c.slug, project_root)

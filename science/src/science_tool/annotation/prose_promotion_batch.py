@@ -119,11 +119,15 @@ def _apply_validated_row(
 
     try:
         if candidate.decision == "MINT":
-            promoted_to = targets[candidate.kind].mint(
+            outcome = targets[candidate.kind].mint(
                 candidate, [row.source_ref, row.artifact_unit_ref], project_root, None
             )
-            report.written_paths.append(str(entity_dest(promoted_to, project_root)))
-            report.minted += 1
+            if outcome.created:
+                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
+                report.minted += 1
+            else:
+                report.linked += 1
+            promoted_to = outcome.entity_id
         elif candidate.decision == "LINK":
             if candidate.slug is None:
                 raise ProsePromotionError(f"LINK decision for unit {row.unit_id!r} is missing target ref")
