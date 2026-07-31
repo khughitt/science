@@ -1,0 +1,337 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+from science_model.evidence_broker import SurfacePolicy
+
+from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+from science_tool.evidence_broker.serve import Outcome, ServeError, serve, verify_commit
+
+OPEN = SurfacePolicy(notice="withheld")
+CLOSED = SurfacePolicy(deny_prefixes=("private", "notes/a[b].md"), notice="withheld")
+ZERO = "0" * 40
+
+
+def _repo(tmp_path: Path) -> tuple[Path, str]:
+    root = tmp_path / "repo"
+    (root / "private").mkdir(parents=True)
+    (root / "privateer").mkdir()
+    (root / "notes").mkdir()
+    for args in (
+        ("init", "-q"),
+        ("config", "user.email", "p@example.invalid"),
+        ("config", "user.name", "P"),
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    (root / "a.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+    (root / "empty.txt").write_text("", encoding="utf-8")
+    (root / "private" / "x.txt").write_text("secret\n", encoding="utf-8")
+    (root / "privateer" / "p.txt").write_text("secret\n", encoding="utf-8")
+    (root / "notes" / "a[b].md").write_text("secret\n", encoding="utf-8")
+    (root / "notes" / "ab.md").write_text("secret\n", encoding="utf-8")
+    # A directory whose NAME is git's own miss sentence, so a substring classifier reports
+    # it absent. It is committed, so `cat-file -t` must answer `tree`.
+    (root / "does not exist in").mkdir()
+    (root / "does not exist in" / "f.txt").write_text("present\n", encoding="utf-8")
+    # A file whose name contains a literal backslash, with NOTHING at `a/b`. The two
+    # spellings therefore read different things, which is what makes the normalization
+    # test below able to fail.
+    (root / "a\\b").write_text("raw\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", "seed"], check=True, capture_output=True
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True
+    ).stdout.decode().strip()
+    return root, commit
+
+
+def _read(target: str) -> EvidenceRequest:
+    return EvidenceRequest(op=EvidenceOp.READ, target=target)
+
+
+def _search(pattern: str, pathspec: str | None = None) -> EvidenceRequest:
+    return EvidenceRequest(op=EvidenceOp.SEARCH, target=pattern, pathspec=pathspec)
+
+
+def test_read_serves_the_blob(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _read("a.txt"), OPEN)
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == b"alpha\nbeta\n"
+
+
+def test_an_empty_file_is_served_not_missed(tmp_path: Path):
+    """"Shipped as a stub" is a different fact from "never shipped", and a reviewer that
+    cannot tell them apart will report the wrong one."""
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _read("empty.txt"), OPEN)
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == b""
+
+
+def test_an_absent_path_is_a_defined_miss(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _read("nope.txt"), OPEN)
+    assert served.outcome is Outcome.MISS_ABSENT
+    assert served.payload  # the marker, so the hash covers the answer
+
+
+def test_an_absent_path_that_exists_on_disk_is_the_same_miss(tmp_path: Path):
+    """git spells this miss two ways depending on the working tree, which the actor owns.
+    A classifier that knows only one turns an ordinary absent path into a halted run for
+    exactly the paths the actor happened to create."""
+    root, commit = _repo(tmp_path)
+    (root / "later.txt").write_text("added after the commit\n", encoding="utf-8")
+    served = serve(root, commit, _read("later.txt"), OPEN)
+    assert served.outcome is Outcome.MISS_ABSENT
+
+
+def test_read_refuses_a_directory(tmp_path: Path):
+    """`git show <commit>:<dir>` answers this with a tree listing at exit 0. Served that
+    way it would record FULL coverage over a directory listing, and a citation into it
+    would correspond while resting on no file at all."""
+    root, commit = _repo(tmp_path)
+    # OPEN, deliberately: under CLOSED this path is refused by policy and the tree would
+    # never be reached, so the test would pass without proving anything about `read`.
+    with pytest.raises(ServeError):
+        serve(root, commit, _read("private"), OPEN)
+
+
+def test_a_directory_named_like_the_miss_message_is_not_a_miss(tmp_path: Path):
+    """MEASURED: `cat-file blob <c>:does not exist in` fails with
+    `fatal: git cat-file <c>:does not exist in: bad file`, which CONTAINS git's miss
+    sentence. A substring classifier serves a present directory as an absent path, and
+    tells the reviewer a file is missing when it is there."""
+    root, commit = _repo(tmp_path)
+    with pytest.raises(ServeError):
+        serve(root, commit, _read("does not exist in"), OPEN)
+
+
+def test_a_denied_read_makes_no_git_call_at_all(tmp_path: Path, monkeypatch):
+    """Not merely "is refused": a withheld path must leave no trace in a process table or
+    a timing difference, so `authorize` runs before `verify_commit` and before anything
+    else. `run_git` is replaced with a landmine rather than observed after the fact."""
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    def _landmine(*args, **kwargs):
+        raise AssertionError(f"a denied request reached git: {args}")
+
+    monkeypatch.setattr(serve_module, "run_git", _landmine)
+    served = serve(root, commit, _read("private/x.txt"), CLOSED)
+
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.payload == b""
+
+
+def test_a_history_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path):
+    """MEASURED policy bypass: `priv*` is under no deny prefix as text, and as a bare
+    pathspec git expands it onto `private/x.txt`. The literal pathspec is what keeps the
+    authorized spelling and the searched spelling the same string."""
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="priv*"), CLOSED)
+    assert served.outcome is Outcome.MISS_NO_COMMITS
+
+
+def test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("secret", pathspec="priv*"), CLOSED)
+    assert served.outcome is Outcome.MISS_NO_MATCH
+
+
+FILE_DENY = SurfacePolicy(deny_prefixes=("private/x.txt",), notice="withheld")
+
+
+def _repo_with_split_history(tmp_path: Path) -> tuple[Path, str, str]:
+    """Two commits under ONE ancestor: one touching a denied file, one touching an allowed
+    sibling. Returns `(root, allowed_commit, denied_commit)`; the denied one is HEAD.
+
+    Both descendants live under `private/`, which is the whole point. A control that asked
+    about a path OUTSIDE the ancestor cannot tell a precise exclusion from one that dropped
+    the entire subtree -- both answer the same way -- so it would pass against the
+    over-broad fix as readily as the correct one.
+    """
+    root = tmp_path / "split"
+    (root / "private").mkdir(parents=True)
+    for args in (
+        ("init", "-q"),
+        ("config", "user.email", "p@example.invalid"),
+        ("config", "user.name", "P"),
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    def _commit(message: str) -> str:
+        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(root), "commit", "-q", "-m", message], check=True, capture_output=True
+        )
+        return subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True
+        ).stdout.decode().strip()
+
+    (root / "private" / "public.txt").write_text("allowed\n", encoding="utf-8")
+    allowed = _commit("touch the allowed sibling")
+    (root / "private" / "x.txt").write_text("secret\n", encoding="utf-8")
+    denied = _commit("touch the denied descendant")
+    return root, allowed, denied
+
+
+def test_history_of_an_ancestor_does_not_report_a_denied_descendant(tmp_path: Path):
+    """MEASURED: with deny prefix `private/x.txt`, the target `private` is beneath no
+    prefix and authorizes -- `read` refuses it as a tree, but `log` selects paths
+    RECURSIVELY, so `:(top,literal)private` reports every commit touching the denied file.
+
+    Authorization answers "is this path denied". It cannot answer "does this path CONTAIN
+    something denied", so `log` carries the exclusions exactly as `grep` does.
+    """
+    root, _allowed, denied = _repo_with_split_history(tmp_path)
+    served = serve(
+        root, denied, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
+    )
+    assert denied.encode() not in served.payload
+
+
+def test_the_history_exclusions_withhold_only_the_denied_descendant(tmp_path: Path):
+    """The control, and it must live INSIDE the ancestor. Dropping all of `private` would
+    satisfy the test above just as well, so precision is what this asserts: the allowed
+    sibling's commit is still reported, from the same query."""
+    root, allowed, denied = _repo_with_split_history(tmp_path)
+    served = serve(
+        root, denied, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
+    )
+    assert served.outcome is Outcome.SERVED
+    assert allowed.encode() in served.payload
+
+
+def test_a_working_tree_symlink_does_not_redirect_or_deny_a_read(tmp_path: Path):
+    """§7's policy bullet. The served surface is a blob read at a pinned commit, which
+    never consults the working tree -- so replacing a committed file with a symlink must
+    change nothing. A `resolve()`-based containment check would have denied this request,
+    and would have bought no security doing so: there is no filesystem lookup to protect.
+    """
+    root, commit = _repo(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not the committed bytes\n", encoding="utf-8")
+    (root / "a.txt").unlink()
+    (root / "a.txt").symlink_to(outside)
+
+    served = serve(root, commit, _read("a.txt"), OPEN)
+
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == b"alpha\nbeta\n"
+
+
+def test_the_normalized_path_is_what_git_reads(tmp_path: Path):
+    """`a\\b` normalizes to `a/b`, and the fixture commits a file at the FORMER and nothing
+    at the latter. So the two spellings read different things, and the outcome says which
+    one `serve` used: a request judged as `a/b` must miss, while a caller passing its own
+    raw string would be served `raw\\n` -- authorizing one path and reading another.
+
+    A gentler spelling such as `.//a.txt` proves nothing here: git resolves it to `a.txt`
+    itself, so both the raw and the normalized form succeed and the test cannot fail.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _read("a\\b"), OPEN)
+    assert served.outcome is Outcome.MISS_ABSENT
+    assert served.payload != b"raw\n"
+
+
+def test_search_hits_carry_commit_path_and_line(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("alpha"), OPEN)
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == f"{commit}:a.txt".encode() + b"\x001\x00alpha\n"
+
+
+def test_a_search_with_no_matches_is_a_defined_miss(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("zzzznope"), OPEN)
+    assert served.outcome is Outcome.MISS_NO_MATCH
+
+
+def test_a_malformed_pattern_is_refused_not_raised(tmp_path: Path):
+    """The requester's own input, carrying no repository fact. Raising would halt an
+    honest run over a typo."""
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("a["), OPEN)
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "pattern-malformed"
+
+
+def test_search_carries_the_policy_exclusions_even_with_no_pathspec(tmp_path: Path):
+    """Search never names a path, so denying a directory to `read` while grep returns
+    hits from inside it denies nothing."""
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("secret"), CLOSED)
+    assert served.outcome is Outcome.SERVED
+    assert b"private/x.txt" not in served.payload
+    assert b"notes/a[b].md" not in served.payload
+    assert b"privateer/p.txt" in served.payload
+    assert b"notes/ab.md" in served.payload
+
+
+def test_history_serves_commits(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), OPEN)
+    assert served.outcome is Outcome.SERVED
+    assert served.payload.startswith(commit.encode())
+
+
+def test_history_with_no_commits_is_a_defined_miss(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(
+        root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="nope.txt"), OPEN
+    )
+    assert served.outcome is Outcome.MISS_NO_COMMITS
+
+
+def test_a_wellformed_nonexistent_commit_halts_rather_than_answering(tmp_path: Path):
+    """THE regression test. `0`*40 makes git emit the MISS message, so an implementation
+    that classifies before verifying answers "absent at commit" for a bogus revision --
+    and passes a test written with a malformed ref instead."""
+    root, _commit = _repo(tmp_path)
+    with pytest.raises(ServeError):
+        verify_commit(root, ZERO)
+    with pytest.raises(ServeError):
+        serve(root, ZERO, _read("a.txt"), OPEN)
+
+
+def test_unrecognised_git_output_raises(tmp_path: Path, monkeypatch):
+    """Anything git reports that is not a defined miss halts the run. A broker that
+    guessed would turn an instrument failure into evidence.
+
+    THE EARLIER FAKE FAILED EVERY CALL, so `verify_commit` raised and the read
+    classifier was never reached -- the test passed without exercising the code it
+    names. This one answers the verification truthfully and only then goes strange.
+    """
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    real_run_git = serve_module.run_git
+    calls: list[tuple] = []
+
+    def _fake(repo_root, *args, **kwargs):
+        calls.append(args)
+        if args[0] == "rev-parse":
+            return real_run_git(repo_root, *args, **kwargs)
+
+        class _Strange:
+            returncode = 128
+            stdout = b""
+            stderr = b"fatal: something nobody has seen before\n"
+
+        return _Strange()
+
+    monkeypatch.setattr(serve_module, "run_git", _fake)
+    with pytest.raises(ServeError, match="could not be classified"):
+        serve(root, commit, _read("a.txt"), OPEN)
+
+    # The verification really did run, so the raise came from the read classifier.
+    assert calls[0][0] == "rev-parse"
+    assert len(calls) > 1
