@@ -120,6 +120,24 @@ A second round found six more, all likewise reproduced first:
 Findings 8 and 11 are the same shape as 1 and 4 — a check whose scope was narrower than the rule
 it enforced. That is the failure mode this plan's own guards are most likely to repeat.
 
+A third round found two more, both in the guards rather than the serving code:
+
+13. **The subprocess guard was a text scan, so it rejected its own package's documentation.**
+    `policy.py`'s docstring explains why a NUL cannot cross `subprocess`'s argv boundary, and the
+    guard forbade the substring anywhere in any module — it would have failed on the first run
+    against the code this plan tells the implementer to write. A guard that forbids *discussing*
+    the hazard pushes the explanation out of the code, which inverts its purpose. Now an AST
+    check on imports and calls, widened to `os`'s spawning family since `policy.py` now imports
+    `os`.
+14. **The history control could not distinguish precision from over-exclusion.** It queried
+    `a.txt`, outside the ancestor, so dropping all of `private/` would have satisfied both tests.
+    Measured: the over-broad spelling returns no commits at all. The control now lives *inside*
+    the ancestor — two commits under `private/`, one touching the denied file and one an allowed
+    sibling — and asserts the allowed commit still appears from the same query.
+
+Finding 13 is worth keeping in view beyond this plan: a guard implemented as a text scan is a
+guard whose scope is the whole file, including its prose.
+
 ## Global Constraints
 
 - Work in the `feat/evidence-broker-serving` worktree at `.worktrees/evidence-broker-serving`, on
@@ -1129,6 +1147,40 @@ def test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path)
 FILE_DENY = SurfacePolicy(deny_prefixes=("private/x.txt",), notice="withheld")
 
 
+def _repo_with_split_history(tmp_path: Path) -> tuple[Path, str, str]:
+    """Two commits under ONE ancestor: one touching a denied file, one touching an allowed
+    sibling. Returns `(root, allowed_commit, denied_commit)`; the denied one is HEAD.
+
+    Both descendants live under `private/`, which is the whole point. A control that asked
+    about a path OUTSIDE the ancestor cannot tell a precise exclusion from one that dropped
+    the entire subtree -- both answer the same way -- so it would pass against the
+    over-broad fix as readily as the correct one.
+    """
+    root = tmp_path / "split"
+    (root / "private").mkdir(parents=True)
+    for args in (
+        ("init", "-q"),
+        ("config", "user.email", "p@example.invalid"),
+        ("config", "user.name", "P"),
+    ):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    def _commit(message: str) -> str:
+        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(root), "commit", "-q", "-m", message], check=True, capture_output=True
+        )
+        return subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True
+        ).stdout.decode().strip()
+
+    (root / "private" / "public.txt").write_text("allowed\n", encoding="utf-8")
+    allowed = _commit("touch the allowed sibling")
+    (root / "private" / "x.txt").write_text("secret\n", encoding="utf-8")
+    denied = _commit("touch the denied descendant")
+    return root, allowed, denied
+
+
 def test_history_of_an_ancestor_does_not_report_a_denied_descendant(tmp_path: Path):
     """MEASURED: with deny prefix `private/x.txt`, the target `private` is beneath no
     prefix and authorizes -- `read` refuses it as a tree, but `log` selects paths
@@ -1137,21 +1189,23 @@ def test_history_of_an_ancestor_does_not_report_a_denied_descendant(tmp_path: Pa
     Authorization answers "is this path denied". It cannot answer "does this path CONTAIN
     something denied", so `log` carries the exclusions exactly as `grep` does.
     """
-    root, commit = _repo(tmp_path)
+    root, _allowed, denied = _repo_with_split_history(tmp_path)
     served = serve(
-        root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
+        root, denied, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
     )
-    assert served.outcome is Outcome.MISS_NO_COMMITS
+    assert denied.encode() not in served.payload
 
 
-def test_the_history_exclusions_do_not_suppress_an_undenied_path(tmp_path: Path):
-    """Control for the test above: the exclusions must withhold the denied descendant and
-    nothing else, or the fix would be indistinguishable from `log` answering nothing."""
-    root, commit = _repo(tmp_path)
+def test_the_history_exclusions_withhold_only_the_denied_descendant(tmp_path: Path):
+    """The control, and it must live INSIDE the ancestor. Dropping all of `private` would
+    satisfy the test above just as well, so precision is what this asserts: the allowed
+    sibling's commit is still reported, from the same query."""
+    root, allowed, denied = _repo_with_split_history(tmp_path)
     served = serve(
-        root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), FILE_DENY
+        root, denied, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
     )
     assert served.outcome is Outcome.SERVED
+    assert allowed.encode() in served.payload
 
 
 def test_a_working_tree_symlink_does_not_redirect_or_deny_a_read(tmp_path: Path):
@@ -1561,6 +1615,7 @@ prior behaviour, confirm the named test fails, then restore:
 | `_serve_search` inserts `pathspec` instead of `literal_pathspec(pathspec)` | `test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix` |
 | `serve` passes `request.target` instead of `auth.path` | `test_the_normalized_path_is_what_git_reads` |
 | `_serve_history` drops `*exclude_pathspecs(policy)` | `test_history_of_an_ancestor_does_not_report_a_denied_descendant` |
+| `_serve_history` excludes the ancestor wholesale (`":(top,literal,exclude)" + target`) | `test_the_history_exclusions_withhold_only_the_denied_descendant` — measured: the over-broad spelling returns no commits at all, so only a control INSIDE the ancestor can tell it from the correct fix |
 | `_serve_read` uses `path.resolve()`-style containment before reading | `test_a_working_tree_symlink_does_not_redirect_or_deny_a_read` |
 | Move `verify_commit` back above the `authorize` branch | `test_a_denied_read_makes_no_git_call_at_all` trips the landmine |
 
@@ -1833,11 +1888,36 @@ def test_authorize_precedes_every_git_call_in_serve():
             assert site > authorized_at, f"{name} is called at {site}, before authorize at {authorized_at}"
 
 
+#: `os` is imported by `policy.py` for `fsencode`, so its spawning family is in reach and is
+#: named here alongside `subprocess`. Anything that starts a process outside `run_git` is a
+#: process the hardening never sees.
+_SPAWNING_MODULES = frozenset({"subprocess"})
+_SPAWNING_OS_CALLS = frozenset(
+    {"system", "popen", "execv", "execve", "execvp", "execvpe", "spawnv", "spawnve", "posix_spawn"}
+)
+
+
 def test_the_broker_makes_no_direct_subprocess_call():
     """A git call that skips `run_git` is a call the actor can turn into arbitrary
-    execution inside the control plane, and no layer of this design would report it."""
-    for path in _package_dir().glob("*.py"):
-        assert "subprocess" not in path.read_text(encoding="utf-8"), path
+    execution inside the control plane, and no layer of this design would report it.
+
+    AN AST CHECK, NOT A TEXT SCAN. Searching each module for the substring `subprocess`
+    reads as stricter and is simply broken: `policy.py`'s own docstring explains why a NUL
+    cannot cross `subprocess`'s argv boundary, and the guard would reject the module for
+    documenting the reason it exists. A guard that forbids discussing the hazard forces the
+    explanation out of the code, which is the opposite of what it was written for.
+    """
+    for name, tree in _module_asts().items():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name.split(".")[0] not in _SPAWNING_MODULES, f"{name}: {alias.name}"
+            elif isinstance(node, ast.ImportFrom):
+                assert (node.module or "").split(".")[0] not in _SPAWNING_MODULES, name
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                target = node.func.value
+                if isinstance(target, ast.Name) and target.id == "os":
+                    assert node.func.attr not in _SPAWNING_OS_CALLS, f"{name}: os.{node.func.attr}"
 ```
 
 - [ ] **Step 2: Run them and record what fails**
@@ -1904,11 +1984,13 @@ rather than how it looks. A POSIX class replays identically across parent
 locales, and the defined-miss classifier survives a translated parent, which is
 the case that would turn an ordinary absent path into a halted run.
 
-Three derived guards, from the AST rather than a maintained list: every run_git
-call sits in a known helper, authorize precedes every one of them by source
-position rather than by set membership, and the package makes no direct
-subprocess call. The membership spelling passed against a helper invoked above
-the authorization, which is the defect the guard exists to catch."
+Three derived guards, all from the AST and all over the whole package: every
+run_git call sits in a known helper, authorize precedes every one of them by
+source position rather than by set membership, and no module imports subprocess
+or reaches os's spawning family. The membership spelling passed against a helper
+invoked above the authorization, which is the defect the guard exists to catch,
+and the subprocess guard was a text scan that rejected policy.py for documenting
+why the NUL check exists."
 ```
 
 ---
