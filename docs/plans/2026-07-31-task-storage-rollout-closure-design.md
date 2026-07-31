@@ -1,6 +1,6 @@
 # Task-storage rollout closure — design
 
-**Status:** Accepted design; overlay-provenance amendment pending written review
+**Status:** Accepted
 **Date:** 2026-07-31
 
 ## 1. Decision
@@ -433,18 +433,19 @@ The first published toolkit prerequisite contains the parser change,
 regression tests, correction to the original storage design, and the
 canonical-plus-regenerated audit note.
 
-The second prerequisite contains only the overlay-provenance normalization,
+The second prerequisite bundle adds only the overlay-provenance normalization,
 its regression tests, and this rollout amendment. Run focused graph tests,
 Ruff, Pyright, and the full default Science suite before pushing it to
 `origin/main`. Consumer locks use the second public SHA; it contains the parser
 correction by ancestry.
 
-That sentence describes the corrective commit's scope, not the complete
-revision history consumers receive. At amendment review, toolkit `main` was
-eight commits ahead and zero behind `origin/main`, including the entity-index
-path scrub and scoped-validation documentation. Reconcile the rollout branch
-with that local `main` before the release gate; the published corrective SHA
-inherits those commits rather than pretending to be parser-plus-overlay only.
+That sentence describes the corrective prerequisite bundle's scope, not the
+complete revision history consumers receive. At final amendment review, toolkit `main`
+was 28 commits ahead and zero behind `origin/main`, including the entity-index
+path scrub, scoped-validation documentation, and the merged evidence-broker
+session work. Reconcile the rollout branch with that local `main` before the
+release gate; the published corrective SHA inherits those commits rather than
+pretending to be parser-plus-overlay only.
 
 At design review, local toolkit `main` was one commit ahead and zero behind
 `origin/main`, so the first prerequisite push had a clean ancestry. Reconfirm
