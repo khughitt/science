@@ -23,7 +23,7 @@ from science_tool.cli import main
 
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
-    "exempt": 121,
+    "exempt": 122,
     "deferred": 102,
 }
 
@@ -166,7 +166,10 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
     validation acceptance, taking the partition to 69/122/102 = 293. Validation
     sidecar retirement removes the fixed-output `project artifacts
     port-validate-sidecar` leaf and its exemption, leaving the live partition at
-    69/121/102 = 292.
+        69/121/102 = 292. Evidence Broker Plan 3 then adds the fixed four-field
+        `evidence serve` receipt as one exempt leaf; served bytes never reach stdout and
+        its target/path strings are model-bounded, taking the partition to
+        69/122/102 = 293.
     """
     actual = {
         "budgeted": len(BUDGETS),

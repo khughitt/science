@@ -157,6 +157,7 @@ EXEMPTIONS: dict[str, str] = {
     "distill pykeen": "single snapshot-path confirmation",
     "entities register-kind": "single registration result",
     "entity review": "single review result",
+    "evidence serve": "fixed four-field receipt; served bytes are written outside stdout and target/path fields are bounded",
     "feedback scaffold-test": "three fixed guidance lines for one scaffold",
     "feedback update": "single update confirmation",
     "graph init": "at most three fixed initialization guidance lines",
