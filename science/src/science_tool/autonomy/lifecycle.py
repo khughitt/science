@@ -18,13 +18,20 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, ValidationError
 from science_model.audit.subjects import SubjectError, normalize_project_path
 from science_model.autonomous_runs import (
+    RUN_ID_PREFIX,
     AutonomousRunRecord,
     PolicyIdentity,
     RunBudget,
     RunDisposition,
     RunTier,
 )
-from science_model.evidence_broker import EvidenceSession, EvidenceSessionSpec, InlineInput
+from science_model.evidence_broker import (
+    REPLAY_PROTOCOL_VERSION,
+    EvidenceExposure,
+    EvidenceSession,
+    EvidenceSessionSpec,
+    InlineInput,
+)
 
 from science_tool.autonomy.baseline import (
     BaselineError,
@@ -57,7 +64,13 @@ from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.identity import graph_uri
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
-from science_tool.evidence_broker.journal import create_journal
+from science_tool.evidence_broker.journal import (
+    JournalError,
+    count_requests,
+    create_journal,
+    open_journal,
+    read_journal,
+)
 
 
 class RepositoryStateError(ValueError):
@@ -219,6 +232,7 @@ def finish_run(
     project_root: Path,
     *,
     baseline_path: Path,
+    expect_run: str | None = None,
     head: str,
     ended: datetime,
     tokens: int | None,
@@ -242,11 +256,32 @@ def finish_run(
     except BaselineError as exc:
         return RunOutcome(disposition=RunDisposition.UNWIRED, record=None, reason=str(exc))
 
+    if expect_run is not None and baseline.run_id.removeprefix(
+        RUN_ID_PREFIX
+    ) != expect_run.removeprefix(RUN_ID_PREFIX):
+        return RunOutcome(
+            disposition=RunDisposition.UNWIRED,
+            record=None,
+            reason=f"the baseline at {baseline_path} names {baseline.run_id!r}, not {expect_run!r}",
+        )
+
+    exposure: EvidenceExposure | None = None
+    if baseline.evidence is not None:
+        try:
+            exposure = _seal_evidence(baseline.evidence, project_root=project_root)
+        except (JournalError, ValidationError) as exc:
+            return RunOutcome(
+                disposition=RunDisposition.UNWIRED,
+                record=None,
+                reason=f"the brokered run's exposure could not be sealed: {exc}",
+            )
+
     def _unwired(reason: str) -> RunOutcome:
         return _finalize(
             project_root, baseline,
             disposition=RunDisposition.UNWIRED, reason=reason, head=head, ended=ended,
             tokens=tokens, wall_clock_seconds=wall_clock_seconds,
+            evidence=exposure,
         )
 
     try:
@@ -302,6 +337,7 @@ def finish_run(
             ),
             head=head, ended=ended, tokens=tokens, wall_clock_seconds=wall_clock_seconds,
             deltas=deltas, denials=tuple(verdict.denials), mark_issues=mark_issues,
+            evidence=exposure,
         )
 
     return _finalize(
@@ -309,6 +345,27 @@ def finish_run(
         disposition=RunDisposition.CLEAN,
         reason="belief basis unmoved, every change on the tier's allowlist, marks consistent",
         head=head, ended=ended, tokens=tokens, wall_clock_seconds=wall_clock_seconds,
+        evidence=exposure,
+    )
+
+
+def _seal_evidence(session: EvidenceSession, *, project_root: Path) -> EvidenceExposure:
+    """Copy the descriptor-pinned journal into the permanent run record."""
+    with open_journal(session.journal_path, project_root=project_root) as handle:
+        entries = read_journal(handle)
+    stamped = tuple(
+        entry.model_copy(update={"commit": session.commit}) if entry.op == "inline" else entry
+        for entry in entries
+    )
+    return EvidenceExposure(
+        commit=session.commit,
+        budget=session.budget,
+        requests_used=count_requests(stamped),
+        instrument=session.instrument,
+        surface_policy=session.surface_policy,
+        inline=session.inline,
+        replay_protocol=REPLAY_PROTOCOL_VERSION,
+        entries=stamped,
     )
 
 
@@ -371,6 +428,7 @@ def _finalize(
     deltas: tuple[BasisDelta, ...] = (),
     denials: tuple[Denial, ...] = (),
     mark_issues: tuple[MarkIssue, ...] = (),
+    evidence: EvidenceExposure | None = None,
 ) -> RunOutcome:
     """Build and write the attestation. The single place a record comes into existence.
 
@@ -396,6 +454,7 @@ def _finalize(
             ended=ended,
             budget=RunBudget(tokens=tokens, wall_clock_seconds=wall_clock_seconds),
             disposition=disposition,
+            evidence=evidence,
         )
     except ValidationError as exc:
         # The record could not even be constructed, so nothing is attested. Report it as

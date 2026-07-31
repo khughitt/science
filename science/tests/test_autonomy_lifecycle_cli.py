@@ -279,6 +279,75 @@ def test_a_finish_with_no_budget_option_is_an_argument_error(project: Path, base
     assert not (project / "runs").exists(), "an argument error must attest nothing"
 
 
+def test_finish_refuses_both_baseline_and_session(project: Path, baseline_path: Path) -> None:
+    _start(project, baseline_path)
+    result = _finish(project, baseline_path, "--session", "2026-07-25-curation-sweep-a3f1")
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_finish_refuses_neither_baseline_nor_session(project: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "finish",
+            "--project-root",
+            str(project),
+            "--head",
+            _git(project, "rev-parse", "HEAD"),
+            "--tokens",
+            "1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_finish_resolves_a_brokered_session_handle(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    opened = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "start",
+            "--project-root",
+            str(project),
+            "--agent",
+            AGENT,
+            "--model",
+            "test-model",
+            "--short-id",
+            "a3f1",
+            "--broker-spec",
+            str(_broker_spec(tmp_path / "spec.json")),
+            "--json",
+        ],
+    )
+    assert opened.exit_code == 0, opened.output
+    run_id = json.loads(opened.output)["run_id"]
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "finish",
+            "--project-root",
+            str(project),
+            "--session",
+            run_id,
+            "--head",
+            _git(project, "rev-parse", "HEAD"),
+            "--tokens",
+            "1",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["record"]["evidence"] is not None
+
+
 def test_start_refuses_an_agent_slug_the_record_could_never_carry(project: Path, baseline_path: Path):
     """Fail at `start`, not hours later when `finish` builds the record and discovers the
     identity is unusable -- by then the run's work exists and can never be attested."""

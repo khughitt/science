@@ -135,6 +135,19 @@ def _finish(project: Path, baseline_path: Path):
     )
 
 
+def _start_brokered(project: Path, tmp_path: Path, monkeypatch, *, inline_paths=()):
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    return start_run(
+        project,
+        agent=AGENT,
+        model="test-model",
+        tier=RunTier.BELIEF_NEUTRAL,
+        short_id="a3f1",
+        started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        evidence=_spec(inline_paths=inline_paths),
+    )
+
+
 def _spec(*, inline_paths: tuple[Path, ...] = ()) -> EvidenceSessionSpec:
     return EvidenceSessionSpec(
         budget=2,
@@ -292,6 +305,79 @@ def test_start_writes_no_run_record(project: Path, baseline_path: Path):
         "materialize_graph is not byte-deterministic across two calls; every dirty-tree "
         "test in this module would then pass for the wrong reason"
     )
+
+
+def test_a_brokered_run_seals_its_exposure(project: Path, tmp_path: Path, monkeypatch) -> None:
+    from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+    from science_tool.evidence_broker.session import Session
+
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    Session(project, baseline.evidence).request(
+        EvidenceRequest(op=EvidenceOp.READ, target="science.yaml")
+    )
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.record is not None
+    exposure = outcome.record.evidence
+    assert exposure is not None
+    assert exposure.requests_used == 1
+    assert exposure.surface_policy == baseline.evidence.surface_policy
+    assert exposure.inline == baseline.evidence.inline
+    assert exposure.entries[0].target == "science.yaml"
+
+
+def test_inline_entries_are_stamped_with_the_session_commit(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    baseline = _start_brokered(
+        project, tmp_path, monkeypatch, inline_paths=(Path("science.yaml"),)
+    )
+    assert baseline.evidence is not None
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.record is not None and outcome.record.evidence is not None
+    assert {entry.commit for entry in outcome.record.evidence.entries} == {baseline.base_commit}
+
+
+@pytest.mark.parametrize("disposition", ["clean", "quarantined", "unwired"])
+def test_a_missing_journal_writes_no_record_in_every_disposition(
+    project: Path, tmp_path: Path, monkeypatch, disposition: str
+) -> None:
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    if disposition == "quarantined":
+        paper = project / "entities" / "papers" / "x.md"
+        paper.write_text(
+            paper.read_text(encoding="utf-8").replace(
+                "venue: Nature", "venue: Nature\nmethods_summary: rewritten"
+            ),
+            encoding="utf-8",
+        )
+        _commit_as_agent(project, "docs: rewrite methods", baseline.run_id)
+    elif disposition == "unwired":
+        monkeypatch.setattr(toolkit_module, "toolkit_is_clean", lambda root=None: False)
+    baseline.evidence.journal_path.unlink()
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.disposition is RunDisposition.UNWIRED
+    assert outcome.record is None
+
+
+def test_finish_run_checks_the_handle_against_the_baseline_it_reads(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    outcome = finish_run(
+        project,
+        baseline_path=baseline.evidence.journal_path.parent / "baseline.json",
+        expect_run="2026-07-25-curation-sweep-other",
+        head=_git(project, "rev-parse", "HEAD"),
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC),
+        tokens=1,
+        wall_clock_seconds=1,
+    )
+    assert outcome.disposition is RunDisposition.UNWIRED
+    assert outcome.record is None
+    assert "not '2026-07-25-curation-sweep-other'" in outcome.reason
 
 
 def test_an_allowlisted_edit_finishes_clean(project: Path, baseline_path: Path):
