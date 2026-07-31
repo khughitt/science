@@ -20,7 +20,7 @@ output at `finish`; `evidence/cli.py` gives the actor exactly one command.
 
 Implements Spec 2a of the autonomous-audit program:
 [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-**revision 12** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
+**revision 13** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
 `served/`), §4.1 (run record), §4.3 (baseline), §6 (seal failure), and the §7 bullets named below.
 
 Plan 1 (`57b09bf0`) and plan 2 (`dab47dc3`) are merged. This is plan 3 of four.
@@ -69,6 +69,21 @@ journal creation moving to `start --broker-spec`, an exhausted budget journaling
 refusal writing no `served/` file. Read revision 12's header paragraph before Task 1 — it explains
 why the refusal row is the whole reason this plan stores an outcome at all.
 
+**Revision 13** came from review of *this plan* and closes two more fail-opens, both design-level:
+`InlineInput.target` must be a normalized project-relative path (an absolute one is a manifest entry
+`LocationEvidence` can never express, so it would carry `FULL` coverage no citation could reach), and
+the served file is written **before** the journal line (an entry appended first claims an exposure a
+failed delivery never made — and replay confirms it, because replay re-serves from the commit and
+never consults `served/`). Both are in Tasks 3 and 4 below.
+
+That review also found six plan-level defects, all fixed in place: the `served/` containment check
+design §3.5 requires and this plan had omitted; a `TypeError` escape in the journal parser that would
+have raised out of `finish_run` instead of returning `UNWIRED`; the widened exception boundary and the
+`"baseline_path": "None"` receipt on brokered `start`; a vacuous mutation and an overclaiming docstring
+on the unbudgeted-path guard; and the `StrEnum` and `git add` slips. The mutation instructions in
+Task 1 were themselves an instance of the conjunction defect — they asked for one mutation of a
+validator that enforces two rules.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section.
@@ -90,6 +105,10 @@ Every task's requirements implicitly include this section.
 7. Line length 120. `cd science && uv run ruff check && uv run pyright` and
    `cd science/model && uv run --frozen pytest` both clean before every commit.
 8. Conventional commits. No AI-attribution trailer or footer.
+9. **`git commit -am` stages only tracked files.** Every task here creates new files; `git add`
+   them explicitly before committing, and check `git status --porcelain` is clean afterwards. A
+   task that "committed" while leaving its module untracked passes its own tests and fails the
+   next task's import.
 
 ---
 
@@ -381,10 +400,23 @@ evidence.)
 
 - [ ] **Step 5: Certify each validator by mutation**
 
-For each of the four validators in turn: comment out its body (`return self`), re-run, and confirm
-**the specific test for that validator** fails and the others still pass. A validator whose removal
-fails nothing, or fails everything, is not certified by the test that claims it. Restore, then record
-in your report which four mutations you ran and what failed under each.
+There are **three** validators on `EvidenceExposure`, and one of them enforces a conjunction — so
+this is four mutations, not three, and not the "one per validator" the count suggests:
+
+| Mutation | Must fail | Must still pass |
+|---|---|---|
+| `_spend_is_derived_then_bounded`: delete the **count** branch only | `test_requests_used_must_equal_the_non_inline_entry_count` | the budget test |
+| `_spend_is_derived_then_bounded`: delete the **bound** branch only | `test_requests_used_may_not_exceed_the_budget` | the count test |
+| `_one_evidence_surface` → `return self` | `test_entries_must_agree_with_the_exposure_commit` | others |
+| `_inline_entries_were_served` → `return self` | `test_an_inline_entry_carries_served` | others |
+
+**Do not mutate `_spend_is_derived_then_bounded` as a whole.** Removing it fails *both* tests, which
+proves neither branch: a guard that certifies a conjunction certifies neither half, and this
+validator is the conjunction. The two branches are also ordered on purpose — the bound is meaningless
+against a count nobody tied to `entries` — so the count-branch mutation is the one that matters most.
+
+`_exposure_is_bound_to_this_run` lives on `AutonomousRunRecord` and is certified separately in step 7.
+Restore everything and record all four mutations and their results in your report.
 
 - [ ] **Step 6: Hang `evidence` on the run record**
 
@@ -432,8 +464,11 @@ Delete the `class Outcome(StrEnum)` block at `serve.py:45-50` and import it inst
 from science_model.evidence_broker import Outcome, SurfacePolicy
 ```
 
-`MISS_MARKERS` keeps its `dict[Outcome, bytes]` annotation and its position. No other line of
-`serve.py` changes — every existing reference is already `Outcome.X`.
+`MISS_MARKERS` keeps its `dict[Outcome, bytes]` annotation and its position. Every existing reference
+is already `Outcome.X`, so no call site moves — but **one more line must go**: `serve.py:21` imports
+`StrEnum` solely for the class being deleted, and leaving it is an immediate `ruff` F401. Delete
+`from enum import StrEnum` too, and confirm with `grep -n StrEnum serve.py` returning nothing before
+you commit.
 
 - [ ] **Step 9: Confirm plan 2's suite is untouched by the move**
 
@@ -588,6 +623,19 @@ def test_appends_never_rewrite(tmp_path: Path) -> None:
     assert journal.read_text(encoding="utf-8").startswith(first)
 
 
+@pytest.mark.parametrize("payload", ["[]", "null", "1", '"a string"'])
+def test_valid_json_of_the_wrong_shape_is_a_journal_error(tmp_path: Path, payload: str) -> None:
+    """These parse fine, then `event["event"]` raises `TypeError` -- NOT a `ValueError`, so it
+    escapes the parse guard, and `finish_run` catches only `JournalError`/`ValidationError`.
+    One such line would raise out of `finish_run` instead of returning `UNWIRED, record=None`."""
+    journal, project = tmp_path / "j.jsonl", tmp_path / "project"
+    project.mkdir()
+    create_journal(journal, project_root=project, inline=())
+    journal.write_text(payload + "\n", encoding="utf-8")
+    with pytest.raises(JournalError, match="JSON object"):
+        read_journal(journal, project_root=project)
+
+
 def test_the_journal_is_one_object_per_line(tmp_path: Path) -> None:
     """Append-only means line-oriented; a pretty-printed entry cannot be appended to."""
     journal, project = tmp_path / "j.jsonl", tmp_path / "project"
@@ -736,6 +784,13 @@ def read_journal(path: Path, *, project_root: Path) -> tuple[ExposureEntry, ...]
             event = json.loads(line)
         except json.JSONDecodeError as exc:
             raise JournalError(f"{path} line {number} is not JSON: {exc}") from exc
+        if not isinstance(event, dict):
+            # `[]`, `null` and `1` are all valid JSON. Indexing them raises `TypeError`, which
+            # is NOT a `ValueError` -- it would escape this function uncaught, and `finish_run`
+            # catches only `JournalError`/`ValidationError`, so a journal holding one valid
+            # non-object line would raise out of `finish_run` instead of returning design §6's
+            # `UNWIRED, record=None`. Checked before indexing rather than caught after.
+            raise JournalError(f"{path} line {number} is not a JSON object")
         try:
             if event["event"] == "inline":
                 entries.append(ExposureEntry(
@@ -779,8 +834,12 @@ Expected: exit 0.
 2. Wrap the `json.loads` call in `try: … except json.JSONDecodeError: continue` and confirm
    `test_a_truncated_line_is_an_error_not_an_empty_journal` fails. A parser that skips damaged
    lines converts a tampered journal into a shorter honest one.
+3. Delete the `isinstance(event, dict)` check and confirm every parametrization of
+   `test_valid_json_of_the_wrong_shape_is_a_journal_error` fails with `TypeError` — the point is
+   the *exception type*, not merely that it raises, because `TypeError` is what escapes
+   `finish_run`'s handler.
 
-Record both in the report.
+Record all three in the report.
 
 - [ ] **Step 6: Prove the lock actually serializes**
 
@@ -901,6 +960,45 @@ def test_two_requests_serving_identical_bytes_coincide(session_at, run_dir) -> N
 def test_seeding_leaves_requests_used_at_zero(session_at) -> None:
     session = session_at(budget=3, inline_count=4)
     assert session.requests_used() == 0
+
+
+def test_a_run_dir_inside_the_project_cannot_construct_a_session(project, session_model) -> None:
+    """Design §3.5: `served/` is created under the same containment check as the journal.
+    An unsafe session must not be CONSTRUCTIBLE -- every file it wrote into the tree would be
+    a `report-only` path-gate denial, failing the run for doing what the design prescribes."""
+    with pytest.raises(BaselineError, match="inside the project"):
+        Session(project, session_model, run_dir=project / "runs")
+
+
+def test_a_symlinked_run_dir_pointing_into_the_project_is_refused(project, tmp_path, session_model) -> None:
+    """`reject_baseline_inside_project` judges as-spelled AND as-resolved. A path spelled
+    outside the tree may still land inside through a link the actor controls."""
+    link = tmp_path / "outside"
+    link.symlink_to(project / "runs")
+    with pytest.raises(BaselineError, match="inside the project"):
+        Session(project, session_model, run_dir=link)
+
+
+def test_a_failed_served_write_records_nothing(session_at, monkeypatch) -> None:
+    """DELIVER FIRST, RECORD SECOND. An entry appended before delivery succeeds claims an
+    exposure that never happened -- and replay confirms it, because replay re-serves from the
+    commit and never consults `served/`. Fail closed: no bytes, no line, no round spent."""
+    session = session_at(budget=3)
+    monkeypatch.setattr(Session, "_write_served", _raising_oserror)
+    with pytest.raises(OSError):
+        session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    assert session.requests_used() == 0
+
+
+def test_the_served_bytes_leave_the_tree_untouched(session_at, project) -> None:
+    """§7's write-gate bullet, composed against the shipped gate rather than asserted:
+    a reviewer that serves several files produces a ChangeSet that `evaluate` finds EMPTY."""
+    session = session_at(budget=5)
+    for target in ("a.md", "b.md", "copy-of-a.md"):
+        session.request(EvidenceRequest(op=EvidenceOp.READ, target=target))
+    change_set = extract_change_set(project, BASE, head_of(project))
+    assert evaluate(change_set, tier=RunTier.REPORT_ONLY, report_path=None).denials == []
+    assert change_set.changes == ()
 ```
 
 - [ ] **Step 2: Run them and watch them fail**
@@ -920,8 +1018,11 @@ EVERY REQUEST THAT REACHES `request` SPENDS A ROUND, including denials and inval
 denials make probing the deny policy unlimited, and a spent round is also what makes two runs
 comparable. The one exception is an EXHAUSTED budget, which appends nothing -- see `request`.
 
-THE ONLY WAY TO REACH `serve` FROM HERE IS THROUGH `request`. This module deliberately does not
-re-export `serve`; an unbudgeted path to it would be a budget in name only.
+SERVING HAPPENS IN EXACTLY ONE PLACE, inside `request`'s locked critical section, so the count, the
+budget check, the serve and the append cannot be separated. This module binds `serve` privately and
+calls it once; that is a readability claim and NOT a security boundary -- any caller can import
+`serve` directly, and Python offers no way to prevent it. The budget binds the session's own path,
+which is the path the CLI and 2b's dispatch actually take.
 """
 
 from __future__ import annotations
@@ -932,6 +1033,7 @@ from pathlib import Path
 
 from science_model.evidence_broker import EvidenceSession, ExposureEntry, Outcome
 
+from science_tool.autonomy.baseline import reject_baseline_inside_project
 from science_tool.evidence_broker.journal import (
     append_request,
     journal_lock,
@@ -939,7 +1041,11 @@ from science_tool.evidence_broker.journal import (
     requests_used,
 )
 from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
-from science_tool.evidence_broker.serve import serve
+# Bound privately so this module's namespace does not re-export it. That is a readability
+# claim, not a security boundary: any caller can import `serve` directly and Python offers no
+# way to prevent it. The property that IS enforceable, and is what `budgeted` operationally
+# means, is asserted in the suite -- one call site, inside the lock. See Task 3 step 6.
+from science_tool.evidence_broker.serve import serve as _serve
 
 _BUDGET_NOTICE = "evidence budget exhausted for this run"
 
@@ -966,6 +1072,15 @@ class Session:
         self._session = session
         self._served_dir = run_dir / "served"
         self._project_root = repo_root
+        # CONTAINMENT ON THE CONSTRUCTOR, not at write time. `run_dir` is a parameter, and the
+        # in-process interface design §3.4.1 offers 2b hands it in directly -- so without this
+        # check a caller could aim `served/` into the project tree, where every written file
+        # becomes a `report-only` path-gate denial and the run fails the gate for doing exactly
+        # what this design tells it to do. Design §3.5 requires it ("created under the same
+        # containment check as the journal"); checking here means an unsafe session cannot be
+        # CONSTRUCTED, rather than failing on its first served byte.
+        reject_baseline_inside_project(self._served_dir, repo_root)
+        reject_baseline_inside_project(session.journal_path, repo_root)
 
     def requests_used(self) -> int:
         """Derived by counting `request` events. There is no counter to reset."""
@@ -987,10 +1102,24 @@ class Session:
             if self.requests_used() >= self._session.budget:
                 return Receipt(outcome=Outcome.REFUSED, notice=_BUDGET_NOTICE)
 
-            served = serve(
+            served = _serve(
                 self._repo_root, self._session.commit, request, self._session.surface_policy
             )
             digest = hashlib.sha256(served.payload).hexdigest()
+
+            # DELIVER FIRST, RECORD SECOND. The journal is the record of what the requester was
+            # SHOWN. Appending before the write succeeds claims an exposure that may not have
+            # happened: a failed write leaves the requester with no bytes and no receipt while
+            # the seal copies an entry saying `served` -- and replay reproduces it perfectly,
+            # because replay re-serves from the commit and never consults `served/`. The
+            # reviewer would hold `FULL` coverage over a file it never received. Writing first
+            # inverts the failure: bytes on disk with no journal line are bytes nothing counts,
+            # the round is not spent, and no coverage is granted. Both orderings can fail; only
+            # this one fails closed.
+            path: Path | None = None
+            if served.outcome is not Outcome.REFUSED:
+                path = self._write_served(digest, served.payload)
+
             append_request(
                 self._session.journal_path,
                 ExposureEntry(
@@ -1002,6 +1131,7 @@ class Session:
                     outcome=served.outcome,
                 ),
             )
+
             if served.outcome is Outcome.REFUSED:
                 # No file: every refusal serves zero bytes, so content addressing would land
                 # them all on one `served/e3b0c442...` -- a real, empty, readable file that
@@ -1010,8 +1140,6 @@ class Session:
                     outcome=served.outcome,
                     notice=served.denial.notice if served.denial is not None else None,
                 )
-
-            path = self._write_served(digest, served.payload)
             return Receipt(outcome=served.outcome, sha256=digest, path=path)
 
     def _write_served(self, digest: str, payload: bytes) -> Path:
@@ -1047,13 +1175,46 @@ Expected: exit 0.
 
 - [ ] **Step 6: Guard the unbudgeted path**
 
-Write an AST-derived test — not a roster — asserting no name bound at module scope in `session.py`
-is `serve`'s function object re-exported, and that `serve` is called from exactly one place in the
-module. Model it on the shape plan 2 used in `test_evidence_broker_canonical.py`, and follow that
-file's lesson: use `ast`, not a text scan, because a text scan's scope is the whole file including
-the prose above, which mentions `serve` five times.
+**Read this framing before writing the test.** §7 asks that "no unbudgeted path to `serve` is
+exported", and the obvious guard for it is worthless twice over. `from …serve import serve` already
+binds the name, so `session.serve` is reachable whatever the guard says, and `serve = serve` at module
+scope is a no-op that would "prove" the guard while changing nothing. Worse, no structural check can
+stop `from science_tool.evidence_broker.serve import serve` in a caller — Python has no such
+boundary, and a guard that claims one is a guard narrower than its rule, which is this branch's
+recurring defect.
 
-Certify it by adding `serve = serve` at module scope and confirming the test fails.
+So do not assert an unreachable property. Assert the one that is real and load-bearing: **inside this
+module, `serve` is called exactly once, and that call is lexically inside `Session.request`'s
+`journal_lock` block.** That is what "budgeted" means operationally — the count, the check, the serve
+and the append are one critical section — and it is exactly what a later refactor would break.
+
+Import it as `from science_tool.evidence_broker.serve import serve as _serve` so the module namespace
+does not re-export it, then walk the module with `ast`:
+
+```python
+def test_serving_happens_only_inside_the_locked_critical_section() -> None:
+    tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == "_serve"
+    ]
+    assert len(calls) == 1
+    locked = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.With)
+        and any(_calls_journal_lock(item.context_expr) for item in node.items)
+    ]
+    assert any(calls[0] in ast.walk(block) for block in locked)
+```
+
+Use `ast`, not a text scan — a text scan's scope is the whole file including the prose above, which
+mentions `serve` five times. That is the mistake plan 2 made and fixed.
+
+Certify it with **two** mutations, because one call site inside one `with` block is a conjunction:
+move the `_serve(...)` call above the `with journal_lock(...)` line (confirm it fails), and add a
+second `_serve(...)` call anywhere in the module (confirm it fails). Passing only one of these means
+the guard pins only one half.
 
 - [ ] **Step 7: Lint, type-check, commit**
 
@@ -1074,8 +1235,10 @@ git commit -m "feat(evidence-broker): enforce the round budget in a session"
 - Test: `science/tests/test_autonomy_lifecycle.py`, `science/tests/test_autonomy_cli.py`
 
 **Interfaces:**
-- Consumes: `EvidenceSessionSpec`, `EvidenceSession`, `InlineInput` (Task 1); `create_journal`
-  (Task 2); `control_plane.run_dir` (plan 1).
+- Consumes: `EvidenceSessionSpec`, `EvidenceSession`, `InlineInput` (Task 1); `create_journal`,
+  `JournalError` (Task 2); `control_plane.run_dir`, `control_plane.run_slug` (plan 1);
+  `normalize_project_path` and `SubjectError` from `science_model.audit.subjects` — both new
+  imports in `lifecycle.py`.
 - Produces: `start_run(..., baseline_out: Path | None = None, evidence: EvidenceSessionSpec | None
   = None) -> RunBaseline` and `RunBaseline.evidence: EvidenceSession | None`.
 
@@ -1094,15 +1257,32 @@ def test_one_of_the_two_is_required(project) -> None:
         start_run(project, ..., baseline_out=None, evidence=None)
 
 
-def test_start_computes_the_inline_manifest_itself(project, tmp_path) -> None:
+def test_start_computes_the_inline_manifest_itself(project) -> None:
     """A supervisor that declared those numbers would be attesting to bytes it had not read."""
-    seed = tmp_path / "prompt.md"
+    seed = project / "private" / "rubric.md"          # in-tree, and inside a denied prefix:
+    seed.parent.mkdir()                               # design §3.4's motivating case exactly
     seed.write_text("one\ntwo\n", encoding="utf-8")
-    baseline = start_run(project, ..., evidence=spec_with(inline_paths=(seed,)))
+    baseline = start_run(project, ..., evidence=spec_with(inline_paths=(Path("private/rubric.md"),)))
     assert baseline.evidence is not None
     (manifest,) = baseline.evidence.inline
     assert manifest.lines == 2
     assert manifest.sha256 == hashlib.sha256(seed.read_bytes()).hexdigest()
+
+
+def test_an_inline_target_is_a_path_a_citation_could_name(project) -> None:
+    """THE POINT OF THE NORMALIZATION. An inline target that `LocationEvidence` cannot express
+    is a seeded file granted FULL coverage no review can ever reach."""
+    baseline = start_run(project, ..., evidence=spec_with(inline_paths=(Path("private/rubric.md"),)))
+    (manifest,) = baseline.evidence.inline
+    assert LocationEvidence(path=manifest.target).path == manifest.target
+
+
+def test_an_inline_path_outside_the_project_is_refused(project, tmp_path) -> None:
+    """Readable, and provably unciteable. Refused at `start` rather than silently manifested."""
+    outside = tmp_path / "prompt.md"
+    outside.write_text("x\n", encoding="utf-8")
+    with pytest.raises(BaselineError, match="project-relative"):
+        start_run(project, ..., evidence=spec_with(inline_paths=(outside,)))
 
 
 def test_start_creates_the_journal_and_seeds_it(project, tmp_path) -> None:
@@ -1194,7 +1374,7 @@ Then, once the basis is captured and before writing the baseline:
             budget=evidence.budget,
             surface_policy=evidence.surface_policy,
             instrument=evidence.instrument,
-            inline=_read_inline_manifest(evidence.inline_paths),
+            inline=_read_inline_manifest(evidence.inline_paths, project_root=project_root),
         )
         # JOURNAL FIRST. A baseline that exists must imply a journal that exists: design §6
         # writes NO RECORD AT ALL for a brokered baseline beside a missing journal, so the
@@ -1206,22 +1386,38 @@ Then, once the basis is captured and before writing the baseline:
 with the manifest helper:
 
 ```python
-def _read_inline_manifest(paths: tuple[Path, ...]) -> tuple[InlineInput, ...]:
+def _read_inline_manifest(paths: tuple[Path, ...], *, project_root: Path) -> tuple[InlineInput, ...]:
     """`start` reads each path and computes its digest and line count ITSELF.
 
-    `target` is the path as supplied. These files are the supervisor's own prompt inputs and
-    need not live in the project tree at all, so they are not put through
-    `normalize_project_path` -- which would refuse an absolute path, and refusing the
-    supervisor's own prompt is refusing the run.
+    `target` IS A NORMALIZED PROJECT-RELATIVE PATH, and the supplied paths must be too (design
+    §4.3). Storing the supervisor's absolute path would produce a manifest entry NO CITATION CAN
+    NAME: `LocationEvidence.path` runs `normalize_project_path`, which refuses an absolute path
+    outright, so the inline input would carry `FULL` coverage under §5.1 that no `Evidence` value
+    could ever reach -- a seeded file that is provably unciteable.
+
+    That is not a limitation to work around. §3.4's motivating case is exactly in-tree: "an
+    instrument that legitimately lives inside a denied prefix", seeded so it can be accounted
+    for despite the policy denying it. A file outside the project can be read but never cited,
+    so seeding one accomplishes nothing and is refused here rather than silently manifested.
+
+    The normalized spelling is also what lets §5.1 compare an inline target against a read one
+    -- "`FULL` supersedes `LINES`" is a statement about two entries naming ONE path.
     """
     manifest: list[InlineInput] = []
     for path in paths:
         try:
-            payload = path.read_bytes()
+            target = normalize_project_path(str(path))
+        except SubjectError as exc:
+            raise BaselineError(
+                f"inline input {path} is not a project-relative path: {exc}. An inline target "
+                "that `LocationEvidence` cannot express is a seeded file no review can cite."
+            ) from exc
+        try:
+            payload = (project_root / target).read_bytes()
         except OSError as exc:
-            raise BaselineError(f"could not read inline input {path}: {exc}") from exc
+            raise BaselineError(f"could not read inline input {target}: {exc}") from exc
         manifest.append(InlineInput(
-            target=str(path),
+            target=target,
             sha256=hashlib.sha256(payload).hexdigest(),
             lines=len(payload.splitlines()),
         ))
@@ -1253,10 +1449,40 @@ Pass `evidence=session` into the `RunBaseline(...)` construction.
 )
 ```
 
-`--baseline-out` loses `required=True` and gains `default=None`. The command reads and validates
-the spec with `EvidenceSessionSpec.model_validate_json(...)`, letting a `ValidationError` become the
-exit-2 `could not start:` message like every other failure there. Add `run_dir` to the payload as
-`"run_dir"` when brokered, so a supervisor can find what it just opened.
+`--baseline-out` loses `required=True` and gains `default=None`.
+
+**The existing exception boundary does not cover any of the new failures — widen it deliberately.**
+`start_command` today catches `(RunRecordError, ToolkitError, RepositoryStateError, BaselineError,
+ExtractError)`. Brokered start adds three escapes, none of them in that tuple:
+
+| New failure | Raises | Without the fix |
+|---|---|---|
+| `--broker-spec` file unreadable | `OSError` | traceback, exit 1 |
+| spec JSON invalid or wrong shape | `pydantic.ValidationError` | traceback, exit 1 |
+| journal already exists (a second `start` on one run) | `JournalError` | traceback, exit 1 |
+
+Exit 1 is what the documented codes read as *quarantined*, so each of these would misreport a run
+that never opened. Read and validate the spec inside the same `try`, and extend the tuple with
+`(OSError, ValidationError, JournalError)`.
+
+**`baseline_out` is reassigned inside `start_run`, so the command's own variable is still `None`.**
+The existing payload does `"baseline_path": str(baseline_out)`, which for a successful brokered start
+would report the string `"None"` — a receipt naming a path that does not exist, for the one flow whose
+whole purpose is that the supervisor did not choose the path. Derive both from what was actually
+written rather than recomputing the path calculation a second time:
+
+```python
+    directory = None if baseline.evidence is None else baseline.evidence.journal_path.parent
+    payload = {
+        ...,
+        "baseline_path": str(baseline_out if directory is None else directory / "baseline.json"),
+        "run_dir": None if directory is None else str(directory),
+    }
+```
+
+`journal_path.parent` **is** `run_dir` — it is the value `start_run` used, read back off the baseline
+it wrote, so the receipt cannot drift from the run even if the path calculation later changes. Assert
+both fields in the CLI test: a receipt is only useful if it is true.
 
 - [ ] **Step 8: Test the CLI exclusion, then commit**
 
@@ -1385,6 +1611,8 @@ is the conjunction defect plan 2 hit twice.
 
 ```bash
 cd science && uv run ruff check && uv run pyright && uv run --frozen pytest tests/test_evidence_broker_cli.py
+# `git add` explicitly: this task CREATES two files, and `commit -am` stages only tracked ones.
+git add science/src/science_tool/evidence_broker/cli.py science/tests/test_evidence_broker_cli.py
 git commit -am "feat(evidence-broker): serve one request from a session handle"
 ```
 
@@ -1569,6 +1797,8 @@ holds exactly one file. This is §7's integration bullet minus its `append` clau
 cd science && uv run ruff check && uv run pyright
 cd science/model && uv run --frozen pytest
 cd ../ && uv run --frozen pytest        # ~10 min; the top-level agent runs this, not a subagent
+# `git add` explicitly: this task CREATES a test file, and `commit -am` stages only tracked ones.
+git add science/tests/test_evidence_broker_seal.py
 git commit -am "feat(autonomy): seal a brokered run's exposure into its record"
 ```
 

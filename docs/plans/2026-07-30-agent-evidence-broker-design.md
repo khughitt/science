@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 12)
+**Status:** partially implemented (revision 13)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -49,6 +49,14 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 13 comes from review of plan 3 and closes two more fail-opens, both of the first pattern.
+`InlineInput.target` had no specified spelling, and the absolute path an implementer would naturally
+store is one `LocationEvidence` can never express — a manifest entry granting `FULL` coverage that no
+citation can reach (§4.3). And §3.5 did not order the served-file write against the journal append; an
+entry appended first claims an exposure a failed delivery never made, and replay confirms it, because
+replay re-serves from the commit and never looks at `served/` (§3.5). Both are cases where the honest
+path and the fail-open path look identical in prose and differ by one line of code.
 
 Revisions 10 and 11 come from *building* plan 2 rather than reading it, and both are the second
 pattern again. Revision 10 corrects §5.1's grep output format, which said `<commit>:<path>:<line>:`
@@ -784,6 +792,15 @@ bytes cannot be aimed, and two requests that produce identical bytes coincide ha
 directory is created under the same containment check as the journal, so a relocated
 `SCIENCE_CONTROL_PLANE` cannot land it in the project tree.
 
+**The served file is written before the journal line, not after.** The journal is the record of what
+the requester was *shown*, so an entry appended before delivery succeeded claims an exposure that may
+not have happened: a failed write leaves the requester with no bytes and no receipt while the seal
+copies an entry saying `served`, and replay — which re-serves from the commit and never consults
+`served/` — reproduces that entry perfectly. The reviewer would then hold `FULL` coverage over a file
+it never received, which is support for a citation it could only have invented. Writing first inverts
+the failure: bytes on disk with no journal line are bytes nothing counts, so the round is not spent
+and no coverage is granted. Both orderings can fail; only one fails closed.
+
 **A refusal writes no file.** A policy denial, a malformed pattern and an exhausted budget all serve
 zero bytes, and content addressing maps all of them onto the digest of the empty string — so every
 refusal in every run would coincide on one `served/e3b0c442…`, and the receipt would name a real,
@@ -1068,6 +1085,20 @@ journal's `sha256` matches the manifest's.
 
 `lines` is carried so a line or span citation into an inline input can be checked the same way as one
 into a read file. Inline bytes are not in the tree, so a line count cannot be re-derived later.
+
+**`InlineInput.target` is a normalized project-relative path, and `EvidenceSessionSpec.inline_paths`
+are too.** Revisions 1–12 left the spelling open, and an implementation that stored the supervisor's
+own absolute path would produce a manifest entry **no citation can name**: `LocationEvidence.path`
+runs `normalize_project_path`, which refuses an absolute path outright, so an inline input would be
+granted `FULL` coverage under §5.1 that no `Evidence` value could ever reach. The motivating case in
+§3.4 is already in-tree — "an instrument that legitimately lives inside a denied prefix" — and that
+is the whole point of seeding: the file *is* a project path, and inline seeding is how it is accounted
+for despite the policy that denies it. A path outside the project can be *read* by `start`, but it
+cannot be cited, so seeding one accomplishes nothing and is refused rather than silently manifested.
+`start` therefore resolves each `inline_paths` entry against `project_root` to read the bytes, and
+stores the normalized project-relative spelling as `target` — the same spelling every other entry
+carries, which is what lets §5.1's "`FULL` supersedes `LINES`" compare an inline target against a read
+one at all.
 
 `surface_policy` is here for the reason given in §3.1: the deny prefixes are `:(exclude)` pathspecs on
 every search, so they are part of the query, and a query whose text is not fixed does not replay.
