@@ -29,10 +29,12 @@ from science_model.reasoning import (
 from science_tool.annotation.model import Annotation, Sidecar, TextualBody
 from science_tool.annotation.promote import entity_dest
 from science_tool.annotation.statement_extract import find_qualified_spans
-from science_tool.entities import _parse_markdown_file, write_entity_file
+from science_tool.dag.entity_frontmatter import Ownership, update_entity_file
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
 SYNTH_FIELDS: tuple[str, ...] = ("subject", "object", "predicate", "polarity", "claim_layer")
+# DERIVED from SYNTH_FIELDS, never retyped. `create_only` is empty: synthesize only updates.
+SYNTHESIZE_PROPOSITION = Ownership(frozenset(SYNTH_FIELDS) | {"reasoning_source"})
 _CANDIDATE_KEYS = frozenset({"proposition", "annotation", "override", *SYNTH_FIELDS})
 _PREDICATE_VALUES = frozenset(p.value for p in Predicate)
 _POLARITY_VALUES = frozenset(p.value for p in Polarity)
@@ -417,14 +419,20 @@ def apply_synthesis(
 
 
 def _write_proposition(
-    prop_ref: str, merged_fm: dict[str, Any], project_root: Path, as_of: date | None
+    proposition: str, merged_fm: dict[str, Any], project_root: Path, as_of: date | None
 ) -> None:
-    """Body-preserving frontmatter write: reconstruct the typed entity, keep the prose body.
+    """Contained frontmatter update: only synthesis-owned keys are overwritten.
 
-    The existing (possibly curated) markdown body is read and passed back verbatim; only
-    frontmatter fields change. `write_entity_file` preserves `created` and advances `updated`.
+    `proposition` is the trusted candidate identity; a mismatched `id` or `kind` in the current
+    frontmatter cannot redirect the update. The body and identity admission come from
+    `read_existing_target` inside `update_entity_file`, the only writer-side destination reader.
     """
-    dest = entity_dest(prop_ref, project_root)
-    _, body = _parse_markdown_file(dest)
-    prop = PropositionEntity(**merged_fm)          # re-runs interlock validator; extra keys ignored
-    write_entity_file(prop, project_root=project_root, body=body, as_of=as_of)
+    trusted_fm = dict(merged_fm)
+    trusted_fm.update(id=proposition, kind="proposition")
+    prop = PropositionEntity(**trusted_fm)
+    update_entity_file(
+        prop,
+        project_root=project_root,
+        ownership=SYNTHESIZE_PROPOSITION,
+        as_of=as_of,
+    )

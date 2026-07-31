@@ -31,7 +31,7 @@ from science_tool.annotation.synthesize import (
     statement_context,
     validate_candidate,
 )
-from science_tool.entities import _parse_markdown_file, write_entity_file
+from science_tool.entities import _parse_markdown_file
 
 
 def _ann(frag, atype, exact, *, body, promoted_to=None, status=Status.OPEN):
@@ -281,9 +281,15 @@ def _project(tmp_path: Path) -> Path:
 
 def _write_prop(root: Path, slug: str, *, title: str, body: str = "# t\n\n## Claim\n\nKEEP-ME\n",
                 **fields) -> str:
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION, create_entity_file
+
     ref = f"proposition:{slug}"
-    write_entity_file(PropositionEntity(id=ref, title=title, **fields),
-                      project_root=root, body=body)
+    create_entity_file(
+        PropositionEntity(id=ref, title=title, **fields),
+        project_root=root,
+        ownership=WORKBENCH_PROPOSITION,
+        create_body=body,
+    )
     return ref
 
 
@@ -381,6 +387,36 @@ def test_apply_is_atomic_on_interlock_error(tmp_path):
     assert "claim_layer" not in fm
 
 
+def test_apply_refuses_scoped_file_declaring_another_propositions_identity(tmp_path):
+    from science_tool.dag.entity_frontmatter import MalformedTargetError
+
+    root = _project(tmp_path)
+    scoped = _write_prop(root, "scoped", title="scoped claim")
+    _write_prop(root, "other", title="other claim")
+    scoped_path = root / "entities/propositions/scoped.md"
+    other_path = root / "entities/propositions/other.md"
+    scoped_path.write_text(
+        scoped_path.read_text(encoding="utf-8").replace(
+            "id: proposition:scoped", "id: proposition:other"
+        ),
+        encoding="utf-8",
+    )
+    before_scoped = scoped_path.read_text(encoding="utf-8")
+    before_other = other_path.read_text(encoding="utf-8")
+
+    with pytest.raises(MalformedTargetError, match="proposition:scoped"):
+        apply_synthesis(
+            [_cand({"claim_layer": "causal_effect"}, prop=scoped)],
+            current={scoped: _parse_markdown_file(scoped_path)[0]},
+            project_root=root,
+            source="llm-synth:m:proposition-synthesize-v1",
+            in_scope={scoped},
+        )
+
+    assert scoped_path.read_text(encoding="utf-8") == before_scoped
+    assert other_path.read_text(encoding="utf-8") == before_other
+
+
 def _scaffold_project(tmp_path: Path):
     root = _project(tmp_path)
     _write_prop(root, "brca1", title="BRCA1 affects instability", subject="BRCA1")
@@ -441,3 +477,35 @@ def test_cli_apply_writes_reasoning_fields(tmp_path):
                                              "--apply", "--input", str(cpath), "--format", "json"])
     assert r2.exit_code == 0, r2.output
     assert json.loads(r2.output)["updated"] == 0
+
+
+def test_cli_apply_reports_malformed_record_refusal_without_traceback(tmp_path):
+    root, md = _scaffold_project(tmp_path)
+    dest = root / "entities/propositions/brca1.md"
+    dest.write_text(
+        dest.read_text(encoding="utf-8").replace(
+            "title: BRCA1 affects instability", "title: ''"
+        ),
+        encoding="utf-8",
+    )
+    before = dest.read_text(encoding="utf-8")
+    candidate = {
+        "source": "llm-synth:m:proposition-synthesize-v1",
+        "candidates": [{
+            "proposition": "proposition:brca1",
+            "annotation": "annotation:papers/p.source#s1",
+            "claim_layer": "causal_effect",
+        }],
+    }
+    input_path = root / "cand.json"
+    input_path.write_text(json.dumps(candidate), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        annotate_group,
+        ["synthesize", str(md), "--root", str(root), "--apply", "--input", str(input_path)],
+    )
+
+    assert result.exit_code == 1
+    assert "durable base shape" in result.output
+    assert "Traceback" not in result.output
+    assert dest.read_text(encoding="utf-8") == before

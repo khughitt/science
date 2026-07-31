@@ -12,17 +12,14 @@ from science_model.reasoning import ClaimLayer, IdentificationStrength, Polarity
 from science_tool.dag.workbench import workbench_entity_body
 from science_tool.dag.workbench_apply import (
     WorkbenchApplyError,
+    _entity_edit,
     apply_workbench,
     apply_workbench_plan,
     build_workbench_apply_plan,
 )
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
-from science_tool.entities import (
-    parse_markdown_entity_file_preserving_body,
-    render_entity_text,
-    write_entity_file,
-)
+from science_tool.entities import parse_markdown_entity_file_preserving_body
 
 
 def _seed_project(root: Path) -> None:
@@ -54,27 +51,6 @@ def _proposition(entity_id: str = "proposition:a-affects-b") -> PropositionEntit
         claim_layer=ClaimLayer.CAUSAL_EFFECT,
         identification_strength=IdentificationStrength.OBSERVATIONAL,
     )
-
-
-def test_render_entity_text_matches_write_entity_file_output(tmp_path: Path) -> None:
-    _seed_project(tmp_path)
-    entity = _proposition()
-    body = workbench_entity_body(entity)
-
-    write_entity_file(entity, project_root=tmp_path, body=body, as_of=date(2026, 7, 4))
-
-    path = tmp_path / "entities/propositions/a-affects-b.md"
-    written = path.read_text(encoding="utf-8")
-    rendered = render_entity_text(
-        entity,
-        body=body,
-        created="2026-07-04",
-        updated="2026-07-04",
-    )
-    assert written == rendered
-    frontmatter = _frontmatter(path)
-    assert frontmatter["kind"] == "proposition"
-    assert "type" not in frontmatter
 
 
 def test_parse_markdown_entity_file_preserving_body_keeps_body_bytes(tmp_path: Path) -> None:
@@ -730,3 +706,26 @@ def test_build_workbench_apply_plan_rejects_duplicate_idless_proposition_targets
 
     assert not (tmp_path / "entities").exists()
     assert "id: proposition:a-affects-b" not in workbench_path.read_text(encoding="utf-8")
+
+
+def test_noop_entity_edit_still_writes_nothing(tmp_path: Path) -> None:
+    """The unchanged-timestamp probe (workbench_apply.py:196) must keep detecting no-ops.
+
+    Its verdict depends on render_update's OUTPUT, not on ownership alone, so threading an
+    `ownership` argument through it could flip a no-op into a spurious write without any
+    ownership set changing. Re-planning an already-applied edit must stay `changed=False`.
+    """
+    _seed_project(tmp_path)
+    entity = _proposition()
+
+    first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 4))
+    assert first.changed is True
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    first.path.write_text(first.final_text, encoding="utf-8")
+
+    # Same entity, LATER date. The timestamp probe must recognise the content as unchanged
+    # and decline to bump `updated`.
+    second = _entity_edit(tmp_path, entity, as_of=date(2026, 8, 1))
+    assert second.changed is False
+    assert second.final_text == first.final_text
+    assert "updated: '2026-07-04'" in second.final_text

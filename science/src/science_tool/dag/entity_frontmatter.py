@@ -1,10 +1,9 @@
-"""Which frontmatter keys the workbench writers own, and how they render them.
+"""Which frontmatter keys each proposition / evidence-line writer owns, and how they render them.
 
-Governs the workbench writers specifically -- `workbench.compile_workbench` (create) and
-`workbench_apply._entity_edit` (create + update). It does NOT govern every path that mints a
-proposition: `annotation/promote.py` and `annotation/synthesize.py` still write propositions
-through `entities.write_entity_file`, the uncontained full-model dump this module exists to
-replace on the workbench path; migrating those is out of scope here.
+Governs every writer of `proposition` / `evidence-line`: the workbench (create + update via
+`workbench.compile_workbench` and `workbench_apply._entity_edit`) and the two annotation
+writers (`annotation/promote.py` creates, `annotation/synthesize.py` updates). Each supplies
+its own `Ownership`; there is no uncontained full-model dump left on these paths.
 
 It lives in its own module because `workbench_apply` imports `workbench`, so neither can host
 code the other needs.
@@ -20,6 +19,10 @@ No dump-mode flag can express "required for the model, not for the file"; only a
 
 from __future__ import annotations
 
+import os
+import secrets
+from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -62,11 +65,33 @@ EVIDENCE_LINE_OWNED_KEYS: frozenset[str] = frozenset(
 CREATE_ONLY_KEYS: frozenset[str] = frozenset(("title", "status"))
 
 
-def owned_keys(kind: str) -> frozenset[str]:
+@dataclass(frozen=True)
+class Ownership:
+    """Which frontmatter keys ONE writer owns.
+
+    Per-writer, not per-kind: three writers mint propositions and each owns a different set.
+    Widening a shared per-kind allowlist to their union would give the workbench ownership of
+    `source_refs` -- so every `compile_workbench` recompile would overwrite an author's curated
+    value on a path this design does not otherwise touch.
+
+    `create_only` defaults to EMPTY, not to CREATE_ONLY_KEYS: an update-only writer creates
+    nothing and must not claim `title`.
+    """
+
+    owned: frozenset[str]
+    create_only: frozenset[str] = frozenset()
+
+
+WORKBENCH_PROPOSITION = Ownership(PROPOSITION_OWNED_KEYS, CREATE_ONLY_KEYS)
+WORKBENCH_EVIDENCE_LINE = Ownership(EVIDENCE_LINE_OWNED_KEYS, CREATE_ONLY_KEYS)
+
+
+def workbench_ownership(kind: str) -> Ownership:
+    """Workbench two-kind dispatch. Retains today's fail-early raise on an unsupported kind."""
     if kind == "proposition":
-        return PROPOSITION_OWNED_KEYS
+        return WORKBENCH_PROPOSITION
     if kind == "evidence-line":
-        return EVIDENCE_LINE_OWNED_KEYS
+        return WORKBENCH_EVIDENCE_LINE
     raise FrontmatterRenderError(f"unsupported workbench entity kind: {kind}")
 
 
@@ -121,10 +146,12 @@ def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
         ) from exc
 
 
-def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: str) -> str:
-    """Render a NEW entity file from the owned allowlist plus the create-only keys."""
+def render_create(
+    entity: WorkbenchEntity, *, ownership: Ownership, body: str, created: str, updated: str
+) -> str:
+    """Render a NEW entity file from the owned allowlist plus the writer's create-only keys."""
     generated = generated_frontmatter(entity, created=created, updated=updated)
-    allowed = owned_keys(entity.kind) | CREATE_ONLY_KEYS
+    allowed = ownership.owned | ownership.create_only
     final = {key: value for key, value in generated.items() if key in allowed}
     final["created"] = created
     final["updated"] = updated
@@ -165,6 +192,7 @@ def read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str,
 def render_update(
     entity: WorkbenchEntity,
     *,
+    ownership: Ownership,
     existing_frontmatter: dict[str, object],
     body: str,
     created: str,
@@ -172,9 +200,8 @@ def render_update(
 ) -> str:
     """Render an EXISTING entity file: overwrite only owned keys, preserve everything else.
 
-    `CREATE_ONLY_KEYS` is deliberately NOT applied here -- that is what makes `title` create-only
-    and lets an author's replacement survive. Both writers use this, so the compile path and the
-    apply path cannot diverge on what an update means.
+    `ownership.create_only` is deliberately NOT applied here -- that is what makes `title`
+    create-only and lets an author's replacement survive.
     """
     final = {
         key: value
@@ -182,7 +209,7 @@ def render_update(
         if key not in RENDERER_DERIVED_KEYS
     }
     generated = generated_frontmatter(entity, created=created, updated=updated)
-    for key in owned_keys(entity.kind):
+    for key in ownership.owned:
         if key in generated:
             final[key] = generated[key]
     final["created"] = created
@@ -190,3 +217,120 @@ def render_update(
     text = render_from_frontmatter(final, body)
     certify_persisted(entity, text)
     return text
+
+
+class EntityWriteError(ValueError):
+    """A write was refused because the destination's existence contradicts the operation."""
+
+
+def _entity_dest(entity: WorkbenchEntity, project_root: Path) -> Path:
+    from science_tool.entities import resolve_path_policy
+
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    root = resolve_path_policy(entity.kind, project_root=project_root).root
+    return project_root / root / f"{local_part}.md"
+
+
+def _write(dest: Path, text: str) -> Path:
+    from science_tool.entities import _atomic_replace_text
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_replace_text(dest, text)
+    return dest
+
+
+def _render_update_for(
+    entity: WorkbenchEntity, dest: Path, *, ownership: Ownership, updated: str
+) -> str:
+    # ADMIT FIRST. `read_existing_target` refuses a wrong-identity, undated or unparseable
+    # destination. Reading the file directly and defaulting `created` lets `render_update`
+    # repair a record into validity before `certify_persisted` ever sees it.
+    frontmatter, body, _current = read_existing_target(dest, entity)
+    return render_update(
+        entity,
+        ownership=ownership,
+        existing_frontmatter=frontmatter,
+        body=body,
+        created=str(frontmatter["created"]),
+        updated=updated,
+    )
+
+
+def create_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Write a NEW entity file, publishing only a complete no-clobber result."""
+    dest = _entity_dest(entity, project_root)
+    if dest.exists():
+        raise EntityWriteError(f"refusing to create {dest}: it already exists")
+    today = (as_of or date.today()).isoformat()
+    text = render_create(
+        entity, ownership=ownership, body=create_body, created=today, updated=today
+    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        while True:
+            staged = dest.with_name(f".{dest.name}.{secrets.token_hex(8)}.tmp")
+            try:
+                handle = staged.open("x", encoding="utf-8", newline="")
+                break
+            except FileExistsError:
+                continue
+        try:
+            with handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.link(staged, dest)
+        finally:
+            staged.unlink(missing_ok=True)
+    except FileExistsError as exc:
+        raise EntityWriteError(f"refusing to create {dest}: it already exists") from exc
+    except OSError as exc:
+        raise EntityWriteError(f"could not create {dest}: {exc}") from exc
+    return dest
+
+
+def update_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    as_of: date | None = None,
+) -> Path:
+    """Update an EXISTING entity file. Refuses a missing destination.
+
+    Takes no `create_body`: an update-only writer has none to supply, and inventing one to
+    satisfy a signature is how a stub body eventually reaches a real record.
+    """
+    dest = _entity_dest(entity, project_root)
+    if not dest.exists():
+        raise EntityWriteError(f"refusing to update {dest}: it does not exist")
+    today = (as_of or date.today()).isoformat()
+    return _write(dest, _render_update_for(entity, dest, ownership=ownership, updated=today))
+
+
+def upsert_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Create or update. Used ONLY by the workbench, which legitimately recompiles over rows."""
+    dest = _entity_dest(entity, project_root)
+    today = (as_of or date.today()).isoformat()
+    if dest.exists():
+        text = _render_update_for(entity, dest, ownership=ownership, updated=today)
+    else:
+        text = render_create(
+            entity, ownership=ownership, body=create_body, created=today, updated=today
+        )
+    return _write(dest, text)

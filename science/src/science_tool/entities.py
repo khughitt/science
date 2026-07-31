@@ -474,47 +474,6 @@ def render_entity_text(
     return _render_markdown(frontmatter, body)
 
 
-def write_entity_file(
-    entity: Any,  # any typed entity exposing .kind, .id, and Pydantic .model_dump()
-    *,
-    project_root: Path,
-    body: str,
-    as_of: date | None = None,
-) -> None:
-    """Write a typed entity to its canonical ``entities/<kind>/<slug>.md`` file.
-
-    Single canonical entity writer (also used by ``dag.workbench``). Path from
-    ``resolve_path_policy``; frontmatter from the typed model's ``model_dump``; the
-    Markdown ``body`` is supplied by the caller. ``created`` is preserved on upsert;
-    ``updated`` advances to ``as_of`` (or today).
-    """
-    today = as_of or date.today()
-    kind = entity.kind
-    assert entity.id is not None
-    local_part = entity.id.split(":", 1)[1]
-    policy = resolve_path_policy(kind, project_root=project_root)
-    dest = project_root / policy.root / f"{local_part}.md"
-
-    existing_created: str | None = None
-    if dest.exists():
-        try:
-            existing_fm, _ = _parse_markdown_file(dest)
-            existing_created = existing_fm.get("created")
-            if existing_created is not None:
-                existing_created = str(existing_created)
-        except (yaml.YAMLError, ValueError, OSError):
-            existing_created = None
-
-    text = render_entity_text(
-        entity,
-        body=body,
-        created=existing_created if existing_created is not None else today.isoformat(),
-        updated=today.isoformat(),
-    )
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_replace_text(dest, text)
-
-
 def render_entity_source_refs(
     file_path: Path,
     refs_to_append: Sequence[str],

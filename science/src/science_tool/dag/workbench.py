@@ -352,37 +352,18 @@ def _write_entity_file(
 
     An UPSERT. `compile_workbench` is re-run over the same rows routinely, so the destination
     usually exists; rendering it as a create would overwrite the author's title, status and body
-    on every recompile. Deliberately NOT `entities.write_entity_file`, which renders the whole
-    model and would re-introduce the skeleton dump on this path.
+    on every recompile. Delegates to `entity_frontmatter.upsert_entity_file`, which owns the
+    admit-then-render ordering.
     """
-    from science_tool.dag.entity_frontmatter import read_existing_target, render_create, render_update
-    from science_tool.entities import _atomic_replace_text, resolve_path_policy
+    from science_tool.dag.entity_frontmatter import upsert_entity_file, workbench_ownership
 
-    today = (as_of or date.today()).isoformat()
-    assert entity.id is not None
-    local_part = entity.id.split(":", 1)[1]
-    dest = project_root / resolve_path_policy(entity.kind, project_root=project_root).root / f"{local_part}.md"
-
-    if dest.exists():
-        # ADMIT FIRST. `read_existing_target` refuses a wrong-identity, undated or unparseable
-        # destination. Reading the file directly and defaulting `created` -- as an earlier draft
-        # of this plan did -- lets `render_update` overwrite id/kind/created/updated and hand
-        # `certify_persisted` a mapping that is valid only because it was just repaired.
-        existing_frontmatter, existing_body, _current = read_existing_target(dest, entity)
-        text = render_update(
-            entity,
-            existing_frontmatter=existing_frontmatter,
-            body=existing_body,
-            created=str(existing_frontmatter["created"]),
-            updated=today,
-        )
-    else:
-        text = render_create(
-            entity, body=workbench_entity_body(entity), created=today, updated=today
-        )
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_replace_text(dest, text)
+    upsert_entity_file(
+        entity,
+        project_root=project_root,
+        ownership=workbench_ownership(entity.kind),
+        create_body=workbench_entity_body(entity),
+        as_of=as_of,
+    )
 
 
 def compile_workbench(
@@ -399,7 +380,7 @@ def compile_workbench(
     The normalized workbench replaces inline stubs with evidence-line references.
 
     ``compile`` is the only writer of these entities from the workbench, so all
-    entity files are (re)written via the canonical entity-layer writer.
+    entity files are (re)written via `_write_entity_file`'s owned-allowlist upsert.
 
     ``as_of`` controls the ``created``/``updated`` timestamps written into each
     entity file.  Defaults to ``date.today()`` when None so existing callers

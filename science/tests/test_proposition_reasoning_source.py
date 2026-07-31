@@ -6,7 +6,8 @@ STAMP = "llm-synth:claude-opus-4-8:proposition-synthesize-v1"
 def test_reasoning_source_defaults_none_and_omitted():
     p = PropositionEntity(id="proposition:x", title="t")
     assert p.reasoning_source is None
-    # exclude_none (how write_entity_file serializes) ⇒ absent when unset
+    # exclude_none (how generated_frontmatter/render_entity_text serialize for the writers'
+    # render_create/render_update) ⇒ absent when unset
     assert "reasoning_source" not in p.model_dump(mode="json", exclude_none=True)
 
 

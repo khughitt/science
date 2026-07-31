@@ -222,9 +222,15 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
     promoted_to = None
     try:
         if decision.decision == "MINT":
-            promoted_to = targets[decision.kind].mint(decision, [source_ref, decision.ref], project_root, None)
-            report.written_paths.append(str(entity_dest(promoted_to, project_root)))
-            report.minted += 1
+            outcome = targets[decision.kind].mint(
+                decision, [source_ref, decision.ref], project_root, None
+            )
+            if outcome.created:
+                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
+                report.minted += 1
+            else:
+                report.linked += 1
+            promoted_to = outcome.entity_id
         elif decision.decision == "LINK":
             if decision.slug is None:
                 raise ProsePromotionError(f"LINK decision for unit {unit_id!r} is missing target ref")
