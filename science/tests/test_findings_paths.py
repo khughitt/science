@@ -1,5 +1,6 @@
 # science/tests/test_findings_paths.py
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -11,16 +12,108 @@ from science_tool.findings.paths import (
     create_regular_file_at,
     exists_at,
     mkdir_inside,
+    open_dir_anchored,
     open_dir_inside,
     open_dir_inside_if_present,
     open_lock_at,
+    open_record_at,
     project_relative,
     read_inside_bounded,
+    read_regular_fd,
     read_regular_file_at,
     replace_at,
     resolve_inside,
     unlink_at,
+    write_all,
 )
+
+
+def test_open_dir_anchored_refuses_a_symlinked_component(tmp_path: Path) -> None:
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real" / "leaf").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "real")
+    with pytest.raises(PathSafetyError, match="component at"):
+        open_dir_anchored(tmp_path / "link" / "leaf")
+
+
+def test_open_dir_anchored_refuses_a_relative_directory() -> None:
+    with pytest.raises(PathSafetyError, match="absolute"):
+        open_dir_anchored(Path("relative/dir"))
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        pytest.param(lambda d, t: (d / "j").symlink_to(t), id="symlink"),
+        pytest.param(lambda d, t: os.link(t, d / "j"), id="hardlink"),
+        pytest.param(lambda d, _t: os.mkfifo(d / "j"), id="fifo"),
+    ],
+)
+def test_open_record_at_refuses_a_planted_target(tmp_path: Path, plant) -> None:
+    directory, target = tmp_path / "d", tmp_path / "target"
+    directory.mkdir()
+    target.write_text("", encoding="utf-8")
+    plant(directory, target)
+    reader = None
+    if stat.S_ISFIFO(os.lstat(directory / "j").st_mode):
+        reader = os.open(directory / "j", os.O_RDONLY | os.O_NONBLOCK)
+    fd = open_dir_anchored(directory)
+    try:
+        with pytest.raises(PathSafetyError):
+            open_record_at(fd, "j")
+    finally:
+        os.close(fd)
+        if reader is not None:
+            os.close(reader)
+    assert target.read_text(encoding="utf-8") == ""
+
+
+def test_open_record_at_does_not_create(tmp_path: Path) -> None:
+    fd = open_dir_anchored(tmp_path)
+    try:
+        with pytest.raises(PathSafetyError):
+            open_record_at(fd, "absent")
+    finally:
+        os.close(fd)
+    assert not (tmp_path / "absent").exists()
+
+
+def test_open_dir_anchored_create_stops_at_a_link_having_made_nothing(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(PathSafetyError, match="component at"):
+        open_dir_anchored(tmp_path / "link" / "a" / "b", create=True)
+    assert list((tmp_path / "elsewhere").iterdir()) == []
+
+
+def test_read_regular_fd_reads_without_moving_the_descriptor_offset(tmp_path: Path) -> None:
+    target = tmp_path / "f"
+    target.write_text("payload", encoding="utf-8")
+    descriptor = os.open(target, os.O_RDONLY)
+    try:
+        assert read_regular_fd(descriptor, 1024) == "payload"
+        assert os.lseek(descriptor, 0, os.SEEK_CUR) == 0
+    finally:
+        os.close(descriptor)
+
+
+def test_write_all_completes_a_short_write(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "f"
+    target.write_bytes(b"")
+    descriptor = os.open(target, os.O_WRONLY | os.O_APPEND)
+    real = os.write
+
+    def one_byte_at_a_time(fd: int, data) -> int:
+        return real(fd, bytes(data)[:1]) if fd == descriptor else real(fd, data)
+
+    monkeypatch.setattr(os, "write", one_byte_at_a_time)
+    try:
+        write_all(descriptor, b"0123456789")
+    finally:
+        os.close(descriptor)
+    assert target.read_bytes() == b"0123456789"
 
 # --- resolve_inside: the check-only primitive -------------------------------------
 
@@ -490,12 +583,12 @@ def test_read_inside_bounded_retries_short_reads_until_eof(tmp_path, monkeypatch
     path = tmp_path / "report.json"
     payload = "complete despite short reads"
     path.write_text(payload, encoding="utf-8")
-    real_read = finding_paths.os.read
+    real_pread = finding_paths.os.pread
 
-    def short_read(descriptor, max_bytes):
-        return real_read(descriptor, min(max_bytes, 2))
+    def short_read(descriptor, max_bytes, offset):
+        return real_pread(descriptor, min(max_bytes, 2), offset)
 
-    monkeypatch.setattr(finding_paths.os, "read", short_read)
+    monkeypatch.setattr(finding_paths.os, "pread", short_read)
 
     assert read_inside_bounded(tmp_path, path, 1024) == payload
 
@@ -503,19 +596,19 @@ def test_read_inside_bounded_retries_short_reads_until_eof(tmp_path, monkeypatch
 def test_read_inside_bounded_detects_growth_past_the_bound(tmp_path, monkeypatch):
     path = tmp_path / "report.json"
     path.write_bytes(b"0123456789")
-    real_read = finding_paths.os.read
+    real_pread = finding_paths.os.pread
     grew = False
 
-    def short_read_then_grow(descriptor, max_bytes):
+    def short_read_then_grow(descriptor, max_bytes, offset):
         nonlocal grew
-        chunk = real_read(descriptor, min(max_bytes, 5))
+        chunk = real_pread(descriptor, min(max_bytes, 5), offset)
         if not grew:
             with path.open("ab") as handle:
                 handle.write(b"!")
             grew = True
         return chunk
 
-    monkeypatch.setattr(finding_paths.os, "read", short_read_then_grow)
+    monkeypatch.setattr(finding_paths.os, "pread", short_read_then_grow)
 
     with pytest.raises(PathSafetyError, match="exceeds"):
         read_inside_bounded(tmp_path, path, 10)
