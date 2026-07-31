@@ -29,10 +29,13 @@ from science_model.reasoning import (
 from science_tool.annotation.model import Annotation, Sidecar, TextualBody
 from science_tool.annotation.promote import entity_dest
 from science_tool.annotation.statement_extract import find_qualified_spans
-from science_tool.dag.entity_frontmatter import Ownership, update_entity_file
+from science_tool.dag.entity_frontmatter import (
+    PROPOSITION_REASONING_FIELDS as SYNTH_FIELDS,
+    Ownership,
+    update_entity_file,
+)
 
 SYNTH_SOURCE_RE = re.compile(r"^llm-synth:[A-Za-z0-9._-]+:proposition-synthesize-v1$")
-SYNTH_FIELDS: tuple[str, ...] = ("subject", "object", "predicate", "polarity", "claim_layer")
 # DERIVED from SYNTH_FIELDS, never retyped. `create_only` is empty: synthesize only updates.
 SYNTHESIZE_PROPOSITION = Ownership(frozenset(SYNTH_FIELDS) | {"reasoning_source"})
 _CANDIDATE_KEYS = frozenset({"proposition", "annotation", "override", *SYNTH_FIELDS})

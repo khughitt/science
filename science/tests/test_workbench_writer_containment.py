@@ -35,12 +35,145 @@ def _row(**over) -> WorkbenchRow:
     return WorkbenchRow(**{**base, **over})
 
 
+_SYNTH_STAMP = "llm-synth:m:proposition-synthesize-v1"
+
+
+def _reasoning_frontmatter() -> dict[str, object]:
+    return {
+        "id": "proposition:x",
+        "kind": "proposition",
+        "title": "A affects B",
+        "status": "active",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "claim_layer": "causal_effect",
+        "identification_strength": "observational",
+        "reasoning_source": _SYNTH_STAMP,
+        "created": "2026-07-01",
+        "updated": "2026-07-01",
+    }
+
+
+def _rendered_frontmatter(entity, ownership) -> dict[str, object]:
+    from science_model.frontmatter import split_frontmatter
+    from science_tool.dag.entity_frontmatter import render_update
+
+    text = render_update(
+        entity,
+        ownership=ownership,
+        existing_frontmatter=_reasoning_frontmatter(),
+        body="\n# Body\n",
+        created="2026-07-01",
+        updated="2026-07-31",
+    )
+    frontmatter, _body = split_frontmatter(text)
+    return frontmatter
+
+
+def test_ownership_rejects_owned_clear_overlap_at_construction() -> None:
+    from science_tool.dag.entity_frontmatter import Ownership
+
+    with pytest.raises(ValueError, match="owned and clear_on_change overlap.*reasoning_source"):
+        Ownership(
+            frozenset({"reasoning_source"}),
+            clear_on_change=frozenset({"reasoning_source"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"subject": "concept:a2"}, id="subject"),
+        pytest.param({"object": "concept:b2"}, id="object"),
+        pytest.param({"predicate": "regulates"}, id="predicate"),
+        pytest.param({"polarity": "negative"}, id="polarity"),
+        pytest.param({"claim_layer": "structural_claim"}, id="claim-layer"),
+    ],
+)
+def test_each_effective_reasoning_change_clears_synthesis_stamp(change) -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION
+
+    values = {
+        "id": "proposition:x",
+        "title": "ignored",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "claim_layer": "causal_effect",
+        "identification_strength": "observational",
+    }
+    entity = PropositionEntity(**(values | change))
+
+    frontmatter = _rendered_frontmatter(entity, WORKBENCH_PROPOSITION)
+
+    assert "reasoning_source" not in frontmatter
+
+
+def test_preserved_omitted_reasoning_field_does_not_clear_stamp() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION
+
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="ignored",
+        subject="concept:a",
+        object="concept:b",
+        predicate="affects",
+        polarity="positive",
+        claim_layer=None,
+        identification_strength="interventional",
+    )
+
+    frontmatter = _rendered_frontmatter(entity, WORKBENCH_PROPOSITION)
+
+    assert frontmatter["claim_layer"] == "causal_effect"
+    assert frontmatter["identification_strength"] == "interventional"
+    assert frontmatter["reasoning_source"] == _SYNTH_STAMP
+
+
+def test_empty_change_triggers_clear_nothing() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag.entity_frontmatter import Ownership, PROPOSITION_OWNED_KEYS
+
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="ignored",
+        subject="concept:a2",
+        object="concept:b",
+        predicate="affects",
+        polarity="positive",
+        claim_layer="causal_effect",
+    )
+
+    frontmatter = _rendered_frontmatter(entity, Ownership(PROPOSITION_OWNED_KEYS))
+
+    assert frontmatter["subject"] == "concept:a2"
+    assert frontmatter["reasoning_source"] == _SYNTH_STAMP
+
+
 def test_proposition_title_is_the_triple() -> None:
     # THE RULING (design §5.2). Deterministic generation, not a required input field: `WorkbenchRow`
     # is extra="forbid" and carries no `title`, so requiring one would widen the authored-input
     # contract. Changing this string is a behaviour change and must fail here.
     prop = _proposition_for_row(_row())
     assert prop.title == "concept:a affects concept:b"
+
+
+def test_signless_predicate_canonicalizes_omitted_polarity() -> None:
+    from science_model.reasoning import Polarity
+
+    prop = _proposition_for_row(_row(predicate="binds", polarity=None))
+
+    assert prop.polarity is Polarity.NOT_APPLICABLE
+
+
+def test_sign_meaningful_predicate_still_requires_polarity() -> None:
+    with pytest.raises(ValidationError, match="polarity must be"):
+        _proposition_for_row(_row(polarity=None))
 
 
 def test_evidence_line_title_uses_source_when_present() -> None:
@@ -198,6 +331,96 @@ def test_recompiling_preserves_an_authors_title_and_body(tmp_path) -> None:
     assert "Authored prose." in after
 
 
+def test_compile_canonicalizes_stale_polarity_and_invalidates_stamp(tmp_path) -> None:
+    import yaml
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag import workbench as wb
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    dest = tmp_path / "entities/propositions/x.md"
+    dest.parent.mkdir(parents=True)
+    dest.write_text(
+        "---\n"
+        "id: proposition:x\n"
+        "kind: proposition\n"
+        "title: A affects B\n"
+        "status: active\n"
+        "subject: concept:a\n"
+        "object: concept:b\n"
+        "predicate: affects\n"
+        "polarity: positive\n"
+        "claim_layer: causal_effect\n"
+        f"reasoning_source: {_SYNTH_STAMP}\n"
+        "created: '2026-07-01'\n"
+        "updated: '2026-07-01'\n"
+        "---\n\n# Curated body\n",
+        encoding="utf-8",
+    )
+    workbench = wb.WorkbenchFile.model_validate(
+        {
+            "rows": [
+                {
+                    "id": "proposition:x",
+                    "subject": "concept:a",
+                    "predicate": "binds",
+                    "object": "concept:b",
+                    "patch": "p",
+                    "claim_layer": "structural_claim",
+                }
+            ]
+        }
+    )
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 31))
+
+    frontmatter = yaml.safe_load(dest.read_text(encoding="utf-8").split("---\n", 2)[1])
+    assert frontmatter["predicate"] == "binds"
+    assert frontmatter["polarity"] == "not_applicable"
+    assert "reasoning_source" not in frontmatter
+    PropositionEntity.model_validate(frontmatter)
+    assert "# Curated body" in dest.read_text(encoding="utf-8")
+
+
+def test_idempotent_compile_preserves_reasoning_stamp_and_bytes(tmp_path) -> None:
+    import yaml
+
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import render_from_frontmatter
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {
+            "patch": "p",
+            "rows": [
+                {
+                    "id": "proposition:x",
+                    "subject": "concept:a",
+                    "predicate": "affects",
+                    "object": "concept:b",
+                    "patch": "p",
+                    "polarity": "positive",
+                    "claim_layer": "causal_effect",
+                }
+            ],
+        }
+    )
+    as_of = date(2026, 7, 31)
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    dest = tmp_path / "entities/propositions/x.md"
+    frontmatter_text, body = dest.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    frontmatter = yaml.safe_load(frontmatter_text)
+    frontmatter["reasoning_source"] = _SYNTH_STAMP
+    dest.write_text(render_from_frontmatter(frontmatter, body), encoding="utf-8")
+    before = dest.read_bytes()
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    after = dest.read_bytes()
+    assert after == before
+    assert yaml.safe_load(after.decode().split("---\n", 2)[1])["reasoning_source"] == _SYNTH_STAMP
+
+
 @pytest.mark.parametrize(
     "corruption",
     [
@@ -261,6 +484,86 @@ def test_update_of_an_empty_title_record_is_REJECTED(tmp_path) -> None:
     assert entity.id in message            # names the record
     assert "title" in message              # names the field
     assert edit.path.read_text(encoding="utf-8").count("title: ''") == 1  # and wrote nothing
+
+
+def test_typed_certification_rejects_an_invalid_merged_proposition() -> None:
+    from science_model.propositions import PropositionEntity
+    from science_model.reasoning import Predicate
+
+    from science_tool.dag.entity_frontmatter import (
+        Ownership,
+        PersistedShapeError,
+        render_update,
+    )
+
+    existing = {
+        "id": "proposition:x",
+        "kind": "proposition",
+        "title": "A affects B",
+        "status": "active",
+        "subject": "concept:a",
+        "object": "concept:b",
+        "predicate": "affects",
+        "polarity": "positive",
+        "created": "2026-07-01",
+        "updated": "2026-07-01",
+    }
+    entity = PropositionEntity(
+        id="proposition:x",
+        title="A binds B",
+        subject="concept:a",
+        object="concept:b",
+        predicate=Predicate.BINDS,
+    )
+    # This synthetic future writer changes predicate but does not own polarity, so the stale
+    # signed value survives the merge. No live writer has this ownership shape after Task 3.
+    ownership = Ownership(
+        frozenset({"id", "kind", "subject", "object", "predicate", "created", "updated"})
+    )
+
+    with pytest.raises(PersistedShapeError, match="sign-less"):
+        render_update(
+            entity,
+            ownership=ownership,
+            existing_frontmatter=existing,
+            body="\n# Affects\n",
+            created="2026-07-01",
+            updated="2026-07-31",
+        )
+
+
+def test_evidence_line_typed_certification_fills_only_unpersisted_skeleton() -> None:
+    from science_model.entities import EvidenceLineEntity
+    from science_model.frontmatter import split_frontmatter
+
+    from science_tool.dag.entity_frontmatter import (
+        TYPED_VALIDATION_SKELETON_KEYS,
+        WORKBENCH_EVIDENCE_LINE,
+        certify_persisted,
+        render_create,
+    )
+
+    line = _evidence_line_for_stub(
+        EvidenceStub(stance="supports", source="paper:S"),
+        target_id="proposition:0001-x",
+        index=0,
+    )
+    text = render_create(
+        line,
+        ownership=WORKBENCH_EVIDENCE_LINE,
+        body="\n# Evidence\n",
+        created="2026-07-01",
+        updated="2026-07-01",
+    )
+    frontmatter, _body = split_frontmatter(text)
+
+    with pytest.raises(ValidationError) as exc:
+        EvidenceLineEntity.model_validate(frontmatter)
+    missing = {error["loc"][0] for error in exc.value.errors() if error["type"] == "missing"}
+    assert missing == TYPED_VALIDATION_SKELETON_KEYS
+
+    certify_persisted(line, text)
+    assert not (set(frontmatter) & TYPED_VALIDATION_SKELETON_KEYS)
 
 
 def test_the_apply_create_path_is_validated_too(tmp_path, monkeypatch) -> None:
@@ -329,17 +632,22 @@ def test_workbench_ownership_carries_todays_sets_verbatim() -> None:
     from science_tool.dag.entity_frontmatter import (
         CREATE_ONLY_KEYS,
         EVIDENCE_LINE_OWNED_KEYS,
+        PROPOSITION_REASONING_FIELDS,
         PROPOSITION_OWNED_KEYS,
         WORKBENCH_EVIDENCE_LINE,
         WORKBENCH_PROPOSITION,
         workbench_ownership,
     )
 
-    # Ownership SEMANTICS are unchanged by construction -- that is the point of §4.1.
+    # Write allowlists are unchanged; invalidation authority is asserted separately.
     assert WORKBENCH_PROPOSITION.owned == PROPOSITION_OWNED_KEYS
     assert WORKBENCH_PROPOSITION.create_only == CREATE_ONLY_KEYS
+    assert WORKBENCH_PROPOSITION.change_triggers == frozenset(PROPOSITION_REASONING_FIELDS)
+    assert WORKBENCH_PROPOSITION.clear_on_change == frozenset({"reasoning_source"})
     assert WORKBENCH_EVIDENCE_LINE.owned == EVIDENCE_LINE_OWNED_KEYS
     assert WORKBENCH_EVIDENCE_LINE.create_only == CREATE_ONLY_KEYS
+    assert WORKBENCH_EVIDENCE_LINE.change_triggers == frozenset()
+    assert WORKBENCH_EVIDENCE_LINE.clear_on_change == frozenset()
 
     assert workbench_ownership("proposition") is WORKBENCH_PROPOSITION
     assert workbench_ownership("evidence-line") is WORKBENCH_EVIDENCE_LINE
