@@ -1,6 +1,6 @@
 # Task-storage rollout closure — design
 
-**Status:** Accepted
+**Status:** Accepted; amended after Task 10 losslessness review
 **Date:** 2026-07-31
 
 ## 1. Decision
@@ -8,15 +8,17 @@
 Finish the task-storage split across every legacy Science project currently
 registered in `~/.config/science/config.yaml`.
 
-The rollout has five layers:
+The rollout has six layers:
 
 1. Correct the shared task parser so an otherwise-valid title may contain `]`.
 2. Make project-local overlay provenance independent of checkout location.
 3. Close the local graph revision manifest over the source families the graph
    loader actually consumes.
-4. Migrate each legacy project transactionally, preserve its task set, and
+4. Make the migrator refuse substantive aggregate-ledger preambles instead of
+   silently dropping them.
+5. Migrate each legacy project transactionally, preserve its task set, and
    rebuild its local graph.
-5. Once all local graphs are current on local `main`, refresh the affected
+6. Once all local graphs are current on local `main`, refresh the affected
    composites without changing federation membership.
 
 This is storage and generated-artifact closure. It is not a federation-topology
@@ -69,6 +71,15 @@ This is not a reason to bless the primary checkout as authoritative. It is
 evidence that graph inputs must be durable and that revision coverage must
 match loader coverage before the rollout can continue.
 
+Task 10 review exposed a fourth shared prerequisite. Aggregate parsing starts
+at the first `## [tNNN]` header and ignores every earlier line. The migrator's
+normalized before/after snapshots therefore certify only parsed task blocks:
+they do not prove that the deleted aggregate file contained no other live work.
+Cancer/meta would have lost two unchecked reminders, and therapeutics would
+have lost a 14-item legacy `t-txNNN` checklist containing six open tasks. A
+storage migration must refuse that input until the project explicitly
+reconciles it.
+
 ## 3. Registry-wide inventory
 
 The 2026-07-31 audit covered all 21 entries in
@@ -81,23 +92,25 @@ The 2026-07-31 audit covered all 21 entries in
 | Commons store | science-commons | No task queue; not a migration target |
 | Missing path | `obsproj` under a deleted temporary directory | Registry hygiene debt, not a project migration |
 
-The 13 legacy stores contain 272 active tasks:
+The original parser-visible inventory contains 272 active tasks. The lossless
+preamble audit found seven additional live reminders that must become
+canonical tasks, yielding 279 active tasks after reconciliation:
 
-| Project | Active tasks | Initial dry-run result | Toolkit action |
-|---|---:|---|---|
-| cancer/meta | 11 | 11 writes | Pin final prerequisite |
-| evolution | 31 | 31 writes | Pin final prerequisite |
-| pre-cancer | 6 | 6 writes | Pin final prerequisite |
-| cBioPortal | 74 | Refused on historical bracketed title | Pin final prerequisite |
-| ovarian | 0 | Valid empty plan | Pin final prerequisite |
-| head-and-neck | 0 | Valid empty plan | Pin final prerequisite |
-| prostate | 0 | Valid empty plan | Pin final prerequisite |
-| breast | 0 | Valid empty plan | Pin final prerequisite |
-| therapeutics | 2 | 2 writes | Pin final prerequisite; sync stale environment |
-| health/meta | 32 | 32 writes | Pin final prerequisite |
-| pan-disease | 58 | Refused on historical bracketed title | Pin final prerequisite |
-| cycles | 53 | 53 writes | Pin final prerequisite |
-| immunity | 5 | 5 writes | Pin final prerequisite |
+| Project | Parsed tasks | Reconciled total | Initial dry-run result | Toolkit action |
+|---|---:|---:|---|---|
+| cancer/meta | 11 | 12 | 11 writes before guard | Reconcile one live reminder; pin final prerequisite |
+| evolution | 31 | 31 | 31 writes | Pin final prerequisite |
+| pre-cancer | 6 | 6 | 6 writes | Pin final prerequisite |
+| cBioPortal | 74 | 74 | Refused on historical bracketed title | Pin final prerequisite |
+| ovarian | 0 | 0 | Valid empty plan | Pin final prerequisite |
+| head-and-neck | 0 | 0 | Valid empty plan | Pin final prerequisite |
+| prostate | 0 | 0 | Valid empty plan | Pin final prerequisite |
+| breast | 0 | 0 | Valid empty plan | Pin final prerequisite |
+| therapeutics | 2 | 8 | 2 writes before guard | Archive legacy queue; promote six live items; pin final prerequisite |
+| health/meta | 32 | 32 | 32 writes | Pin final prerequisite |
+| pan-disease | 58 | 58 | Refused on historical bracketed title | Pin final prerequisite |
+| cycles | 53 | 53 | 53 writes | Pin final prerequisite |
+| immunity | 5 | 5 | 5 writes | Pin final prerequisite |
 
 No target has a mixed store or a migration journal. All repositories were on
 clean local `main` branches during the audit. The unrelated untracked report in
@@ -161,7 +174,35 @@ removed from the default revision manifest with exact leaf patterns:
 `tasks/.tasks.lock` and `**/__marimo__/session/*.json`. No broader code or
 notebook exclusion is introduced.
 
-## 4. Shared parser correction
+### 3.3 Aggregate-preamble audit
+
+The fleet audit inspected every line before the first canonical active-task
+header. cBioPortal and pan-disease began directly with canonical headers before
+their completed migrations. Evolution and pre-cancer do the same. The four
+empty cancer-type stores contain only one complete HTML comment. Health/meta,
+cycles, and immunity contain only their conventional comment; blank lines and
+the exact `# Active Tasks` heading are also non-data scaffolding.
+
+Two projects contain substantive preambles:
+
+- cancer/meta has a reminder already satisfied by completed `task:t013` and a
+  still-live 2026-06-15 compatibility-symlink scan. The first receives an
+  explicit satisfied disposition; the second becomes canonical `task:t053`.
+- therapeutics has 14 legacy `t-txNNN` checklist records before canonical
+  `task:t001` and `task:t002`. Eight are checked complete and six remain open.
+  Preserve all 14 verbatim in `doc/legacy-task-queue.md`, including a mapping
+  table. Its done ledger already owns `task:t003` through `task:t005`, so the
+  allocator creates `task:t006` through `task:t011` for the six open records in
+  source order. Preserve `t-tx003`'s in-progress state as `status: active`; the
+  other five begin proposed except `task:t011`, which is blocked by
+  `task:t008` and `task:t009`. Historical prose may retain the old labels; each
+  new task description and the archive map its legacy label to the canonical
+  ID.
+
+This is explicit data reconciliation, not a parser compatibility mode. The
+canonical active total increases by seven; no other project count changes.
+
+## 4. Shared toolkit corrections
 
 ### 4.1 Root cause
 
@@ -306,6 +347,31 @@ outside the manifest, every declared code root and `code_excludes` decision is
 respected, both transient leaf classes are excluded, and primary/worktree builds
 with the same tracked source bytes have identical semantic quads.
 
+### 4.6 Lossless aggregate-preamble refusal
+
+Keep `_parse_tasks_text` unchanged: done ledgers and direct parser callers may
+legitimately carry headings outside task blocks. Tighten only the destructive
+storage transition in `tasks_migrate.py`. Before parsing `tasks/active.md`,
+inspect the prefix before the first task-like `_ANY_TASK_HEADER_RE` match.
+Permit only blank
+lines, the exact `# Active Tasks` heading, and complete single-line HTML
+comments. Any other line adds a refusal naming `tasks/active.md` and its line
+number. The refused plan contains no entries or post-images; dry-run and apply
+write no split content or migration journal and leave the aggregate unchanged.
+Apply may still create the normal task-allocation lock.
+
+If no canonical header exists, the entire file is the prefix. This keeps the
+four audited comment-only empty stores valid while refusing a checklist-only
+queue. Do not add a flag, fallback parser, implicit task conversion, or broader
+Markdown heuristic.
+
+Tests cover a cancer/meta-style unchecked reminder, a therapeutics-style
+legacy checklist item, allowed heading/comment/blank scaffolding, and a
+comment-only zero-task store. They also reject text surrounding an otherwise
+complete HTML comment and require refused plans to contain zero planned writes.
+Existing bracket-title, empty-store, transaction, and second-run refusal tests
+remain green.
+
 ## 5. Project-local migration contract
 
 Each project migration runs in an isolated worktree created from that project's
@@ -326,6 +392,9 @@ Before mutation, capture:
 - the complete, unbudgeted graph diff via
   `science graph diff --format json --output "$EVIDENCE_DIR/local-graph-diff-before.json"`;
 - Git status and relevant ignored-state caveats.
+- the exact aggregate SHA-256 plus a numbered display of the prefix before the
+  first task-like header, so normalized task parity cannot hide non-task text
+  without mislabeling the display projection as raw bytes.
 
 The normalized task snapshot is the parity authority. Rendered bytes are not:
 the purpose of the migration is to change the active-task representation.
@@ -363,6 +432,17 @@ Git.
 
 Any structural task delta, done-ledger byte delta, unplanned refusal, mixed
 store, or retained journal stops that project before commit.
+
+Cancer/meta and therapeutics are the only reconciliation exceptions. Their
+exact aggregate hashes, numbered preamble displays, and dispositions are
+review inputs. Cancer/meta first returns
+its uncommitted rollout worktree to the recorded base, preserves the failed
+migration evidence, then migrates the original 11 task blocks and adds `t053`
+through the split-store CLI. Therapeutics archives all 14 legacy checklist
+records verbatim, removes only that archived prefix, migrates `t001` and `t002`,
+then adds the six mapped canonical tasks through the CLI. Their after snapshots
+must contain 12 and eight active tasks respectively and must pass explicit
+legacy-label coverage checks.
 
 ### 5.3 Documentation
 
@@ -423,6 +503,20 @@ The pre-rollout audit already found non-task graph staleness in several targets,
 including 38 rows in cBioPortal, 53 in pan-disease, and 29 in
 post-acute-infection. A canonical rebuild incorporates the current source tree
 honestly. Generated bytes are not tuned to preserve an obsolete graph.
+
+Task 10 review identified two exact non-task refresh deltas in cancer/meta that
+must be recorded rather than hidden: 25 `SkillLoad` quads materialize from the
+already-authored `skills_loaded` block in
+`entities/plans/0001-t031-transcriptional-output-analysis-plan.md`, which the
+baseline graph diff marked stale, and one `skos:related` quad disappears after
+Science Commons commit `b98600b` removed that dangling outbound reference from
+`theme:0013-cross-disease-foundations`. Before unwinding the interrupted
+migration, preserve the complete already-reviewed corrective graph and its
+semantic projection. After remigrating the original 11 tasks but before adding
+`t053`, the new build must match that projection byte-for-byte after excluding
+only `REVISION_URI`. This executable gate proves there is no other semantic
+delta without a bespoke normalization script. Adding `t053` is then the only
+remaining source change and is reviewed as a bounded final graph addition.
 
 Expected storage deltas include removal of the aggregate source path, addition
 of per-task source paths, and corresponding provenance-node changes. Task IDs
@@ -549,15 +643,27 @@ its regression tests. It is already public at `36463540`.
 
 The third prerequisite closes revision-manifest source coverage, excludes the
 transient task lock, adds its regression tests, and carries this amended design
-and plan. Run focused graph tests, Ruff, Pyright, and the full default Science
-suite before pushing it to `origin/main`. Final consumer locks use the third
-public SHA; it contains both earlier corrections by ancestry.
+and plan. It is public at `2fc330d0`.
 
-That describes the third prerequisite commit's scope, not the complete revision
-history consumers receive. It starts from public `main` at `36463540` and
-therefore inherits both earlier prerequisites plus their intervening ancestry.
-Reconfirm the ahead/behind relation immediately before the third push; consumer
-locks depend on the resulting revision being publicly resolvable.
+The fourth prerequisite adds only the lossless aggregate-preamble refusal and
+its tests, plus this reviewed amendment by ancestry. Run focused migration
+tests, Ruff, Pyright, and the full default Science suite before pushing it to
+`origin/main`. Final consumer locks use this fourth public SHA; it contains all
+earlier corrections by ancestry. cBioPortal and pan-disease receive local-only
+follow-up repin commits before Task 10 resumes.
+
+At amendment time, local toolkit `main` is `96ab4a5a`, five commits ahead and
+zero behind `origin/main`; those five commits are the reviewed annotation
+reasoning-invalidation design/plan series, not part of the preamble-guard
+commit. The final revision inherits them when the rollout branch is reconciled
+to current local `main`. Reconfirm this relation and the clean merge tree before
+publication so the audit trail does not confuse commit scope with revision
+ancestry.
+
+These descriptions concern prerequisite commit scope, not the complete revision
+history consumers receive. Reconfirm the ahead/behind relation immediately
+before the fourth push; consumer locks depend on the resulting revision being
+publicly resolvable.
 
 ### 8.2 Project-local commits
 
@@ -579,8 +685,10 @@ overlay defect was observed, and cBioPortal already has a local overlay-fix
 commit. cBioPortal receives one more source-closure commit containing the final
 pin/lock, narrow ignore rules, 11 tracked manifests, and regenerated local
 graph. Pan-disease moves directly from its parser pin to the final prerequisite.
-Their task stores are not rewritten. Cancer/meta remains uncommitted until it
-uses the final SHA.
+Those commits currently pin the third prerequisite; each receives a fourth-pin
+follow-up without rewriting its task store or graph semantics. Cancer/meta
+remains uncommitted until its lossy interrupted state is unwound and it uses the
+fourth SHA.
 
 Post-acute-infection's closure commit contains its final pin/lock, narrow ignore
 rules, five tracked manifests, the one path normalization, its live guide fix,
@@ -615,14 +723,18 @@ Composite work begins only after all local migrations are complete. A failed
 composite refresh cannot corrupt task storage and is retried after its graph or
 peer dependency is corrected.
 
-The cBioPortal primary checkout currently has one modified generated graph from
-the diagnostic rebuild that exposed this prerequisite. Preserve its hash and
-semantic-delta evidence while the third prerequisite is implemented. Before
-fast-forwarding the final cBioPortal source-closure commit, verify that the
-primary modification is still only that generated artifact, then restore the
-committed graph and merge. Rebuild both checkouts, compare their semantic
-projections, and leave the primary checkout on the committed worktree-built
-artifact; revision-metadata-only differences are evidence, not a second commit.
+The cBioPortal diagnostic rebuild that exposed the third prerequisite was
+preserved, verified, and cleaned before local commit `5a6c6b8` fast-forwarded.
+Its primary/worktree semantic projections are identical after excluding the
+revision subject. That completed recovery remains evidence and is not rerun by
+the fourth-prerequisite repin.
+
+Task 10's interrupted cancer/meta worktree is also rollout-owned and
+uncommitted. Preserve its complete evidence and require its exact known status,
+then restore only `pyproject.toml`, `uv.lock`, `knowledge/graph.trig`, and
+`tasks/active.md` from base and delete only the 11 named generated split files.
+Require a clean worktree at `fdeeb705` before applying the reviewed preamble
+reconciliation. Do not reset a broader path or reuse the lossy post-image.
 
 ## 10. Alternatives rejected
 
@@ -681,6 +793,13 @@ Mtime and hybrid modes are existing local diagnostics. Removing their stored
 baseline is unnecessary for this rollout: semantic parity already excludes the
 single revision subject, while same-checkout byte identity remains available.
 
+### 10.9 Trust normalized task parity despite unparsed preamble
+
+This is the defect exposed by Task 10: parser parity can be exact while the
+aggregate file deletion loses live work. Archiving or reconciling substantive
+preamble is a project decision, and the shared migrator must refuse until that
+decision is explicit.
+
 ## 11. Non-goals and reported follow-ups
 
 This design does not:
@@ -703,7 +822,9 @@ These remain visible follow-ups rather than hidden prerequisites.
 The rollout is complete when:
 
 1. No present, non-Commons configured project retains `tasks/active.md`.
-2. All 272 migrated active tasks are structurally identical to their baselines.
+2. All 272 originally parsed tasks are structurally identical to their
+   baselines, seven reconciled live reminders exist as canonical tasks, and the
+   final active total is 279.
 3. Non-empty stores have one file per active task; empty stores have no
    placeholder.
 4. No target has a mixed store or migration journal.
@@ -723,6 +844,10 @@ The rollout is complete when:
     source families, matches declared code-root discovery, excludes
     `tasks/.tasks.lock` and Marimo session JSON, and detects a changed
     workflow-run manifest.
-13. cBioPortal's 11 and post-acute-infection's five workflow-run manifests are
+13. A migration dry-run refuses substantive aggregate preamble before any
+    split or journal write; cancer/meta records the satisfied/live
+    dispositions, and therapeutics preserves all 14 legacy records while
+    mapping its six open labels to canonical tasks.
+14. cBioPortal's 11 and post-acute-infection's five workflow-run manifests are
     tracked while non-manifest result payloads remain ignored; no tracked
     manifest contains a checkout-local path.

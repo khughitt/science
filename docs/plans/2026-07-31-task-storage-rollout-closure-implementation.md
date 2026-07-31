@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Correct bracket handling, overlay provenance, and revision-manifest source coverage in the shared toolkit; make workflow-run provenance durable; transactionally migrate all 13 registered legacy task stores without changing their task sets; close 15 local graphs; and refresh the 14 affected composites.
+**Goal:** Correct bracket handling, overlay provenance, revision-manifest source coverage, and lossy aggregate-preamble handling in the shared toolkit; make workflow-run provenance durable; transactionally migrate all 13 registered legacy task stores while preserving 272 parsed tasks and reconciling seven additional live reminders; close 15 local graphs; and refresh the 14 affected composites.
 
-**Architecture:** The parser and overlay corrections are already public and remain immutable. A third toolkit prerequisite extends the revision manifest over the five omitted project-local loader surfaces and excludes the transient task lock. cBioPortal and post-acute-infection narrowly track the 16 workflow-run manifests their graphs consume while result payloads remain ignored. Every task-migration target, post-acute-infection, and multiple-myeloma pins the final public SHA. Cross-checkout graph parity compares named-graph quads excluding only `REVISION_URI`; same-checkout no-change rebuilds retain byte parity. Composite graphs are rebuilt only after all 15 local graphs are current, preserving peer named-graph context, authored peer lists, and default Commons behavior.
+**Architecture:** The parser, overlay, and revision-manifest corrections are public at `2fc330d0`. A fourth toolkit prerequisite makes the migrator refuse substantive text before the first canonical task header. Cancer/meta and therapeutics explicitly reconcile the only affected preambles; every other store remains byte/structure-parity migration. cBioPortal and post-acute-infection narrowly track the 16 workflow-run manifests their graphs consume while result payloads remain ignored. Every task-migration target, post-acute-infection, and multiple-myeloma pins the revised final public SHA. Cross-checkout graph parity compares named-graph quads excluding only `REVISION_URI`; same-checkout no-change rebuilds retain byte parity. Composite graphs are rebuilt only after all 15 local graphs are current, preserving peer named-graph context, authored peer lists, and default Commons behavior.
 
 **Tech Stack:** Python 3.13, Click, Pydantic `Task`, PyYAML, RDFLib, uv, pytest, Ruff, Pyright, Git worktrees, jq, yq.
 
@@ -24,6 +24,10 @@
 - cBioPortal and post-acute-infection must track every discovered `results/**/datapackage.json` while all non-manifest result payloads remain ignored.
 - Relative overlay source URIs are project-local. Composite verification must preserve the peer project named graph as their qualifier; never certify them from a flattened union.
 - The transactional migrator is the only task-store writer. Do not manually finish a partial migration, delete its journal, or copy task files between projects.
+- Before apply, preserve the exact aggregate SHA-256 and inspect a numbered
+  display of the prefix before the first task-like header. Permit only blank
+  lines, the exact `# Active Tasks` heading, or complete single-line HTML
+  comments. A substantive line is a hard refusal, never an implicit conversion.
 - No permanent rollout helper belongs in the toolkit or consumers. The two audit helpers in Task 3 live only under `/tmp/task-storage-rollout-closure/`.
 - Do not run test suites concurrently in the toolkit worktree.
 - Do not add compatibility modes, feature flags, new dependencies, or `Co-Authored-By` trailers.
@@ -46,6 +50,8 @@ Toolkit files changed by the prerequisite:
 - `science/src/science_tool/graph/io.py` — include the five omitted project-local loader surfaces in the revision manifest and exclude `tasks/.tasks.lock` plus exact Marimo session JSON leaves.
 - `science/src/science_tool/graph/storage_adapters/datapackage.py` — expose the existing entity-profile eligibility predicate for manifest discovery, if the implementation needs it; do not duplicate profile parsing.
 - `science/tests/test_graph_io_revision_manifest.py` — prove complete source-family coverage, payload exclusion, task-lock exclusion, and workflow-manifest drift detection.
+- `science/src/science_tool/tasks_migrate.py` — refuse substantive aggregate preamble before planning any write.
+- `science/tests/test_migrate_storage.py` — prove reminder/checklist refusal and preserve allowed heading/comment/empty-store behavior.
 - `docs/plans/2026-07-31-task-storage-rollout-closure-design.md` — record the approved overlay-provenance amendment.
 - `docs/plans/2026-07-31-task-storage-rollout-closure-implementation.md` — sequence the corrective release and staged repins.
 
@@ -55,23 +61,23 @@ Consumer migration matrix:
 |---:|---|---:|---|---|---|
 | 4 | `~/d/cancer/data-sources/cbioportal` | 74 | parser, overlay, then final SHA | none | yes |
 | 5 | `~/d/health/comparisons/pan-disease` | 58 | parser SHA; final in Task 9 | `AGENTS.md`, `README.md` | yes |
-| 10 | `~/d/cancer/meta` | 11 | final SHA | none | yes |
+| 10 | `~/d/cancer/meta` | 12 after one reminder promotion | final SHA | none | yes |
 | 11 | `~/d/cancer/mechanisms/evolution` | 31 | final SHA | `AGENTS.md` | yes |
 | 12 | `~/d/cancer/conditions/pre-cancer` | 6 | final SHA | none | yes |
 | 13 | `~/d/cancer/cancer-types/ovarian` | 0 | final SHA | `AGENTS.md` | yes |
 | 14 | `~/d/cancer/cancer-types/head-and-neck` | 0 | final SHA | `AGENTS.md` | yes |
 | 15 | `~/d/cancer/cancer-types/prostate` | 0 | final SHA | `AGENTS.md` | yes |
 | 16 | `~/d/cancer/cancer-types/breast` | 0 | final SHA | `AGENTS.md` | yes |
-| 17 | `~/d/cancer/therapeutics` | 2 | final SHA | `AGENTS.md` | no |
+| 17 | `~/d/cancer/therapeutics` | 8 after six legacy promotions | final SHA | `AGENTS.md`, `doc/legacy-task-queue.md` | no |
 | 18 | `~/d/health/meta` | 32 | final SHA | `AGENTS.md` | yes |
 | 19 | `~/d/health/processes/cycles` | 53 | final SHA | `AGENTS.md` | yes |
 | 20 | `~/d/health/processes/immunity` | 5 | final SHA | `AGENTS.md` | yes |
 | 21 | `~/d/health/processes/post-acute-infection` | already split | final SHA | `AGENTS.md` | yes |
 | 22 | `~/d/cancer/cancer-types/multiple-myeloma` | already split | final SHA | none | yes |
 
-Tasks 4 and 5 are complete migration commits on local `main`. Task 8's cBioPortal overlay correction is also complete at `2e7dd121`; Task 8C adds the final pin and durable workflow manifests. Task 9 has not started. Cancer/meta's Task 10 resumes its uncommitted migrated worktree after replacing the intermediate pin and tainted graph. Multiple-myeloma's historical `tasks/active.md` citations remain unchanged. `~/d/cancer/therapeutics` has no composite.
+Tasks 4 and 5 are complete migration commits on local `main`. Task 8's cBioPortal overlay correction is complete at `2e7dd121`; Task 8C completed at `5a6c6b8` with durable workflow manifests. Task 9 completed pan-disease at `ec930e2`. Both currently pin the third prerequisite and need a fourth-pin follow-up. Task 10 stopped before commit after review proved that its uncommitted migration would delete substantive preamble; preserve that evidence, return the worktree to `fdeeb705`, and rerun only after the fourth prerequisite is public. Multiple-myeloma's historical `tasks/active.md` citations remain unchanged. `~/d/cancer/therapeutics` has no composite.
 
-**Execution state and order:** Tasks 1-8 are complete, including publication of `36463540` and cBioPortal's local overlay commit. After independent review, stage only these two plan documents, run `git diff --cached --check`, and commit `docs: close graph source reproducibility gap` before Task 8A so its code commit starts from a clean branch. Then execute Tasks 8A-8C and Tasks 9-25 numerically. The completed Task 4-8 records remain as history and are not rerun.
+**Execution state and order:** Tasks 1-9 are complete through the local pan-disease commit. Task 10 review discovered the preamble-loss defect; no Task 10 commit exists. After independent review, stage only these two amended plan documents, run `git diff --cached --check`, and commit `docs: prevent lossy task-storage migration`. Execute Tasks 9A-9B, then resume Tasks 10-25 numerically. Completed Task 4-9 records remain history and are not rerun except for the explicit Task 9B repins.
 
 ---
 
@@ -906,9 +912,136 @@ git -C ~/d/health/comparisons/pan-disease merge --ff-only task-storage-rollout-c
 
 Do not push. Retain the worktree for the health composite phase.
 
+### Task 9A: Refuse lossy aggregate preambles and publish the revised final prerequisite
+
+**Files:**
+- Modify: `science/src/science_tool/tasks_migrate.py`
+- Modify: `science/tests/test_migrate_storage.py`
+- Already amended and committed first: this design and implementation plan
+
+**Interfaces:** Consumes public toolkit `2fc330d0` and the Task 10 review evidence. Produces one revised public toolkit SHA that refuses substantive aggregate preamble before any migration write.
+
+- [ ] **Step 1: Commit the reviewed plan amendment before code**
+
+Stage only the two `2026-07-31-task-storage-rollout-closure-*` plan files, run
+`git diff --cached --check`, and commit:
+
+```bash
+git commit -m "docs: prevent lossy task-storage migration"
+```
+
+- [ ] **Step 2: Write the failing migration-plan tests**
+
+Add focused tests proving:
+
+- `# Active Tasks`, blank lines, and a complete single-line HTML comment before
+  `## [t001]` remain allowed;
+- a cancer/meta-style unchecked reminder refuses with
+  `tasks/active.md:<line>` in the reason;
+- a therapeutics-style `- [ ] t-tx003 ...` line refuses;
+- `<!-- note --> live reminder <!-- end -->` refuses rather than being hidden
+  by a permissive comment check;
+- a comment-only zero-task file still plans zero writes without refusal;
+- every substantive-preamble refusal returns a plan with no entries and no
+  post-images;
+- `apply_migration` on a refused plan leaves `tasks/active.md` byte-identical,
+  creates no split directory, and creates no journal.
+
+Run the focused tests and require the new refusal cases to fail for the expected
+reason before implementation.
+
+- [ ] **Step 3: Implement the narrow preamble guard**
+
+In `tasks_migrate.py`, inspect only the source prefix before the first
+task-like `_ANY_TASK_HEADER_RE` match. Permit stripped empty lines, the exact
+`# Active Tasks` heading, and lines whose stripped form is one complete
+`<!-- ... -->` comment. Return an empty, line-specific refused plan immediately
+before normal task parsing or post-image planning; it must contain no entries
+or post-images. Do not treat a line that merely starts and ends with comment
+markers as one comment when non-comment text lies between closed comments.
+Do not change `_parse_tasks_text`, parse legacy IDs, infer tasks, or add a flag.
+
+- [ ] **Step 4: Run focused and mutation verification**
+
+Run:
+
+```bash
+cd science
+uv run --frozen pytest -q tests/test_migrate_storage.py tests/test_tasks_cli.py
+```
+
+Temporarily remove the guard with the patch tool, require the two substantive
+preamble tests to fail, then restore it with the patch tool and rerun green.
+
+- [ ] **Step 5: Release-test the toolkit**
+
+From `science/`, run Ruff and Pyright, followed by the full default suite with
+an explicit long timeout. Require a clean result and no concurrent suite in the
+worktree.
+
+- [ ] **Step 6: Review, commit, publish, and record the revised final SHA**
+
+Obtain SDD spec and code reviews, run `git diff --check`, and commit:
+
+```bash
+git add src/science_tool/tasks_migrate.py tests/test_migrate_storage.py
+git commit -m "fix(tasks): refuse lossy aggregate preambles"
+```
+
+Reconfirm that current local `main` is `96ab4a5a`, five commits ahead and zero
+behind `origin/main`, and that those five commits are the annotation
+reasoning-invalidation design/plan series. Reconcile the rollout branch with
+that current local `main`, require a clean merge tree, rerun focused tests,
+Ruff, and Pyright, fast-forward local `main`, and push toolkit `main`. This push
+publishes that reviewed ancestry as well as the narrow guard commit. Require
+`origin/main` to resolve the exact commit and replace
+`/tmp/task-storage-rollout-closure/final-toolkit-sha.txt` with that 40-character
+SHA. This push is authorized; no consumer push is.
+
+### Task 9B: Repin completed cBioPortal and pan-disease consumers
+
+**Files:** `pyproject.toml` and `uv.lock` in cBioPortal and pan-disease; no task-store rewrite.
+
+**Interfaces:** Consumes clean local mains/worktrees at cBioPortal `5a6c6b8` and pan-disease `ec930e2`, plus the revised public SHA. Produces one local-only follow-up commit in each repository.
+
+- [ ] **Step 1: Reconfirm both completed repositories are clean**
+
+Require each primary and retained rollout worktree to be clean and point to its
+recorded commit. Reconfirm consumer remote refs are unchanged where present.
+Preserve the existing evidence directories; cBioPortal's current
+`local-commit.txt` still names its earlier intermediate commit and is expected
+to be overwritten only after the repin commit succeeds.
+
+- [ ] **Step 2: Repin and audit each Science-only lock movement**
+
+In each retained worktree, replace only `2fc330d0d7b664842dbbad28dcdfc2f3c994f249`
+with the revised final SHA, run the standard Science-only lock upgrade,
+`uv sync --frozen`, and verify both installed direct URLs resolve to the final
+commit. No task path may change.
+
+- [ ] **Step 3: Recheck behavior without manufacturing a graph delta**
+
+Run complete strict validation, task listing, peers, graph validation, and a
+complete graph diff. Require validation/task/peer identity against the completed
+project evidence, zero graph-diff rows, zero absolute overlay identifiers, 11
+cBioPortal workflow runs, and no `knowledge/graph.trig` change. Any graph change
+stops for review.
+
+- [ ] **Step 4: Review, commit, and fast-forward locally**
+
+Stage only `pyproject.toml` and `uv.lock`, run cached `diff --check`, obtain SDD
+reviews, and commit `chore(science): pin lossless task migration prerequisite`
+in each repository. Fast-forward each local `main`, update its `local-commit.txt`,
+retain both worktrees, and do not push.
+
 ## Local migration protocol used historically by Tasks 4-5 and now by Tasks 10-20
 
 Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTED_COUNT`, pin action, documentation files, and commit message. Execute this protocol inside that task; a failure stops that project before commit and before its local-main merge.
+
+Tasks 10 and 17 are reconciliation exceptions. They replace generic Steps 3
+and 4 with their task-specific refusal, archive/disposition, and migration
+steps; only after that reconciliation succeeds do they resume the applicable
+remainder of this protocol. Do not require their initial dry-runs to exit zero.
 
 1. **Create the worktree.** With the task's exact `PROJECT_ROOT`, `PROJECT_ID`, and `EXPECTED_COUNT`, run:
 
@@ -951,6 +1084,9 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
 3. **Capture the canonical baseline under the post-pin environment.** Run:
 
    ```bash
+   sha256sum tasks/active.md | tee "$EVIDENCE_DIR/active-md.sha256"
+   awk '/^##[[:space:]]+\[[^]]+\][[:space:]]+/{exit} {print FNR ":" $0}' \
+     tasks/active.md | tee "$EVIDENCE_DIR/active-preamble-numbered.txt"
    uv run --frozen python /tmp/task-storage-rollout-closure/snapshot_tasks.py \
      . "$EVIDENCE_DIR/tasks-before.json"
    exit_code=0
@@ -972,6 +1108,13 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
    sha256sum science.yaml | tee "$EVIDENCE_DIR/science-yaml-before.sha256"
    git status --short | tee "$EVIDENCE_DIR/git-status-before.txt"
    ```
+
+   Except in Tasks 10 and 17, require `active-preamble-numbered.txt` to display
+   only blank lines, the exact `# Active Tasks` heading, or complete single-line
+   HTML comments after removing its line-number prefix. The aggregate SHA is
+   the exact-byte authority; the numbered file is only a review projection.
+   A substantive line must also appear as a dry-run refusal and stops the
+   generic protocol.
 
    Capture strict validation with `--output validate-before.json`, stderr, and its exact 0/1 status using the status block below; reject exit 2 or `Traceback`.
 
@@ -1100,21 +1243,84 @@ test "$exit_code" -le 1
 
 **Files:** `pyproject.toml`, `uv.lock`, task store, and local graph artifacts under `~/d/cancer/meta`.
 
-**Interfaces:** Consumes the already-applied uncommitted 11-task migration, evidence under `/tmp/task-storage-rollout-closure/cancer-meta`, and the final public SHA. Produces the original 11 structurally identical split tasks plus a stable current local graph; it never reapplies or manually rewrites migration output.
+**Interfaces:** Consumes the reviewed-but-uncommitted lossy 11-task migration, evidence under `/tmp/task-storage-rollout-closure/cancer-meta`, and the revised final public SHA. Produces the original 11 structurally identical tasks plus canonical `task:t053` for the one live preamble reminder, for 12 active tasks total.
 
-- [ ] **Step 1: Verify and preserve the interrupted execution state**
+- [ ] **Step 1: Verify and preserve the blocked review state**
 
-Require clean primary `main` at `fdeeb70`, rollout branch based at that commit, and worktree changes limited to `pyproject.toml`, `uv.lock`, `tasks/active.md`, `tasks/active/*.md`, and `knowledge/graph.trig`. Require exactly 21 absolute overlay source identifiers in the tainted graph. Preserve every existing evidence file. Do not reset, recreate the worktree, or rerun `--apply`.
+Require clean primary `main` at `fdeeb70`, rollout branch based at that commit,
+and worktree changes limited to `pyproject.toml`, `uv.lock`, `tasks/active.md`,
+`tasks/active/*.md`, and `knowledge/graph.trig`. The current reviewed graph is
+the corrective rebuild with zero absolute overlay identifiers; the base graph
+still contains 21. Copy that complete current graph into the evidence directory,
+record its SHA-256, and project it with `semantic_graph.py` as
+`reviewed-corrective-semantic.json` before restoring any path. This is the
+reviewed graph whose exact non-task delta is 25 `SkillLoad` additions and the
+one Commons-driven `skos:related` removal. Preserve every existing evidence
+file. Do not reset, recreate the worktree, or rerun `--apply` before the
+targeted unwind.
 
-- [ ] **Step 2: Re-certify the completed migration gates**
+- [ ] **Step 2: Return only rollout-owned paths to the recorded base**
 
-Require `tasks-before.json == tasks-after.json`, exactly 11 split files, no aggregate or journal, successful `tasks-list-after.json`, second-run exit 1 with both required refusals, byte-identical peers, and a valid `science-yaml-before.sha256` check.
+Save the exact status and diff as `lossy-review-state.*`. Restore only
+`pyproject.toml`, `uv.lock`, `knowledge/graph.trig`, and `tasks/active.md` from
+`HEAD`. Use the patch tool to delete only the 11 named untracked
+`tasks/active/*.md` files already recorded in `tasks-after.json`. Require a
+clean worktree at `fdeeb705`; do not use a broad reset, clean, or worktree
+recreation. Reconfirm the restored base graph has exactly 21 absolute overlay
+identifiers before any new build.
 
-- [ ] **Step 3: Replace the intermediate pin with the final SHA**
+- [ ] **Step 3: Prove the revised prerequisite catches the original loss**
 
-Use the patch tool to replace `ba0b0cb0304aff03159ebc37c188839cfd4b1515` with the exact `final-toolkit-sha.txt` value. Relock only Science packages, require no unrelated lock movement, synchronize, and verify both installed package revisions.
+Pin the revised final SHA, relock only Science packages, synchronize, and
+verify both installed revisions. Record the exact aggregate SHA-256 and a
+numbered display of its five-line preamble. Run the migration dry-run against
+the untouched aggregate and require exit 1 with a line-specific refusal on the
+first unchecked reminder, `.meta.source_count == 0`, and only refusal rows.
+The Task 9A unit contract supplies the corresponding zero-post-image proof.
+Require unchanged aggregate bytes, no split directory, and no journal.
 
-- [ ] **Step 4: Replace the tainted generated graph through a canonical rebuild**
+- [ ] **Step 4: Reconcile both reminders explicitly**
+
+Verify `tasks/done/2026-05.md` contains completed `task:t013`, whose title and
+description satisfy the first meta next-lap reminder. Patch only aggregate
+lines 3-5—the two reminder bullets and the first bullet's continuation—while
+retaining the conventional heading/blank scaffolding and every canonical task
+byte. Preserve the original
+lines and the `t013` disposition in evidence. Require the revised dry-run to
+plan exactly 11 writes with no refusal.
+
+- [ ] **Step 5: Apply the canonical 11-task migration**
+
+Apply through the migrator, prove the original 11 normalized task structures
+and done-ledger bytes are identical, and require the normal second-run refusal.
+Require exactly 11 active files, no aggregate or journal, a successful list,
+and a snapshot byte-identical to the original 11-task baseline.
+
+- [ ] **Step 6: Prove the complete reviewed corrective graph before promotion**
+
+Build the local graph with exactly those 11 tasks, validate it, and create its
+`semantic_graph.py` projection. Require that projection byte-identical to
+`reviewed-corrective-semantic.json`, excluding only `REVISION_URI` by the
+helper's existing contract. Also require the task-domain projection
+byte-identical to the already-certified 11-task `task-graph-after.json` and zero
+absolute overlay identifiers. This single comparison imports the reviewed 25
+`SkillLoad` additions and one Commons-driven removal and proves no other
+semantic delta without a bespoke normalization script. Preserve this 11-task
+graph and projection as evidence for the bounded promotion delta.
+
+- [ ] **Step 7: Add the live reminder and build the final graph**
+
+Use `science tasks add` so the allocator creates exactly `t053`:
+
+```bash
+uv run --frozen science tasks add \
+  "Audit compatibility-symlink usage and retire expired symlinks" \
+  --priority P2 \
+  --description "Legacy active.md reminder dated 2026-06-15. Scan ~/d/r/mm30 and ~/d/r/cbioportal compatibility-symlink usage, update remaining external references, and remove the expired symlinks after verification. The neighboring meta next-lap reminder is not promoted because completed task:t013 already satisfies it."
+```
+
+Require 12 active files, no aggregate or journal, a successful list, and a
+snapshot containing the original 11 tasks unchanged plus only `t053`. Then run:
 
 ```bash
 uv run --frozen science graph build --local-only
@@ -1127,21 +1333,32 @@ test "$(rg -o 'schema:identifier "/[^"]*/overlays/[^"]*"' \
   knowledge/graph.trig | wc -l)" -eq 0
 ```
 
-Create `task-graph-corrective.json` and require it byte-identical to the already-certified `task-graph-after.json`.
+Create `task-graph-corrective.json`. Filter every triple containing `t053` and
+require the remainder byte-identical to the already-certified 11-task
+`task-graph-after.json`; inspect the excluded triples and require they describe
+only `t053`, its source, and provenance. Compare the final semantic projection
+to the preserved 11-task projection, require zero removals, and save the bounded
+additions for review. Every addition must belong to the `t053` task/source
+closure; any unrelated addition stops.
 
-- [ ] **Step 5: Make no live-doc edit**
+The initial audit found no current aggregate-path instruction. Make no live-doc
+edit outside the new task itself; leave historical docs untouched.
 
-The initial audit found no current aggregate-path instruction. Leave historical docs untouched.
+- [ ] **Step 8: Recheck validation and topology**
 
-- [ ] **Step 6: Recheck validation and topology**
+Capture complete strict validation as `validate-corrective.json`. Require every
+existing post-migration result to remain identical and permit only a result
+whose subject/path is the new `t053`; an unrelated delta stops. Re-capture
+peers, require identity, and verify `science.yaml` checksum identity.
 
-Capture complete strict validation as `validate-corrective.json`. Require its sorted results byte-identical to the existing post-migration `validate-after.json`; this pin changes provenance spelling, not validation semantics. Re-capture peers, require identity, and verify `science.yaml` checksum identity.
+- [ ] **Step 9: Inspect and review the complete atomic diff**
 
-- [ ] **Step 7: Inspect the complete atomic diff**
+Require the dependency diff restricted to the two Science packages, the 11
+original split tasks identical to migrator output, the one CLI-authored `t053`,
+no absolute overlay identifier, and only the declared graph deltas. Run
+unstaged and cached `diff --check`; obtain fresh SDD spec and code reviews.
 
-Require the dependency diff restricted to the two Science packages, the 11-task split identical to migrator output, no absolute overlay identifier, and generated graph changes explained by task storage plus absolute-to-relative overlay provenance. Run unstaged and cached `diff --check`.
-
-- [ ] **Step 8: Commit and fast-forward cancer/meta locally**
+- [ ] **Step 10: Commit and fast-forward cancer/meta locally**
 
 ```bash
 git add -A
@@ -1246,18 +1463,123 @@ Do not push. Retain the worktree for Task 23.
 
 ### Task 17: Migrate therapeutics and close its stale environment
 
-**Files:** task store, `AGENTS.md`, and local graph artifacts under `~/d/cancer/therapeutics`.
+**Files:** task store, `AGENTS.md`, `doc/legacy-task-queue.md`, and local graph artifacts under `~/d/cancer/therapeutics`.
 
-**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces two structurally identical split tasks and a current local graph; no composite follows.
+**Interfaces:** Consumes the final public SHA and a mixed historical aggregate containing two canonical tasks plus 14 legacy checklist records. Produces the original two tasks unchanged, six canonical promotions for the open legacy records, a verbatim archive of all 14 records, and a current local graph; no composite follows.
 
-- [ ] **Step 1: Create therapeutics' clean worktree and run `uv sync --frozen` to replace its stale installed environment, using `PROJECT_ROOT=~/d/cancer/therapeutics`, `PROJECT_ID=therapeutics`, and `EXPECTED_COUNT=2`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
-- [ ] **Step 3: Capture the complete canonical task, two-write dry-run, validation, graph, and peer baseline.**
-- [ ] **Step 4: Apply the migrator and prove two-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
-- [ ] **Step 5: Update `AGENTS.md` to the split-store/CLI guidance.**
-- [ ] **Step 6: Rebuild and verify the local graph, task-domain parity, zero complete graph diff, and a dependency diff restricted to the two Science packages.**
-- [ ] **Step 7: Review validation activation and require peer/config identity.**
-- [ ] **Step 8: Commit as `chore(science): migrate task storage`, fast-forward local `main`, do not push its origin, and retain the clean worktree through Task 25.**
+- [ ] **Step 1: Create the clean worktree and inventory both task formats**
+
+Run `uv sync --frozen` to replace the stale installed environment, using
+`PROJECT_ROOT=~/d/cancer/therapeutics` and `PROJECT_ID=therapeutics`. Preserve
+the exact aggregate SHA-256 and a numbered display of its first 16 lines.
+Require exactly two canonical headers, 14 `t-txNNN` checklist records, eight
+checked records, and these six open labels in source order:
+
+```text
+t-tx003 t-tx009 t-tx010 t-tx006 t-tx014 t-tx012
+```
+
+- [ ] **Step 2: Pin the revised final SHA and prove the refusal**
+
+Capture current-pin validation, pin and Science-only relock the exact final
+public SHA, synchronize, and verify both installed revisions. Run dry-run and
+require a line-specific substantive-preamble refusal,
+`.meta.source_count == 0`, and only refusal rows. The Task 9A unit contract
+supplies the corresponding zero-post-image proof. Require unchanged aggregate
+bytes, no split directory, and no journal.
+
+Then capture the rest of the canonical post-pin baseline without the generic
+successful-plan assertion: write the two parsed active tasks and done-ledger
+hashes to `tasks-before.json`; write the complete graph diff to
+`local-graph-diff-before.json`; project the committed task domain to
+`task-graph-before.json`; capture complete strict validation as
+`validate-before.json` plus stderr and exact 0/1 exit status; capture
+`peers-before.json`; and record `science-yaml-before.sha256`. Reject a traceback,
+exit 2, or any state change beyond the pin/lock and normal allocation lock.
+
+- [ ] **Step 3: Archive the complete legacy queue and pin the mapping**
+
+Create `doc/legacy-task-queue.md` with the source commit SHA, the original 14
+checklist records copied verbatim, and this disposition table:
+
+| Legacy label | Disposition |
+|---|---|
+| `t-tx001`, `t-tx002`, `t-tx004`, `t-tx005`, `t-tx007`, `t-tx008`, `t-tx011`, `t-tx013` | completed; archived verbatim |
+| `t-tx003` | canonical `task:t006` (`status: active`) |
+| `t-tx009` | canonical `task:t007` |
+| `t-tx010` | canonical `task:t008` |
+| `t-tx006` | canonical `task:t009` |
+| `t-tx014` | canonical `task:t010` |
+| `t-tx012` | canonical `task:t011` (blocked by `task:t008`, `task:t009`) |
+
+Require every source line to occur byte-for-byte inside the archive and all 14
+labels to occur in the table. Historical prose references remain unchanged.
+
+- [ ] **Step 4: Remove only the archived preamble and migrate the two canonical tasks**
+
+Patch `tasks/active.md` to remove the 14 archived checklist lines while
+retaining the conventional comment/blank scaffolding and the two canonical
+task blocks byte-for-byte. Require dry-run to plan exactly two writes without
+refusal, then apply. Prove `t001`/`t002` structural parity, done-ledger byte
+parity, split shape, no journal, listing success, and the expected second-run
+refusal. The pre-reconciliation snapshot contains exactly two active tasks;
+`tasks/done/2026-06.md` continues to contain completed `t003`-`t005`.
+
+- [ ] **Step 5: Promote the six open records through the CLI**
+
+Use `science tasks add` in the mapping-table order so allocation is exactly:
+
+| Canonical ID | Title | Priority | Additional action |
+|---|---|---|---|
+| `t006` | Assess independent-action applicability to multiple myeloma | P2 | preserve `t-tx003` and its in-progress context; then set `status: active` |
+| `t007` | Scope and preregister combination translation-rate analysis A5 | P1 | description preserves `t-tx009` |
+| `t008` | Add the AZ-Sanger DREAM dataset under a workflow-owned fetch rule | P1 | description preserves `t-tx010` and DUA gate |
+| `t009` | Resolve licenses for DrugComb, DrugCombDB, and SYNERGxDB | P2 | description preserves `t-tx006` |
+| `t010` | Preregister and run the A2 non-monotonicity re-gate | P1 | description preserves `t-tx014` |
+| `t011` | Execute the rich-grid metric-convention re-gate for P1 | P1 | after creation, block by `task:t008` and `task:t009`; description preserves `t-tx012` |
+
+Every description points to `doc/legacy-task-queue.md` for the full historical
+text. Because `science tasks add` creates proposed tasks and there is no
+`tasks start` command, run `science tasks edit t006 --status active` to preserve
+the source's explicit in-progress state. Use
+`science tasks block t011 --by task:t008 --by task:t009` after all six exist.
+Require exactly eight active files, `t006` active, `t011` blocked, the other
+promotions proposed, and a successful task listing.
+
+- [ ] **Step 6: Prove reconciled task and documentation closure**
+
+Snapshot the final store as `tasks-after.json`. Remove `t006`-`t011` from its
+active-task projection and require the remainder identical to
+`tasks-before.json`. Require each of the six legacy labels in exactly one
+canonical task description and in the archive mapping. Require exactly eight
+active tasks after reconciliation. Update `AGENTS.md` to the split-store/CLI
+guidance.
+
+- [ ] **Step 7: Rebuild and verify the local graph**
+
+Build/validate the local graph and require zero complete graph-diff rows, zero
+absolute overlay identifiers, and save the final task-domain projection. Filter
+the six added task subjects from it and require the result byte-identical to
+`task-graph-before.json`. This gate preserves the completed `t003`-`t005`
+subjects as well as active `t001`/`t002`. Require the dependency diff restricted
+to the two Science packages.
+
+- [ ] **Step 8: Review validation and topology**
+
+Capture complete strict validation and compare it with Step 2's
+`validate-before.json` under the generic protocol's activation rule: allow the
+declared task-storage and graph-freshness removals, map every newly activated
+rule family to a pre-migration `validate.check-error`, and additionally review
+findings attributable to `t006`-`t011` or the archive. Reject every unexplained
+delta rather than requiring literal result identity. Require peer output
+identical to `peers-before.json`, verify `science-yaml-before.sha256`, and run
+both unstaged and cached `diff --check`.
+
+- [ ] **Step 9: Review, commit, and fast-forward locally**
+
+Obtain SDD spec/code reviews, commit as
+`chore(science): migrate task storage`, fast-forward local `main`, do not push
+its origin, and retain the clean worktree through Task 25.
 
 ### Task 18: Migrate health/meta under the final toolkit
 
@@ -1557,22 +1879,33 @@ printf 'skip commons: role has no task queue\n'
 
 Expected: the two skips are explicit; every present non-Commons project passes the absence assertion.
 
-- [ ] **Step 3: Prove all 272 migrated active tasks survived structurally**
+- [ ] **Step 3: Prove 272 parsed tasks plus seven reconciled live reminders survived**
 
 Run:
 
 ```bash
-project_ids=(
-  cbioportal pan-disease cancer-meta evolution pre-cancer ovarian head-and-neck
-  prostate breast therapeutics health-meta cycles immunity
+parity_project_ids=(
+  cbioportal pan-disease evolution pre-cancer ovarian head-and-neck
+  prostate breast health-meta cycles immunity
 )
-for project_id in $project_ids; do
+for project_id in $parity_project_ids; do
   cmp "/tmp/task-storage-rollout-closure/$project_id/tasks-before.json" \
     "/tmp/task-storage-rollout-closure/$project_id/tasks-after.json"
 done
-jq -s -e 'map(.active | length) | add == 272' \
-  /tmp/task-storage-rollout-closure/{cbioportal,pan-disease,cancer-meta,evolution,pre-cancer,ovarian,head-and-neck,prostate,breast,therapeutics,health-meta,cycles,immunity}/tasks-before.json
+jq -s -e 'map(.active | length) | add == 259' \
+  /tmp/task-storage-rollout-closure/{cbioportal,pan-disease,evolution,pre-cancer,ovarian,head-and-neck,prostate,breast,health-meta,cycles,immunity}/tasks-before.json
 ```
+
+For cancer/meta, filter the row whose `.id == "t053"` from `tasks-after.json`
+and require the remainder identical to its 11-task `tasks-before.json`; require
+`t053` to match the reviewed reminder contract. For therapeutics, filter rows
+whose IDs are `t006` through `t011` and require the remainder identical to its
+two-active-task baseline; separately require its completed `t003`-`t005` ledger
+records and pre-promotion task-graph subjects unchanged; require the six
+canonical descriptions and archive table to cover all six open legacy labels,
+require `t006` active and `t011` blocked by `t008` and `t009`, and
+require all 14 original checklist records in the verbatim archive. Finally
+snapshot all 13 local-main stores and require their active counts to sum to 279.
 
 Also require no `tasks/.science/task-storage-migration.journal` in those 13 roots or post-acute-infection.
 
@@ -1798,4 +2131,4 @@ Leave the toolkit worktree in place for final review and branch handoff.
 
 - [ ] **Step 10: Write the completion report**
 
-Report: public final toolkit SHA; exact final pins in all 15 closure targets; all consumer commit SHAs; 272/272 task parity; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; 16 tracked workflow-run manifests with ignored payloads; primary/worktree semantic parity; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; and which consumer mains remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, workflow-manifest schema projection, and historical-citation follow-ups.
+Report: public final toolkit SHA; exact final pins in all 15 closure targets; all consumer commit SHAs; 272/272 parsed-task parity plus seven reviewed promotions for 279 active tasks; both preamble dispositions and the therapeutics archive; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; 16 tracked workflow-run manifests with ignored payloads; primary/worktree semantic parity; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; and which consumer mains remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, workflow-manifest schema projection, and historical-citation follow-ups.
