@@ -36,6 +36,7 @@ from science_model.reasoning import (
     IdentificationStrength,
     Polarity,
     Predicate,
+    SIGN_MEANINGFUL_PREDICATES,
     canonical_evidence_type_token,
 )
 
@@ -283,13 +284,20 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
     belief-target IRI directly (Task 0, no shim).
     """
     entity_id = row.id or f"proposition:{_slug_for_triple(row.subject, row.predicate, row.object)}"
+    predicate = Predicate(row.predicate)
+    if row.polarity is not None:
+        polarity = Polarity(row.polarity)
+    elif predicate in SIGN_MEANINGFUL_PREDICATES:
+        polarity = None
+    else:
+        polarity = Polarity.NOT_APPLICABLE
     return PropositionEntity(
         id=entity_id,
         title=_proposition_title(row),
         subject=row.subject,
         object=row.object,
-        predicate=Predicate(row.predicate),
-        polarity=Polarity(row.polarity) if row.polarity is not None else None,
+        predicate=predicate,
+        polarity=polarity,
         legacy_relation_label=row.legacy_relation_label,
         legacy_patch=row.legacy_patch,
         legacy_edge_id=row.legacy_edge_id,

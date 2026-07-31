@@ -192,6 +192,41 @@ def test_apply_workbench_new_proposition_body_matches_workbench_body(tmp_path: P
     assert body == workbench_entity_body(_proposition())
 
 
+def test_apply_workbench_canonicalizes_polarity_and_invalidates_stamp(tmp_path: Path) -> None:
+    from science_model.propositions import PropositionEntity
+
+    _seed_project(tmp_path)
+    workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
+    workbench_path.parent.mkdir(parents=True)
+    _write_workbench(workbench_path, inline_evidence=False)
+    apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
+
+    prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    frontmatter, body = parse_markdown_entity_file_preserving_body(prop_path)
+    frontmatter["reasoning_source"] = "llm-synth:m:proposition-synthesize-v1"
+    prop_path.write_text(
+        "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
+        encoding="utf-8",
+    )
+    changed = workbench_path.read_text(encoding="utf-8")
+    changed = changed.replace("predicate: affects", "predicate: binds")
+    changed = changed.replace("  polarity: positive\n", "")
+    workbench_path.write_text(changed, encoding="utf-8")
+
+    result = apply_workbench(
+        tmp_path,
+        input_path=workbench_path,
+        as_of=date(2026, 7, 10),
+    )
+
+    assert result.status == "applied"
+    persisted = _frontmatter(prop_path)
+    assert persisted["predicate"] == "binds"
+    assert persisted["polarity"] == "not_applicable"
+    assert "reasoning_source" not in persisted
+    PropositionEntity.model_validate(persisted)
+
+
 def test_apply_workbench_rerun_is_noop_without_timestamp_churn(tmp_path: Path) -> None:
     _seed_project(tmp_path)
     workbench_path = tmp_path / "doc/figures/dags/h1.workbench.yaml"
@@ -200,12 +235,19 @@ def test_apply_workbench_rerun_is_noop_without_timestamp_churn(tmp_path: Path) -
 
     apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 4))
     prop_path = tmp_path / "entities/propositions/a-affects-b.md"
+    frontmatter, body = parse_markdown_entity_file_preserving_body(prop_path)
+    frontmatter["reasoning_source"] = "llm-synth:m:proposition-synthesize-v1"
+    prop_path.write_text(
+        "---\n" + yaml.safe_dump(frontmatter, sort_keys=False) + "---\n" + body,
+        encoding="utf-8",
+    )
     first_frontmatter = _frontmatter(prop_path)
 
     result = apply_workbench(tmp_path, input_path=workbench_path, as_of=date(2026, 7, 10))
 
     assert result.status == "no-op"
     assert _frontmatter(prop_path) == first_frontmatter
+    assert first_frontmatter["reasoning_source"] == "llm-synth:m:proposition-synthesize-v1"
 
 
 def test_apply_workbench_preserves_authored_proposition_body_on_semantic_update(tmp_path: Path) -> None:

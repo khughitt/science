@@ -163,6 +163,19 @@ def test_proposition_title_is_the_triple() -> None:
     assert prop.title == "concept:a affects concept:b"
 
 
+def test_signless_predicate_canonicalizes_omitted_polarity() -> None:
+    from science_model.reasoning import Polarity
+
+    prop = _proposition_for_row(_row(predicate="binds", polarity=None))
+
+    assert prop.polarity is Polarity.NOT_APPLICABLE
+
+
+def test_sign_meaningful_predicate_still_requires_polarity() -> None:
+    with pytest.raises(ValidationError, match="polarity must be"):
+        _proposition_for_row(_row(polarity=None))
+
+
 def test_evidence_line_title_uses_source_when_present() -> None:
     stub = EvidenceStub(stance="supports", source="paper:Smith2025")
     line = _evidence_line_for_stub(stub, target_id="proposition:0001-x", index=0)
@@ -316,6 +329,96 @@ def test_recompiling_preserves_an_authors_title_and_body(tmp_path) -> None:
     after = written.read_text(encoding="utf-8")
     assert yaml.safe_load(after.split("---\n", 2)[1])["title"] == "An author's real title"
     assert "Authored prose." in after
+
+
+def test_compile_canonicalizes_stale_polarity_and_invalidates_stamp(tmp_path) -> None:
+    import yaml
+    from science_model.propositions import PropositionEntity
+    from science_tool.dag import workbench as wb
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    dest = tmp_path / "entities/propositions/x.md"
+    dest.parent.mkdir(parents=True)
+    dest.write_text(
+        "---\n"
+        "id: proposition:x\n"
+        "kind: proposition\n"
+        "title: A affects B\n"
+        "status: active\n"
+        "subject: concept:a\n"
+        "object: concept:b\n"
+        "predicate: affects\n"
+        "polarity: positive\n"
+        "claim_layer: causal_effect\n"
+        f"reasoning_source: {_SYNTH_STAMP}\n"
+        "created: '2026-07-01'\n"
+        "updated: '2026-07-01'\n"
+        "---\n\n# Curated body\n",
+        encoding="utf-8",
+    )
+    workbench = wb.WorkbenchFile.model_validate(
+        {
+            "rows": [
+                {
+                    "id": "proposition:x",
+                    "subject": "concept:a",
+                    "predicate": "binds",
+                    "object": "concept:b",
+                    "patch": "p",
+                    "claim_layer": "structural_claim",
+                }
+            ]
+        }
+    )
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 31))
+
+    frontmatter = yaml.safe_load(dest.read_text(encoding="utf-8").split("---\n", 2)[1])
+    assert frontmatter["predicate"] == "binds"
+    assert frontmatter["polarity"] == "not_applicable"
+    assert "reasoning_source" not in frontmatter
+    PropositionEntity.model_validate(frontmatter)
+    assert "# Curated body" in dest.read_text(encoding="utf-8")
+
+
+def test_idempotent_compile_preserves_reasoning_stamp_and_bytes(tmp_path) -> None:
+    import yaml
+
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import render_from_frontmatter
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {
+            "patch": "p",
+            "rows": [
+                {
+                    "id": "proposition:x",
+                    "subject": "concept:a",
+                    "predicate": "affects",
+                    "object": "concept:b",
+                    "patch": "p",
+                    "polarity": "positive",
+                    "claim_layer": "causal_effect",
+                }
+            ],
+        }
+    )
+    as_of = date(2026, 7, 31)
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    dest = tmp_path / "entities/propositions/x.md"
+    frontmatter_text, body = dest.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    frontmatter = yaml.safe_load(frontmatter_text)
+    frontmatter["reasoning_source"] = _SYNTH_STAMP
+    dest.write_text(render_from_frontmatter(frontmatter, body), encoding="utf-8")
+    before = dest.read_bytes()
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    after = dest.read_bytes()
+    assert after == before
+    assert yaml.safe_load(after.decode().split("---\n", 2)[1])["reasoning_source"] == _SYNTH_STAMP
 
 
 @pytest.mark.parametrize(
