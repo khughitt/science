@@ -69,9 +69,15 @@ keys whose "deleting them is piece 3's corpus migration". Measured:
 - `legacy_relation_label` holds **243 distinct values across 307 records** — the only
   human-authored semantics on those skeletons, ranging from terse (`dosage`, `epigenetic`)
   to substantive ("gain(1q) carries a dosage-linked mitochondrial-redox expression block").
-  Deleting it destroys information. `legacy_patch`, by contrast, has 15 distinct values and
-  is near-redundant with `discusses` (9 of 15 map to exactly one `discusses` set; the
-  remaining 6 map to two).
+  It is also **still consumed**: `dag/proposition_edges.py:69` maps it to `original_label`,
+  which `dag/render.py:242` uses to build rendered edge labels. Deleting it would both
+  destroy information and change rendered DAG output.
+- `legacy_patch`, by contrast, has 15 distinct values and is near-redundant with `discusses`
+  (9 of 15 map to exactly one `discusses` set; the remaining 6 map to two).
+
+**The inert validator does not make these outputs inert.** Two of the three fields still
+materialize into the provenance graph and the third still renders; only the `.dot`
+cross-check has fallen silent. Each field needs its own verdict.
 
 **Ruling: out of scope here.** The triple's fate belongs to the migration design, which
 should start from these measurements rather than from "just delete them".
@@ -95,9 +101,12 @@ body              'curated body'       -> '# stub'
 
 `write_entity_file` renders the whole model with `exclude_none`, so every field the minting
 `PropositionEntity` leaves unset is *absent from the new file* — silently deleting the
-synthesis result and the curated body. This is a live data-loss path, and containing the
-writers closes it as a direct consequence: `render_update` preserves unowned keys and the
-existing body.
+synthesis result and the curated body.
+
+This is a live data-loss path. Containment alone does **not** close it: rendering the same
+write as a contained update would still replace `source_refs`, `subject` and `object`, because
+the minting writer owns them. Closing it requires the §4.3 ruling — an existing identical
+claim is provenance accrual, not a rewrite.
 
 **This, not the empty titles, is why the slice is worth doing on its own.**
 
@@ -125,7 +134,7 @@ three writers of `proposition` own genuinely different sets:
 | writer | operation | owns beyond the shared core |
 |---|---|---|
 | `dag.workbench` | upsert | `legacy_*`, `discusses`, `predicate`, `polarity` |
-| `annotation.promote` | create (upsert on identical claim) | **`source_refs`** |
+| `annotation.promote` | **create only** (§4.3) | **`source_refs`**, at create |
 | `annotation.synthesize` | update only | **`reasoning_source`** |
 
 `source_refs` and `reasoning_source` appear in neither existing allowlist.
@@ -146,15 +155,19 @@ class Ownership:
     create_only: frozenset[str] = frozenset()
 ```
 
-with four declarations. The two workbench sets are carried over **verbatim**, so the
-workbench's behaviour is unchanged by construction:
+with four declarations. The two workbench sets are carried over **verbatim**, which makes its
+*ownership semantics* — which keys a workbench write may overwrite — unchanged by
+construction. That is narrower than "the workbench is unchanged", and the difference matters:
+the moved path, body, date and atomic-write logic of §4.2 is shared code that this design
+relocates, and `workbench_apply`'s no-op detection depends on `render_update`'s output rather
+than on ownership alone. Those are covered by test, not by construction (§5.2).
 
 ```python
 WORKBENCH_PROPOSITION   = Ownership(PROPOSITION_OWNED_KEYS,   CREATE_ONLY_KEYS)
 WORKBENCH_EVIDENCE_LINE = Ownership(EVIDENCE_LINE_OWNED_KEYS, CREATE_ONLY_KEYS)
 PROMOTE_PROPOSITION     = Ownership(
     frozenset(("id", "kind", "subject", "object", "source_refs")), CREATE_ONLY_KEYS
-)
+)   # reaches `render_create` ONLY -- promote never updates a record (§4.3)
 SYNTHESIZE_PROPOSITION  = Ownership(
     frozenset(("subject", "object", "predicate", "polarity", "claim_layer",
                "reasoning_source"))
@@ -185,23 +198,25 @@ dest.parent.mkdir(parents=True, exist_ok=True)
 _atomic_replace_text(dest, text)
 ```
 
-Move it into `entity_frontmatter` as **two** entry points over shared internals:
+Move it into `entity_frontmatter` as **three** entry points over shared internals, one per
+operation actually performed:
 
 ```python
 def upsert_entity_file(entity, *, project_root, ownership, create_body, as_of=None) -> Path
+def create_entity_file(entity, *, project_root, ownership, create_body, as_of=None) -> Path
 def update_entity_file(entity, *, project_root, ownership, as_of=None) -> Path
 ```
 
-`upsert_entity_file` is today's behaviour, for writers that legitimately create — the
-workbench and `promote`. `update_entity_file` refuses a missing destination with
-`MalformedTargetError` and takes **no `create_body`**, because an update-only writer has no
-create body to supply.
+`upsert_entity_file` is today's behaviour, used only by the workbench, which legitimately
+recompiles over existing rows. `create_entity_file` refuses an **existing** destination;
+`update_entity_file` refuses a **missing** one and takes no `create_body`, because an
+update-only writer has none to supply.
 
-The two entry points are not decoration. `synthesize` only ever updates existing
-propositions, so giving it `upsert_entity_file` would force a `create_body` argument that
-can never be used — and a value invented to satisfy a signature is exactly the silent
-fallback that would one day mint a proposition from a stub body. Making the operation
-explicit in the function name lets the unreachable branch not exist rather than be guarded.
+The three entry points are not decoration — each writer performs exactly one operation, and
+naming it is what keeps the other branches from existing. Handing `synthesize` an upsert
+would force a `create_body` argument that can never be used, and a value invented to satisfy
+a signature is the silent fallback that would one day mint a proposition from a stub body.
+Handing `promote` an upsert is worse, and is the defect §4.3 fixes.
 
 This **removes a copy rather than adding an abstraction**: leaving the dance in
 `workbench._write_entity_file` would put the admit-then-render ordering — the subtle part,
@@ -210,11 +225,34 @@ repair a record into validity before `certify_persisted` ever sees it — in thr
 
 ### 4.3 The two call sites
 
-**`promote._mint_proposition`** keeps its never-overwrite guard unchanged and calls
-`upsert_entity_file(..., ownership=PROMOTE_PROPOSITION, create_body=_proposition_body(c.claim))`.
-Because `title` is create-only and unowned keys survive an update, a re-mint of an identical
-claim now preserves the author's title, body, and everything `synthesize` contributed —
-closing §2.4.
+**`promote._mint_proposition` becomes create-only, and an existing identical claim accrues
+provenance instead of being rewritten.**
+
+A same-slug MINT onto an existing record is reachable only through a curator override — auto
+mints are pre-screened, since a claim matching an existing title classifies as `LINK` and a
+colliding slug classifies as `COLLISION`. The never-overwrite guard already rejects the case
+where the claims *differ*. So the only destination that survives the guard is a record
+asserting **the same claim**, and for that case promotion has an established, correct
+behaviour: the `LINK` path at `promote.py:384-391` accrues provenance with
+`append_entity_source_ref`, whose contract is explicit that it exists
+
+> so a hand-authored proposition's prose is never clobbered.
+
+Rendering that record as an update would replace `source_refs` with only the current paper's
+refs — discarding accumulated provenance — and overwrite `subject` / `object` with the
+promotion's values, discarding refinements `synthesize` owns and may have made. **An
+identical claim arriving from a second source is provenance accrual, not a rewrite**, and the
+two paths that reach it must not disagree about that.
+
+So:
+
+- destination absent → `create_entity_file(..., ownership=PROMOTE_PROPOSITION,
+  create_body=_proposition_body(c.claim))`.
+- destination present and the guard passes → `append_entity_source_ref` for each ref, exactly
+  as `LINK` does. Nothing else on the record is touched.
+
+`PROMOTE_PROPOSITION` therefore never reaches `render_update`, which is why §4.1 marks it
+create-only.
 
 **`synthesize._write_proposition`** calls
 `update_entity_file(..., ownership=SYNTHESIZE_PROPOSITION)`. Its destination always exists —
@@ -247,12 +285,20 @@ its own scope has a hole by construction, and this program has already been bitt
 1. **Ownership declarations** — `SYNTHESIZE_PROPOSITION.owned` equals
    `set(SYNTH_FIELDS) | {"reasoning_source"}`, asserted against the imported tuple, so adding
    a synth field fails loudly rather than silently escaping containment.
-2. **The workbench is unchanged** — its two ownership constants are identical to today's
-   frozensets, and its existing conformance and apply suites pass untouched. This is the
-   slice's central safety claim and must be asserted, not assumed.
-3. **The §2.4 regression test** — the reproduction above, as a test: enrich, re-mint, assert
-   `predicate` / `polarity` / `claim_layer` / `reasoning_source` and the body all survive.
-   It fails on `main`.
+2. **The workbench is unchanged** — its two ownership constants equal today's frozensets, and
+   its existing conformance and apply suites pass untouched. Ownership equality is by
+   construction; everything else on that path is not, so the implementation plan must carry
+   **all four renderer call sites** through the signature change explicitly:
+   `workbench._write_entity_file:372/381` and `workbench_apply:178` (`render_create`),
+   `:196` (the **unchanged-timestamp no-op probe**, whose result depends on `render_update`'s
+   output) and `:206` (the final `render_update`). The no-op probe is the one most likely to
+   change behaviour silently and needs a test asserting a no-op edit still writes nothing.
+3. **The §2.4 regression test** — enrich a proposition, then force a same-slug MINT of the
+   identical claim, and assert that `predicate`, `polarity`, `claim_layer`,
+   `reasoning_source`, the curated body, **the pre-existing `source_refs` (accrued, not
+   replaced), and the `subject` / `object` refinements** all survive. It fails on `main`.
+   The `source_refs` / `subject` / `object` assertions are the ones a naive contained-update
+   implementation would still fail — they are the point of §4.3, not incidental coverage.
 4. **No skeleton keys** — a minted proposition's frontmatter contains no `datapackage`,
    `local_path`, `accessions`, `siblings`, `parent_dataset`, or `license`.
 5. **Guard falsifiability** — mutation-test by reverting one call site to
@@ -261,8 +307,11 @@ its own scope has a hole by construction, and this program has already been bitt
 6. **`certify_persisted` on the annotation path** — a synthesize update targeting a
    pre-containment empty-title record raises `PersistedShapeError` naming the record and
    `title`, rather than rewriting it.
-7. **`update_entity_file` refuses a missing destination** with `MalformedTargetError`, and
-   accepts no `create_body` — the update-only contract, asserted rather than assumed.
+7. **The operation contracts hold** — `update_entity_file` refuses a missing destination and
+   accepts no `create_body`; `create_entity_file` refuses an existing one. Asserted rather
+   than assumed, since these refusals are what keep the unreachable branches unreachable.
+8. **Promotion accrual matches LINK** — a same-slug MINT of an identical claim and a `LINK`
+   to the same record leave the file in the same state. One behaviour, two routes to it.
 
 Validation per `AGENTS.md`: `cd science && uv run --frozen pytest`, `cd science/model &&
 uv run --frozen pytest`, `uv run ruff check` in both packages, `uv run pyright` from
@@ -283,9 +332,11 @@ any failure at the merge-base before attributing it to this branch.
 
 - **The corpus migration** (the rest of piece 3): 697 records, two populations with different
   repair physics (§2.2), and the legacy triple's fate (§2.3). Needs its own design.
-- **`materialize.py`'s legacy emitters** (`sci:legacyPatch`, `sci:legacyEdgeId`) outlive the
-  validator that justified them. Retiring them is a graph-output change and belongs with the
-  migration.
+- **The legacy triple has three separate consumers and needs three verdicts**, not one:
+  `sci:legacyPatch` / `sci:legacyEdgeId` still materialize into the provenance graph
+  (`materialize.py:2082-2087`), `legacy_relation_label` still renders as an edge label
+  (`proposition_edges.py:69` → `render.py:242`), and only the `.dot` cross-check is inert.
+  Retiring any of them changes an output, and belongs with the migration.
 - **`_check_legacy_dag_metadata` is inert wherever the `.dot` corpus is gone.** A check that
   cannot fire is worth either restoring or retiring, and its silence should not be read as
   health.
