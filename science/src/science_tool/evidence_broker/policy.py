@@ -40,8 +40,11 @@ class Denial:
     """Two strings, for two audiences.
 
     `reason` is categorised and stays parent-side, for the audit. `notice` is what the requester
-    sees and comes from the policy, never from this module: a specific reason confirms that the
-    denied thing exists, which a blinding study cannot afford.
+    sees. For a policy denial it is the policy's OWN notice, never a specific reason invented
+    here: a specific reason would confirm that the denied thing exists, which a blinding study
+    cannot afford. The malformed-pattern denial is the one case where `notice` instead carries
+    git's own diagnostic -- that diagnostic echoes only the requester's own pattern back at
+    them, so it reveals no repository fact and the same non-disclosure rule still holds.
     """
 
     reason: str

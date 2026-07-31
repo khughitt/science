@@ -97,7 +97,11 @@ def test_read_refuses_a_directory(tmp_path: Path):
     root, commit = _repo(tmp_path)
     # OPEN, deliberately: under CLOSED this path is refused by policy and the tree would
     # never be reached, so the test would pass without proving anything about `read`.
-    with pytest.raises(ServeError):
+    #
+    # `match=` distinguishes a TYPED refusal from an unclassifiable one -- without it this
+    # test is satisfied by any `ServeError` at all, including the one a broken classifier
+    # raises for a reason that has nothing to do with `cat-file -t` typing the path.
+    with pytest.raises(ServeError, match="names a tree"):
         serve(root, commit, _read("private"), OPEN)
 
 
@@ -107,8 +111,43 @@ def test_a_directory_named_like_the_miss_message_is_not_a_miss(tmp_path: Path):
     sentence. A substring classifier serves a present directory as an absent path, and
     tells the reviewer a file is missing when it is there."""
     root, commit = _repo(tmp_path)
-    with pytest.raises(ServeError):
+    # `match=` is load-bearing here too: without the `cat-file -t` step, `cat-file blob`
+    # alone would ALSO raise `ServeError` for this directory (as `could not be classified`),
+    # so an unmatched `pytest.raises` cannot tell a typed refusal from an unclassifiable one
+    # -- it would pass whether or not the typing step ever ran.
+    with pytest.raises(ServeError, match="names a tree"):
         serve(root, commit, _read("does not exist in"), OPEN)
+
+
+def test_a_wellformed_miss_naming_a_different_path_is_not_a_miss(tmp_path: Path, monkeypatch):
+    """Certifies the ANCHORED comparison in `_absent_sentences` against a fake, because behind
+    the `cat-file -t` type check every git-produced failure this module can actually reach is
+    already a genuine miss for the requested path -- live git offers no counterexample to point
+    at. THE FAKE ANSWERS `rev-parse` TRUTHFULLY (so the call reaches the read classifier, as in
+    `test_unrecognised_git_output_raises`) and then reports a well-formed miss sentence naming a
+    DIFFERENT path than the one requested. Real code must raise, because the sentence's path and
+    the request's path disagree; a classifier that matched `does not exist in` as a bare
+    substring would call this a miss for `a.txt` on git's word about `other.txt`.
+    """
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    real_run_git = serve_module.run_git
+
+    def _fake(repo_root, *args, **kwargs):
+        if args[0] == "rev-parse":
+            return real_run_git(repo_root, *args, **kwargs)
+
+        class _Strange:
+            returncode = 128
+            stdout = b""
+            stderr = f"fatal: path 'other.txt' does not exist in '{commit}'\n".encode()
+
+        return _Strange()
+
+    monkeypatch.setattr(serve_module, "run_git", _fake)
+    with pytest.raises(ServeError, match="could not be classified"):
+        serve(root, commit, _read("a.txt"), OPEN)
 
 
 def test_a_denied_read_makes_no_git_call_at_all(tmp_path: Path, monkeypatch):
@@ -241,6 +280,29 @@ def test_the_normalized_path_is_what_git_reads(tmp_path: Path):
     assert served.payload != b"raw\n"
 
 
+def test_the_normalized_path_is_what_history_walks(tmp_path: Path):
+    """The HISTORY sibling of `test_the_normalized_path_is_what_git_reads`. `a\\b` normalizes
+    to `a/b`, which has no history at all, while the raw spelling names a real committed file
+    with one commit. A request judged as `a/b` must report no commits; a caller passing
+    `request.target` straight through to `log` would instead report history for the committed
+    `a\\b`.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a\\b"), OPEN)
+    assert served.outcome is Outcome.MISS_NO_COMMITS
+
+
+def test_the_normalized_path_is_what_search_is_restricted_to(tmp_path: Path):
+    """The SEARCH sibling. `a\\b` normalizes to `a/b`, which does not exist, so a search
+    restricted to that pathspec must miss even though `raw` -- the pattern -- IS the literal
+    content of the committed `a\\b`. A caller passing `request.pathspec` straight through would
+    instead search the real file and find it.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("raw", pathspec="a\\b"), OPEN)
+    assert served.outcome is Outcome.MISS_NO_MATCH
+
+
 def test_search_hits_carry_commit_path_and_line(tmp_path: Path):
     root, commit = _repo(tmp_path)
     served = serve(root, commit, _search("alpha"), OPEN)
@@ -333,5 +395,37 @@ def test_unrecognised_git_output_raises(tmp_path: Path, monkeypatch):
         serve(root, commit, _read("a.txt"), OPEN)
 
     # The verification really did run, so the raise came from the read classifier.
+    assert calls[0][0] == "rev-parse"
+    assert len(calls) > 1
+
+
+def test_unrecognised_search_output_raises(tmp_path: Path, monkeypatch):
+    """The SEARCH sibling of `test_unrecognised_git_output_raises`. A `grep` failure that does
+    not carry the argv-rejection prefix must halt rather than be reported as a retryable
+    refusal -- the pattern classifier is as narrow as the read classifier is, and needs the
+    same proof that it does not swallow an unfamiliar failure as a defined outcome.
+    """
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    real_run_git = serve_module.run_git
+    calls: list[tuple] = []
+
+    def _fake(repo_root, *args, **kwargs):
+        calls.append(args)
+        if args[0] == "rev-parse":
+            return real_run_git(repo_root, *args, **kwargs)
+
+        class _Strange:
+            returncode = 128
+            stdout = b""
+            stderr = b"fatal: something nobody has seen before\n"
+
+        return _Strange()
+
+    monkeypatch.setattr(serve_module, "run_git", _fake)
+    with pytest.raises(ServeError, match="could not be classified"):
+        serve(root, commit, _search("alpha"), OPEN)
+
     assert calls[0][0] == "rev-parse"
     assert len(calls) > 1

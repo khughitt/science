@@ -49,6 +49,7 @@ MISS_MARKERS: dict[Outcome, bytes] = {
     Outcome.MISS_NO_COMMITS: b"science-evidence: no commits for this query\n",
 }
 
+
 def _absent_sentences(commit: str, path: str) -> tuple[bytes, ...]:
     """The two spellings git gives one fact, FULLY INTERPOLATED.
 
@@ -64,6 +65,21 @@ def _absent_sentences(commit: str, path: str) -> tuple[bytes, ...]:
         f"fatal: path '{path}' does not exist in '{commit}'".encode(),
         f"fatal: path '{path}' exists on disk, but not in '{commit}'".encode(),
     )
+
+
+def _malformed_pattern_prefix(pattern: str) -> bytes:
+    """The fixed prefix git gives an argv-rejected pattern, FULLY INTERPOLATED.
+
+    MEASURED, git 2.55: every pattern `-e` cannot compile fails with
+    `fatal: -e option, '<pattern>': ` followed by a message that varies with what is wrong --
+    `Invalid regular expression`, `Trailing backslash`, `Invalid preceding regular expression`,
+    `Unmatched ( or \\(`, and doubtless others this module has not been shown. The PREFIX naming
+    this pattern does not vary, so anchoring there is the same discipline `_absent_sentences`
+    uses for `read`: comparing an interpolated value rather than a keyword that could appear in
+    stderr for an unrelated reason.
+    """
+    return f"fatal: -e option, '{pattern}': ".encode()
+
 
 #: `grep` renders through config unless argv says otherwise; `-E` is passed explicitly so
 #: `grep.patternType` cannot decide what the caller's pattern MEANS.
@@ -166,7 +182,7 @@ def _serve_search(
     if completed.returncode == 1:
         return _miss(Outcome.MISS_NO_MATCH)
     stderr = completed.stderr
-    if b"Invalid regular expression" in stderr or b"-e option" in stderr:
+    if stderr.startswith(_malformed_pattern_prefix(pattern)):
         # The requester's own input. It carries no repository fact, so it is retryable rather
         # than an instrument failure -- halting an honest run over a typo would be worse.
         return Served(
@@ -234,9 +250,14 @@ def serve(
         return Served(outcome=Outcome.REFUSED, payload=b"", denial=auth.denial)
     resolved = verify_commit(repo_root, commit)
     if request.op is EvidenceOp.READ:
-        assert auth.path is not None  # a READ that authorized always carries its path
+        if auth.path is None:
+            # An internal invariant, not a user-facing miss: `authorize` always carries a path
+            # for a READ it does not deny. An `assert` would vanish under `python -O`, at which
+            # point `None` would interpolate into `f"{commit}:{target}"` rather than halt.
+            raise ServeError("a READ authorization without a denial must carry a path")
         return _serve_read(repo_root, resolved, auth.path)
     if request.op is EvidenceOp.SEARCH:
         return _serve_search(repo_root, resolved, request.target, policy, auth.path)
-    assert auth.path is not None  # likewise for HISTORY
+    if auth.path is None:
+        raise ServeError("a HISTORY authorization without a denial must carry a path")
     return _serve_history(repo_root, resolved, auth.path, policy)
