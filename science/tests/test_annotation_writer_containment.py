@@ -321,13 +321,16 @@ def test_synthesize_refuses_pre_containment_record(tmp_path: Path) -> None:
         "Body.\n",
         encoding="utf-8",
     )
+    # subject/object/polarity are here only to satisfy PropositionEntity's own interlock
+    # validator (predicate requires both operands; a sign-meaningful predicate requires a
+    # sign). PropositionEntity.title is `str = ""`, so title alone would not stop construction
+    # either way -- the point is that the entity CONSTRUCTS fine and the refusal comes from
+    # certify_persisted, not from pydantic.
     merged = {"id": "proposition:legacy", "kind": "proposition", "title": "",
               "subject": "concept:a", "object": "concept:b", "predicate": "affects",
               "polarity": "unsigned",
               "reasoning_source": "llm-synth:m:proposition-synthesize-v1"}
 
-    # PropositionEntity.title is `str = ""`, so the entity CONSTRUCTS fine and the refusal
-    # comes from certify_persisted -- not from pydantic.
     with pytest.raises(PersistedShapeError, match="legacy"):
         _write_proposition("proposition:legacy", merged, root, date(2026, 7, 31))
     assert "title: ''" in dest.read_text(encoding="utf-8")   # untouched
