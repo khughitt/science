@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-finding-1.0.json",
+  "title": "science entity finding mixin",
+  "$comment": "Field set frozen by docs/plans/2026-07-30-schema-closure-finding-slice-inventory.md over 201 authored records -- 52 markdown in 3 project roots plus 149 structured source rows in ~/d/natural-systems. `finding` is the ONLY core kind routed through the structured-source loader (that project's manifest declares `core_structured_sources`), so this mixin is the first to face two structurally different authoring paths at once, and several entries here exist for the structured path alone. No project extension anywhere covers `finding` -- both declared extensions in the tree are hypothesis-scoped -- so every corpus field must be admitted here or by base 2.0, with no project-side escape hatch. Three omissions are decisions rather than absences: `consolidated_into` (a writer defect, fixed in the observation slice at archive.py:292 rather than admitted here), `note` inside a relations entry (silently discarded by AuthoredTargetedRelation; the 3 records carrying it are migrated, and refusing it makes the discard loud), and `content`/`canonical_id`, which the adapters declare as injected and which therefore never face this schema as authored.",
+  "type": "object",
+  "required": ["id", "kind", "status"],
+  "$defs": {
+    "authored_relation": {
+      "$comment": "Copied VERBATIM from mixin-hypothesis-2.0's $defs, deliberately: carving a finding-local variant that admitted the corpus's `note` key would make the schema vouch for a field the projection drops. AuthoredTargetedRelation (source_contracts.py:18) declares predicate/target/graph_layer and nothing else, and `additionalProperties: false` is what turns a typo'd key inside a relation from a silent drop into a refusal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate", "target"],
+      "properties": {
+        "predicate": {"type": "string", "pattern": "\\S"},
+        "target": {"type": "string", "pattern": "\\S"},
+        "graph_layer": {"type": "string"}
+      }
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^finding:",
+      "$comment": "PREFIX only, per the ruling in mixin-hypothesis-2.0: base 2.0 owns the id's shape and the mixin owns its identity. Deliberately NOT a numeric-slug pattern despite the descriptor's `strategy=\"numeric\"` -- the 149 structured ids are of the form `finding:t291-path2-audit-<model>__<model>__<model>`, which no numeric pattern derived from the markdown corpus would admit. Measured, and exactly the reason the ruling is prefix-only."
+    },
+    "kind": {"const": "finding"},
+    "status": {
+      "type": "string",
+      "$comment": "NO enum. The descriptor (profiles/core.py:155) declares [active, superseded, retired, archived], but `finding` is not in _CERTIFIED_KINDS (validate/kind_severity.py:24), and status_vocabulary.py rules that an uncertified instrument may not fail anyone's build -- a schema enum fails it HARDER than a validate ERROR, refusing the record at load with no warning stage. REQUIRED, though, and that is the slice's own ruling rather than an inherited default: the 149 structured rows author no status at all, so requiring it here forces a migration. Recorded because the corpus cannot show it: after that migration every one of the 201 records is `active`, so no probe over this corpus distinguishes a correct vocabulary from an over-tight one -- and `superseded` in particular is declared by the descriptor, authored by nobody, on a supersedable=True kind."
+    },
+    "profile": {
+      "type": "string",
+      "$comment": "Authored on both paths -- 26 markdown records and all 149 structured rows -- and additionally defaulted into `raw` by graph/sources.py when an author omits it, exactly as documented for mixin-search-1.0."
+    },
+    "file_path": {
+      "type": "string",
+      "minLength": 1,
+      "$comment": "ADMITTED FOR THE STRUCTURED PATH, where it is genuinely authored. The rows write `source_path`, which normalize_structured_row renames to `file_path`; because the author DID write it, sources.py:1300 subtracts it from _STRUCTURED_INJECTED_KEYS and it faces this schema as authored. On the markdown path the same key IS declared injected and never reaches here. One key, two classifications, in one load of one project -- and the subtraction is what keeps that honest rather than hiding a key the author wrote."
+    },
+    "related": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "aliases": {
+      "type": "array",
+      "items": {"type": "string"},
+      "$comment": "Authored by 26 protein-landscape records, and independently backfilled as `[]` onto every structured row by sources.py without being declared injected. Either surface alone would justify admitting it; both are recorded because the structured backfill is the one that would be invisible to a corpus-only inventory. See F9."
+    },
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "propositions": {"type": "array", "items": {"type": "string"}},
+    "observations": {"type": "array", "items": {"type": "string"}},
+    "mode": {
+      "type": "string",
+      "$comment": "23 natural-systems records: empirical-measurement (19), confirmatory (2), structural-audit, literature-synthesis. NO enum, for the same reason `status` has none -- the vocabulary is uncertified, and a 23-record corpus in a single project cannot certify one."
+    },
+    "input": {
+      "type": "string",
+      "$comment": "22 natural-systems records, carrying the data path an analysis consumed. Not a free-form annotation: project_config.py:101 declares `input` in DEFAULT_PROVENANCE_FIELDS, so it is a read provenance field."
+    },
+    "relations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/authored_relation"},
+      "$comment": "3 records, all `predicate: sci:amends` -- the finding-to-finding amendment chain. `finding` is in _CONCLUSION_KINDS (profiles/core.py:14), which is what makes `amends` an admitted predicate here."
+    },
+    "promoted_from": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the source file this entity was promoted from, e.g. knowledge/sources/local/entities.yaml"
+    },
+    "superseded_by": {
+      "type": "string",
+      "pattern": "^finding:",
+      "$comment": "ADMITTED AT ZERO OCCURRENCES, and load-bearing for exactly that reason. `finding` is supersedable=True, and consolidation.py:147 rules frontmatter is 'the only place an authored superseded_by can live' -- so `mark_superseded` can stamp this key onto a finding at any time. Omitting it would let a shipped writer produce a record this mixin refuses, which is precisely the defect filed as F7 against mixin-method-1.0. Caught here BEFORE arming rather than after, and only because the inventory asked which kind-agnostic MUTATORS can write to this kind's frontmatter -- no corpus can contain a key that would have refused it."
+    },
+    "schema_profile": false
+  }
+}
