@@ -352,8 +352,8 @@ def _write_entity_file(
 
     An UPSERT. `compile_workbench` is re-run over the same rows routinely, so the destination
     usually exists; rendering it as a create would overwrite the author's title, status and body
-    on every recompile. Deliberately NOT `entities.write_entity_file`, which renders the whole
-    model and would re-introduce the skeleton dump on this path.
+    on every recompile. Delegates to `entity_frontmatter.upsert_entity_file`, which owns the
+    admit-then-render ordering.
     """
     from science_tool.dag.entity_frontmatter import upsert_entity_file, workbench_ownership
 
@@ -380,7 +380,7 @@ def compile_workbench(
     The normalized workbench replaces inline stubs with evidence-line references.
 
     ``compile`` is the only writer of these entities from the workbench, so all
-    entity files are (re)written via the canonical entity-layer writer.
+    entity files are (re)written via `_write_entity_file`'s owned-allowlist upsert.
 
     ``as_of`` controls the ``created``/``updated`` timestamps written into each
     entity file.  Defaults to ``date.today()`` when None so existing callers

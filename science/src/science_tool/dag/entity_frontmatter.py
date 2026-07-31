@@ -1,10 +1,9 @@
 """Which frontmatter keys the workbench writers own, and how they render them.
 
-Governs the workbench writers specifically -- `workbench.compile_workbench` (create) and
-`workbench_apply._entity_edit` (create + update). It does NOT govern every path that mints a
-proposition: `annotation/promote.py` and `annotation/synthesize.py` still write propositions
-through `entities.write_entity_file`, the uncontained full-model dump this module exists to
-replace on the workbench path; migrating those is out of scope here.
+Governs every writer of `proposition` / `evidence-line`: the workbench (create + update via
+`workbench.compile_workbench` and `workbench_apply._entity_edit`) and the two annotation
+writers (`annotation/promote.py` creates, `annotation/synthesize.py` updates). Each supplies
+its own `Ownership`; there is no uncontained full-model dump left on these paths.
 
 It lives in its own module because `workbench_apply` imports `workbench`, so neither can host
 code the other needs.

@@ -19,11 +19,7 @@ from science_tool.dag.workbench_apply import (
 )
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
-from science_tool.entities import (
-    parse_markdown_entity_file_preserving_body,
-    render_entity_text,
-    write_entity_file,
-)
+from science_tool.entities import parse_markdown_entity_file_preserving_body
 
 
 def _seed_project(root: Path) -> None:
@@ -55,27 +51,6 @@ def _proposition(entity_id: str = "proposition:a-affects-b") -> PropositionEntit
         claim_layer=ClaimLayer.CAUSAL_EFFECT,
         identification_strength=IdentificationStrength.OBSERVATIONAL,
     )
-
-
-def test_render_entity_text_matches_write_entity_file_output(tmp_path: Path) -> None:
-    _seed_project(tmp_path)
-    entity = _proposition()
-    body = workbench_entity_body(entity)
-
-    write_entity_file(entity, project_root=tmp_path, body=body, as_of=date(2026, 7, 4))
-
-    path = tmp_path / "entities/propositions/a-affects-b.md"
-    written = path.read_text(encoding="utf-8")
-    rendered = render_entity_text(
-        entity,
-        body=body,
-        created="2026-07-04",
-        updated="2026-07-04",
-    )
-    assert written == rendered
-    frontmatter = _frontmatter(path)
-    assert frontmatter["kind"] == "proposition"
-    assert "type" not in frontmatter
 
 
 def test_parse_markdown_entity_file_preserving_body_keeps_body_bytes(tmp_path: Path) -> None:
