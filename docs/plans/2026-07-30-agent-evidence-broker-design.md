@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 18)
+**Status:** partially implemented (revision 19)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,8 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | the checker — §3.1's NFD close, §3.2's shallow rule and payload bound, the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 18, not implemented |
-| Plan 4b | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 18, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 19, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 19, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 19, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -51,6 +52,26 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 19 splits plan 4 in three rather than two, on a seam revision 18's own findings exposed.
+Three of its five defects — the NFC tree rule, the shallow refusal, the payload bound — are not
+preparation for correspondence at all. They are **wrong answers the shipped broker gives today**: a
+path reported absent that exists under another spelling, a history whose result depends on clone
+depth, an allocation with no ceiling. Bundling them into the checker's plan would hold repairs to
+merged code behind the design of a component that does not exist yet.
+
+Two further reasons the seam is real rather than tidy. The payload ceiling belongs to `run_git`,
+which `extract`, `toolkit_is_clean` and a validate check also use — blast radius outside the broker
+entirely, and not something to review inside a plan headlined "correspondence". And bumping
+`REPLAY_PROTOCOL_VERSION` in the slice that changes serving lets the checker be written against a
+stable protocol instead of bumping the very thing it is learning to parse.
+
+So: **4a serving hardening, 4b the checker, 4c the boundary.** The shallow rule divides along that
+line without being forced to — refusal at serving is 4a, `unwired` classification at replay is 4b,
+which is where replay lives regardless. **Revision 17's and 18's log entries below use "4a" for the
+checker and "4b" for the boundary; from revision 19 those mean 4b and 4c.** The entries are left as
+written because a revision log is a record of what was decided when, not a document to be
+back-edited.
 
 Revision 18 comes from review of revision 17 and closes five defects, three of which would have
 voided plan 4 outright. They are worth reading as a set, because four of the five are one shape: **a
@@ -1010,7 +1031,7 @@ may live — but the honest statement is that the anchoring rule is enforced for
 `served/` and not for the baseline. Recorded here rather than implied away; closing it is a change to
 plan 1's shipped `autonomy/baseline.py` and belongs to whichever slice next touches that module.
 
-Plan 4a's replay and correspondence work inherits this: anything that later reads the journal or
+Plan 4b's replay and correspondence work inherits this: anything that later reads the journal or
 `served/` reads it the same way.
 
 **The served file is written before the journal line, not after.** The journal is the record of what
@@ -1217,8 +1238,8 @@ record disagreeing with the run it names.
 
 **Revision 17 strengthens that to: `code` is required whenever `status != "verified"`.** Revisions
 1–16 required it only under `unwired`, which was coherent while `violated` was refused at
-`append_review` and never stored. It stops being coherent once §5's checker (plan 4a) ships ahead of
-that boundary (plan 4b): `check_correspondence` returns a `violated` result to a caller, and without
+`append_review` and never stored. It stops being coherent once §5's checker (plan 4b) ships ahead of
+that boundary (plan 4c): `check_correspondence` returns a `violated` result to a caller, and without
 this the §5.3 codes `EXPOSURE_UNREPRODUCIBLE` and `CITATION_UNSERVED` would be unrepresentable on the
 value that carries them — recoverable only as prose in an error message. `verified` remains the one
 status with nothing to explain.
@@ -1391,7 +1412,7 @@ def check_correspondence(review, exposure, *, repo) -> Correspondence
 
 The live session is gone from the signature: everything replay needs is sealed into `exposure`.
 
-**Modules (plan 4a).** `evidence_broker/hits.py` parses `git grep -n -z` output into hits and runs no
+**Modules (plan 4b).** `evidence_broker/hits.py` parses `git grep -n -z` output into hits and runs no
 git of its own — pure bytes in, `(path, line)` out — so the NUL-record contract of §5.1 can be
 certified against real `git grep` output without an exposure, a repository or a review in the
 picture. That isolation is worth a module because revisions 1–9 stated the format wrongly in prose
@@ -1443,7 +1464,7 @@ matched lines are recoverable from the served bytes — **NUL-separated, not col
 Revisions 1–9 said `<commit>:<path>:<line>:` here while §3.2.1's own table pinned `-z`, which
 changes the separator. A parser written to the colon spelling recovers no line numbers at all, so
 every search-derived citation would be `CITATION_UNSERVED` and §5.3 would refuse an honest review.
-The NUL form is what ships and what **plan 4a** parses — plan 3 was named here through revision 16
+The NUL form is what ships and what **plan 4b** parses — plan 3 was named here through revision 16
 and shipped without touching it; a path is unambiguous under it, which is why `-z` is pinned in the
 first place — which is a second reason replay is not optional, since the journal stores only a hash
 of them. Where a path is both read and searched, `FULL` supersedes `LINES`.
@@ -1795,27 +1816,38 @@ closed downstream survived a green suite until it was negative-tested, and four 
 revision 1 of this document were guards that looked right on the page. A guard nobody has watched fail
 is a guard nobody has tested.
 
-**Plan 4a's roster is written as pairs — the mutation beside the test it must turn red — because
+**Plan 4's roster is written as pairs — the mutation beside the test it must turn red — because
 across plans 2 and 3 the recurring finding was a mutation that left its test green and therefore
-certified nothing.**
+certified nothing.** The `Slice` column is not decoration: a mutation is only meaningful against a
+tree where the guard it breaks exists, so a 4b row run during 4a is green for the wrong reason.
 
-| Mutation | Test that must fail |
-|---|---|
-| Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
-| Key the served map on the tree's raw path bytes | an honest citation into a non-ASCII path corresponds |
-| Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
-| Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
-| `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |
-| Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
-| Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
-| Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
-| Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
-| Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
-| Drop the shallow check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
-| Drop the shallow check at serving | `history` is refused in a shallow repository |
-| Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
-| Remove the `read` size pre-check | an oversized blob refuses without being read |
-| Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
+| Slice | Mutation | Test that must fail |
+|---|---|---|
+| 4a | Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
+| 4a | Drop the shallow check at serving | `history` is refused in a shallow repository |
+| 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
+| 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
+| 4b | Key the served map on the tree's raw path bytes | an honest citation into a non-ASCII path corresponds |
+| 4b | Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
+| 4b | Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
+| 4b | `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |
+| 4b | Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
+| 4b | Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
+| 4b | Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
+| 4b | Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
+| 4b | Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
+| 4b | Drop the shallow check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
+| 4b | Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
+| 4c | Re-add `reviewer_kind` to `ReviewSubmission` and branch on it | constructing a submission carrying `reviewer_kind` raises |
+| 4c | Skip the agent cross-check against the run record | an attested agent whose `model` disagrees with its run record is stored |
+| 4c | Skip the lens cross-check | an attested `lens` that is not `exposure.instrument.ref` is stored |
+
+**The first 4c row is a different kind of pair and must not be graded like the others.** Identity is
+prevented structurally, not checked, so on the fixed tree there is no behaviour to negative-test —
+the `human`-labelled-agent bypass cannot be expressed. The test is therefore that *constructing* the
+bad submission fails, and the mutation is re-opening the field. A reviewer looking for a
+behavioural test here will not find one, and should not read its absence as a gap: it is what §4.2
+means by "not a field a producer may leave blank, a field it cannot express."
 
 **The `Full`-supersedes-`Lines` row is the one to distrust**, and its fixture is specified here rather
 than left to an implementer: it needs a single exposure in which one path is **both read and
