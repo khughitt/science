@@ -1,6 +1,6 @@
 # Task-storage rollout closure — design
 
-**Status:** Accepted design
+**Status:** Accepted design; overlay-provenance amendment pending written review
 **Date:** 2026-07-31
 
 ## 1. Decision
@@ -8,12 +8,13 @@
 Finish the task-storage split across every legacy Science project currently
 registered in `~/.config/science/config.yaml`.
 
-The rollout has three layers:
+The rollout has four layers:
 
 1. Correct the shared task parser so an otherwise-valid title may contain `]`.
-2. Migrate each legacy project transactionally, preserve its task set, and
+2. Make project-local overlay provenance independent of checkout location.
+3. Migrate each legacy project transactionally, preserve its task set, and
    rebuild its local graph.
-3. Once all local graphs are current on local `main`, refresh the affected
+4. Once all local graphs are current on local `main`, refresh the affected
    composites without changing federation membership.
 
 This is storage and generated-artifact closure. It is not a federation-topology
@@ -41,6 +42,13 @@ health/meta. A registry-wide audit showed that fixing only those two projects
 would leave their federations and most registered consumers in the same
 pre-split state.
 
+Execution exposed a second shared prerequisite. Graph materialization carries
+an overlay's resolved absolute filename from `ProjectSources` into provenance.
+A build from a nested worktree therefore serializes `.worktrees/<name>/` into
+source URIs and `schema:identifier` values. The first two migrated projects
+committed that location-dependent output: six overlay paths in cBioPortal and
+54 in pan-disease. Cancer/meta exposed the defect before its commit.
+
 ## 3. Registry-wide inventory
 
 The 2026-07-31 audit covered all 21 entries in
@@ -57,19 +65,19 @@ The 13 legacy stores contain 272 active tasks:
 
 | Project | Active tasks | Current migration result | Toolkit action |
 |---|---:|---|---|
-| cancer/meta | 11 | 11 writes | Upgrade pre-migrator pin |
-| evolution | 31 | 31 writes | Retain capable pin |
-| pre-cancer | 6 | 6 writes | Upgrade pre-migrator pin |
-| cBioPortal | 74 | Refused on historical bracketed title | Pin parser correction |
-| ovarian | 0 | Valid empty plan | Upgrade pre-migrator pin |
-| head-and-neck | 0 | Valid empty plan | Upgrade pre-migrator pin |
-| prostate | 0 | Valid empty plan | Upgrade pre-migrator pin |
-| breast | 0 | Valid empty plan | Upgrade pre-migrator pin |
-| therapeutics | 2 | 2 writes | Retain capable pin; sync stale environment |
-| health/meta | 32 | 32 writes | Retain capable pin |
-| pan-disease | 58 | Refused on historical bracketed title | Pin parser correction |
-| cycles | 53 | 53 writes | Retain capable pin |
-| immunity | 5 | 5 writes | Upgrade pre-migrator pin |
+| cancer/meta | 11 | 11 writes | Pin corrective prerequisite |
+| evolution | 31 | 31 writes | Pin corrective prerequisite |
+| pre-cancer | 6 | 6 writes | Pin corrective prerequisite |
+| cBioPortal | 74 | Refused on historical bracketed title | Pin corrective prerequisite |
+| ovarian | 0 | Valid empty plan | Pin corrective prerequisite |
+| head-and-neck | 0 | Valid empty plan | Pin corrective prerequisite |
+| prostate | 0 | Valid empty plan | Pin corrective prerequisite |
+| breast | 0 | Valid empty plan | Pin corrective prerequisite |
+| therapeutics | 2 | 2 writes | Pin corrective prerequisite; sync stale environment |
+| health/meta | 32 | 32 writes | Pin corrective prerequisite |
+| pan-disease | 58 | Refused on historical bracketed title | Pin corrective prerequisite |
+| cycles | 53 | 53 writes | Pin corrective prerequisite |
+| immunity | 5 | 5 writes | Pin corrective prerequisite |
 
 No target has a mixed store or a migration journal. All repositories were on
 clean local `main` branches during the audit. The unrelated untracked report in
@@ -85,8 +93,18 @@ cBioPortal and pan-disease contain records that require the parser correction.
 Those nine projects pin the new published toolkit revision as part of their
 atomic migration commit.
 
-Evolution, therapeutics, health/meta, and cycles already pin revisions with the
-migrator and do not require unrelated lock movement.
+Before the overlay defect was observed, evolution, therapeutics, health/meta,
+and cycles already pinned revisions with the migrator and required no lock
+movement for task storage alone.
+
+The overlay-provenance correction changes that pin inventory. Eight local
+closure targets contain overlays: cancer/meta, evolution, pre-cancer,
+cBioPortal, therapeutics, health/meta, pan-disease, and cycles.
+Multiple-myeloma also contains overlays and its composite refresh normally
+re-materializes its local graph. Those nine projects must consume the corrected
+revision before their next local build. For a single auditable prerequisite,
+all 13 task-migration targets pin that same corrected revision; the five
+zero-overlay upgrades avoid pinning an already-superseded intermediate SHA.
 
 Checked-in locks, not installed environments, are authoritative. cBioPortal and
 therapeutics demonstrated why: their existing virtual environments did not
@@ -153,6 +171,39 @@ Tests prove that:
 - the other fail-closed migration checks remain armed.
 
 The toolkit commit is tested and pushed before any consumer lock points to it.
+
+### 4.4 Stable overlay provenance
+
+Overlay files are project-authored sources. Their graph identity is the stable,
+project-relative POSIX path, such as `overlays/papers/Garraway2006.md`, not the
+absolute directory from which a build happened to run.
+
+Keep `ProjectSources.commons_overlay_paths` absolute. Loaders, diagnostics, and
+arbitration use those paths to open files, and changing that interface would
+broaden this correction unnecessarily. Normalize only at the graph-emission
+boundary: resolve the recorded overlay path, require it to be contained by
+`sources.project_root`, and serialize `relative_to(project_root).as_posix()`.
+An overlay outside the project root is a compiler error rather than a fallback
+to machine-specific provenance.
+
+This is the smallest shared fix because every graph-emission path already
+passes through `_emit_phase`. Changing `ProjectSources` would alter an internal
+loading contract with filesystem consumers. Mapping a worktree to the primary
+checkout's absolute path would still make graph bytes machine- and
+location-dependent.
+
+Tests prove that:
+
+- source loading still exposes the absolute overlay path internally;
+- graph provenance emits the project-relative overlay path in both its URI and
+  `schema:identifier`;
+- an overlay path outside the project root fails early;
+- identical project content built from a primary checkout and a linked
+  worktree produces byte-identical local graph output;
+- generated graphs contain no `.worktrees/` overlay provenance.
+
+This correction is published as a second prerequisite revision; the already
+published parser revision is not rewritten.
 
 ## 5. Project-local migration contract
 
@@ -255,7 +306,7 @@ another as peers.
 
 ### 6.2 Local phase
 
-The 13 migrated projects and post-acute-infection run:
+The 13 migrated projects, post-acute-infection, and multiple-myeloma run:
 
 ```bash
 uv run --frozen science graph build --local-only
@@ -275,6 +326,12 @@ honestly. Generated bytes are not tuned to preserve an obsolete graph.
 Expected storage deltas include removal of the aggregate source path, addition
 of per-task source paths, and corresponding provenance-node changes. Task IDs
 and task-domain triples remain equivalent.
+
+Overlay-bearing graphs also replace absolute overlay provenance with stable
+project-relative paths. Before any local commit, reject `.worktrees/` in the
+complete generated graph. Rebuilds from the primary checkout and rollout
+worktree must produce identical local graph bytes once both name the same
+content and corrected toolkit revision.
 
 ### 6.3 Composite phase
 
@@ -296,8 +353,9 @@ refreshing composites. Then rebuild composites for:
 - immunity;
 - post-acute-infection.
 
-Therapeutics has no composite. Multiple-myeloma needs no local rebuild, but its
-composite depends on the changed cancer/meta local graph.
+Therapeutics has no composite. Multiple-myeloma needs a corrected toolkit pin
+and local rebuild before its composite refresh; its composite also depends on
+the changed cancer/meta local graph.
 
 Once every local graph is current, these composite refreshes are independent:
 they read peer local graphs, not peer composites. A normal `graph build` may
@@ -349,17 +407,22 @@ to force parity.
 
 ## 8. Sequencing and commit boundaries
 
-### 8.1 Toolkit prerequisite
+### 8.1 Toolkit prerequisites
 
-One toolkit commit contains the parser change, regression tests, correction to
-the original storage design, and the canonical-plus-regenerated audit note. Run
-focused task and generated-asset tests, Ruff, Pyright, and the full default
-Science suite before pushing it to `origin/main`.
+The first published toolkit prerequisite contains the parser change,
+regression tests, correction to the original storage design, and the
+canonical-plus-regenerated audit note.
+
+The second prerequisite contains only the overlay-provenance normalization,
+its regression tests, and this rollout amendment. Run focused graph tests,
+Ruff, Pyright, and the full default Science suite before pushing it to
+`origin/main`. Consumer locks use the second public SHA; it contains the parser
+correction by ancestry.
 
 At design review, local toolkit `main` was one commit ahead and zero behind
-`origin/main`, so the prerequisite push had a clean ancestry. Reconfirm the
-ahead/behind relation immediately before pushing; nine consumer locks depend on
-the resulting revision being publicly resolvable.
+`origin/main`, so the first prerequisite push had a clean ancestry. Reconfirm
+the ahead/behind relation immediately before the corrective push; consumer
+locks depend on the resulting revision being publicly resolvable.
 
 ### 8.2 Project-local commits
 
@@ -376,6 +439,11 @@ Post-acute-infection's corresponding commit contains only its closure changes.
 No commit deletes the aggregate store while leaving the project unable to read
 the replacement.
 
+cBioPortal and pan-disease already committed their task migrations before the
+overlay defect was observed. Each receives one follow-up corrective commit
+containing the new pin/lock and regenerated local graph; their task stores are
+not rewritten. Cancer/meta remains uncommitted until it uses the corrected SHA.
+
 ### 8.3 Composite commits
 
 After all local commits are merged, each project with changed generated bytes
@@ -383,7 +451,7 @@ receives one composite-refresh commit. Do not create an empty commit when the
 composite is already current.
 
 Consumer repositories are merged into local `main`. Existing consumer remotes
-are not pushed without separate authorization. The toolkit prerequisite is
+are not pushed without separate authorization. Toolkit prerequisites are
 pushed because exact consumer revisions must be publicly resolvable.
 
 ## 9. Failure and recovery
@@ -427,6 +495,20 @@ health peer lists are also asymmetric. Those facts merit a separate federation
 decision. Changing them here would alter composite membership and make storage
 parity impossible to interpret.
 
+### 10.4 Make overlay paths relative in `ProjectSources`
+
+The loader's absolute paths are useful for opening files and reporting precise
+diagnostics. Changing that contract would touch arbitration and inventory
+consumers when only persisted graph identity is defective. Normalize at graph
+emission instead.
+
+### 10.5 Serialize the primary checkout's absolute overlay path
+
+The registry already maps worktrees to their primary checkout for project
+registration, but reusing that absolute path for provenance only hides the
+worktree segment. It still makes graph identity depend on one machine's mount
+point and prevents byte-identical builds after moving a repository.
+
 ## 11. Non-goals and reported follow-ups
 
 This design does not:
@@ -436,7 +518,8 @@ This design does not:
 - delete the missing temporary `obsproj` registry entry;
 - invent a graph artifact for science-commons;
 - refresh unrelated stale standalone graphs;
-- align every consumer to one toolkit revision;
+- align consumers outside this rollout's local/composite closure set to one
+  toolkit revision;
 - rewrite historical task-path citations.
 
 These remain visible follow-ups rather than hidden prerequisites.
@@ -452,9 +535,11 @@ The rollout is complete when:
 4. No target has a mixed store or migration journal.
 5. cBioPortal plans 74 writes with no refusal and pan-disease plans 58 writes
    with no refusal under the corrected parser.
-6. All 14 closure-target local graphs validate and report zero staleness.
+6. All 15 closure-target local graphs validate and report zero staleness.
 7. All affected composites preserve declared membership, validate, and leave
    their local graphs byte-identical.
 8. Cancer and health peer checks complete without storage errors.
 9. Validation emits no traceback or task-storage fallback warning.
 10. Registry and peer topology are unchanged.
+11. No closure-target graph contains `.worktrees/` overlay provenance, and an
+    overlay-bearing primary/worktree rebuild is byte-identical.
