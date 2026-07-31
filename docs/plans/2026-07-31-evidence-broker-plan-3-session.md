@@ -84,6 +84,22 @@ on the unbudgeted-path guard; and the `StrEnum` and `git add` slips. The mutatio
 Task 1 were themselves an instance of the conjunction defect — they asked for one mutation of a
 validator that enforces two rules.
 
+**A second review round found six more, and two of them were in guards the first round had just
+rewritten.** The `served/` write used `path.exists()` as proof of content, so a partial write
+returned truncated bytes on retry and a planted symlink was written *through* — the same
+delivery fail-open reached through the existence check instead of the append (Task 3). `finish
+--session` validated the handle but never bound the loaded baseline back to it, so a rule
+implemented in full for `evidence serve` was half-implemented for the command that writes the
+attestation (Task 6). The session journaled `request.target` rather than the authorized spelling,
+which is precisely the defect plan 2 fixed *inside* `serve` — arriving one layer up because
+`Served` never handed the spelling back (Task 1 step 9). And the rewritten AST guard accepted a
+`_serve` call under *any* lock in the module rather than the one in `Session.request`: narrower
+than its rule again, in the guard written to fix being narrower than its rule.
+
+The lesson worth carrying into implementation: **rewriting a guard does not certify the rewrite.**
+Each of these passed a careful reading. Only mutation finds them, which is why every guard below
+names the specific mutations that must fail it.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section.
@@ -126,6 +142,8 @@ Every task's requirements implicitly include this section.
 - Produces: `Outcome`, `InstrumentIdentity`, `InlineInput`, `ExposureEntry`, `EvidenceExposure`,
   `EvidenceSession`, `EvidenceSessionSpec`, `REPLAY_PROTOCOL_VERSION`, and
   `AutonomousRunRecord.evidence`. Tasks 2–6 all import from here.
+- Also modifies plan 2's `Served` to carry the authorized spelling (step 9) — the one change this
+  plan makes to shipped serving code, and the reason Task 3 can journal what git actually read.
 
 **Why `Outcome` moves rather than being copied:** `ExposureEntry.outcome` is typed by it and
 `science_model` cannot import `science_tool`. A second enum with the same members is the
@@ -470,13 +488,45 @@ is already `Outcome.X`, so no call site moves — but **one more line must go**:
 `from enum import StrEnum` too, and confirm with `grep -n StrEnum serve.py` returning nothing before
 you commit.
 
-- [ ] **Step 9: Confirm plan 2's suite is untouched by the move**
+- [ ] **Step 9: Hand the authorized spelling back through `Served`**
+
+**The defect this closes is the one plan 2 already fixed one layer down.** `authorize` returns both a
+verdict *and* the normalized spelling, because "returning only a verdict is what let an earlier draft
+authorize one path and read another". `serve` honours that internally — every git call uses
+`auth.path` — but `Served` carries only `(outcome, payload, denial)`, so a *caller* has no way to
+learn what was actually read. Task 3 journals the entry, and with only the raw request in reach it
+would record `a\b` for a read of `a/b`. `LocationEvidence.path` normalizes, so an honest citation to
+`a/b` would key differently from the entry and come back `CITATION_UNSERVED`. The same trap, one
+layer up, reached by the same route.
+
+Add to `Served`:
+
+```python
+    #: The spelling git was actually given: `auth.path` for `read` and `history`, the pattern as
+    #: supplied for `search` (a pattern is not a path and is never normalized). `None` on a
+    #: refusal -- a denied or malformed request has no authorized spelling, and its RAW form is
+    #: what must be journaled, since a path that fails to normalize has no other form.
+    target: str | None = None
+    #: `auth.path` for a search's optional pathspec; `None` otherwise.
+    pathspec: str | None = None
+```
+
+Populate it at the three dispatch sites in `serve` — `_serve_read` and `_serve_history` receive
+`auth.path` already, and `_serve_search` receives the pattern and `auth.path` as separate arguments.
+The refusal branch leaves both `None`.
+
+Test that a read of `a\b` against a repository containing only `a/b` returns `served.target == "a/b"`,
+not `"a\\b"` — plan 2's suite already builds exactly this fixture to prove `auth.path` reaches git, so
+extend that test rather than inventing a second repository. Certify by returning `request.target`
+instead of `auth.path` and confirming it fails.
+
+- [ ] **Step 10: Confirm plan 2's suite is untouched by the move**
 
 Run: `cd science && uv run --frozen pytest tests/test_evidence_broker_serve.py
 tests/test_evidence_broker_policy.py tests/test_evidence_broker_canonical.py`
 Expected: exit 0. An import move that changes behaviour is not an import move.
 
-- [ ] **Step 10: Lint, type-check, commit**
+- [ ] **Step 11: Lint, type-check, commit**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
@@ -879,14 +929,19 @@ class Receipt:
     outcome: Outcome
     sha256: str | None       # None for a refusal -- no bytes were served
     path: Path | None        # None for a refusal -- design §3.5 writes no file
-    notice: str | None       # the policy's notice, or the budget refusal
+    notice: str | None       # the policy's notice, or the budget refusal; None when served
 
 class SessionError(RuntimeError): ...
 
 class Session:
-    def __init__(self, repo_root: Path, session: EvidenceSession, *, run_dir: Path) -> None
+    def __init__(self, repo_root: Path, session: EvidenceSession) -> None
     def request(self, request: EvidenceRequest) -> Receipt
+    def requests_used(self) -> int
 ```
+
+**`served/` is derived from `session.journal_path.parent`, not passed in.** Two parameters for one
+location is two sources of truth: a caller could pair run A's journal with run B's `served/`, and
+both values would be individually well-formed so no validator could catch it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -962,21 +1017,53 @@ def test_seeding_leaves_requests_used_at_zero(session_at) -> None:
     assert session.requests_used() == 0
 
 
-def test_a_run_dir_inside_the_project_cannot_construct_a_session(project, session_model) -> None:
+def test_a_journal_inside_the_project_cannot_construct_a_session(project, session_model) -> None:
     """Design §3.5: `served/` is created under the same containment check as the journal.
     An unsafe session must not be CONSTRUCTIBLE -- every file it wrote into the tree would be
     a `report-only` path-gate denial, failing the run for doing what the design prescribes."""
+    inside = session_model.model_copy(update={"journal_path": project / "runs" / "j.jsonl"})
     with pytest.raises(BaselineError, match="inside the project"):
-        Session(project, session_model, run_dir=project / "runs")
+        Session(project, inside)
 
 
-def test_a_symlinked_run_dir_pointing_into_the_project_is_refused(project, tmp_path, session_model) -> None:
+def test_a_symlinked_journal_path_landing_in_the_project_is_refused(project, tmp_path, session_model) -> None:
     """`reject_baseline_inside_project` judges as-spelled AND as-resolved. A path spelled
     outside the tree may still land inside through a link the actor controls."""
     link = tmp_path / "outside"
     link.symlink_to(project / "runs")
+    linked = session_model.model_copy(update={"journal_path": link / "j.jsonl"})
     with pytest.raises(BaselineError, match="inside the project"):
-        Session(project, session_model, run_dir=link)
+        Session(project, linked)
+
+
+def test_a_partial_write_is_never_handed_back_on_retry(session_at, monkeypatch) -> None:
+    """The existence check that isn't. A `write` that dies partway leaves the digest-named path
+    holding TRUNCATED bytes; a retry that skips writing because the path exists journals the
+    FULL digest and returns the truncated file -- and replay confirms it, because replay
+    re-serves from the commit and never opens `served/`."""
+    session = session_at(budget=3)
+    monkeypatch.setattr(io.BufferedWriter, "write", _write_half_then_raise)
+    with pytest.raises(OSError):
+        session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    monkeypatch.undo()
+    receipt = session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    assert receipt.path is not None
+    assert hashlib.sha256(receipt.path.read_bytes()).hexdigest() == receipt.path.name
+
+
+def test_a_planted_symlink_is_replaced_not_written_through(session_at, project) -> None:
+    """`write_bytes` FOLLOWS SYMLINKS, and `served/` is actor-writable by design. A planted link
+    aimed into the tree would turn a serve into an in-tree write -- a path-gate denial produced
+    by the broker itself. `os.replace` swaps the name for a regular file instead."""
+    session = session_at(budget=3)
+    target = project / "victim.txt"
+    target.write_text("original\n", encoding="utf-8")
+    digest = hashlib.sha256(EXPECTED_BYTES).hexdigest()
+    session._served_dir.mkdir(parents=True, exist_ok=True)
+    (session._served_dir / digest).symlink_to(target)
+    session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    assert target.read_text(encoding="utf-8") == "original\n"
+    assert not (session._served_dir / digest).is_symlink()
 
 
 def test_a_failed_served_write_records_nothing(session_at, monkeypatch) -> None:
@@ -1028,6 +1115,7 @@ which is the path the CLI and 2b's dispatch actually take.
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1067,10 +1155,16 @@ class Receipt:
 class Session:
     """One run's evidence surface. Holds the round counter and the journal."""
 
-    def __init__(self, repo_root: Path, session: EvidenceSession, *, run_dir: Path) -> None:
+    def __init__(self, repo_root: Path, session: EvidenceSession) -> None:
         self._repo_root = repo_root
         self._session = session
-        self._served_dir = run_dir / "served"
+        # DERIVED, not a parameter. A separate `run_dir` argument is a second source of truth for
+        # one location: nothing would stop a caller pairing run A's journal with run B's
+        # `served/`, and no validator could catch it because both values would be individually
+        # well-formed. `journal_path` is settable only by the supervisor at `start` (design
+        # §3.4.1 -- none of the session's fields is CLI-settable), so deriving from it means the
+        # two cannot disagree by construction rather than by check.
+        self._served_dir = session.journal_path.parent / "served"
         self._project_root = repo_root
         # CONTAINMENT ON THE CONSTRUCTOR, not at write time. `run_dir` is a parameter, and the
         # in-process interface design §3.4.1 offers 2b hands it in directly -- so without this
@@ -1124,8 +1218,14 @@ class Session:
                 self._session.journal_path,
                 ExposureEntry(
                     op=request.op.value,
-                    target=request.target,
-                    pathspec=request.pathspec,
+                    # THE AUTHORIZED SPELLING, not the requested one. `serve` reads `auth.path`,
+                    # so journaling `request.target` would record `a\b` for a read of `a/b` --
+                    # and `LocationEvidence.path` normalizes, so an honest citation would key
+                    # differently and come back unserved. On a refusal `served.target` is `None`
+                    # and the RAW form is what goes in: a path that failed to normalize has no
+                    # other form, and the refusal must still replay as a refusal.
+                    target=served.target if served.target is not None else request.target,
+                    pathspec=served.pathspec if served.target is not None else request.pathspec,
                     commit=self._session.commit,
                     sha256=digest,
                     outcome=served.outcome,
@@ -1143,16 +1243,42 @@ class Session:
             return Receipt(outcome=served.outcome, sha256=digest, path=path)
 
     def _write_served(self, digest: str, payload: bytes) -> Path:
-        """`served/<sha256>`. THE ONE PLACE AN ACTOR WRITES IN THE CONTROL PLANE, and it is safe
-        because nothing trusts it: replay re-serves every entry from the pinned commit,
-        correspondence reads the manifest and the map it rebuilds, and `finish_run` never opens
-        this directory. An actor that rewrites its own served files changes what it can read and
-        nothing about what it can prove.
+        """`served/<sha256>`, written whole or not at all.
+
+        THE ONE PLACE AN ACTOR WRITES IN THE CONTROL PLANE, and it is safe because nothing trusts
+        it: replay re-serves every entry from the pinned commit, correspondence reads the manifest
+        and the map it rebuilds, and `finish_run` never opens this directory.
+
+        `if not path.exists(): path.write_bytes(...)` is WRONG here in two ways, and both are
+        reachable without an attacker. A `write_bytes` that dies partway -- a full disk, a signal
+        -- leaves the digest-named path in place holding PARTIAL bytes; the retry sees it exists,
+        skips the write, journals the FULL payload's digest, and hands back the truncated file.
+        Replay then confirms it, because replay re-serves from the commit and never opens
+        `served/`, so the reviewer holds `FULL` coverage over content it never received. That is
+        the delivery-ordering fail-open again, arriving through the existence check instead of
+        through the append.
+
+        And `write_bytes` FOLLOWS SYMLINKS. `served/` is actor-writable by design, so a planted
+        `served/<digest>` symlink aimed into the project tree turns a serve into an in-tree write
+        -- a path-gate denial at `report-only`, produced by the broker itself.
+
+        So: an exclusive, no-follow temporary regular file, then an atomic rename onto the digest
+        name. `os.replace` is atomic and replaces a symlink with the regular file rather than
+        writing through it, so a reader sees either no file or the whole one.
         """
         self._served_dir.mkdir(parents=True, exist_ok=True)
         path = self._served_dir / digest
-        if not path.exists():
-            path.write_bytes(payload)
+        temporary = self._served_dir / f".{digest}.{os.getpid()}.partial"
+        descriptor = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         return path
 ```
 
@@ -1192,7 +1318,7 @@ Import it as `from science_tool.evidence_broker.serve import serve as _serve` so
 does not re-export it, then walk the module with `ast`:
 
 ```python
-def test_serving_happens_only_inside_the_locked_critical_section() -> None:
+def test_serving_happens_only_inside_request_s_locked_critical_section() -> None:
     tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
     calls = [
         node for node in ast.walk(tree)
@@ -1200,8 +1326,15 @@ def test_serving_happens_only_inside_the_locked_critical_section() -> None:
         and node.func.id == "_serve"
     ]
     assert len(calls) == 1
+
+    # SCOPED TO `Session.request`, not to "any locked block anywhere". A guard that accepts any
+    # `with journal_lock(...)` in the module passes when `_serve` is moved into a NEW method
+    # under its OWN lock -- outside the count/check/append critical section, which is the whole
+    # property. Locate the method first, then the lock inside it.
+    (klass,) = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Session"]
+    (method,) = [n for n in klass.body if isinstance(n, ast.FunctionDef) and n.name == "request"]
     locked = [
-        node for node in ast.walk(tree)
+        node for node in ast.walk(method)
         if isinstance(node, ast.With)
         and any(_calls_journal_lock(item.context_expr) for item in node.items)
     ]
@@ -1211,10 +1344,34 @@ def test_serving_happens_only_inside_the_locked_critical_section() -> None:
 Use `ast`, not a text scan — a text scan's scope is the whole file including the prose above, which
 mentions `serve` five times. That is the mistake plan 2 made and fixed.
 
-Certify it with **two** mutations, because one call site inside one `with` block is a conjunction:
-move the `_serve(...)` call above the `with journal_lock(...)` line (confirm it fails), and add a
-second `_serve(...)` call anywhere in the module (confirm it fails). Passing only one of these means
-the guard pins only one half.
+Certify it with **three** mutations, because the rule is a conjunction of three things: move the
+`_serve(...)` call above the `with journal_lock(...)` line; add a second `_serve(...)` call anywhere;
+and — the one the unscoped version missed — move the `_serve(...)` call into a new
+`Session.peek(...)` method wrapped in its own `with journal_lock(...)`. All three must fail.
+
+- [ ] **Step 6b: Prove the budget behaviourally, which the AST guard cannot**
+
+The structural guard is a ratchet against a future refactor; it is not evidence the budget holds.
+Add the test that is:
+
+```python
+def test_a_budget_of_one_admits_exactly_one_of_two_concurrent_requests(session_at) -> None:
+    """The property `journal_lock` exists for. Two reviewers that each counted and then each
+    served would both pass a check for the last remaining round."""
+    session = session_at(budget=1)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        receipts = [f.result() for f in [
+            pool.submit(session.request, EvidenceRequest(op=EvidenceOp.READ, target="a.md")),
+            pool.submit(session.request, EvidenceRequest(op=EvidenceOp.READ, target="b.md")),
+        ]]
+    assert sorted(r.outcome is Outcome.REFUSED for r in receipts) == [False, True]
+    assert session.requests_used() == 1
+```
+
+Certify it by narrowing `journal_lock` to wrap only the `append_request` call: the count-then-serve
+window reopens and both requests are admitted. If this test passes with the lock narrowed, it is
+timing-dependent rather than proving anything — add a barrier so both threads are inside `request`
+before either counts, and say so in your report.
 
 - [ ] **Step 7: Lint, type-check, commit**
 
@@ -1326,11 +1483,31 @@ Run: `cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py -k b
 
 ```python
     evidence: EvidenceSession | None = None
+
+    @model_validator(mode="after")
+    def _session_names_this_run(self) -> RunBaseline:
+        """`session_id` is `run_slug(run_id)` or the baseline is refused.
+
+        Design §4.3 specifies the field as "the run slug", but a value that is derived once at
+        `start` and never checked again is a second identity for one run -- and this baseline is
+        read back off disk by a different process, where the two can disagree without anything
+        noticing. Validated HERE because `EvidenceSession` alone cannot see `run_id`; this is the
+        same shape as `AutonomousRunRecord._exposure_is_bound_to_this_run`.
+        """
+        if self.evidence is not None and self.evidence.session_id != run_slug(self.run_id):
+            raise BaselineError(
+                f"the session names {self.evidence.session_id!r} but the run is {self.run_id!r}"
+            )
+        return self
 ```
 
 Named `evidence`, and its policy field named `surface_policy` rather than reusing
 `policy_identity` — that field is the autonomy *write-surface* policy, a different thing about a
 different boundary, and one field standing for two policies is how they end up enforced as one.
+
+Test both directions: a baseline whose `session_id` disagrees is refused, and the one `start_run`
+builds agrees. Certify by having `start_run` set `session_id=run_id` (with the `run:` prefix, the
+plausible slip) and confirming the first test fails.
 
 - [ ] **Step 4: Rewrite `start_run`'s signature and opening**
 
@@ -1544,7 +1721,11 @@ def test_the_receipt_never_carries_the_bytes(runner, brokered) -> None:
     result = runner.invoke(cli, ["evidence", "serve", "--session", HANDLE,
                                  "--op", "read", "--target", "a.md", "--format", "json"])
     payload = json.loads(result.output)
-    assert set(payload) == {"outcome", "sha256", "path"}
+    # `notice` is ALWAYS present and `null` when served -- a conditional key makes every
+    # consumer branch on presence rather than on value, and the two tests in this file
+    # disagreed about the wire format until this was pinned.
+    assert set(payload) == {"outcome", "sha256", "path", "notice"}
+    assert payload["notice"] is None
     assert FILE_CONTENT not in result.output
 
 
@@ -1587,12 +1768,13 @@ Resolution order, and each step is load-bearing:
     if baseline.evidence is None:
         _fail(f"run {handle!r} was not opened with a broker spec; there is no surface to serve")
 
-    session = Session(project_root, baseline.evidence, run_dir=directory)
+    session = Session(project_root, baseline.evidence)
     receipt = session.request(EvidenceRequest(op=EvidenceOp(op), target=target, pathspec=pathspec))
 ```
 
 The payload is `{"outcome", "sha256", "path", "notice"}` and nothing else — never `payload`, never
-the bytes. Let `ServeError` and `JournalError` propagate: design §6's last row is "anything else from
+the bytes. **All four keys are always present**, with `null` for the ones that do not apply: a
+conditionally-omitted key makes every consumer branch on presence rather than on value. Let `ServeError` and `JournalError` propagate: design §6's last row is "anything else from
 git raises, halts the run", and a broker that answered around an unreadable journal would be
 answering from a record it could not read.
 
@@ -1783,6 +1965,26 @@ Mutually exclusive with `--baseline`, resolving through `run_dir` **from the sup
 environment**. That resolution is what makes §3.4.2's containment argument true rather than
 asserted: the actor cannot influence which control plane `finish` reads. Same `(a is None) == (b is
 None)` spelling as Task 4, and the same pair of tests (both flags → exit 2; neither → exit 2).
+
+**Apply §3.4.1's rule in BOTH halves here, not just the first.** The rule is two-part — parse the
+handle as a generated run id *before* any join, then check the loaded baseline's own `run_id`
+*after* — and Task 5 implements both for `evidence serve`. Doing only the first half here would
+leave `finish --session Y` finalizing run X from a baseline swapped under Y's directory, which is
+precisely the defect the second half exists to close and which Task 5 already refuses. A rule
+enforced on one of the two commands that take a handle is enforced on neither, and this is the
+"fix applied to the headline and not to the path production takes" pattern: the actor-facing command
+is the one you think about, and `finish` is the one that writes the attestation.
+
+So after `read_baseline` in the `--session` path:
+
+```python
+    if run_slug(baseline.run_id) != run_slug(handle):
+        _fail(f"the baseline at {directory} does not name run {handle!r}")
+```
+
+Give it its own test — `finish --session Y` against a directory holding X's baseline exits 2 and
+writes no record — and its own mutation: delete the check and confirm that test fails. Do not reuse
+Task 5's test; a guard proven on `serve` is not a guard on `finish`.
 
 - [ ] **Step 7: End-to-end**
 
