@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 25)
+**Status:** partially implemented (revision 26)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the shallow diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 25, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 25, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 25, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the shallow diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 26, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 26, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -98,6 +98,20 @@ this design has had.
    initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
    executing anything at all. It must spawn a fresh interpreter on
    `import science_model.evidence_broker`.
+
+Revision 26 closes two, both in revision 25's own fix and neither in the production boundary.
+
+1. **The lazy-fetch fixture's precondition was built from the pin it mutates.** Asking "is this tree
+   absent?" is itself a lazy-fetch trigger: measured, unpinned `cat-file -e <tree>` exits 0 **and
+   spawns a fetch**, as does `rev-parse 'HEAD~1^{tree}'` inside the partial clone. Deleting the
+   production pin therefore breaks the row's *setup* — and populates the clone while doing it — so
+   the mutation never reaches serving. The OID comes from the source repository and the check carries
+   its own explicit `GIT_NO_LAZY_FETCH=1`. §7 now states the general question: **which line does the
+   mutation break first?**
+2. **§3.2.1's canonical-invocation table still listed only `LC_ALL` and `LANG`**, contradicting §3.2.
+   Both pins are named there, and named for **all three ops** — a partial clone withholds blobs as
+   readily as trees, so `cat-file blob` and `grep` reach a promisor remote by the same mechanism that
+   motivated the pin under `history`.
 
 Revision 25 closes one defect, in revision 24's fix, plus a stale status line.
 
@@ -1023,7 +1037,14 @@ scope was the set of channels someone thought to probe. `log.follow` was missed 
 changes served history whenever exactly one pathspec is given, which is any policy with no deny
 prefixes.
 | `cat-file blob <commit>:<path>` | nothing further — a blob read; a new subcommand to `git.py`, so probed under §3.2.1's rule before it ships |
-| all three | `LC_ALL=C`, `LANG=C` in the child environment |
+| all three | `LC_ALL=C`, `LANG=C`, `GIT_SHALLOW_FILE=/dev/null`, `GIT_NO_LAZY_FETCH=1` in the child environment |
+
+The last two are pinned for **all three** ops, not for `history` alone. §3.2 argues them from history
+because that is where a shallow boundary bites, but a partial clone withholds *blobs* as readily as
+trees — so `cat-file blob` and `grep` reach a promisor remote by the identical mechanism. A pin
+scoped to the op that motivated it would be this design's recurring defect in environment-variable
+form: **the guarantee stated on the axis where it was discovered rather than the axis where it
+holds.**
 
 **What was probed, and what actually executes.** Against git 2.55.0 in a scratch
 repository, under exactly the argv the broker builds:
@@ -2276,14 +2297,34 @@ into a partially initialised `audit.record`. Spawn it; do not trust the ambient 
 the general form: *a cycle test that shares a process with its own test runner tests the runner's
 import order.*
 
-**The lazy-fetch row has two ways to go vacuously green, and both must be closed in the fixture.**
-First, `uploadpack.allowFilter` defaults to **false**: a `--filter=tree:0` clone from a serving
-repository without it comes back *complete*, so the mutation has nothing to expose and the test
-passes against the defect. Set it on the serving side and assert the filter took — `git cat-file -e`
-on a parent commit's tree must report the object **absent** — before serving anything. Second, the
-promisor remote must still hold the objects and be reachable: point it at a `file://` path that
-exists. With the remote gone, both the pinned and unpinned runs fail, and the pair proves nothing.
-The distinction the row is testing is *whether git goes and gets it*, not whether the request errors.
+**The lazy-fetch row has three ways to go wrong, and the third is the interesting one.**
+
+1. `uploadpack.allowFilter` defaults to **false**: a `--filter=tree:0` clone from a serving
+   repository without it comes back *complete*, so the mutation has nothing to expose and the test
+   passes against the defect. Set it on the serving side, and assert the filter actually took before
+   serving anything.
+2. The promisor remote must still hold the objects and be reachable — point it at a `file://` path
+   that exists. With the remote gone, both the pinned and unpinned runs fail, and the pair proves
+   nothing. The row tests *whether git goes and gets it*, not whether the request errors.
+3. **The precondition in (1) must not be built out of the thing being mutated.** Every obvious way to
+   ask "is this tree absent?" is itself a lazy-fetch trigger. Measured, git 2.55, fresh
+   `--filter=tree:0` clone: unpinned `git cat-file -e <tree>` **exits 0 and spawns a fetch**, and
+   unpinned `git rev-parse 'HEAD~1^{tree}'` inside the clone spawns one too. So a fixture that
+   derives the OID in the partial clone, or checks absence through `run_git`, does not merely
+   misreport under the mutation — **it fetches the object in and destroys the condition it was
+   establishing.** The mutation then fails during setup, and a row that dies in setup certifies
+   nothing about serving, which is the whole point of the pair.
+
+   Derive the tree OID from the **source** repository, and run the absence check with a *test-owned,
+   explicit* `GIT_NO_LAZY_FETCH=1` rather than through `run_git` or the ambient environment. The
+   precondition must hold on a tree where the production pin has been deleted; if it borrows that
+   pin, it is not a precondition.
+
+**This is the FIFO/`ENXIO` lesson in a new costume** (§7's standing rule, and the reason the
+maximal-mutation probe exists): a parametrization that measures the environment rather than the
+guard. There the kernel refused the open before `S_ISREG` was ever consulted; here git satisfies the
+precondition by fetching before serving is ever reached. **Ask of every fixture: which line does the
+mutation break first?** If the answer is a setup line, the row is not testing what its name says.
 
 **The two shallow rows are not redundant, and the first is the one that carries the guarantee.**
 Dropping the env pin leaves the open-time check green — the run opens against a clean repository,
