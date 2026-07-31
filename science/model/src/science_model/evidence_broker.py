@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from science_model.audit.subjects import SubjectError, normalize_project_path
+from science_model.audit.subjects import SubjectError, normalize_project_path, normalize_utf8_nfc
 
 
 class SurfacePolicy(BaseModel):
@@ -40,8 +40,25 @@ class SurfacePolicy(BaseModel):
         A prefix normalized at match time would be normalized once per request and could differ
         between serving and replay if the normalizer ever changed. Doing it on construction means
         the policy that reaches the baseline is already the policy that will be compared.
+
+        A PREFIX WHOSE NFC FORM DIFFERS FROM WHAT WAS WRITTEN IS REFUSED, NOT QUIETLY WEAKENED.
+        `normalize_project_path` folds to NFC; git matches pathspecs BYTE-exactly. MEASURED, git
+        2.55: against a tree holding an NFD `café/x.txt`, a deny prefix written in NFD is stored
+        as NFC, `:(top,literal,exclude)café` in NFC then matches nothing, and `search` serves the
+        file AND its content -- while `read` of the same path normalizes the request too and
+        misses. The two mechanisms disagree, and the caller who asked for the denial is the last
+        to know. There is no spelling of this policy that expresses the NFD path, so the caller
+        learns that here rather than receiving a weaker policy than the one they wrote.
         """
         try:
-            return tuple(normalize_project_path(raw) for raw in value)
+            prefixes = tuple(normalize_project_path(raw) for raw in value)
         except SubjectError as exc:
             raise ValueError(f"deny prefix is not a project path: {exc}") from exc
+        for raw in value:
+            if normalize_utf8_nfc(raw) != raw:
+                raise ValueError(
+                    f"deny prefix {raw!r} is not in NFC and cannot be expressed: git matches "
+                    "pathspecs byte-exactly, so the NFC spelling stored here would exclude "
+                    "nothing from `search` while `read` denied the same path"
+                )
+        return prefixes
