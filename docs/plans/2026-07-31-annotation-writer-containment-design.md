@@ -1,6 +1,7 @@
 # Annotation writer containment — design
 
-**Status:** design, ready for the implementation plan (revision 2 — §2.3 measurement corrected)
+**Status:** design, ready for the implementation plan (revision 3 — `.dot` count de-polluted,
+`MintFn` contract widened to all three callers)
 **Branch:** `annotation-writer-containment`, forked from `main` at `0c7a6ba6`
 **Program:** schema-first closure, piece 3 (first slice)
 
@@ -63,11 +64,11 @@ keys whose "deleting them is piece 3's corpus migration". Measured:
 - Its validator, `dag/validate.py:_check_legacy_dag_metadata`, is **live, and currently
   failing on every one of the 307 records**. An earlier revision of this design claimed the
   opposite ("mm30 contains zero `.dot` files, so `per_dag_edges` is empty and the check
-  `continue`s on every record"). Re-measured 2026-07-31, that is wrong in every clause: mm30
-  holds **105 `.dot` files** under `doc/figures/dags` (16 after `_discover_dot_files` excludes
-  `-auto` / `-numbered`), and **all 15 distinct `legacy_patch` values match a `.dot` stem**, so
-  every record passes the `continue` at `validate.py:275` and reaches the subject/object
-  cross-check. Running `validate_project` on mm30:
+  `continue`s on every record"). Re-measured 2026-07-31, that is wrong in every clause:
+  `doc/figures/dags` holds **35 `.dot` files** — 16 selected, plus 15 `-auto` and 4 `-numbered`
+  that `_discover_dot_files` excludes — and **all 15 distinct `legacy_patch` values match a
+  selected stem**, so no record takes the `continue` at `validate.py:275` and every one reaches
+  the subject/object cross-check. Running `validate_project` on mm30:
 
   ```
   findings by rule: {'proposition_edge_missing': 362, 'acyclicity': 1,
@@ -76,6 +77,13 @@ keys whose "deleting them is piece 3's corpus migration". Measured:
 
   307 findings, severity `error`. Deleting `legacy_patch` would retire a check that runs — and
   fails — on the whole population. The check is not silent; it is unread.
+
+  A count of 105 here in revision 2 was a **polluted measurement**: mm30 carries two
+  `.worktrees` copies of itself, and a bare `find . -name '*.dot'` that excludes only `.git`
+  triples the corpus (35 × 3). Anyone re-measuring a file population in a Science project must
+  exclude `.worktrees` as well as `.git`. The 16-selected figure and the 307/670 validator
+  findings were never affected — those came from `_discover_dot_files` and `validate_project`,
+  which resolve `dag_dir` from `science.yaml` and never see the copies.
 - `graph/materialize.py:2082-2087` still emits `sci:legacyPatch` and `sci:legacyEdgeId`
   into the graph. That output *is* live.
 - `legacy_relation_label` holds **243 distinct values across 307 records** — the only
@@ -281,9 +289,23 @@ So:
 `PROMOTE_PROPOSITION` therefore never reaches `render_update`, which is why §4.1 marks it
 create-only.
 
-**The report must follow the behaviour, and that changes `MintFn`.** `apply_candidates:380-383`
-currently does `report.minted += 1` and `written_paths.append(...)` unconditionally on the MINT
-branch, because `MintFn` returns a bare `str`:
+**The report must follow the behaviour, and that changes `MintFn`.** `MintFn` returns a bare
+`str`, so **all three of its callers** assume a mint always created a file and unconditionally
+do `report.minted += 1` and `written_paths.append(...)` on their MINT branch:
+
+| caller | site |
+|---|---|
+| `promote.apply_candidates` | `promote.py:380-383` |
+| `prose_promote` (single unit) | `prose_promote.py:225-227` |
+| `prose_promotion_batch` (batch row) | `prose_promotion_batch.py:122-125` |
+
+All three reach the accrual branch: both prose paths build their targets with
+`build_targets()` (`prose_promote.py:112,204`; `prose_promotion_batch.py:72,85`), so a
+proposition MINT routes through `proposition_target()` → `_mint_proposition` exactly as
+`apply_candidates` does. Fixing only `apply_candidates` would leave two paths reporting a mint
+for a file they did not write — the same defect, in the two places least likely to be looked at.
+
+The signature is what makes the omission possible:
 
 ```python
 MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], str]   # promote.py:247
@@ -297,13 +319,17 @@ A mint that accrued would then report as a mint, and name a path nothing wrote. 
   collapses;
 - **`written_paths` gains an entry only when a file is created.**
 
-So `MintFn` returns the entity id *and* whether it created, and `apply_candidates` branches on
-that instead of assuming. **All three mint implementations carry the contract** —
-`_mint_proposition` returns created-or-accrued, and both `_mint_numeric` closures
-(`question`, `hypothesis`) always report created, since `reserve_entity` + the template render
-have no accrual path. Threading it through only the proposition mint would leave the other two
-returning a value the caller must special-case, which is how the unconditional `+= 1` got there
-in the first place.
+So `MintFn` returns the entity id *and* whether it created, and **all three callers branch on
+that return instead of assuming**, with identical accounting. Widening the return type is what
+forces this: every caller must be touched to keep type-checking, so none can be silently left
+behind — which is the property to preserve when implementing, rather than adding an optional
+field the existing callers would keep ignoring.
+
+**All three mint implementations carry the contract** — `_mint_proposition` returns
+created-or-accrued, and both `_mint_numeric` closures (`question`, `hypothesis`) always report
+created, since `reserve_entity` + the template render have no accrual path. Threading it
+through only the proposition mint would leave the other two returning a value the caller must
+special-case, which is how the unconditional `+= 1` got there in the first place.
 
 **`synthesize._write_proposition`** calls
 `update_entity_file(..., ownership=SYNTHESIZE_PROPOSITION)`. Its destination always exists —
@@ -342,16 +368,19 @@ Keeping a callerless function alive plus a guard asserting nobody calls it is al
 mechanisms where one will do, and it is the "legacy layer nobody asked for" the repo
 conventions rule out.
 
-So the guard becomes a **symbol-absence assertion**: `write_entity_file` is not defined in
-`science_tool.entities` and does not appear anywhere under `science/src/science_tool/`. That is
-strictly stronger than the caller guard it replaces — a caller cannot re-acquire a symbol that
-does not exist — and it cannot be satisfied by a re-definition under another name reached
-through the same dump.
+So the guard becomes a **retirement assertion for exactly one symbol**: `write_entity_file` is
+not defined in `science_tool.entities` and does not appear anywhere under
+`science/src/science_tool/`.
+
+**That is all it claims.** It proves this symbol stayed retired; it does **not** prove the
+full-model dump stayed gone. A writer reintroduced under another name — or an inlined
+`model_dump(exclude_none=True)` at a call site — passes it cleanly. The behavioural protection
+comes from the containment tests (§5.3, §5.4): a record that loses `predicate` or gains
+`datapackage` fails there regardless of which symbol wrote it. Guard and tests cover different
+things, and the guard must not be described as covering the tests' half.
 
 The scope is **derived from a tree walk, never an enumerated module list**. A guard that lists
 its own scope has a hole by construction, and this program has already been bitten by one.
-
-Deleting it moves the three *test* callers (§5.9), which are the only remaining references.
 
 ## 5. Testing
 
@@ -389,15 +418,24 @@ Deleting it moves the three *test* callers (§5.9), which are the only remaining
    `linked` incremented, `minted` not, and no `written_paths` entry (§4.3). One behaviour, two
    routes to it — asserting only the file state would let the report diverge unnoticed, which
    is the hole the unconditional `report.minted += 1` opened.
-9. **The fixtures move off the deleted writer** — `tests/test_proposition_synthesize.py`'s
-   `_write_prop` helper (`:283-286`) currently builds its records *with* `write_entity_file`,
-   as do `test_entity_writer.py` and `test_workbench_apply.py`. §4.4 deletes it, so they must
-   be rewritten onto the contained path. This is not mechanical: the full-model dump seeds
-   skeleton keys that `render_update` preserves (they are not owned) and `certify_persisted`
-   does not reject (base 2.0 deliberately omits `unevaluatedProperties`, per its docstring).
-   Left alone, the synthesize suite would certify containment against inputs only the
-   uncontained writer could produce — and test 4's "no skeleton keys" would pass over records
-   whose skeleton keys came from the fixture, not the writer under test.
+9. **The deleted writer's three test references get two different treatments.** Only one is a
+   fixture; the other two have the deleted writer as their *subject* and are deleted with it.
+
+   - **Move** `tests/test_proposition_synthesize.py::_write_prop` (`:283-286`) onto the
+     contained path. It is a fixture — it builds records the synthesize tests then act on.
+     This is not mechanical: the full-model dump seeds skeleton keys that `render_update`
+     preserves (they are not owned) and `certify_persisted` does not reject (base 2.0
+     deliberately omits `unevaluatedProperties`, per its docstring). Left alone, the suite
+     would certify containment against inputs only the uncontained writer could produce — and
+     test 4's "no skeleton keys" would pass over records whose skeleton keys came from the
+     fixture rather than the writer under test.
+   - **Delete** `test_entity_writer.py::test_write_entity_file_places_custom_body` (`:35`) and
+     `test_workbench_apply.py::test_render_entity_text_matches_write_entity_file_output`
+     (`:59`). Both assert properties *of* `write_entity_file`; with it gone they have no
+     subject, and rewriting them onto the contained path would invent coverage nobody asked
+     for. Note the first is one test of twelve in its module — the other eleven cover
+     `slug_*`, `append_entity_source_ref` and `render_entity_*`, all of which survive. Delete
+     the test, not the module.
 
 Validation per `AGENTS.md`: `cd science && uv run --frozen pytest`, `cd science/model &&
 uv run --frozen pytest`, `uv run ruff check` in both packages, `uv run pyright` from
