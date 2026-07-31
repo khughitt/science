@@ -21,6 +21,7 @@ No dump-mode flag can express "required for the model, not for the file"; only a
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -215,3 +216,98 @@ def render_update(
     text = render_from_frontmatter(final, body)
     certify_persisted(entity, text)
     return text
+
+
+class EntityWriteError(ValueError):
+    """A write was refused because the destination's existence contradicts the operation."""
+
+
+def _entity_dest(entity: WorkbenchEntity, project_root: Path) -> Path:
+    from science_tool.entities import resolve_path_policy
+
+    assert entity.id is not None
+    local_part = entity.id.split(":", 1)[1]
+    root = resolve_path_policy(entity.kind, project_root=project_root).root
+    return project_root / root / f"{local_part}.md"
+
+
+def _write(dest: Path, text: str) -> Path:
+    from science_tool.entities import _atomic_replace_text
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_replace_text(dest, text)
+    return dest
+
+
+def _render_update_for(
+    entity: WorkbenchEntity, dest: Path, *, ownership: Ownership, updated: str
+) -> str:
+    # ADMIT FIRST. `read_existing_target` refuses a wrong-identity, undated or unparseable
+    # destination. Reading the file directly and defaulting `created` lets `render_update`
+    # repair a record into validity before `certify_persisted` ever sees it.
+    frontmatter, body, _current = read_existing_target(dest, entity)
+    return render_update(
+        entity,
+        ownership=ownership,
+        existing_frontmatter=frontmatter,
+        body=body,
+        created=str(frontmatter["created"]),
+        updated=updated,
+    )
+
+
+def create_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Write a NEW entity file. Refuses an existing destination."""
+    dest = _entity_dest(entity, project_root)
+    if dest.exists():
+        raise EntityWriteError(f"refusing to create {dest}: it already exists")
+    today = (as_of or date.today()).isoformat()
+    return _write(dest, render_create(
+        entity, ownership=ownership, body=create_body, created=today, updated=today
+    ))
+
+
+def update_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    as_of: date | None = None,
+) -> Path:
+    """Update an EXISTING entity file. Refuses a missing destination.
+
+    Takes no `create_body`: an update-only writer has none to supply, and inventing one to
+    satisfy a signature is how a stub body eventually reaches a real record.
+    """
+    dest = _entity_dest(entity, project_root)
+    if not dest.exists():
+        raise EntityWriteError(f"refusing to update {dest}: it does not exist")
+    today = (as_of or date.today()).isoformat()
+    return _write(dest, _render_update_for(entity, dest, ownership=ownership, updated=today))
+
+
+def upsert_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Create or update. Used ONLY by the workbench, which legitimately recompiles over rows."""
+    dest = _entity_dest(entity, project_root)
+    today = (as_of or date.today()).isoformat()
+    if dest.exists():
+        text = _render_update_for(entity, dest, ownership=ownership, updated=today)
+    else:
+        text = render_create(
+            entity, ownership=ownership, body=create_body, created=today, updated=today
+        )
+    return _write(dest, text)
