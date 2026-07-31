@@ -940,6 +940,41 @@ ValueError inside subprocess and surface as GitError, halting the run over input
 
 ## Task 3: `evidence_broker/serve.py`
 
+> **Shipped with six accepted deviations** (`2cfac00a` → `45e053e7` → `a2768906`, 26 tests). The
+> review measured, by patching `serve.py` from a pytest plugin, that three guards this task's code
+> block relies on were proven by nothing: the suite stayed green with the `cat-file -t` step
+> deleted, with the anchored stderr sentences replaced by substrings, and with git handed the raw
+> `request.target`/`request.pathspec` in the search and history branches. **The plan's central
+> property was certified only in the READ branch.** The code below is what was written; these six
+> changes are what it took to make it true rather than asserted:
+>
+> 1. Both directory tests gained `match="names a tree"` — `pytest.raises(ServeError)` alone cannot
+>    tell a typed refusal from an unclassifiable one.
+> 2. `test_a_wellformed_miss_naming_a_different_path_is_not_a_miss` — a fake whose `cat-file -t`
+>    returns a well-formed miss sentence naming a *different* path. No live-git input can reach the
+>    anchored comparison behind the type check, so it can only be certified against a fake.
+> 3. `auth.path` certified in all three branches, via a HISTORY request for `a\b` and a SEARCH
+>    request with `pathspec="a\\b"`. Every other path in the suite is normalization-invariant, so
+>    the raw-string defect passed 21/21 without them.
+> 4. `assert auth.path is not None` → an explicit raise. An assert vanishes under `python -O`,
+>    which contradicts this plan's own "explicit over defensive, fail early" constraint.
+> 5. `Denial`'s docstring corrected: the malformed-pattern denial carries git's diagnostic, not the
+>    policy's notice. The docstring claimed an invariant the code did not have.
+> 6. The malformed-pattern classifier anchors on the interpolated prefix
+>    `fatal: -e option, '{pattern}': ` instead of an unanchored substring — the same technique this
+>    module refuses for `read` — plus
+>    `test_a_wellformed_malformed_pattern_naming_a_different_pattern_is_not_a_refusal`, because the
+>    anchoring introduced in round 1 was itself uncertified.
+>
+> One finding was deliberately deferred: `_serve_read` compares the *entire* stripped stderr, so an
+> incidental extra diagnostic line would demote a defined miss into a halted run. No measured
+> failing case exists under the hardened invocation, and Task 4 is where hostile configuration gets
+> certified.
+>
+> Findings 1, 2, 3 and 6 are one pattern, and it is the plan's own review pattern for the fourth
+> time: **a guard nobody watched fail.** Certifying by conjunction is not certifying — the two
+> defenses for the directory case each looked proven because breaking *both* failed a test.
+
 **Files:**
 - Create: `science/src/science_tool/evidence_broker/serve.py`
 - Test: `science/tests/test_evidence_broker_serve.py`
