@@ -323,3 +323,38 @@ def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch)
         wb.compile_workbench(workbench, project_root=tmp_path, as_of=date(2026, 7, 27))
 
     assert not list((tmp_path / "entities").rglob("*.md")), "a refused compile still wrote a file"
+
+
+def test_workbench_ownership_carries_todays_sets_verbatim() -> None:
+    from science_tool.dag.entity_frontmatter import (
+        CREATE_ONLY_KEYS,
+        EVIDENCE_LINE_OWNED_KEYS,
+        PROPOSITION_OWNED_KEYS,
+        WORKBENCH_EVIDENCE_LINE,
+        WORKBENCH_PROPOSITION,
+        workbench_ownership,
+    )
+
+    # Ownership SEMANTICS are unchanged by construction -- that is the point of §4.1.
+    assert WORKBENCH_PROPOSITION.owned == PROPOSITION_OWNED_KEYS
+    assert WORKBENCH_PROPOSITION.create_only == CREATE_ONLY_KEYS
+    assert WORKBENCH_EVIDENCE_LINE.owned == EVIDENCE_LINE_OWNED_KEYS
+    assert WORKBENCH_EVIDENCE_LINE.create_only == CREATE_ONLY_KEYS
+
+    assert workbench_ownership("proposition") is WORKBENCH_PROPOSITION
+    assert workbench_ownership("evidence-line") is WORKBENCH_EVIDENCE_LINE
+
+
+def test_workbench_ownership_rejects_unsupported_kind() -> None:
+    from science_tool.dag.entity_frontmatter import FrontmatterRenderError, workbench_ownership
+
+    with pytest.raises(FrontmatterRenderError, match="unsupported workbench entity kind: dataset"):
+        workbench_ownership("dataset")
+
+
+def test_ownership_defaults_create_only_to_empty() -> None:
+    from science_tool.dag.entity_frontmatter import Ownership
+
+    # synthesize owns no create-only keys -- it never creates. The default must be empty,
+    # not CREATE_ONLY_KEYS, or an update-only writer would claim `title`.
+    assert Ownership(frozenset({"predicate"})).create_only == frozenset()

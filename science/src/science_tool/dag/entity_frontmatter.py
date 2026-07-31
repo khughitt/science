@@ -20,6 +20,7 @@ No dump-mode flag can express "required for the model, not for the file"; only a
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -60,6 +61,36 @@ EVIDENCE_LINE_OWNED_KEYS: frozenset[str] = frozenset(
 # create-time default; on update the author's value wins, which is why it is absent from both
 # per-kind sets above. `status` is likewise seeded once and then owned by the author.
 CREATE_ONLY_KEYS: frozenset[str] = frozenset(("title", "status"))
+
+
+@dataclass(frozen=True)
+class Ownership:
+    """Which frontmatter keys ONE writer owns.
+
+    Per-writer, not per-kind: three writers mint propositions and each owns a different set.
+    Widening a shared per-kind allowlist to their union would give the workbench ownership of
+    `source_refs` -- so every `compile_workbench` recompile would overwrite an author's curated
+    value on a path this design does not otherwise touch.
+
+    `create_only` defaults to EMPTY, not to CREATE_ONLY_KEYS: an update-only writer creates
+    nothing and must not claim `title`.
+    """
+
+    owned: frozenset[str]
+    create_only: frozenset[str] = frozenset()
+
+
+WORKBENCH_PROPOSITION = Ownership(PROPOSITION_OWNED_KEYS, CREATE_ONLY_KEYS)
+WORKBENCH_EVIDENCE_LINE = Ownership(EVIDENCE_LINE_OWNED_KEYS, CREATE_ONLY_KEYS)
+
+
+def workbench_ownership(kind: str) -> Ownership:
+    """Workbench two-kind dispatch. Retains today's fail-early raise on an unsupported kind."""
+    if kind == "proposition":
+        return WORKBENCH_PROPOSITION
+    if kind == "evidence-line":
+        return WORKBENCH_EVIDENCE_LINE
+    raise FrontmatterRenderError(f"unsupported workbench entity kind: {kind}")
 
 
 def owned_keys(kind: str) -> frozenset[str]:
