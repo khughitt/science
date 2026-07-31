@@ -2,24 +2,26 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Correct bracket handling and overlay-provenance serialization in the shared toolkit, transactionally migrate all 13 registered legacy task stores without changing their task sets, close 15 local graphs, and refresh the 14 affected composites.
+**Goal:** Correct bracket handling, overlay provenance, and revision-manifest source coverage in the shared toolkit; make workflow-run provenance durable; transactionally migrate all 13 registered legacy task stores without changing their task sets; close 15 local graphs; and refresh the 14 affected composites.
 
-**Architecture:** The already-published parser commit remains immutable. A second toolkit commit normalizes project-local overlay provenance only at graph emission, is rebased onto current local `main`, passes the full release gate, and is published before further consumer commits. Every task-migration target plus multiple-myeloma pins that corrective SHA; consumers prove task parity, graph freshness, stable relative overlay identifiers, and unchanged topology before local integration. Composite graphs are rebuilt only after all 15 local graphs are current, preserving peer named-graph context, authored peer lists, and default Commons behavior.
+**Architecture:** The parser and overlay corrections are already public and remain immutable. A third toolkit prerequisite extends the revision manifest over the five omitted project-local loader surfaces and excludes the transient task lock. cBioPortal and post-acute-infection narrowly track the 16 workflow-run manifests their graphs consume while result payloads remain ignored. Every task-migration target, post-acute-infection, and multiple-myeloma pins the final public SHA. Cross-checkout graph parity compares named-graph quads excluding only `REVISION_URI`; same-checkout no-change rebuilds retain byte parity. Composite graphs are rebuilt only after all 15 local graphs are current, preserving peer named-graph context, authored peer lists, and default Commons behavior.
 
 **Tech Stack:** Python 3.13, Click, Pydantic `Task`, PyYAML, RDFLib, uv, pytest, Ruff, Pyright, Git worktrees, jq, yq.
 
 ## Global Constraints
 
-- Work only in `.worktrees/task-storage-rollout-closure`; never edit a primary consumer checkout directly.
-- Use `~/d/` paths in documentation and commands; do not write `/mnt/ssd/Dropbox/` paths into tracked files.
+- Make authored and commit-bound changes only in `.worktrees/task-storage-rollout-closure`. The explicit Task 8C primary graph rebuild is a read-through diagnostic that may rewrite only the generated graph; preserve evidence and restore it as specified.
+- Use `~/d/` paths in documentation and commands; do not write machine-specific absolute checkout roots into tracked files.
 - Treat checked-in `uv.lock` files as authoritative and run `uv sync --frozen` in every worktree before invoking Science.
-- The corrective toolkit prerequisite must be reachable from `origin/main` before any new or corrective consumer lock names it.
+- The final toolkit prerequisite must be reachable from `origin/main` before any remaining consumer lock names it.
 - Do not push any consumer repository. Local `main` merges are authorized; consumer remote publication is not.
 - Do not change `~/.config/science/config.yaml`, any `science.yaml` peer list, or default Commons behavior. Never substitute `--no-commons` after a Commons failure.
 - Every graph-diff capture, including baselines, must use `--output`; stdout is capped at 40 rows.
 - Keep validation exit statuses and stderr. Exit 0 or 1 is admissible for strict validation; exit 2, a traceback, or a new unrelated finding delta stops the project.
 - Map every newly activated finding family to a named pre-migration `validate.check-error`; any unexplained validation delta stops the project.
 - A local graph must contain zero `schema:identifier` values matching an absolute `/.../overlays/...` path. Checking only for `.worktrees/` is insufficient.
+- Cross-checkout graph comparisons use a sorted named-graph quad projection that excludes only the `graph_revision` subject. Do not use raw graph bytes across checkouts.
+- cBioPortal and post-acute-infection must track every discovered `results/**/datapackage.json` while all non-manifest result payloads remain ignored.
 - Relative overlay source URIs are project-local. Composite verification must preserve the peer project named graph as their qualifier; never certify them from a flattened union.
 - The transactional migrator is the only task-store writer. Do not manually finish a partial migration, delete its journal, or copy task files between projects.
 - No permanent rollout helper belongs in the toolkit or consumers. The two audit helpers in Task 3 live only under `/tmp/task-storage-rollout-closure/`.
@@ -41,6 +43,9 @@ Toolkit files changed by the prerequisite:
 - `science/src/science_tool/graph/materialize.py` — normalize absolute project-local overlay filenames to contained project-relative POSIX identifiers at emit time.
 - `science/tests/test_graph_materialize.py` — prove relative overlay provenance and fail-early containment while retaining absolute loader state.
 - `science/tests/test_graph_composite.py` — prove identical relative overlay source URIs remain distinct by peer named-graph context.
+- `science/src/science_tool/graph/io.py` — include the five omitted project-local loader surfaces in the revision manifest and exclude `tasks/.tasks.lock` plus exact Marimo session JSON leaves.
+- `science/src/science_tool/graph/storage_adapters/datapackage.py` — expose the existing entity-profile eligibility predicate for manifest discovery, if the implementation needs it; do not duplicate profile parsing.
+- `science/tests/test_graph_io_revision_manifest.py` — prove complete source-family coverage, payload exclusion, task-lock exclusion, and workflow-manifest drift detection.
 - `docs/plans/2026-07-31-task-storage-rollout-closure-design.md` — record the approved overlay-provenance amendment.
 - `docs/plans/2026-07-31-task-storage-rollout-closure-implementation.md` — sequence the corrective release and staged repins.
 
@@ -48,25 +53,25 @@ Consumer migration matrix:
 
 | Task | Project root | Active | Pin | Live docs | Composite |
 |---:|---|---:|---|---|---|
-| 4 | `~/d/cancer/data-sources/cbioportal` | 74 | parser SHA; corrected in Task 8 | none | yes |
-| 5 | `~/d/health/comparisons/pan-disease` | 58 | parser SHA; corrected in Task 9 | `AGENTS.md`, `README.md` | yes |
-| 10 | `~/d/cancer/meta` | 11 | corrective SHA | none | yes |
-| 11 | `~/d/cancer/mechanisms/evolution` | 31 | corrective SHA | `AGENTS.md` | yes |
-| 12 | `~/d/cancer/conditions/pre-cancer` | 6 | corrective SHA | none | yes |
-| 13 | `~/d/cancer/cancer-types/ovarian` | 0 | corrective SHA | `AGENTS.md` | yes |
-| 14 | `~/d/cancer/cancer-types/head-and-neck` | 0 | corrective SHA | `AGENTS.md` | yes |
-| 15 | `~/d/cancer/cancer-types/prostate` | 0 | corrective SHA | `AGENTS.md` | yes |
-| 16 | `~/d/cancer/cancer-types/breast` | 0 | corrective SHA | `AGENTS.md` | yes |
-| 17 | `~/d/cancer/therapeutics` | 2 | corrective SHA | `AGENTS.md` | no |
-| 18 | `~/d/health/meta` | 32 | corrective SHA | `AGENTS.md` | yes |
-| 19 | `~/d/health/processes/cycles` | 53 | corrective SHA | `AGENTS.md` | yes |
-| 20 | `~/d/health/processes/immunity` | 5 | corrective SHA | `AGENTS.md` | yes |
-| 21 | `~/d/health/processes/post-acute-infection` | already split | retain | `AGENTS.md` | yes |
-| 22 | `~/d/cancer/cancer-types/multiple-myeloma` | already split | corrective SHA | none | yes |
+| 4 | `~/d/cancer/data-sources/cbioportal` | 74 | parser, overlay, then final SHA | none | yes |
+| 5 | `~/d/health/comparisons/pan-disease` | 58 | parser SHA; final in Task 9 | `AGENTS.md`, `README.md` | yes |
+| 10 | `~/d/cancer/meta` | 11 | final SHA | none | yes |
+| 11 | `~/d/cancer/mechanisms/evolution` | 31 | final SHA | `AGENTS.md` | yes |
+| 12 | `~/d/cancer/conditions/pre-cancer` | 6 | final SHA | none | yes |
+| 13 | `~/d/cancer/cancer-types/ovarian` | 0 | final SHA | `AGENTS.md` | yes |
+| 14 | `~/d/cancer/cancer-types/head-and-neck` | 0 | final SHA | `AGENTS.md` | yes |
+| 15 | `~/d/cancer/cancer-types/prostate` | 0 | final SHA | `AGENTS.md` | yes |
+| 16 | `~/d/cancer/cancer-types/breast` | 0 | final SHA | `AGENTS.md` | yes |
+| 17 | `~/d/cancer/therapeutics` | 2 | final SHA | `AGENTS.md` | no |
+| 18 | `~/d/health/meta` | 32 | final SHA | `AGENTS.md` | yes |
+| 19 | `~/d/health/processes/cycles` | 53 | final SHA | `AGENTS.md` | yes |
+| 20 | `~/d/health/processes/immunity` | 5 | final SHA | `AGENTS.md` | yes |
+| 21 | `~/d/health/processes/post-acute-infection` | already split | final SHA | `AGENTS.md` | yes |
+| 22 | `~/d/cancer/cancer-types/multiple-myeloma` | already split | final SHA | none | yes |
 
-Tasks 4 and 5 are complete migration commits on local `main`; Tasks 8 and 9 correct only their pin/lock and generated local graph. Cancer/meta's Task 10 resumes its uncommitted migrated worktree after replacing the intermediate pin and tainted graph. Multiple-myeloma's historical `tasks/active.md` citations remain unchanged. `~/d/cancer/therapeutics` has no composite.
+Tasks 4 and 5 are complete migration commits on local `main`. Task 8's cBioPortal overlay correction is also complete at `2e7dd121`; Task 8C adds the final pin and durable workflow manifests. Task 9 has not started. Cancer/meta's Task 10 resumes its uncommitted migrated worktree after replacing the intermediate pin and tainted graph. Multiple-myeloma's historical `tasks/active.md` citations remain unchanged. `~/d/cancer/therapeutics` has no composite.
 
-**Execution state and order:** Tasks 1-5 are already complete. Commit this reviewed amendment, then resume at Task 6 and execute Tasks 6-25 numerically. The completed Task 4-5 records remain below beside the shared migration protocol they used; their document position does not repeat them.
+**Execution state and order:** Tasks 1-8 are complete, including publication of `36463540` and cBioPortal's local overlay commit. After independent review, stage only these two plan documents, run `git diff --cached --check`, and commit `docs: close graph source reproducibility gap` before Task 8A so its code commit starts from a clean branch. Then execute Tasks 8A-8C and Tasks 9-25 numerically. The completed Task 4-8 records remain as history and are not rerun.
 
 ---
 
@@ -659,7 +664,7 @@ This is the only new toolkit push; consumer pushes remain forbidden.
 
 **Interfaces:**
 - Consumes: local migration commit `cbe00b6238dc50fc4898b0b38413e305258a0ffc`, its retained rollout worktree/evidence, and `corrective-toolkit-sha.txt`.
-- Produces: a corrective local-main commit with unchanged 74-task snapshot, zero graph diff, no absolute overlay source identifier, and a real primary/worktree byte-parity canary.
+- Produces: the completed `2e7dd121` local-main overlay commit with unchanged 74-task snapshot, zero worktree graph diff, no absolute overlay source identifier, and the primary/worktree failure evidence consumed by Task 8A.
 
 - [ ] **Step 1: Reopen the retained clean worktree and capture the corrective baseline**
 
@@ -712,26 +717,177 @@ git -C ~/d/cancer/data-sources/cbioportal merge --ff-only task-storage-rollout-c
 
 Record the corrective commit and confirm the existing remote ref is unchanged.
 
-- [ ] **Step 6: Run the real primary/worktree byte-parity canary**
+- [x] **Step 6: Run the real primary/worktree canary and stop on the discovered source delta**
 
-After the fast-forward, run `uv sync --frozen` and `science graph build --local-only` from the primary checkout. Require its `knowledge/graph.trig` byte-identical to the retained rollout worktree copy, require the primary checkout clean, and rerun the absolute-overlay identifier gate in both checkouts.
+After the fast-forward, the primary rebuild was not byte-identical. Investigation proved that revision mtimes differ by checkout and that 11 ignored workflow manifests add 99 non-revision quads only in primary. Preserve the primary generated-graph modification and evidence; do not force parity or clean it until Task 8C.
 
-### Task 9: Correct pan-disease's pin and overlay provenance
+### Task 8A: Close revision-manifest source coverage in the toolkit
+
+**Files:**
+- Modify: `science/src/science_tool/graph/io.py`
+- Modify only if needed to share its existing predicate: `science/src/science_tool/graph/storage_adapters/datapackage.py`
+- Modify: `science/tests/test_graph_io_revision_manifest.py`
+- Create temporarily: `/tmp/task-storage-rollout-closure/semantic_graph.py`
+
+**Interfaces:**
+- Consumes: accepted design/plan amendment and public toolkit `main` at `364635402fcb64c3483684a39b6692eac325688e`.
+- Produces: one reviewed toolkit commit whose manifest covers the five omitted project-local loader surfaces without walking result payloads, plus a reusable semantic-quad evidence helper.
+
+- [ ] **Step 1: Create the semantic graph projection helper**
+
+Use the patch tool to create `/tmp/task-storage-rollout-closure/semantic_graph.py`. It accepts `GRAPH_TRIG OUTPUT_JSON`, parses an RDFLib `Dataset`, drops only quads whose subject equals `http://example.org/project/graph_revision`, retains the named-graph identifier, sorts `(subject, predicate, object, graph)` strings, and writes indented JSON. Smoke-test it against cBioPortal's primary and retained worktree graphs; record the expected pre-fix inequality caused by the 11 absent workflow runs.
+
+- [ ] **Step 2: Write the failing source-family and exclusion tests**
+
+In `test_graph_io_revision_manifest.py`, seed one project containing:
+
+- `research/packages/example.md`;
+- `papers/references.bib`;
+- valid entity-profile datapackages under both `data/` and `results/`;
+- `results/run/datapackage.json` plus a sibling payload;
+- one canonical overlay under `overlays/papers/`;
+- `tasks/.tasks.lock`; and
+- two declared code roots with one `code_excludes` match, including
+  `code/notebooks/__marimo__/session/state.py.json` plus ordinary durable code
+  files in both roots.
+
+Assert that the five source families are represented by project-relative paths, the existing roots appear in `walked`, both declared code roots are covered, the configured code exclusion and sibling result payload are absent, both transient leaves are absent, and ordinary code files remain. Add a save/mutate/diff test proving that changing only the workflow-run manifest yields exactly that path as `hash_changed`. Run the new tests and require RED for the omitted families/current code-root/transient behavior, not fixture failure.
+
+- [ ] **Step 3: Implement the minimum shared manifest repair**
+
+Extend `build_input_manifest` with exact candidate scans for the five conventions in design §4.5. Replace the single `pp.code_dir` walk with all `pp.code_roots` and apply `pp.code_excludes` to code-root candidates, matching `CodeAdapter`. Reuse the existing markdown leaf policy and datapackage entity-profile predicate; if the latter is not independently callable, extract only that existing predicate and route `DatapackageAdapter.discover()` through it. Do not instantiate the full project loader, add a source registry, hash arbitrary files below `data/` or `results/`, or alter manifest schema 2. Add exactly `tasks/.tasks.lock` and `**/__marimo__/session/*.json` to `DEFAULT_REVISION_MANIFEST_EXCLUDES`.
+
+- [ ] **Step 4: Run focused tests and static checks**
+
+```bash
+cd science
+uv run --frozen pytest tests/test_graph_io_revision_manifest.py \
+  tests/test_graph_cli.py tests/test_graph_materialize.py -q
+uv run --frozen ruff check src/science_tool/graph/io.py \
+  src/science_tool/graph/storage_adapters/datapackage.py \
+  tests/test_graph_io_revision_manifest.py
+uv run --frozen pyright
+```
+
+Expected: PASS. If `datapackage.py` was untouched, omit it from the Ruff path list and staged files.
+
+- [ ] **Step 5: Mutate the workflow manifest test and prove the guard is live**
+
+Temporarily remove the workflow-run candidate scan with the patch tool, rerun only the new workflow manifest tests, and require RED. Restore with the patch tool and require GREEN. Do not use copy/restore shell shortcuts.
+
+- [ ] **Step 6: Review and commit the toolkit code**
+
+Run the SDD spec-compliance and code-quality reviews against the exact diff. Fix all blockers, rerun Step 4, then stage only the code/tests and commit:
+
+```bash
+git add science/src/science_tool/graph/io.py \
+  science/tests/test_graph_io_revision_manifest.py
+git diff --cached --check
+git commit -m "fix(graph): close revision manifest source coverage"
+```
+
+Add `science/src/science_tool/graph/storage_adapters/datapackage.py` only if Step 3 changed it.
+
+### Task 8B: Release-test and publish the final toolkit prerequisite
+
+**Files:** no new tracked files; validates and publishes the accepted amendment plus Task 8A.
+
+**Interfaces:**
+- Consumes: clean rollout branch with the reviewed docs and Task 8A code commit; public `origin/main` at `36463540` unless it advances.
+- Produces: `/tmp/task-storage-rollout-closure/final-toolkit-sha.txt`, a 40-character commit reachable from `origin/main`.
+
+- [ ] **Step 1: Reconfirm ancestry and overlap**
+
+Require clean rollout and primary toolkit worktrees. Fetch, record `rev-list --left-right --count origin/main...main`, and inspect `merge-tree` for the rollout branch versus current local `main`. If either moved beyond `36463540`, rebase only after confirming no overlap with the manifest/doc files.
+
+- [ ] **Step 2: Run the complete release gate**
+
+```bash
+cd science
+uv run --frozen ruff check
+uv run --frozen pyright
+uv run --frozen pytest
+```
+
+Run the full suite alone with an explicit long timeout. Require PASS from all three commands.
+
+- [ ] **Step 3: Fast-forward and publish**
+
+```bash
+git -C ~/d/science merge --ff-only task-storage-rollout-closure
+git -C ~/d/science push origin main
+git -C ~/d/science rev-parse HEAD | \
+  tee /tmp/task-storage-rollout-closure/final-toolkit-sha.txt
+test "$(tr -d '\n' < /tmp/task-storage-rollout-closure/final-toolkit-sha.txt | wc -c)" -eq 40
+git -C ~/d/science ls-remote origin refs/heads/main | \
+  tee /tmp/task-storage-rollout-closure/final-origin-main.txt
+test "$(tr -d '\n' < /tmp/task-storage-rollout-closure/final-toolkit-sha.txt)" = \
+  "$(cut -f1 /tmp/task-storage-rollout-closure/final-origin-main.txt)"
+```
+
+Consumer pushes remain forbidden.
+
+### Task 8C: Make cBioPortal workflow provenance reproducible
+
+**Files:** `.gitignore`, `pyproject.toml`, `uv.lock`, the 11 existing `results/**/datapackage.json` files, and `knowledge/graph.trig` under `~/d/cancer/data-sources/cbioportal`.
+
+**Interfaces:**
+- Consumes: clean retained rollout worktree at `2e7dd121fc82135ca17a5d3e636510ac9bc51c11`, final public toolkit SHA, and the primary checkout's one diagnostic `knowledge/graph.trig` modification.
+- Produces: a local-main source-closure commit with 11 durable workflow-run manifests, ignored payloads, zero graph diff, and primary/worktree semantic parity.
+
+- [ ] **Step 1: Preserve and verify the diagnostic primary state**
+
+Use `git status --short --untracked-files=all` and require the primary checkout to contain exactly one modified `knowledge/graph.trig` and no other changes. Record its SHA-256, full status, semantic projection, and the previously measured `+99` non-revision workflow-run quad delta under cBioPortal's evidence directory. Require exactly 11 primary `results/**/datapackage.json` files and save their sorted relative-path/SHA-256 inventory.
+
+- [ ] **Step 2: Admit only provenance manifests in the retained worktree**
+
+Patch `.gitignore`, replacing `results/` with exactly:
+
+```gitignore
+results/**
+!results/**/
+!results/**/datapackage.json
+!results/.gitkeep
+```
+
+Mechanically transfer the 11 audited JSON manifests from the primary checkout to the same relative paths in the rollout worktree, preserving bytes. Verify their path/hash inventory equals Step 1. Use `git check-ignore` to prove every manifest is visible while representative sibling payloads remain ignored. Require `git status` to show exactly `.gitignore` plus the 11 manifests before the pin moves.
+
+- [ ] **Step 3: Pin the final prerequisite and relock only Science**
+
+Replace `364635402fcb64c3483684a39b6692eac325688e` with the exact SHA from `final-toolkit-sha.txt`, run `uv lock --upgrade-package science --upgrade-package science-model`, require no unrelated package movement, run `uv sync --frozen`, and verify both installed Science packages resolve to the final SHA.
+
+- [ ] **Step 4: Rebuild and certify closure**
+
+Run local graph build/validate and complete graph diff; require zero rows. Require zero absolute overlay identifiers, exactly 11 workflow-run entities, unchanged task snapshot/task-domain projection, unchanged peers and `science.yaml`, and acceptable complete strict-validation parity. Compare the rebuilt worktree graph's semantic projection with the saved primary diagnostic projection and require byte-identical JSON.
+
+- [ ] **Step 5: Commit the source closure**
+
+Inspect the complete diff. Stage only `.gitignore`, the exact 11 manifests, `pyproject.toml`, `uv.lock`, and `knowledge/graph.trig`; run `git diff --cached --check`; obtain SDD spec/code reviews; and commit `fix(graph): make workflow provenance reproducible`. Do not push.
+
+- [ ] **Step 6: Clean the known diagnostic artifact and fast-forward local main**
+
+Reconfirm that the primary dirty graph's SHA-256 still equals Step 1 and no second path is dirty. The modification was created by this rollout and its evidence is preserved, so restore only `knowledge/graph.trig` to `HEAD`, require the primary clean, then fast-forward the rollout branch into local `main`.
+
+- [ ] **Step 7: Run the real semantic parity canary**
+
+From primary, synchronize and rebuild the local graph. Project both primary and retained-worktree graphs with `semantic_graph.py` and require identical JSON, zero absolute overlay identifiers, and 11 workflow-run entities in each. If the primary rebuild changes only revision metadata, preserve the diff evidence and restore only the generated graph to the committed artifact so primary ends clean. Any semantic delta stops the rollout.
+
+### Task 9: Move pan-disease directly to the final prerequisite
 
 **Files:**
 - Modify: `pyproject.toml`, `uv.lock`, `knowledge/graph.trig` under `~/d/health/comparisons/pan-disease`.
 
 **Interfaces:**
-- Consumes: local migration commit `d15e64dfda60f7793f8d203e7df45c92a6535b85`, retained rollout evidence, and `corrective-toolkit-sha.txt`.
+- Consumes: local migration commit `d15e64dfda60f7793f8d203e7df45c92a6535b85`, retained rollout evidence, and `final-toolkit-sha.txt`.
 - Produces: a corrective local-main commit with unchanged 58-task snapshot, zero graph diff, stable relative overlay identifiers, validation identity, and no push.
 
 - [ ] **Step 1: Capture the clean corrective baseline**
 
 Require primary and rollout branches equal `d15e64dfda60f7793f8d203e7df45c92a6535b85`. Synchronize, capture complete strict validation/peers/config checks, require a fresh task snapshot byte-identical to Task 5's `tasks-after.json`, and require exactly 54 absolute overlay source identifiers in the baseline graph.
 
-- [ ] **Step 2: Pin the corrective SHA and audit the Science-only relock**
+- [ ] **Step 2: Pin the final SHA and audit the Science-only relock**
 
-Replace only the parser SHA with the exact corrective SHA, run the same `uv lock --upgrade-package science --upgrade-package science-model`, diff, literal-SHA, installed-resolution, and `uv sync --frozen` gates as Task 8.
+Replace only the parser SHA with the exact final SHA, run `uv lock --upgrade-package science --upgrade-package science-model`, and apply the same dependency-diff, literal-SHA, installed-resolution, and `uv sync --frozen` gates as Task 8C.
 
 - [ ] **Step 3: Rebuild and verify**
 
@@ -750,7 +906,7 @@ git -C ~/d/health/comparisons/pan-disease merge --ff-only task-storage-rollout-c
 
 Do not push. Retain the worktree for the health composite phase.
 
-## Local migration protocol used by Tasks 4-5 and 10-20
+## Local migration protocol used historically by Tasks 4-5 and now by Tasks 10-20
 
 Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTED_COUNT`, pin action, documentation files, and commit message. Execute this protocol inside that task; a failure stops that project before commit and before its local-main merge.
 
@@ -772,10 +928,10 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
    cd "$WORKTREE"
    ```
 
-2. **Synchronize and pin the corrective toolkit.** Run `uv sync --frozen` and capture current-pin validation with the status pattern below. Then read and validate the corrective public SHA:
+2. **Synchronize and pin the target toolkit.** Completed Tasks 4-5 used the parser SHA saved in their evidence. Tasks 10-20 run `uv sync --frozen`, capture current-pin validation with the status pattern below, then read and validate the final public SHA:
 
    ```bash
-   TOOLKIT_SHA="$(tr -d '\n' < /tmp/task-storage-rollout-closure/corrective-toolkit-sha.txt)"
+   TOOLKIT_SHA="$(tr -d '\n' < /tmp/task-storage-rollout-closure/final-toolkit-sha.txt)"
    test "${#TOOLKIT_SHA}" -eq 40
    git -C ~/d/science cat-file -e "$TOOLKIT_SHA^{commit}"
    ```
@@ -896,7 +1052,7 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
    examples include `short-form-ids` and `frontmatter-inline-gap`. Any family
    without that exact explanation stops the project.
 
-8. **Commit and merge locally.** Inspect `git diff --check`, `git diff --stat`, and the full diff. Stage the complete intentional project transaction with `git add -A`, inspect `git diff --cached --check` and `git diff --cached`, commit with the task's exact message, record `git rev-parse HEAD | tee "$EVIDENCE_DIR/local-commit.txt"`, then run `git -C "$PROJECT_ROOT" merge --ff-only task-storage-rollout-closure`. Do not push. Keep composite-bearing worktrees for Tasks 23-24; Task 17 may remove its worktree after the merge because therapeutics has no composite.
+8. **Commit and merge locally.** Inspect `git diff --check`, `git diff --stat`, and the full diff. Stage the complete intentional project transaction with `git add -A`, inspect `git diff --cached --check` and `git diff --cached`, commit with the task's exact message, record `git rev-parse HEAD | tee "$EVIDENCE_DIR/local-commit.txt"`, then run `git -C "$PROJECT_ROOT" merge --ff-only task-storage-rollout-closure`. Do not push. Keep every closure worktree through Task 25.
 
 Use this status-capture shape whenever a command may legitimately exit 0 or 1:
 
@@ -940,11 +1096,11 @@ test "$exit_code" -le 1
 - [ ] **Step 7: Review the complete validation delta and require unchanged peer output and `science.yaml`.**
 - [ ] **Step 8: Commit as `chore(science): migrate task storage`, review, and fast-forward pan-disease's local `main`; do not push.**
 
-### Task 10: Resume and complete cancer/meta under the corrective toolkit
+### Task 10: Resume and complete cancer/meta under the final toolkit
 
 **Files:** `pyproject.toml`, `uv.lock`, task store, and local graph artifacts under `~/d/cancer/meta`.
 
-**Interfaces:** Consumes the already-applied uncommitted 11-task migration, evidence under `/tmp/task-storage-rollout-closure/cancer-meta`, and the corrective public SHA. Produces the original 11 structurally identical split tasks plus a stable current local graph; it never reapplies or manually rewrites migration output.
+**Interfaces:** Consumes the already-applied uncommitted 11-task migration, evidence under `/tmp/task-storage-rollout-closure/cancer-meta`, and the final public SHA. Produces the original 11 structurally identical split tasks plus a stable current local graph; it never reapplies or manually rewrites migration output.
 
 - [ ] **Step 1: Verify and preserve the interrupted execution state**
 
@@ -954,9 +1110,9 @@ Require clean primary `main` at `fdeeb70`, rollout branch based at that commit, 
 
 Require `tasks-before.json == tasks-after.json`, exactly 11 split files, no aggregate or journal, successful `tasks-list-after.json`, second-run exit 1 with both required refusals, byte-identical peers, and a valid `science-yaml-before.sha256` check.
 
-- [ ] **Step 3: Replace the intermediate pin with the corrective SHA**
+- [ ] **Step 3: Replace the intermediate pin with the final SHA**
 
-Use the patch tool to replace `ba0b0cb0304aff03159ebc37c188839cfd4b1515` with the exact `corrective-toolkit-sha.txt` value. Relock only Science packages, require no unrelated lock movement, synchronize, and verify both installed package revisions.
+Use the patch tool to replace `ba0b0cb0304aff03159ebc37c188839cfd4b1515` with the exact `final-toolkit-sha.txt` value. Relock only Science packages, require no unrelated lock movement, synchronize, and verify both installed package revisions.
 
 - [ ] **Step 4: Replace the tainted generated graph through a canonical rebuild**
 
@@ -998,14 +1154,14 @@ git -C ~/d/cancer/meta merge --ff-only task-storage-rollout-closure
 
 Do not push. Retain the worktree for Task 23.
 
-### Task 11: Migrate evolution under the corrective toolkit
+### Task 11: Migrate evolution under the final toolkit
 
 **Files:** task store, `AGENTS.md`, and local graph artifacts under `~/d/cancer/mechanisms/evolution`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces 31 structurally identical split tasks and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces 31 structurally identical split tasks and a current local graph.
 
 - [ ] **Step 1: Create evolution's clean worktree and synchronize its existing lock, using `PROJECT_ROOT=~/d/cancer/mechanisms/evolution`, `PROJECT_ID=evolution`, and `EXPECTED_COUNT=31`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, 31-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove 31-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Update `AGENTS.md` to the split-store/CLI guidance.**
@@ -1017,10 +1173,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, task store, and local graph artifacts under `~/d/cancer/conditions/pre-cancer`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces six structurally identical split tasks and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces six structurally identical split tasks and a current local graph.
 
 - [ ] **Step 1: Create pre-cancer's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/cancer/conditions/pre-cancer`, `PROJECT_ID=pre-cancer`, and `EXPECTED_COUNT=6`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, six-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove six-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Make no live-doc edit because no current aggregate-path instruction was found.**
@@ -1032,10 +1188,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, `tasks/active.md`, `AGENTS.md`, and local graph artifacts under `~/d/cancer/cancer-types/ovarian`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
 
 - [ ] **Step 1: Create ovarian's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/cancer/cancer-types/ovarian`, `PROJECT_ID=ovarian`, and `EXPECTED_COUNT=0`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical zero-write dry-run, empty task snapshot, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove valid `EMPTY` storage, done-ledger parity, no aggregate, placeholder, or journal, zero-row listing, and the absent-source second-run refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1047,10 +1203,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, `tasks/active.md`, `AGENTS.md`, and local graph artifacts under `~/d/cancer/cancer-types/head-and-neck`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
 
 - [ ] **Step 1: Create head-and-neck's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/cancer/cancer-types/head-and-neck`, `PROJECT_ID=head-and-neck`, and `EXPECTED_COUNT=0`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical zero-write dry-run, empty task snapshot, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove valid `EMPTY` storage, done-ledger parity, no aggregate, placeholder, or journal, zero-row listing, and absent-source refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1062,10 +1218,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, `tasks/active.md`, `AGENTS.md`, and local graph artifacts under `~/d/cancer/cancer-types/prostate`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
 
 - [ ] **Step 1: Create prostate's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/cancer/cancer-types/prostate`, `PROJECT_ID=prostate`, and `EXPECTED_COUNT=0`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical zero-write dry-run, empty task snapshot, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove valid `EMPTY` storage, done-ledger parity, no aggregate, placeholder, or journal, zero-row listing, and absent-source refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1077,10 +1233,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, `tasks/active.md`, `AGENTS.md`, and local graph artifacts under `~/d/cancer/cancer-types/breast`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces valid `EMPTY` task storage with no placeholder and a current local graph.
 
 - [ ] **Step 1: Create breast's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/cancer/cancer-types/breast`, `PROJECT_ID=breast`, and `EXPECTED_COUNT=0`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical zero-write dry-run, empty task snapshot, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove valid `EMPTY` storage, done-ledger parity, no aggregate, placeholder, or journal, zero-row listing, and absent-source refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1092,25 +1248,25 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** task store, `AGENTS.md`, and local graph artifacts under `~/d/cancer/therapeutics`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces two structurally identical split tasks and a current local graph; no composite follows.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces two structurally identical split tasks and a current local graph; no composite follows.
 
 - [ ] **Step 1: Create therapeutics' clean worktree and run `uv sync --frozen` to replace its stale installed environment, using `PROJECT_ROOT=~/d/cancer/therapeutics`, `PROJECT_ID=therapeutics`, and `EXPECTED_COUNT=2`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, two-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove two-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Update `AGENTS.md` to the split-store/CLI guidance.**
 - [ ] **Step 6: Rebuild and verify the local graph, task-domain parity, zero complete graph diff, and a dependency diff restricted to the two Science packages.**
 - [ ] **Step 7: Review validation activation and require peer/config identity.**
-- [ ] **Step 8: Commit as `chore(science): migrate task storage`, fast-forward local `main`, do not push its origin, then require a clean merged branch and run `git -C "$PROJECT_ROOT" worktree remove "$WORKTREE"` followed by `git -C "$PROJECT_ROOT" branch -d task-storage-rollout-closure`.**
+- [ ] **Step 8: Commit as `chore(science): migrate task storage`, fast-forward local `main`, do not push its origin, and retain the clean worktree through Task 25.**
 
-### Task 18: Migrate health/meta under the corrective toolkit
+### Task 18: Migrate health/meta under the final toolkit
 
 **Files:** task store, `AGENTS.md`, and local graph artifacts under `~/d/health/meta`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces 32 structurally identical split tasks and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces 32 structurally identical split tasks and a current local graph.
 
 - [ ] **Step 1: Create health/meta's clean worktree and synchronize its existing lock, using `PROJECT_ROOT=~/d/health/meta`, `PROJECT_ID=health-meta`, and `EXPECTED_COUNT=32`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, 32-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove 32-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1122,10 +1278,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** task store, `AGENTS.md`, and local graph artifacts under `~/d/health/processes/cycles`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces 53 structurally identical split tasks and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces 53 structurally identical split tasks and a current local graph.
 
 - [ ] **Step 1: Create cycles' clean worktree and synchronize its existing lock, using `PROJECT_ROOT=~/d/health/processes/cycles`, `PROJECT_ID=cycles`, and `EXPECTED_COUNT=53`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, 53-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove 53-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Update `AGENTS.md`; leave the workflow README's dated aggregate-path record unchanged as history.**
@@ -1137,10 +1293,10 @@ Do not push. Retain the worktree for Task 23.
 
 **Files:** `pyproject.toml`, `uv.lock`, task store, `AGENTS.md`, and local graph artifacts under `~/d/health/processes/immunity`.
 
-**Interfaces:** Consumes the corrective public SHA and Local migration protocol. Produces five structurally identical split tasks and a current local graph.
+**Interfaces:** Consumes the final public SHA and Local migration protocol. Produces five structurally identical split tasks and a current local graph.
 
 - [ ] **Step 1: Create immunity's clean worktree and synchronize its current lock, using `PROJECT_ROOT=~/d/health/processes/immunity`, `PROJECT_ID=immunity`, and `EXPECTED_COUNT=5`.**
-- [ ] **Step 2: Capture current-pin validation, pin the exact corrective public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
+- [ ] **Step 2: Capture current-pin validation, pin the exact final public SHA, relock only Science packages, synchronize, and verify the resolved SHA.**
 - [ ] **Step 3: Capture the complete canonical task, five-write dry-run, validation, graph, and peer baseline.**
 - [ ] **Step 4: Apply the migrator and prove five-task structural parity, done-ledger byte parity, split shape, no journal, listing success, and expected second-run refusal.**
 - [ ] **Step 5: Update both live aggregate-path statements in `AGENTS.md` to the split-store/CLI guidance.**
@@ -1150,9 +1306,9 @@ Do not push. Retain the worktree for Task 23.
 
 ### Task 21: Close post-acute-infection without rerunning migration
 
-**Files:** `AGENTS.md`, `knowledge/graph.trig`, `knowledge/sources/local/manifest.yaml`, `knowledge/sources/local/mappings.yaml` under `~/d/health/processes/post-acute-infection`.
+**Files:** `.gitignore`, `pyproject.toml`, `uv.lock`, `AGENTS.md`, the five existing `results/**/datapackage.json` files, `knowledge/graph.trig`, `knowledge/sources/local/manifest.yaml`, and `knowledge/sources/local/mappings.yaml` under `~/d/health/processes/post-acute-infection`.
 
-**Interfaces:** Consumes its already-split task store at local-main commit ancestry containing `67361ff`. Produces unchanged split tasks, corrected live guidance, and a current local graph.
+**Interfaces:** Consumes its already-split task store at local-main commit ancestry containing `67361ff` and the final public toolkit SHA. Produces unchanged split tasks, five durable workflow-run manifests with no checkout-local path, corrected live guidance, and a current local graph.
 
 - [ ] **Step 1: Create and synchronize the isolated worktree**
 
@@ -1175,9 +1331,26 @@ Expected: clean `main`, the migration commit is already an ancestor, and no migr
 
 - [ ] **Step 2: Capture task, validation, graph, and topology baselines**
 
-Use the Task 3 helpers and the protocol's complete `--output` captures. Record `tasks-before.json`, `task-graph-before.json`, `validate-before.json` plus status/stderr, `local-graph-diff-before.json`, `peers-before.json`, and the `science.yaml` digest.
+Use the Task 3 helpers and the protocol's complete `--output` captures. Record `tasks-before.json`, `task-graph-before.json`, `validate-before.json` plus status/stderr, `local-graph-diff-before.json`, `peers-before.json`, and the `science.yaml` digest. From primary, require exactly five `results/**/datapackage.json` files and save their sorted relative-path/SHA-256 inventory.
 
-- [ ] **Step 3: Correct the live guide and rebuild only the local graph**
+- [ ] **Step 3: Admit only the five provenance manifests**
+
+Patch `.gitignore`, replacing `results/*` and its current exception with exactly:
+
+```gitignore
+results/**
+!results/**/
+!results/**/datapackage.json
+!results/.gitkeep
+```
+
+Mechanically transfer the five audited JSON manifests from primary to the same relative paths in the worktree, preserving bytes, then use the patch tool to change the t116 manifest's checkout-local source path to `code/workflows/t116-power-bias-floor/config.yaml`. Require the other four manifest hashes unchanged, all five visible to Git, `.gitkeep` visible, and representative result payloads still ignored. Reject any remaining checkout-root, home-directory, or `.worktrees/` value across the five manifests.
+
+- [ ] **Step 4: Pin the final toolkit and relock only Science**
+
+Patch the Science source to the exact value from `final-toolkit-sha.txt`, relock only `science` and `science-model`, require no unrelated package movement, run `uv sync --frozen`, and verify both installed revisions.
+
+- [ ] **Step 5: Correct the live guide and rebuild only the local graph**
 
 Patch `AGENTS.md` to describe `tasks/active/` and `science tasks`, then run:
 
@@ -1186,18 +1359,20 @@ uv run --frozen science graph build --local-only
 uv run --frozen science graph validate
 uv run --frozen science graph diff --format json \
   --output "$EVIDENCE_DIR/local-graph-diff-after.json"
+jq -e '.rows | length == 0' "$EVIDENCE_DIR/local-graph-diff-after.json"
 test "$(rg -o 'schema:identifier "/[^"]*/overlays/[^"]*"' \
   knowledge/graph.trig | wc -l)" -eq 0
 ```
 
-- [ ] **Step 4: Prove closure parity**
+- [ ] **Step 6: Prove closure parity**
 
-Recreate task and task-domain graph snapshots and require both byte-identical to baseline. Require zero graph-diff rows, identical peer output and `science.yaml` digest, no migration journal, no `tasks/active.md`, successful task listing, and post-validation without traceback or storage fallback. Review validation deltas under the same rules as the Local migration protocol.
+Recreate task and task-domain graph snapshots and require both byte-identical to baseline. Require exactly five workflow-run entities, all five manifest paths in the stored revision manifest, zero graph-diff rows, identical peer output and `science.yaml` digest, no migration journal, no `tasks/active.md`, successful task listing, and post-validation without traceback or storage fallback. Review validation deltas under the same rules as the Local migration protocol.
 
-- [ ] **Step 5: Commit and merge locally**
+- [ ] **Step 7: Commit and merge locally**
 
 ```bash
-git add AGENTS.md knowledge/graph.trig \
+git add .gitignore pyproject.toml uv.lock AGENTS.md results \
+  knowledge/graph.trig \
   knowledge/sources/local/manifest.yaml knowledge/sources/local/mappings.yaml
 git diff --cached --check
 git diff --cached
@@ -1212,7 +1387,7 @@ Do not push its existing origin. Keep the worktree for the health composite phas
 
 **Files:** `pyproject.toml`, `uv.lock`, and `knowledge/graph.trig` under `~/d/cancer/cancer-types/multiple-myeloma`.
 
-**Interfaces:** Consumes its already-split task store and the corrective public SHA. Produces unchanged tasks and topology, a zero-diff local graph with relative overlay identifiers, and a retained worktree for Task 23. It does not run the task migrator or edit historical task-path citations.
+**Interfaces:** Consumes its already-split task store and the final public SHA. Produces unchanged tasks and topology, a zero-diff local graph with relative overlay identifiers, and a retained worktree for Task 23. It does not run the task migrator or edit historical task-path citations.
 
 - [ ] **Step 1: Create the clean corrective worktree and capture baselines**
 
@@ -1226,9 +1401,9 @@ At `~/d/cancer/cancer-types/multiple-myeloma`, require clean `main`, ignored `.w
 
 Require successful task listing, no aggregate task file or migration journal, and exactly 51 absolute overlay source identifiers in the existing local graph. Do not run `science tasks migrate-storage`.
 
-- [ ] **Step 2: Pin the corrective SHA and audit the Science-only relock**
+- [ ] **Step 2: Pin the final SHA and audit the Science-only relock**
 
-The current dependency has no `rev` key. Use the patch tool to add `rev = "<corrective SHA>"` to the existing `science = { git = ..., subdirectory = "science" }` source using the exact value in `/tmp/task-storage-rollout-closure/corrective-toolkit-sha.txt`; do not replace a nonexistent revision. Run `uv lock --upgrade-package science --upgrade-package science-model`, inspect the full dependency diff, require no unrelated package movement, run `uv sync --frozen`, and verify both installed package revisions equal the corrective SHA.
+The current dependency has no `rev` key. Use the patch tool to add `rev = "<final SHA>"` to the existing `science = { git = ..., subdirectory = "science" }` source using the exact value in `/tmp/task-storage-rollout-closure/final-toolkit-sha.txt`; do not replace a nonexistent revision. Run `uv lock --upgrade-package science --upgrade-package science-model`, inspect the full dependency diff, require no unrelated package movement, run `uv sync --frozen`, and verify both installed package revisions equal the final SHA.
 
 - [ ] **Step 3: Rebuild and certify the local graph**
 
@@ -1403,11 +1578,11 @@ Also require no `tasks/.science/task-storage-migration.journal` in those 13 root
 
 - [ ] **Step 4: Recheck every local and composite artifact from local main**
 
-First require the exact corrective revision in all 13 migrated projects plus multiple-myeloma; post-acute-infection is intentionally retained because it has no overlay inputs:
+First require the exact final revision in all 15 closure targets:
 
 ```bash
-corrective_sha="$(tr -d '\n' < \
-  /tmp/task-storage-rollout-closure/corrective-toolkit-sha.txt)"
+final_sha="$(tr -d '\n' < \
+  /tmp/task-storage-rollout-closure/final-toolkit-sha.txt)"
 pin_roots=(
   ~/d/cancer/meta
   ~/d/cancer/mechanisms/evolution
@@ -1423,10 +1598,11 @@ pin_roots=(
   ~/d/health/comparisons/pan-disease
   ~/d/health/processes/cycles
   ~/d/health/processes/immunity
+  ~/d/health/processes/post-acute-infection
 )
 for project_root in $pin_roots; do
-  rg -q "$corrective_sha" "$project_root/pyproject.toml"
-  rg -q "$corrective_sha" "$project_root/uv.lock"
+  rg -q "$final_sha" "$project_root/pyproject.toml"
+  rg -q "$final_sha" "$project_root/uv.lock"
 done
 ```
 
@@ -1462,14 +1638,18 @@ for (( index = 1; index <= ${#closure_ids}; index++ )); do
   (
     cd "$project_root"
     uv run --frozen science graph validate
-    uv run --frozen science graph diff --format json \
+    uv run --frozen science graph diff --mode hash --format json \
       --output "$final_dir/local-graph-diff.json"
     test "$(rg -o 'schema:identifier "/[^"]*/overlays/[^"]*"' \
       knowledge/graph.trig | wc -l)" -eq 0
   )
-  jq -e '.rows | length == 0' "$final_dir/local-graph-diff.json"
+jq -e '.rows | length == 0' "$final_dir/local-graph-diff.json"
 done
 ```
+
+`--mode hash` is deliberate in primary checkouts: revision mtimes are local to
+the worktree that built the committed artifact. Each retained build worktree
+already proved zero hybrid diff before commit.
 
 Then run:
 
@@ -1504,7 +1684,8 @@ for (( index = 1; index <= ${#composite_ids}; index++ )); do
     uv run --frozen science graph validate --path knowledge/composite.trig
     test "$(rg -o 'schema:identifier "/[^"]*/overlays/[^"]*"' \
       knowledge/composite.trig | wc -l)" -eq 0
-    uv run --frozen science graph diff --path knowledge/composite.trig --format json \
+    uv run --frozen science graph diff --mode hash \
+      --path knowledge/composite.trig --format json \
       --output "$final_dir/composite-graph-diff.json"
   )
   jq -e '.rows | length == 0' "$final_dir/composite-graph-diff.json"
@@ -1514,7 +1695,16 @@ test ! -e ~/d/cancer/therapeutics/knowledge/composite.trig
 
 Do not create a therapeutics composite.
 
-- [ ] **Step 5: Recheck federation health without changing topology**
+- [ ] **Step 5: Prove workflow provenance durability**
+
+Require exactly 11 tracked `results/**/datapackage.json` files in cBioPortal
+and five in post-acute-infection. Require no other tracked result payload except
+each project's existing `.gitkeep`; require every sibling payload still ignored; reject
+checkout-root, home-directory, and `.worktrees/` values across all 16 manifests.
+Project both primary graphs with `semantic_graph.py` and require the saved Task
+8C and Task 21 workflow-run counts.
+
+- [ ] **Step 6: Recheck federation health without changing topology**
 
 Using the exact `closure_ids` and `closure_roots` arrays from Step 4, run from every project root:
 
@@ -1535,7 +1725,7 @@ done
 
 Exit 0 and byte-identical peer lists are required.
 
-- [ ] **Step 6: Recheck task and validation behavior**
+- [ ] **Step 7: Recheck task and validation behavior**
 
 Using the exact `closure_ids` and `closure_roots` arrays from Step 4, run for every entry:
 
@@ -1562,7 +1752,7 @@ done
 
 Extract and report any activated `short-form-ids` or `frontmatter-inline-gap` result; do not suppress it.
 
-- [ ] **Step 7: Confirm local-main state and unpublished remotes**
+- [ ] **Step 8: Confirm local-main state and unpublished remotes**
 
 For every touched repository, require the SHA in its `local-commit.txt` to be an ancestor of local `main`, include any later composite commit, and require an empty primary `git status --porcelain`. This works even though Task 17 already deleted therapeutics' merged branch. For the four repositories with remotes, compare the remote ref to its recorded pre-rollout value and report local ahead counts:
 
@@ -1587,7 +1777,7 @@ done
 
 An identical remote ref proves the rollout did not publish consumer commits.
 
-- [ ] **Step 8: Remove only clean, merged consumer worktrees**
+- [ ] **Step 9: Remove only clean, merged consumer worktrees**
 
 For all 15 closure roots, run:
 
@@ -1604,8 +1794,8 @@ for PROJECT_ROOT in $cleanup_roots; do
 done
 ```
 
-Therapeutics is already absent by Task 17. Leave the toolkit worktree in place for final review and branch handoff.
+Leave the toolkit worktree in place for final review and branch handoff.
 
-- [ ] **Step 9: Write the completion report**
+- [ ] **Step 10: Write the completion report**
 
-Report: public corrective toolkit SHA; exact corrective pins in all 13 migrated projects plus multiple-myeloma; all consumer commit SHAs; 272/272 task parity; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; and which consumer mains remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, and historical-citation follow-ups.
+Report: public final toolkit SHA; exact final pins in all 15 closure targets; all consumer commit SHAs; 272/272 task parity; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; 16 tracked workflow-run manifests with ignored payloads; primary/worktree semantic parity; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; and which consumer mains remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, workflow-manifest schema projection, and historical-citation follow-ups.

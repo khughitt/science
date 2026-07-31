@@ -8,13 +8,15 @@
 Finish the task-storage split across every legacy Science project currently
 registered in `~/.config/science/config.yaml`.
 
-The rollout has four layers:
+The rollout has five layers:
 
 1. Correct the shared task parser so an otherwise-valid title may contain `]`.
 2. Make project-local overlay provenance independent of checkout location.
-3. Migrate each legacy project transactionally, preserve its task set, and
+3. Close the local graph revision manifest over the source families the graph
+   loader actually consumes.
+4. Migrate each legacy project transactionally, preserve its task set, and
    rebuild its local graph.
-4. Once all local graphs are current on local `main`, refresh the affected
+5. Once all local graphs are current on local `main`, refresh the affected
    composites without changing federation membership.
 
 This is storage and generated-artifact closure. It is not a federation-topology
@@ -49,6 +51,24 @@ source URIs and `schema:identifier` values. The first two migrated projects
 committed that location-dependent output: six overlay paths in cBioPortal and
 54 in pan-disease. Cancer/meta exposed the defect before its commit.
 
+Execution exposed a third shared prerequisite when cBioPortal's corrected
+worktree graph was rebuilt from its primary checkout. The two graphs differed
+for two independent reasons:
+
+- revision metadata records checkout-specific file mtimes, so otherwise equal
+  source trees do not produce byte-identical `graph_revision` triples;
+- the primary checkout contained 11 ignored
+  `results/**/datapackage.json` files consumed by `WorkflowRunAdapter`, while a
+  clean worktree contained none.
+
+The second difference is semantic: the primary graph had 99 workflow-run
+quads absent from the clean-worktree graph. Both checkouts nevertheless
+reported zero graph-diff rows because the revision manifest did not scan that
+source family. Post-acute-infection has the same defect with five manifests.
+This is not a reason to bless the primary checkout as authoritative. It is
+evidence that graph inputs must be durable and that revision coverage must
+match loader coverage before the rollout can continue.
+
 ## 3. Registry-wide inventory
 
 The 2026-07-31 audit covered all 21 entries in
@@ -63,21 +83,21 @@ The 2026-07-31 audit covered all 21 entries in
 
 The 13 legacy stores contain 272 active tasks:
 
-| Project | Active tasks | Current migration result | Toolkit action |
+| Project | Active tasks | Initial dry-run result | Toolkit action |
 |---|---:|---|---|
-| cancer/meta | 11 | 11 writes | Pin corrective prerequisite |
-| evolution | 31 | 31 writes | Pin corrective prerequisite |
-| pre-cancer | 6 | 6 writes | Pin corrective prerequisite |
-| cBioPortal | 74 | Refused on historical bracketed title | Pin corrective prerequisite |
-| ovarian | 0 | Valid empty plan | Pin corrective prerequisite |
-| head-and-neck | 0 | Valid empty plan | Pin corrective prerequisite |
-| prostate | 0 | Valid empty plan | Pin corrective prerequisite |
-| breast | 0 | Valid empty plan | Pin corrective prerequisite |
-| therapeutics | 2 | 2 writes | Pin corrective prerequisite; sync stale environment |
-| health/meta | 32 | 32 writes | Pin corrective prerequisite |
-| pan-disease | 58 | Refused on historical bracketed title | Pin corrective prerequisite |
-| cycles | 53 | 53 writes | Pin corrective prerequisite |
-| immunity | 5 | 5 writes | Pin corrective prerequisite |
+| cancer/meta | 11 | 11 writes | Pin final prerequisite |
+| evolution | 31 | 31 writes | Pin final prerequisite |
+| pre-cancer | 6 | 6 writes | Pin final prerequisite |
+| cBioPortal | 74 | Refused on historical bracketed title | Pin final prerequisite |
+| ovarian | 0 | Valid empty plan | Pin final prerequisite |
+| head-and-neck | 0 | Valid empty plan | Pin final prerequisite |
+| prostate | 0 | Valid empty plan | Pin final prerequisite |
+| breast | 0 | Valid empty plan | Pin final prerequisite |
+| therapeutics | 2 | 2 writes | Pin final prerequisite; sync stale environment |
+| health/meta | 32 | 32 writes | Pin final prerequisite |
+| pan-disease | 58 | Refused on historical bracketed title | Pin final prerequisite |
+| cycles | 53 | 53 writes | Pin final prerequisite |
+| immunity | 5 | 5 writes | Pin final prerequisite |
 
 No target has a mixed store or a migration journal. All repositories were on
 clean local `main` branches during the audit. The unrelated untracked report in
@@ -110,6 +130,36 @@ Checked-in locks, not installed environments, are authoritative. cBioPortal and
 therapeutics demonstrated why: their existing virtual environments did not
 match their lock revisions. Every rollout worktree therefore runs
 `uv sync --frozen` before invoking Science.
+
+### 3.2 Project-local source reproducibility
+
+A fleet sweep found two projects with ignored files that contribute domain
+quads:
+
+| Project | Ignored graph inputs | Semantic effect |
+|---|---:|---|
+| cBioPortal | 11 `results/**/datapackage.json` files | 11 workflow-run entities, 99 quads |
+| post-acute-infection | 5 `results/**/datapackage.json` files | Five workflow-run entities |
+
+The 16 manifests total 76,324 bytes. All are JSON objects accepted by the
+current adapter, contain no credential-shaped fields or values, and use no
+volatile host, user, command, or wall-clock metadata. They are provenance
+manifests, not result payloads, and are suitable for version control.
+
+One post-acute manifest contains a checkout-local source value:
+`results/t116-power-bias-floor-sim/datapackage.json` records an absolute path to
+`code/workflows/t116-power-bias-floor/config.yaml`. Normalize that value to the
+project-relative path before tracking the file. The adapter does not consume
+the `sources` field, so the normalization changes portability without changing
+the emitted graph.
+
+Several projects also carry ignored `tasks/.tasks.lock` files, and pan-disease
+has ignored Marimo session JSON under a code root. Those files emit no domain
+quads. They explain revision-metadata byte differences but not semantic graph
+differences. Both are known transient compiler/tool control state and are
+removed from the default revision manifest with exact leaf patterns:
+`tasks/.tasks.lock` and `**/__marimo__/session/*.json`. No broader code or
+notebook exclusion is introduced.
 
 ## 4. Shared parser correction
 
@@ -201,13 +251,60 @@ Tests prove that:
   `schema:identifier`;
 - an overlay path outside the project root fails early;
 - identical project content built from a primary checkout and a linked
-  worktree produces byte-identical local graph output;
+  worktree produces identical semantic quads after excluding `REVISION_URI`;
 - generated graphs contain no absolute `/.../overlays/...` source identifier;
 - two peers with the same relative overlay path retain separate source quads in
   their respective project named graphs.
 
-This correction is published as a second prerequisite revision; the already
-published parser revision is not rewritten.
+This correction is already published as a second prerequisite revision; the
+already published parser revision was not rewritten.
+
+### 4.5 Revision-manifest source closure
+
+`science graph diff` may report “up to date” only if its manifest covers every
+project-local source family that can change the materialized graph. The current
+directory walk covers entities, tasks, the profile-default code directory,
+runs, and structured knowledge sources but omits five loader surfaces:
+
+- `research/packages/**/*.md` canonical markdown;
+- `papers/references.bib` bibliography authority;
+- entity-profile `data/**/datapackage.yaml` and
+  `results/**/datapackage.yaml` files;
+- `results/**/datapackage.json` workflow-run manifests;
+- `overlays/{datasets,papers,topics,themes}/*.md` Commons overlays.
+
+It also only walks `ProjectPaths.code_dir`. `CodeAdapter` instead scans every
+declared `code_roots` entry and honors `code_excludes`. Align the manifest with
+that existing discovery contract: walk every code root and exclude the same
+configured paths. This is parity for an existing source family, not a sixth
+new storage convention.
+
+Extend `build_input_manifest` over those exact source conventions, reusing the
+loader's existing discovery predicates where parsing determines eligibility.
+Do not hash entire `data/` or `results/` payload trees. Record each existing
+source root in the manifest walk-set and each eligible file by project-relative
+POSIX path. Add `tasks/.tasks.lock` to the default excludes because the
+allocation lock is transient control state and contributes no graph content.
+Also exclude only `**/__marimo__/session/*.json`; these are Marimo's ignored
+session records, not discoverable code entities.
+
+This closes project-local loader coverage. Commons canonical records remain an
+external dependency and are outside the local revision manifest; default
+Commons resolution and its existing failure behavior remain unchanged.
+
+The manifest deliberately retains `mtime_ns` because mtime and hybrid diff
+modes are local operational instruments. Consequently the `graph_revision`
+subject is not a reproducible artifact across checkouts even when file bytes
+match. Cross-checkout parity therefore compares named-graph quads after removing
+only quads whose subject is `REVISION_URI`. This is the existing semantic
+projection used by the compiler phase-split tests. Same-checkout rebuilds may
+still use byte identity as the stronger canary.
+
+Tests prove that each omitted source family appears in the manifest, a changed
+workflow-run manifest produces a graph-diff row, ignored result payloads remain
+outside the manifest, every declared code root and `code_excludes` decision is
+respected, both transient leaf classes are excluded, and primary/worktree builds
+with the same tracked source bytes have identical semantic quads.
 
 ## 5. Project-local migration contract
 
@@ -334,9 +431,20 @@ and task-domain triples remain equivalent.
 Overlay-bearing graphs also replace absolute overlay provenance with stable
 project-relative paths. Before any local commit, require zero source identifiers
 matching an absolute `/.../overlays/...` path; checking only for `.worktrees/`
-would miss the same defect in a primary-checkout build. Rebuilds from the
-primary checkout and rollout worktree must produce identical local graph bytes
-once both name the same content and corrected toolkit revision.
+would miss the same defect in a primary-checkout build.
+
+cBioPortal and post-acute-infection also make their workflow-run provenance
+durable. Replace the broad `results/` ignore with narrow recursive rules that
+keep payloads ignored while admitting parent directories and only
+`results/**/datapackage.json`; retain each project's tracked
+`results/.gitkeep`. Track all
+16 manifests in the same consumer transaction that rebuilds the graph. The
+post-acute transaction first normalizes the one checkout-local `sources.path`.
+
+Cross-checkout graph comparisons require identical semantic quads, excluding
+only the `graph_revision` subject. They do not require byte identity because
+revision mtimes are intentionally local. Within one worktree, repeated builds
+still require byte identity when no source changed.
 
 The artifact gate is the direct persisted predicate:
 
@@ -418,12 +526,15 @@ Each project verifies:
   `--output`;
 - no storage-fallback warning remains;
 - local and composite graphs validate;
-- graph diff is empty after the applicable build phase;
+- graph diff is empty in hybrid mode immediately after a worktree build and in
+  hash mode from the merged primary checkout;
 - federation peer checks complete without task-storage errors.
 
 Primary checkouts may contain ignored data absent from their worktrees. Such
 state is preserved and reported; it is never copied into a worktree or deleted
-to force parity.
+to force parity. If an ignored file is an actual graph input, as with the 16
+workflow-run manifests, rollout stops until that provenance is audited and made
+durable. Ignored payloads and non-contributing tool state remain untouched.
 
 ## 8. Sequencing and commit boundaries
 
@@ -433,23 +544,19 @@ The first published toolkit prerequisite contains the parser change,
 regression tests, correction to the original storage design, and the
 canonical-plus-regenerated audit note.
 
-The second prerequisite bundle adds only the overlay-provenance normalization,
-its regression tests, and this rollout amendment. Run focused graph tests,
-Ruff, Pyright, and the full default Science suite before pushing it to
-`origin/main`. Consumer locks use the second public SHA; it contains the parser
-correction by ancestry.
+The second prerequisite bundle added the overlay-provenance normalization and
+its regression tests. It is already public at `36463540`.
 
-That sentence describes the corrective prerequisite bundle's scope, not the
-complete revision history consumers receive. At final amendment review, toolkit `main`
-was 28 commits ahead and zero behind `origin/main`, including the entity-index
-path scrub, scoped-validation documentation, and the merged evidence-broker
-session work. Reconcile the rollout branch with that local `main` before the
-release gate; the published corrective SHA inherits those commits rather than
-pretending to be parser-plus-overlay only.
+The third prerequisite closes revision-manifest source coverage, excludes the
+transient task lock, adds its regression tests, and carries this amended design
+and plan. Run focused graph tests, Ruff, Pyright, and the full default Science
+suite before pushing it to `origin/main`. Final consumer locks use the third
+public SHA; it contains both earlier corrections by ancestry.
 
-At design review, local toolkit `main` was one commit ahead and zero behind
-`origin/main`, so the first prerequisite push had a clean ancestry. Reconfirm
-the ahead/behind relation immediately before the corrective push; consumer
+That describes the third prerequisite commit's scope, not the complete revision
+history consumers receive. It starts from public `main` at `36463540` and
+therefore inherits both earlier prerequisites plus their intervening ancestry.
+Reconfirm the ahead/behind relation immediately before the third push; consumer
 locks depend on the resulting revision being publicly resolvable.
 
 ### 8.2 Project-local commits
@@ -468,9 +575,16 @@ No commit deletes the aggregate store while leaving the project unable to read
 the replacement.
 
 cBioPortal and pan-disease already committed their task migrations before the
-overlay defect was observed. Each receives one follow-up corrective commit
-containing the new pin/lock and regenerated local graph; their task stores are
-not rewritten. Cancer/meta remains uncommitted until it uses the corrected SHA.
+overlay defect was observed, and cBioPortal already has a local overlay-fix
+commit. cBioPortal receives one more source-closure commit containing the final
+pin/lock, narrow ignore rules, 11 tracked manifests, and regenerated local
+graph. Pan-disease moves directly from its parser pin to the final prerequisite.
+Their task stores are not rewritten. Cancer/meta remains uncommitted until it
+uses the final SHA.
+
+Post-acute-infection's closure commit contains its final pin/lock, narrow ignore
+rules, five tracked manifests, the one path normalization, its live guide fix,
+and regenerated local graph.
 
 ### 8.3 Composite commits
 
@@ -500,6 +614,15 @@ worktree before any commit or local-main merge.
 Composite work begins only after all local migrations are complete. A failed
 composite refresh cannot corrupt task storage and is retried after its graph or
 peer dependency is corrected.
+
+The cBioPortal primary checkout currently has one modified generated graph from
+the diagnostic rebuild that exposed this prerequisite. Preserve its hash and
+semantic-delta evidence while the third prerequisite is implemented. Before
+fast-forwarding the final cBioPortal source-closure commit, verify that the
+primary modification is still only that generated artifact, then restore the
+committed graph and merge. Rebuild both checkouts, compare their semantic
+projections, and leave the primary checkout on the committed worktree-built
+artifact; revision-metadata-only differences are evidence, not a second commit.
 
 ## 10. Alternatives rejected
 
@@ -536,7 +659,27 @@ graph emission instead.
 The registry already maps worktrees to their primary checkout for project
 registration, but reusing that absolute path for provenance only hides the
 worktree segment. It still makes graph identity depend on one machine's mount
-point and prevents byte-identical builds after moving a repository.
+point and changes semantic source identity after moving a repository.
+
+### 10.6 Treat ignored workflow manifests as local-only state
+
+This preserves existing primary graphs but makes a clean checkout silently
+smaller. It also leaves `graph diff` unable to report the omitted inputs. The
+manifests are small provenance records; track them while keeping their payloads
+ignored.
+
+### 10.7 Require every graph source to be tracked at compile time
+
+This would make released graphs reproducible but would also reject the normal
+pre-commit workflow of building a graph from a newly authored entity or task.
+Durability is a rollout/release gate. The compiler continues to accept working
+tree sources while its revision manifest reports their changes.
+
+### 10.8 Preserve cross-checkout byte parity by deleting revision mtimes
+
+Mtime and hybrid modes are existing local diagnostics. Removing their stored
+baseline is unnecessary for this rollout: semantic parity already excludes the
+single revision subject, while same-checkout byte identity remains available.
 
 ## 11. Non-goals and reported follow-ups
 
@@ -549,6 +692,8 @@ This design does not:
 - refresh unrelated stale standalone graphs;
 - align consumers outside this rollout's local/composite closure set to one
   toolkit revision;
+- normalize historical workflow-manifest schemas or broaden
+  `WorkflowRunAdapter`'s `related` projection;
 - rewrite historical task-path citations.
 
 These remain visible follow-ups rather than hidden prerequisites.
@@ -564,7 +709,8 @@ The rollout is complete when:
 4. No target has a mixed store or migration journal.
 5. cBioPortal plans 74 writes with no refusal and pan-disease plans 58 writes
    with no refusal under the corrected parser.
-6. All 15 closure-target local graphs validate and report zero staleness.
+6. All 15 closure-target local graphs validate, report zero hybrid staleness in
+   their build worktrees, and report zero hash staleness from local `main`.
 7. All affected composites preserve declared membership, validate, and leave
    their local graphs byte-identical.
 8. Cancer and health peer checks complete without storage errors.
@@ -572,4 +718,11 @@ The rollout is complete when:
 10. Registry and peer topology are unchanged.
 11. No closure-target graph contains a source identifier that is an absolute
     path containing `/overlays/`, and an overlay-bearing primary/worktree
-    rebuild is byte-identical.
+    rebuild has identical semantic quads after excluding `REVISION_URI`.
+12. The revision manifest covers all five formerly omitted project-local
+    source families, matches declared code-root discovery, excludes
+    `tasks/.tasks.lock` and Marimo session JSON, and detects a changed
+    workflow-run manifest.
+13. cBioPortal's 11 and post-acute-infection's five workflow-run manifests are
+    tracked while non-manifest result payloads remain ignored; no tracked
+    manifest contains a checkout-local path.
