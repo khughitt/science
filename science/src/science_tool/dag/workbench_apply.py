@@ -19,6 +19,7 @@ from science_tool.dag.entity_frontmatter import (
     read_existing_target,
     render_create,
     render_update,
+    workbench_ownership,
 )
 from science_tool.dag.workbench import (
     CompileResult,
@@ -175,7 +176,13 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     today = as_of.isoformat()
     if not path.exists():
         body = workbench_entity_body(entity)
-        final_text = render_create(entity, body=body, created=today, updated=today)
+        final_text = render_create(
+            entity,
+            ownership=workbench_ownership(entity.kind),
+            body=body,
+            created=today,
+            updated=today,
+        )
         return PlannedWorkbenchEdit(
             path=path,
             reason="entity",
@@ -195,6 +202,7 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     existing_updated = str(frontmatter["updated"])
     unchanged_timestamp_text = render_update(
         entity,
+        ownership=workbench_ownership(entity.kind),
         existing_frontmatter=frontmatter,
         body=body,
         created=created,
@@ -205,6 +213,7 @@ def _entity_edit(project_root: Path, entity: WorkbenchEntity, *, as_of: date) ->
     else:
         final_text = render_update(
             entity,
+            ownership=workbench_ownership(entity.kind),
             existing_frontmatter=frontmatter,
             body=body,
             created=created,

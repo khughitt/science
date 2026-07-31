@@ -93,14 +93,6 @@ def workbench_ownership(kind: str) -> Ownership:
     raise FrontmatterRenderError(f"unsupported workbench entity kind: {kind}")
 
 
-def owned_keys(kind: str) -> frozenset[str]:
-    if kind == "proposition":
-        return PROPOSITION_OWNED_KEYS
-    if kind == "evidence-line":
-        return EVIDENCE_LINE_OWNED_KEYS
-    raise FrontmatterRenderError(f"unsupported workbench entity kind: {kind}")
-
-
 def generated_frontmatter(entity: WorkbenchEntity, *, created: str, updated: str) -> dict[str, object]:
     generated_text = render_entity_text(entity, body="", created=created, updated=updated)
     try:
@@ -152,10 +144,12 @@ def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
         ) from exc
 
 
-def render_create(entity: WorkbenchEntity, *, body: str, created: str, updated: str) -> str:
-    """Render a NEW entity file from the owned allowlist plus the create-only keys."""
+def render_create(
+    entity: WorkbenchEntity, *, ownership: Ownership, body: str, created: str, updated: str
+) -> str:
+    """Render a NEW entity file from the owned allowlist plus the writer's create-only keys."""
     generated = generated_frontmatter(entity, created=created, updated=updated)
-    allowed = owned_keys(entity.kind) | CREATE_ONLY_KEYS
+    allowed = ownership.owned | ownership.create_only
     final = {key: value for key, value in generated.items() if key in allowed}
     final["created"] = created
     final["updated"] = updated
@@ -196,6 +190,7 @@ def read_existing_target(path: Path, entity: WorkbenchEntity) -> tuple[dict[str,
 def render_update(
     entity: WorkbenchEntity,
     *,
+    ownership: Ownership,
     existing_frontmatter: dict[str, object],
     body: str,
     created: str,
@@ -203,9 +198,8 @@ def render_update(
 ) -> str:
     """Render an EXISTING entity file: overwrite only owned keys, preserve everything else.
 
-    `CREATE_ONLY_KEYS` is deliberately NOT applied here -- that is what makes `title` create-only
-    and lets an author's replacement survive. Both writers use this, so the compile path and the
-    apply path cannot diverge on what an update means.
+    `ownership.create_only` is deliberately NOT applied here -- that is what makes `title`
+    create-only and lets an author's replacement survive.
     """
     final = {
         key: value
@@ -213,7 +207,7 @@ def render_update(
         if key not in RENDERER_DERIVED_KEYS
     }
     generated = generated_frontmatter(entity, created=created, updated=updated)
-    for key in owned_keys(entity.kind):
+    for key in ownership.owned:
         if key in generated:
             final[key] = generated[key]
     final["created"] = created

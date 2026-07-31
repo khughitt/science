@@ -12,6 +12,7 @@ from science_model.reasoning import ClaimLayer, IdentificationStrength, Polarity
 from science_tool.dag.workbench import workbench_entity_body
 from science_tool.dag.workbench_apply import (
     WorkbenchApplyError,
+    _entity_edit,
     apply_workbench,
     apply_workbench_plan,
     build_workbench_apply_plan,
@@ -730,3 +731,26 @@ def test_build_workbench_apply_plan_rejects_duplicate_idless_proposition_targets
 
     assert not (tmp_path / "entities").exists()
     assert "id: proposition:a-affects-b" not in workbench_path.read_text(encoding="utf-8")
+
+
+def test_noop_entity_edit_still_writes_nothing(tmp_path: Path) -> None:
+    """The unchanged-timestamp probe (workbench_apply.py:196) must keep detecting no-ops.
+
+    Its verdict depends on render_update's OUTPUT, not on ownership alone, so threading an
+    `ownership` argument through it could flip a no-op into a spurious write without any
+    ownership set changing. Re-planning an already-applied edit must stay `changed=False`.
+    """
+    _seed_project(tmp_path)
+    entity = _proposition()
+
+    first = _entity_edit(tmp_path, entity, as_of=date(2026, 7, 4))
+    assert first.changed is True
+    first.path.parent.mkdir(parents=True, exist_ok=True)
+    first.path.write_text(first.final_text, encoding="utf-8")
+
+    # Same entity, LATER date. The timestamp probe must recognise the content as unchanged
+    # and decline to bump `updated`.
+    second = _entity_edit(tmp_path, entity, as_of=date(2026, 8, 1))
+    assert second.changed is False
+    assert second.final_text == first.final_text
+    assert "updated: '2026-07-04'" in second.final_text

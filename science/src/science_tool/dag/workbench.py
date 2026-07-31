@@ -355,7 +355,12 @@ def _write_entity_file(
     on every recompile. Deliberately NOT `entities.write_entity_file`, which renders the whole
     model and would re-introduce the skeleton dump on this path.
     """
-    from science_tool.dag.entity_frontmatter import read_existing_target, render_create, render_update
+    from science_tool.dag.entity_frontmatter import (
+        read_existing_target,
+        render_create,
+        render_update,
+        workbench_ownership,
+    )
     from science_tool.entities import _atomic_replace_text, resolve_path_policy
 
     today = (as_of or date.today()).isoformat()
@@ -371,6 +376,7 @@ def _write_entity_file(
         existing_frontmatter, existing_body, _current = read_existing_target(dest, entity)
         text = render_update(
             entity,
+            ownership=workbench_ownership(entity.kind),
             existing_frontmatter=existing_frontmatter,
             body=existing_body,
             created=str(existing_frontmatter["created"]),
@@ -378,7 +384,11 @@ def _write_entity_file(
         )
     else:
         text = render_create(
-            entity, body=workbench_entity_body(entity), created=today, updated=today
+            entity,
+            ownership=workbench_ownership(entity.kind),
+            body=workbench_entity_body(entity),
+            created=today,
+            updated=today,
         )
 
     dest.parent.mkdir(parents=True, exist_ok=True)
