@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 22)
+**Status:** partially implemented (revision 23)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 22, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 22, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 22, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule and the shallow refusal, both at `start_run`; §3.2's payload bound and the `run_git` ceiling; the protocol bump | designed at revision 23, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 23, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 23, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -52,6 +52,31 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 23 closes four defects in §2.2 itself, two of them in the contract's own load-bearing rows.
+
+1. **`Correspondence`'s home did not import.** `evidence_broker.py` imports `audit.subjects`, and
+   `audit/__init__.py` eagerly imports `audit.record`, so `import science_model.evidence_broker`
+   already loads `audit.record` — probed, not reasoned. Having `audit.record` import `Correspondence`
+   back would close a cycle through a partially initialised module. It moves to
+   `science_model/correspondence.py`, a leaf importing pydantic and nothing else, which is the only
+   placement under which neither package depends on the other.
+2. **The forward guarantee was false in the direction 4b would rely on.** Revision 22 promised "no
+   `history` entry originating in a shallow repository", but revision 18 journaled shallow-history
+   refusals, so such entries existed. Replaying one in a *complete* clone re-serves real history and
+   yields `EXPOSURE_UNREPRODUCIBLE` — the reciprocal of the case revision 18 set out to fix, created
+   by revision 18's own fix, and left unstated for five revisions. Shallowness now refuses at
+   `start_run` beside the tree scan: a journaled refusal was never deterministic given the pinned
+   commit, which revision 21's own rule already said disqualifies it from the journal.
+3. **`is_shallow` was declared shared without a module** — which is how one mechanism becomes two
+   functions. `autonomy/git.py::is_shallow`.
+4. **4c's row named a directory.** A new `validate` check is two files: the module and its
+   registration in `validate/checks/__init__.py`. Both are named.
+
+**The first and fourth are the same mistake as "must not touch `audit/*`", which revision 23 also
+replaces.** A contract stated as a *path* fails exactly as a guard stated as a *roster* does: the ban
+on `audit/*` would have forced `Correspondence` into the cycle, because the rule it stood for —
+**4b changes no stored-record model** — was never the rule that got written down.
 
 Revision 22 adds **§2.2, the slice contracts** — what each of 4a/4b/4c may assume, may not assume,
 creates, modifies, must not touch, and owns in §5.3. It exists because revisions 19, 20 and 21 found
@@ -436,12 +461,12 @@ science/src/science_tool/evidence_broker/     # NEW
     cli.py        `science evidence serve`   # the only actor-facing command; §3.4.1, §3.5
 
 science/model/src/science_model/
+    correspondence.py    # NEW (plan 4b) — Correspondence ONLY; imports pydantic and nothing else
     evidence_broker.py   SurfacePolicy (shipped, plan 2); + Outcome, ExposureEntry,
-                         InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure;
-                         + Correspondence (plan 4b)
+                         InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure
     autonomous_runs.py   + AutonomousRunRecord.evidence
     audit/record.py      + Uncertainty, ReviewAttestation, ReviewSubmission; two Review fields
-                           (one importing Correspondence from evidence_broker.py);
+                           (one importing Correspondence from science_model/correspondence.py);
                            confirmation_count() gains a correspondence term
 
 science/src/science_tool/
@@ -480,6 +505,11 @@ correspondence is computed. §5.4 specifies it.
 
 ### 2.2 Slice contracts for plan 4
 
+**This section is authoritative for the seam.** Where a revision-log entry above describes a slice
+boundary — revision 19 on where the shallow rule falls, revisions 17–22 on where `Correspondence`
+lives — the log records what was decided then and §2.2 records what holds now. A log entry is not
+back-edited; it is superseded.
+
 Plan 4 ships as three slices (header table). Revisions 19–21 each found defects **in the seam rather
 than in the design** — a slice handed an outcome it could not reach, a type with two homes, a
 dependency on a field a later slice adds — so the boundaries are stated here explicitly rather than
@@ -490,15 +520,19 @@ may reach backwards**, and each is independently mergeable.
 |---|---|---|---|
 | **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
 | **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that any exposure predates 4a |
-| **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py` | `findings/reviews.py` |
-| **Modifies** | `autonomy/lifecycle.py` (the tree scan, at `start_run`), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | `science_model/evidence_broker.py` (`Correspondence` only) | `science_model/audit/record.py`, `validate/checks/`, `findings/cli.py:317` |
-| **Must not touch** | `science_model/audit/*` | **`science_model/audit/*`** — the claim that keeps 4b independent of 4c | `evidence_broker/serve.py` |
+| **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_correspondence.py` |
+| **Modifies** | `autonomy/lifecycle.py` (tree scan + shallow check, at `start_run`), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
+| **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py` |
 | **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
 
 **The guarantee 4a hands forward, stated as one sentence because 4b is entitled to rely on all of
-it:** every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2` was served from a tree whose every path
-is valid UTF-8 and already NFC, under a per-request byte ceiling, with no `history` entry originating
-in a shallow repository.
+it:** every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2` was served from a **complete** clone of
+a tree whose every path is valid UTF-8 and already NFC, under a per-request byte ceiling.
+
+Revision 22 phrased the last clause as "no `history` **entry** originating in a shallow repository",
+which was false: revision 18 journaled shallow-history refusals, so such entries existed — refused,
+but present and replayed. The guarantee is about the *run*, not about which entries it contains, and
+saying it the other way invited a 4b implementer to trust something 4a was not delivering.
 
 That is what licenses 4b to key its served map on the decoded path without re-normalising, and to
 perform no tree scan of its own (§5.2). A 4b implementer who adds a normalisation guard "to be safe"
@@ -521,10 +555,18 @@ the one place in this seam where "may not modify" and "must import" both apply.
 **Three shared mechanisms belong to 4a, so that 4b consumes rather than reinvents them.** Each is
 needed on both sides of the seam, and each would otherwise be written twice with two spellings:
 
-- `is_shallow(repo) -> bool` — 4a refuses `history` at serving, 4b classifies at replay.
+- **`autonomy/git.py::is_shallow(repo) -> bool`** — 4a refuses to open a run, 4b classifies a replay
+  environment. Revision 22 declared it shared without naming a module, which is how one mechanism
+  becomes two functions.
 - The `run_git` output ceiling, including its refuse-not-truncate discipline.
 - `MAX_SERVED_BYTES` and `MAX_RUN_SERVED_BYTES`, in `science_model/evidence_broker.py` with the
   other bounds.
+
+**"Must not touch `audit/*`" was a proxy, and revision 23 replaces it with the claim it stood for.**
+What must hold is that **4b changes no stored-record model**, so 4c inherits an unmodified `Review`.
+Spelling that as a directory ban broke the moment `Correspondence` needed a home that is neither
+`evidence_broker.py` (a cycle) nor `audit/record.py` (a banned file) — the ban would have forced the
+cycle. A contract stated as a path is the same defect as a guard stated as a roster.
 
 **What 4b imports from `audit/` and does not modify.** `Evidence` and `LocationEvidence` are merged
 and unchanged by this plan; 4b reads them. The distinction matters because "must not touch
@@ -656,9 +698,15 @@ replay is bound to a protocol version at all.
 `--no-replace-objects` is already pinned in `_HARDENING`, so grafts and replace refs are closed;
 completeness is what remains. The rule:
 
-- **`history` is refused in a shallow repository, at serving and at replay**, decided by
-  `git rev-parse --is-shallow-repository`. At serving this is an ordinary refusal — the requester is
-  told the operation is unavailable, spends its round, and the run continues on `read` and `search`.
+- **A brokered run refuses to open against a shallow repository**, decided by
+  `autonomy/git.py::is_shallow` (`git rev-parse --is-shallow-repository`), in `start_run` beside the
+  §3.1 tree scan. Revision 18 made this a per-request refusal that spent a round and was journaled;
+  revision 23 moves it to open, because a journaled refusal is **not deterministic given the pinned
+  commit** — it is determined by what the clone happens to hold. Replaying that honest exposure in a
+  *complete* clone re-serves real history, the outcome no longer matches, and §5.3 returns
+  `EXPOSURE_UNREPRODUCIBLE`: the reciprocal of the case revision 18 set out to fix, created by its
+  own fix. Refusing at open removes both directions at once and needs no sealed term to tell them
+  apart.
 - **At replay, a shallow repository is `unwired` / `EXPOSURE_UNREACHABLE`, never `violated`.** The
   environment could not answer the question; it did not answer it wrongly. Reaching for `violated`
   here would be the could-not-check / checked-and-found-false confusion §5.3 exists to prevent, and
@@ -1718,9 +1766,16 @@ exist at this commit" — which is why §3.1's NFC rule has to hold for it to me
 **`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
 `Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
 never stored, so putting it in `science_model` beside the sealed types would advertise a durability
-it does not have. `Correspondence`, which *is* returned across the boundary, ships in
-`science_model/evidence_broker.py` — beside `Outcome`, which moved there for the same reason — and
-`audit/record.py` imports it for the stored `Review` field (§4.2).
+it does not have. `Correspondence`, which *is* returned across the boundary, ships in its **own
+dependency-neutral module**, `science_model/correspondence.py`, importing pydantic and nothing else.
+
+Revisions 17–22 put it in `evidence_broker.py` beside `Outcome`, which reads well and does not load:
+`evidence_broker.py` imports `audit.subjects`, and `science_model/audit/__init__.py` eagerly imports
+`audit.record`, so `import science_model.evidence_broker` already pulls in `audit.record` — verified
+by probe. Having `audit.record` import `Correspondence` back from `evidence_broker` would close that
+into a cycle through a partially initialised module. A leaf module both sides import is not a
+compromise between the two homes; it is the only placement under which neither package depends on
+the other.
 
 **The cited set.** `line` and `span` are already mutually exclusive on `LocationEvidence`, so a
 citation cites `{line}`, or every line from `span.start_line` to `span.end_line` inclusive, with
@@ -2052,7 +2107,9 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | Slice | Mutation | Test that must fail |
 |---|---|---|
 | 4a | Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
-| 4a | Drop the shallow check at serving | `history` is refused in a shallow repository |
+| 4a | Drop the shallow check at open | a brokered run against a shallow clone opens |
+| 4a | Journal a shallow-`history` refusal instead of refusing at open | an exposure sealed in a shallow clone and replayed in a complete one is not `EXPOSURE_UNREPRODUCIBLE` |
+| 4b | Import `Correspondence` from `evidence_broker.py` | `import science_model.audit.record` raises `ImportError` |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
 | 4a | Bound stdout only | an oversized `stderr` refuses |
