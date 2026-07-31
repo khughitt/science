@@ -138,6 +138,24 @@ A third round found two more, both in the guards rather than the serving code:
 Finding 13 is worth keeping in view beyond this plan: a guard implemented as a text scan is a
 guard whose scope is the whole file, including its prose.
 
+A fourth round found one, in finding 13's own repair:
+
+15. **The rewritten process-boundary guard was narrower than the claim it advertised.** It listed
+    nine `os` spawn names and inspected attribute calls only on a receiver literally spelled `os`,
+    so `os.spawnvp`, `os.spawnl`, `os.posix_spawnp`, `import os as o` then `o.system(...)`, and
+    `from os import system` then `system(...)` all passed a guard whose docstring claimed no
+    module in the package launches a process. Step 3 also certified it with no mutation at all,
+    so nothing would have exposed the gap. It now matches the spawn *family* by prefix, ignores
+    the receiver, rejects dynamic imports, and carries three mutation rows — two of which the
+    roster version survives.
+
+The lesson is finding 8 and 11's again, now for the third time, and the pattern is specific enough
+to name: **every one of these was a check whose scope was narrower than the rule it enforced, and
+in each case the narrowing was an enumeration** — one file rather than the package, one substring
+rather than the concept, nine names rather than the family. Whenever a guard's scope is a list,
+the guard has a hole exactly where the list ends. Prefer a predicate over a roster, and certify
+with a mutation that lands *outside* the roster the previous draft would have caught.
+
 ## Global Constraints
 
 - Work in the `feat/evidence-broker-serving` worktree at `.worktrees/evidence-broker-serving`, on
@@ -1888,13 +1906,22 @@ def test_authorize_precedes_every_git_call_in_serve():
             assert site > authorized_at, f"{name} is called at {site}, before authorize at {authorized_at}"
 
 
-#: `os` is imported by `policy.py` for `fsencode`, so its spawning family is in reach and is
-#: named here alongside `subprocess`. Anything that starts a process outside `run_git` is a
-#: process the hardening never sees.
-_SPAWNING_MODULES = frozenset({"subprocess"})
-_SPAWNING_OS_CALLS = frozenset(
-    {"system", "popen", "execv", "execve", "execvp", "execvpe", "spawnv", "spawnve", "posix_spawn"}
-)
+#: MATCHED BY SHAPE, NOT BY ROSTER. An enumeration of `os` spawn names is a list someone has
+#: to keep complete against a stdlib that has ~20 of them (`spawnl`, `spawnlp`, `spawnvp`,
+#: `spawnvpe`, `posix_spawnp`, the whole `exec*` family), and the one left off the list is the
+#: one a mutation reaches for. `_spawns` matches the family by prefix instead, and the call
+#: check ignores the receiver entirely -- so `os.spawnvp`, `o.system` under an aliased import,
+#: and a bare `system(...)` after `from os import system` all land the same way.
+_SPAWNING_MODULES = frozenset({"subprocess", "pty", "multiprocessing"})
+_SPAWNING_PREFIXES = ("exec", "spawn", "popen", "posix_spawn", "fork")
+#: `import_module` and `__import__` are here because a dynamic import defeats the import check
+#: above: without them, `importlib.import_module("subprocess").run(...)` passes.
+_SPAWNING_NAMES = frozenset({"system", "startfile", "import_module", "__import__"})
+
+
+def _spawns(name: str) -> bool:
+    lowered = name.lower()
+    return lowered in _SPAWNING_NAMES or lowered.startswith(_SPAWNING_PREFIXES)
 
 
 def test_the_broker_makes_no_direct_subprocess_call():
@@ -1906,19 +1933,51 @@ def test_the_broker_makes_no_direct_subprocess_call():
     cannot cross `subprocess`'s argv boundary, and the guard would reject the module for
     documenting the reason it exists. A guard that forbids discussing the hazard forces the
     explanation out of the code, which is the opposite of what it was written for.
+
+    STILL A STRUCTURAL PROXY. `getattr(os, "sys" + "tem")` defeats it, as does any other
+    computed name. The claim is bounded accordingly: no module in this package *spells* a
+    process launch. That is worth asserting because it is the spelling a refactor or a
+    convenience helper would actually use.
     """
     for name, tree in _module_asts().items():
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
+                    # alias.name, not alias.asname: `import subprocess as sp` is still an import.
                     assert alias.name.split(".")[0] not in _SPAWNING_MODULES, f"{name}: {alias.name}"
             elif isinstance(node, ast.ImportFrom):
-                assert (node.module or "").split(".")[0] not in _SPAWNING_MODULES, name
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                target = node.func.value
-                if isinstance(target, ast.Name) and target.id == "os":
-                    assert node.func.attr not in _SPAWNING_OS_CALLS, f"{name}: os.{node.func.attr}"
+                root = (node.module or "").split(".")[0]
+                assert root not in _SPAWNING_MODULES, f"{name}: from {node.module}"
+                for alias in node.names:
+                    # Catches `from os import system`, where the module is innocent and the
+                    # imported name is not.
+                    assert not _spawns(alias.name), f"{name}: from {node.module} import {alias.name}"
+            elif isinstance(node, ast.Call):
+                func = node.func
+                called = (
+                    func.attr
+                    if isinstance(func, ast.Attribute)
+                    else func.id
+                    if isinstance(func, ast.Name)
+                    else None
+                )
+                assert called is None or not _spawns(called), f"{name}: calls {called}"
 ```
+
+Before relying on it, confirm the predicate on the seventeen spellings it is meant to reject and the
+three module shapes it must accept — the roster version passed every module in this package while
+still admitting `os.spawnvp`, so "the guard is green" is not evidence about the guard:
+
+| Must fail | Must pass |
+|---|---|
+| `import subprocess` / `import subprocess as sp` | `policy.py`'s shape: a docstring naming `subprocess`, `import os`, `os.fsencode` |
+| `from subprocess import run` / `import Popen` | `serve.py`'s shape: `from science_tool.autonomy.git import run_git` |
+| `os.spawnvp`, `os.spawnvpe`, `os.spawnl`, `os.posix_spawnp` | `__init__.py`'s shape: a re-export |
+| `os.execl`, `os.execlp`, `os.popen`, `os.system` | |
+| `from os import system` then `system(...)` | |
+| `import os as o` then `o.system(...)` | |
+| `importlib.import_module("subprocess")`, `__import__("subprocess")` | |
+| `import pty` then `pty.spawn(...)` | |
 
 - [ ] **Step 2: Run them and record what fails**
 
@@ -1955,8 +2014,18 @@ For each, restore the prior behaviour, confirm the named test fails, then restor
 | `LC_ALL`/`LANG` from `git.py`'s `_ENVIRONMENT` | the locale replay and the translated-parent rows |
 | Move `verify_commit(repo_root, commit)` above the `authorize` branch in `serve` | `test_authorize_precedes_every_git_call_in_serve` |
 | Add a `run_git` call to a function in `policy.py` | `test_every_git_call_in_the_package_sits_in_a_known_helper` |
+| Add `import subprocess` + `subprocess.run(["git", "log"], ...)` to `serve.py` | `test_the_broker_makes_no_direct_subprocess_call` |
+| Instead add `os.spawnvp(os.P_WAIT, "git", ["git", "log"])` to `policy.py` | the same test — **this is the row that matters** |
+| Instead add `from os import system` + `system("git log")` to `policy.py` | the same test |
 
-**Run the last row against `policy.py` specifically.** An earlier draft parsed only `serve.py`,
+The three spawn rows are not redundant. The first fails against any spelling of the guard,
+including the roster version that shipped in the third draft. The second and third are the ones
+that distinguish them: the roster listed nine `os` names and omitted `spawnvp` and `spawnl`
+entirely, and it only ever inspected attribute calls on a receiver literally named `os`, so a
+bare `system(...)` was invisible to it. **Run all three.** A guard certified only by the mutation
+it was designed against is certified by its author's imagination.
+
+**Run the `policy.py` `run_git` row against `policy.py` specifically.** An earlier draft parsed only `serve.py`,
 so this exact mutation passed both derived guards — the file the guard was written about was the
 one file it could not have been wrong about. Confirm the failure message names `policy.py`.
 
@@ -1986,11 +2055,13 @@ the case that would turn an ordinary absent path into a halted run.
 
 Three derived guards, all from the AST and all over the whole package: every
 run_git call sits in a known helper, authorize precedes every one of them by
-source position rather than by set membership, and no module imports subprocess
-or reaches os's spawning family. The membership spelling passed against a helper
-invoked above the authorization, which is the defect the guard exists to catch,
-and the subprocess guard was a text scan that rejected policy.py for documenting
-why the NUL check exists."
+source position rather than by set membership, and no module spells a process
+launch. The membership spelling passed against a helper invoked above the
+authorization, which is the defect the guard exists to catch; the process-boundary
+guard was first a text scan that rejected policy.py for documenting why the NUL
+check exists, and then a roster of nine os names that admitted spawnvp, spawnl
+and a bare system() imported by name. It matches the family by prefix now, and
+two of its three mutations are ones the roster survived."
 ```
 
 ---
