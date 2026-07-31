@@ -216,23 +216,26 @@ def test_plan_refuses_noncanonical_source_ids(tmp_path: Path, task_id: str) -> N
     assert plan.post_images == {}
 
 
-def test_plan_refuses_invalid_source_title(tmp_path: Path) -> None:
+def test_plan_accepts_bracketed_titles_in_done_ledgers(tmp_path: Path) -> None:
     migrate = _migrate_module()
     tasks_dir = tmp_path / "tasks"
-    _write_raw_legacy(
-        tasks_dir,
-        "## [t001] Bad ] title\n"
-        "- priority: P1\n"
-        "- status: active\n"
-        "- aspects: []\n"
-        "- created: 2026-07-01\n\n"
-        "Body.\n",
+    active = _task("t001", "Current work")
+    completed = [
+        _task("t072", "F10 [Significant] result", status="done", completed=TODAY),
+        _task("t106", "Evidence [UNVERIFIED]", status="done", completed=TODAY),
+    ]
+    _write_legacy(tasks_dir, [active])
+    done_dir = tasks_dir / "done"
+    done_dir.mkdir()
+    done_dir.joinpath("2026-07.md").write_text(
+        "\n".join(render_task(task) for task in completed),
+        encoding="utf-8",
     )
 
     plan = migrate.plan_migration(tasks_dir, today=TODAY)
 
-    assert any("title" in reason and "t001" in reason for reason in plan.refusals)
-    assert plan.post_images == {}
+    assert plan.refusals == []
+    assert [entry.task.id for entry in plan.entries] == ["t001"]
 
 
 def test_plan_refuses_live_relative_markdown_destinations_without_writing(

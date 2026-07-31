@@ -293,7 +293,7 @@ def test_task_refs_validate_declared_stale_invalid_and_typed_refs(tmp_path: Path
             "status 'mystery' not open",
         ),
         (
-            _valid_frontmatter("t001").replace("title: Demo", "title: Bad]"),
+            _valid_frontmatter("t001").replace("title: Demo", 'title: " leading"'),
             "t001-task.md",
             "task title must be",
         ),

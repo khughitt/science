@@ -51,10 +51,19 @@ def test_rejects_unknown_metadata_key():
         _parse_task_block(block)
 
 
-def test_rejects_newline_in_title_via_header():
-    # A header line cannot physically contain a newline; guard the ']' case.
-    with pytest.raises(ValueError):
-        _parse_task_block(["## [t014] a ] b", "- created: 2026-03-01", "", "x"])
+@pytest.mark.parametrize(
+    "title",
+    ["F10 [Significant] result", "Evidence [UNVERIFIED]"],
+)
+def test_bracketed_title_roundtrips_through_ledger(title: str) -> None:
+    task = Task(id="t014", title=title, status="done", created=date(2026, 3, 1))
+
+    assert _roundtrip(task).title == title
+
+
+def test_rejects_blank_title_via_header() -> None:
+    with pytest.raises(ValueError, match="non-empty"):
+        _parse_task_block(["## [t015]    ", "- created: 2026-03-01", "", "x"])
 
 
 def test_scalar_with_newline_roundtrips():

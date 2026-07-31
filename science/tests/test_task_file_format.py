@@ -253,14 +253,28 @@ def test_rejects_filename_id_mismatch(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "title",
-    ['"line one\\nline two"', "contains ] bracket"],
-    ids=["newline", "closing-bracket"],
+    ['"line one\\nline two"'],
+    ids=["newline"],
 )
 def test_rejects_non_single_line_title(tmp_path: Path, title: str) -> None:
     path = _write(tmp_path / "t042-x.md", _task_text(title=title))
 
     with pytest.raises(ValueError, match="title"):
         task_module.parse_task_file(path)
+
+
+def test_leading_bracket_title_roundtrips_through_frontmatter(tmp_path: Path) -> None:
+    task = Task(
+        id="t042",
+        title="[UNVERIFIED] source classification",
+        status="active",
+        created=date(2026, 7, 20),
+    )
+    rendered = task_module.render_task_file(task)
+    path = _write(tmp_path / "t042-unverified-source-classification.md", rendered)
+
+    assert "title: '[UNVERIFIED] source classification'" in rendered
+    assert task_module.parse_task_file(path) == task
 
 
 @pytest.mark.parametrize(

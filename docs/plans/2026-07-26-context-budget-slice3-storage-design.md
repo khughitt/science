@@ -138,10 +138,11 @@ exactly as today (`_format_note` / `_append_note_to_description`).
   there is unrepresentable and would corrupt the done ledger, and even in
   frontmatter a multiline title serves no purpose. Rather than invent a reversible
   header encoding for a value that should never span lines, **titles containing a
-  newline (or a bare `]` that would break the header) are rejected at every task
-  boundary**: `add_task`/`edit_task` input, `parse_task_file` (frontmatter), the
-  ledger `_parse_task_block` header parse, and the migrator. Fail early, single
-  place per boundary.
+  newline are rejected at every task boundary**: `add_task`/`edit_task` input,
+  `parse_task_file` (frontmatter), the ledger `_parse_task_block` header parse,
+  and the migrator. `]` is valid because `_HEADER_RE` consumes the bounded
+  `[tNNN]` ID before capturing the title remainder. Fail early, single place per
+  boundary.
 - **`active/` holds open tasks — enforced at the parse boundary.** `Task.status`
   is a plain `str`, not `TaskStatus` (model `tasks.py:32`), so required-key
   presence alone does not constrain the *value*. `parse_task_file` therefore
@@ -643,9 +644,10 @@ pattern of `datasets/capability_migration.py`:
   across the active→done boundary — no false conflict on replay).
 - Done-ledger unknown key: a `## [tNNN]` block with an unknown metadata line
   (`- foo: bar`) is REJECTED, not silently dropped (symmetric with frontmatter).
-- Single-line title: a title containing a newline (or a `]`) is REJECTED at
-  `add`/`edit`, frontmatter parse, DSL header parse, and migration — no boundary
-  admits it.
+- Single-line title: a title containing a newline is REJECTED at `add`/`edit`,
+  frontmatter parse, DSL header parse, and migration — no boundary admits it.
+  `]` is valid because `_HEADER_RE` consumes the bounded `[tNNN]` ID before
+  capturing the title remainder.
 - Required persisted keys: a file missing `created` (or `status`/`priority`/
   `aspects`/`id`/`title`) is REJECTED naming the key — it does NOT silently
   acquire `date.today()` / `proposed` / `P2`; a file with all required keys and

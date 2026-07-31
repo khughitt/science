@@ -5,6 +5,12 @@
 **Inputs:** four inventory artifacts (`inventory/<project>.{json,md}`) + four manual project audits (`projects/<project>.md`).
 **Method:** convention-threshold rule applied per `docs/plans/historical/2026-04-25-downstream-project-conventions-audit.md` Phase 3 — 3-of-4 with same shape eligible for P1; 2-of-4 eligible for P2 (upgraded with one-line justification only); 1-of-4 → P3 unless it is direct evidence of a known upstream gap.
 
+> **Superseded note (2026-07-31):** This audit records the task layout observed
+> on 2026-04-25. The current active-task store is `tasks/active/`, with one
+> Markdown file per open task; `tasks/done/YYYY-MM.md` remains the closed-task
+> ledger. Use `science tasks` rather than treating the aggregate `active.md`
+> observations below as current operating guidance.
+
 Findings are tagged `[mav-input]` where managed-artifact-versioning would absorb them, `[hyp-phase]` where they touch the in-flight hypothesis-phase plan, and `[v1-tooling]` where they argue for a Phase-1 inventory/tool change.
 
 ---

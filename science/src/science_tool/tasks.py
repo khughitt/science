@@ -172,9 +172,7 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
     match = _HEADER_RE.match(line)
     if match:
         task_id, title = match.group(1), match.group(2).strip()
-        if "]" in title:
-            where = f" in {path}" if path is not None else ""
-            raise ValueError(f"task {task_id} title may not contain ']'{where}")
+        _validate_task_title(title)
         return task_id, title
 
     loose = _ANY_TASK_HEADER_RE.match(line)
@@ -197,11 +195,10 @@ def _validate_task_title(title: str) -> None:
         not title
         or title != title.strip()
         or any(char in title for char in _SPLITLINES_BOUNDARIES)
-        or "]" in title
     ):
         raise ValueError(
             "task title must be non-empty, have no leading or trailing whitespace, "
-            "be single-line, and contain no ']'"
+            "and be single-line"
         )
 
 
