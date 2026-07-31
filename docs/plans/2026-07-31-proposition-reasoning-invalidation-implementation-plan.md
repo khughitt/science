@@ -37,6 +37,10 @@ No new source module is warranted: all behavior belongs at one of the three exis
 Unless a step says otherwise, run every Task 1-3 `uv` command from `science/` and every `git`
 command from the repository root.
 
+Execute Tasks 1-4 in an isolated worktree on branch `proposition-reasoning-invalidation`,
+created from the commit containing this final plan revision. Do not put the implementation
+commits directly on `main`.
+
 ---
 
 ### Task 1: Certify the merged typed entity
@@ -210,13 +214,18 @@ uv run --frozen pytest \
 
 Expected: 5 passed. The first test's `match="sign-less"` is the mutation certificate that removing typed validation would make red.
 
-- [ ] **Step 6: Run the complete pre-existing containment module**
+- [ ] **Step 6: Run the complete pre-existing writer-containment modules**
 
 ```bash
-uv run --frozen pytest tests/test_workbench_writer_containment.py -q
+uv run --frozen pytest \
+  tests/test_workbench_writer_containment.py \
+  tests/test_annotation_writer_containment.py \
+  tests/test_proposition_synthesize.py -q
 ```
 
-Expected: all tests pass, including existing evidence-line preservation and both create paths.
+Expected: all tests pass, including existing evidence-line preservation, promotion creation, and
+synthesis update paths. A shared `certify_persisted` change must not remain unverified across later
+commits.
 
 - [ ] **Step 7: Lint and commit Task 1**
 
@@ -478,6 +487,10 @@ Delete the local retyped `SYNTH_FIELDS` declaration. Keep `SYNTHESIZE_PROPOSITIO
 SYNTHESIZE_PROPOSITION = Ownership(frozenset(SYNTH_FIELDS) | {"reasoning_source"})
 ```
 
+Keep the alias exactly as shown: `test_annotation_writer_containment.py` imports
+`SYNTH_FIELDS` from `annotation.synthesize`, so a bare rename would break the public module
+surface pinned by the existing containment test.
+
 - [ ] **Step 7: Strengthen the existing ownership-set test**
 
 Extend `test_workbench_ownership_carries_todays_sets_verbatim`:
@@ -622,7 +635,55 @@ def test_compile_canonicalizes_stale_polarity_and_invalidates_stamp(tmp_path) ->
     assert "# Curated body" in dest.read_text(encoding="utf-8")
 ```
 
-- [ ] **Step 3: Add the apply-path stale-polarity/stamp regression**
+- [ ] **Step 3: Add the idempotent compile round-trip regression**
+
+Add this test to `test_workbench_writer_containment.py`. Use the same `as_of` value for both
+compiles so byte identity measures reasoning preservation rather than intended timestamp churn.
+`compile_workbench` rewrites unconditionally; the assertion pins that a no-change full round trip
+neither clears the synthesis stamp nor changes the rendered content.
+
+```python
+def test_idempotent_compile_preserves_reasoning_stamp_and_bytes(tmp_path) -> None:
+    import yaml
+
+    from science_tool.dag import workbench as wb
+    from science_tool.dag.entity_frontmatter import render_from_frontmatter
+
+    (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
+    workbench = wb.WorkbenchFile.model_validate(
+        {
+            "patch": "p",
+            "rows": [
+                {
+                    "id": "proposition:x",
+                    "subject": "concept:a",
+                    "predicate": "affects",
+                    "object": "concept:b",
+                    "patch": "p",
+                    "polarity": "positive",
+                    "claim_layer": "causal_effect",
+                }
+            ],
+        }
+    )
+    as_of = date(2026, 7, 31)
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    dest = tmp_path / "entities/propositions/x.md"
+    frontmatter_text, body = dest.read_text(encoding="utf-8").split("---\n", 2)[1:]
+    frontmatter = yaml.safe_load(frontmatter_text)
+    frontmatter["reasoning_source"] = _SYNTH_STAMP
+    dest.write_text(render_from_frontmatter(frontmatter, body), encoding="utf-8")
+    before = dest.read_bytes()
+
+    wb.compile_workbench(workbench, project_root=tmp_path, as_of=as_of)
+
+    after = dest.read_bytes()
+    assert after == before
+    assert yaml.safe_load(after.decode().split("---\n", 2)[1])["reasoning_source"] == _SYNTH_STAMP
+```
+
+- [ ] **Step 4: Add the apply-path stale-polarity/stamp regression**
 
 Add to `test_workbench_apply.py`:
 
@@ -662,7 +723,7 @@ def test_apply_workbench_canonicalizes_polarity_and_invalidates_stamp(tmp_path: 
     PropositionEntity.model_validate(persisted)
 ```
 
-- [ ] **Step 4: Pin idempotent apply behavior with an existing stamp**
+- [ ] **Step 5: Pin idempotent apply behavior with an existing stamp**
 
 In `test_apply_workbench_rerun_is_noop_without_timestamp_churn`, insert a synthesis stamp after the first apply, then take the comparison snapshot:
 
@@ -684,20 +745,21 @@ Keep the existing assertions and add:
 
 This test exercises `workbench_apply`'s unchanged-timestamp probe, not merely `render_update` in isolation.
 
-- [ ] **Step 5: Run the new tests and verify canonicalization is red**
+- [ ] **Step 6: Run the new tests and verify canonicalization is red**
 
 ```bash
 uv run --frozen pytest \
   tests/test_workbench_writer_containment.py::test_signless_predicate_canonicalizes_omitted_polarity \
   tests/test_workbench_writer_containment.py::test_sign_meaningful_predicate_still_requires_polarity \
   tests/test_workbench_writer_containment.py::test_compile_canonicalizes_stale_polarity_and_invalidates_stamp \
+  tests/test_workbench_writer_containment.py::test_idempotent_compile_preserves_reasoning_stamp_and_bytes \
   tests/test_workbench_apply.py::test_apply_workbench_canonicalizes_polarity_and_invalidates_stamp \
   tests/test_workbench_apply.py::test_apply_workbench_rerun_is_noop_without_timestamp_churn -q
 ```
 
 Expected: the sign-less lift assertion fails because polarity is `None`; compile/apply either raise the Task 1 typed `PersistedShapeError` or fail the `not_applicable` assertion. The sign-meaningful rejection and idempotent stamp tests may already pass.
 
-- [ ] **Step 6: Canonicalize polarity once at workbench row lift**
+- [ ] **Step 7: Canonicalize polarity once at workbench row lift**
 
 Add `SIGN_MEANINGFUL_PREDICATES` to `workbench.py`'s existing `science_model.reasoning` import. Compute the typed predicate and polarity once before constructing the entity:
 
@@ -721,7 +783,7 @@ Add `SIGN_MEANINGFUL_PREDICATES` to `workbench.py`'s existing `science_model.rea
 
 Keep the remaining legacy, claim-layer, and identification fields exactly as they are. Do not move canonicalization into `render_update`: create and update must share the same lifted entity.
 
-- [ ] **Step 7: Run both complete public-path modules and synthesis regressions**
+- [ ] **Step 8: Run both complete public-path modules and synthesis regressions**
 
 ```bash
 uv run --frozen pytest \
@@ -735,7 +797,7 @@ uv run --frozen pytest \
 
 Expected: all pass. This is the required existing containment-suite gate, including evidence-line updates and synthesis preservation.
 
-- [ ] **Step 8: Run lint and types**
+- [ ] **Step 9: Run lint and types**
 
 ```bash
 uv run --frozen ruff check
@@ -744,7 +806,7 @@ uv run --frozen pyright
 
 Expected: Ruff clean; Pyright reports 0 errors.
 
-- [ ] **Step 9: Commit Task 3**
+- [ ] **Step 10: Commit Task 3**
 
 Run from the repository root:
 
@@ -824,10 +886,10 @@ Expected: clean status; three implementation commits after the plan commit; no w
 | Design requirement | Plan coverage |
 |---|---|
 | Preserve missing optional values | Task 2 Steps 2 and 5 (`claim_layer` omitted, effective merge compared) |
-| Canonicalize sign-less omitted polarity | Task 3 Steps 1, 2, 3, and 6 |
-| Keep sign-meaningful polarity requirement | Task 3 Steps 1 and 6 |
+| Canonicalize sign-less omitted polarity | Task 3 Steps 1, 2, 4, and 7 |
+| Keep sign-meaningful polarity requirement | Task 3 Steps 1 and 7 |
 | Clear stamp on any of five effective reasoning changes | Task 2 Steps 2, 4, and 5 |
-| Preserve stamp for idempotent/non-reasoning updates | Task 2 Step 2; Task 3 Step 4 |
+| Preserve stamp for idempotent/non-reasoning updates | Task 2 Step 2; Task 3 Steps 3 and 5 |
 | Disjoint deletion and write authority | Task 2 Steps 2 and 4; import-time module constants exercise it immediately |
 | Shared attested-field identity without import cycle | Task 2 Steps 4 and 6 |
 | Compare after preserve-by-default merge | Task 2 Steps 2 and 5 |
@@ -835,8 +897,8 @@ Expected: clean status; three implementation commits after the plan commit; no w
 | Base-first then typed certification | Task 1 Steps 1 and 4; fixture includes the full base shape and matches `sign-less` |
 | Explicit absent-only six-key skeleton | Task 1 Steps 2 and 4 |
 | Future ownership guard despite no live path | Task 1 Step 1's synthetic ownership |
-| Evidence-line compatibility | Task 1 Steps 2, 5, and 6; Task 3 Step 7 |
-| Existing synthesis containment stays green | Task 2 Step 8; Task 3 Step 7 |
+| Evidence-line compatibility | Task 1 Steps 2, 5, and 6; Task 3 Step 8 |
+| Existing synthesis containment stays green | Task 1 Step 6; Task 2 Step 8; Task 3 Step 8 |
 | No corpus repair or unrelated migration | Global Constraints; Task 4 Step 4 |
 
 ## Notes for the Implementer
