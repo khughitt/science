@@ -184,7 +184,7 @@ Expected: PASS, including the pre-existing containment tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/proposition-corpus-remediation
+cd ~/d/science/.worktrees/proposition-corpus-remediation
 git branch --show-current   # must print: annotation-writer-containment
 git add science/src/science_tool/dag/entity_frontmatter.py science/tests/test_workbench_writer_containment.py
 git commit -m "feat(entity-frontmatter): add per-writer Ownership value object
@@ -697,8 +697,9 @@ def test_reminting_identical_claim_accrues_and_destroys_nothing(tmp_path: Path) 
     assert "CURATED BODY" in text
     # Provenance ACCRUES; it is not replaced with only the current paper's refs.
     assert "paper:earlier" in text and "paper:new" in text
-    # subject/object refinements owned by synthesize survive the promotion's values.
-    assert "concept:a-refined" in text and "concept:a\n" not in text
+    # BOTH subject and object refinements owned by synthesize survive the promotion's values.
+    assert "subject: concept:a-refined" in text and "subject: concept:a\n" not in text
+    assert "object: concept:b-refined" in text and "object: concept:b\n" not in text
     # Accounting: accrual counts as linked, not minted, and names no written path.
     assert report.minted == 0
     assert report.linked == 1
@@ -742,9 +743,9 @@ def _mint_candidate():
     )
 ```
 
-If `_statement_ann` will not import across test modules here, lift it and `_sidecar` into
-`science/tests/promote_source_fixtures.py` — that module already exists for shared promotion
-fixtures — and import from there in both places.
+This import is **verified working** — `test_annotation_promote._statement_ann` is a module-level
+function and `tests/` is on `sys.path` under pytest. Use it directly; do not copy it and do not
+relocate it into `promote_source_fixtures.py`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -819,9 +820,36 @@ Replace the tail of `_mint_proposition` (`promote.py:271-287`):
     return MintOutcome(entity_id=prop_ref, created=True)
 ```
 
+Also replace `_mint_proposition`'s docstring at `promote.py:267`, which names the writer being
+retired and would otherwise keep the Task 6 guard red:
+
+```python
+    """4a proposition mint: create-only, with provenance accrual on an identical claim (§4.3)."""
+```
+
 In `_mint_numeric`, change the final `return reservation.entity_id` to
 `return MintOutcome(entity_id=reservation.entity_id, created=True)` — `reserve_entity` plus the
 template render have no accrual path.
+
+**One existing test helper calls `MintFn` directly and must be unwrapped.**
+`science/tests/test_promote_numeric_mint.py::_mint` (`:13-19`) ends with
+`return target.mint(...)`, and its callers do `eid.startswith(...)` and `eid.split(":", 1)[1]` —
+both `AttributeError` on a `MintOutcome`. Change its last line to:
+
+```python
+    outcome = target.mint(c, ["paper:p", c.ref], project_root, date(2026, 6, 16))
+    assert outcome.created is True   # numeric kinds reserve a number; they never accrue
+    return outcome.entity_id
+```
+
+That keeps every existing assertion in the module working on a plain `str` while pinning the
+numeric contract. Search for any other direct `.mint(` call in `tests/` before moving on:
+
+```bash
+cd science && grep -rn "\.mint(" tests/
+```
+
+Every hit must either unwrap `.entity_id` or assert on `MintOutcome` explicitly.
 
 - [ ] **Step 5: Update all three callers with identical accounting**
 
@@ -876,17 +904,21 @@ correctly**. Each caller needs its own assertion. Append to
 
 ```python
 def _accruing_targets():
-    """Targets whose proposition mint always reports accrual, so each caller's non-created
-    branch is exercised directly. Independent of whether `decide_all` can produce this state."""
+    """Targets whose proposition mint reports accrual, so each caller's non-created branch is
+    exercised directly.
+
+    The fake does NOT delegate to the real mint. Two reasons: the real mint would need an
+    existing same-claim record to accrue onto, and creating that record makes `decide_all`
+    classify the candidate as LINK -- so the MINT branch under test would never be reached.
+    The subject here is the CALLER's branching on `MintOutcome.created`, not the mint itself;
+    accrual behaviour proper is covered by the §5.3 and §5.8 tests above.
+    """
     from science_tool.annotation.promote import MintOutcome, PromotionTarget, build_targets
 
-    real = build_targets()
-
     def accruing_mint(c, source_refs, project_root, as_of):
-        real["proposition"].mint(c, source_refs, project_root, as_of)
         return MintOutcome(entity_id=f"proposition:{c.slug}", created=False)
 
-    return {**real, "proposition": PromotionTarget(
+    return {**build_targets(), "proposition": PromotionTarget(
         kind="proposition", slug_addressed=True, mint=accruing_mint
     )}
 
@@ -913,17 +945,17 @@ def _write_existing_identical_claim(root: Path) -> Path:
     return dest
 
 
-def _prose_project_with_existing_claim(tmp_path: Path) -> Path:
-    """A prose project whose unit u001 targets a proposition that already exists.
+def _prose_project_for_mint(tmp_path: Path) -> Path:
+    """A prose project whose unit u001 will be decided as MINT.
 
-    Built from the existing batch scaffolding rather than a second fixture shape:
-    `_persist_artifact` creates the artifact whose unit claims "Basalt flows record the
-    cooling history."; `_write_existing_proposition` writes a record holding that same claim.
+    Deliberately does NOT pre-write a matching proposition: `decide_all` classifies a claim
+    matching an existing title as LINK, which would route around the MINT branch these tests
+    exist to exercise. The injected target (`_accruing_targets`) is what makes that MINT report
+    accrual, not the state of the entities directory.
     """
-    from test_prose_promotion_batch import _persist_artifact, _write_existing_proposition
+    from test_prose_promotion_batch import _persist_artifact
 
     _persist_artifact(tmp_path)
-    _write_existing_proposition(tmp_path)
     return tmp_path
 
 
@@ -945,7 +977,7 @@ def test_prose_promote_counts_accrual_as_linked(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(
         "science_tool.annotation.prose_promote.build_targets", _accruing_targets
     )
-    root = _prose_project_with_existing_claim(tmp_path)
+    root = _prose_project_for_mint(tmp_path)
     report = promote_prose_unit(root, "prose-source:example", "u001", apply=True)
     assert (report.minted, report.linked, report.written_paths) == (0, 1, [])
 
@@ -959,18 +991,22 @@ def test_prose_promotion_batch_counts_accrual_as_linked(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "science_tool.annotation.prose_promotion_batch.build_targets", _accruing_targets
     )
-    root = _prose_project_with_existing_claim(tmp_path)
+    root = _prose_project_for_mint(tmp_path)
     plan = plan_prose_promotions(root, "example", ["u001"])
     report = apply_prose_promotion_plan(root, plan)
     assert (report.minted, report.linked, report.written_paths) == (0, 1, [])
 ```
 
-Build `_prose_project_with_existing_claim` from the existing scaffolding in
-`science/tests/test_prose_promotion_batch.py` — `_persist_artifact` plus
-`_write_existing_proposition` (`:152-166`) already produce exactly this shape. Import and reuse
-them rather than duplicating; model the assertion style on
+`_persist_artifact` is imported from `science/tests/test_prose_promotion_batch.py` — do not
+duplicate it. Do **not** also call that module's `_write_existing_proposition`: it writes a
+record whose title matches the unit's claim, which makes `decide_all` return `LINK` and routes
+the test around the MINT branch it is meant to exercise. Model the assertion style on
 `test_apply_matches_single_unit_promotion_behavior` (`:250`), which already compares batch and
 single reports.
+
+To confirm these three tests are not false-green, invert each temporarily: change the caller's
+`else` branch to `report.minted += 1` and re-run. All three must go RED. If one stays green, its
+MINT branch was never reached and the fixture is wrong.
 
 - [ ] **Step 7: Write the skeleton-key and LINK-equivalence tests (§5.4, §5.8)**
 
@@ -1173,26 +1209,66 @@ def _write_proposition(
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Move the synthesize fixture onto the contained path**
+
+This belongs here, not in Task 6: `_write_proposition` is now contained, so
+`test_proposition_synthesize.py`'s fixtures must produce records the contained path accepts. Left
+until Task 6, this task would commit a red tree.
+
+In `science/tests/test_proposition_synthesize.py`, rewrite `_write_prop` (`:283-286`):
+
+```python
+def _write_prop(root: Path, slug: str, *, title: str, body: str = "# t\n\n## Claim\n\nKEEP-ME\n",
+                **fields) -> str:
+    from science_tool.dag.entity_frontmatter import WORKBENCH_PROPOSITION, create_entity_file
+
+    ref = f"proposition:{slug}"
+    create_entity_file(
+        PropositionEntity(id=ref, title=title, **fields),
+        project_root=root,
+        ownership=WORKBENCH_PROPOSITION,
+        create_body=body,
+    )
+    return ref
+```
+
+**Use `WORKBENCH_PROPOSITION`, not `PROMOTE_PROPOSITION`.** Callers pass `**fields` including
+`predicate`, `polarity` and `claim_layer` — the very fields the no-op and blocking tests
+exercise. `PROMOTE_PROPOSITION` owns only `id`/`kind`/`subject`/`object`/`source_refs`, so it
+would silently drop them from the fixture and those tests would fail for a reason that has
+nothing to do with the code under test. `WORKBENCH_PROPOSITION` owns all of them.
+
+Replace the module's `write_entity_file` import at `:34` accordingly.
+
+The move is not cosmetic: the full-model dump seeds skeleton keys that `render_update` preserves
+(they are not owned) and `certify_persisted` does not reject (base 2.0 deliberately omits
+`unevaluatedProperties`). Left alone, the suite would certify containment against inputs only the
+uncontained writer could produce.
+
+- [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
 cd science && uv run --frozen pytest \
   tests/test_annotation_writer_containment.py tests/test_proposition_synthesize.py -v
 ```
 
-Expected: the two new tests PASS. **Some `test_proposition_synthesize.py` tests may now fail**
-because their fixtures were built by `write_entity_file` — that is Task 6's `_write_prop` move.
-If so, note which and proceed; do not weaken an assertion to make them pass.
+Expected: **all** PASS. Do not commit with any failure here, and do not weaken an assertion to
+get green — if a synthesize test fails, either the fixture ownership is wrong (see above) or the
+containment change is.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add science/src/science_tool/annotation/synthesize.py science/tests/test_annotation_writer_containment.py
+git add science/src/science_tool/annotation/synthesize.py science/tests/
 git commit -m "fix(synthesize): write propositions through the contained update path
 
 Only the synthesis-owned keys are overwritten now; title, source_refs and the
 curated body survive. A record predating containment is REJECTED with
-PersistedShapeError rather than silently backfilled."
+PersistedShapeError rather than silently backfilled.
+
+The synthesize fixtures move onto the contained path in the same commit, so the
+suite stops certifying containment against inputs only the uncontained writer
+could produce."
 ```
 
 ---
@@ -1201,7 +1277,8 @@ PersistedShapeError rather than silently backfilled."
 
 **Files:**
 - Modify: `science/src/science_tool/entities.py:477-...` (delete `write_entity_file`)
-- Modify: `science/tests/test_proposition_synthesize.py:283-286` (`_write_prop`)
+- Modify: `science/src/science_tool/dag/entity_frontmatter.py:4-7`,
+  `science/src/science_tool/dag/workbench.py:353-356` (docstrings naming the retired symbol)
 - Modify: `science/tests/test_entity_writer.py:35` (delete one test)
 - Modify: `science/tests/test_workbench_apply.py:59` (delete one test)
 - Test: `science/tests/test_write_entity_file_retired_guard.py` (create)
@@ -1257,58 +1334,67 @@ def test_symbol_is_absent_from_the_entities_module() -> None:
     assert not hasattr(entities, "write_entity_file")
 ```
 
-Note the substring check also catches `_write_entity_file` in `dag/workbench.py` — that private
-method is a *different* symbol that legitimately survives. Scope the predicate to exclude a
-leading underscore:
+**Use the regex form, not the substring form**, in the comprehension above — a plain
+`"write_entity_file" in line` also matches `_write_entity_file`, the private workbench method
+that legitimately survives. Write the predicate as:
 
 ```python
         if re.search(r"(?<!_)\bwrite_entity_file\b", line)
 ```
 
-with `import re`. Verify by mutation in Step 5 that this still catches the real thing.
+with `import re` at the top. Step 5 mutation-certifies that this exclusion did not make the guard
+toothless.
 
-- [ ] **Step 2: Run the guard to verify it fails**
+- [ ] **Step 2: Run the guard to verify it fails, and read the full offender list**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_write_entity_file_retired_guard.py -v
 ```
 
-Expected: FAIL — offenders lists `entities.py` (the definition) and nothing else, since Tasks 4
-and 5 removed the two production callers.
+Expected: FAIL. The offender list at this point is **four** entries, not one — Tasks 4 and 5
+removed the two *code* callers, but prose references survive:
+
+| file:line | what it is |
+|---|---|
+| `entities.py:477` | the definition — deleted in Step 3 |
+| `dag/entity_frontmatter.py:6` | module docstring naming the deferred work this slice closed |
+| `dag/workbench.py:355` | `_write_entity_file`'s docstring: "Deliberately NOT `entities.write_entity_file`" |
+| `annotation/promote.py:267` | `_mint_proposition`'s docstring — **already fixed in Task 4** |
+
+Confirm the list matches. If a fifth appears, a code caller was missed; find it before
+proceeding.
 
 - [ ] **Step 3: Delete the function and fix the test references**
 
 Delete `write_entity_file` from `science/src/science_tool/entities.py` (starting at line 477).
 Then:
 
-- **Move the fixture.** In `tests/test_proposition_synthesize.py`, rewrite `_write_prop`
-  (`:283-286`) onto the contained path:
+- **Rewrite the two surviving docstrings**, which are what keep the guard red after the
+  definition is gone:
 
-  ```python
-  def _write_prop(root: Path, slug: str, *, title: str, body: str = "# t\n\n## Claim\n\nKEEP-ME\n",
-                  **fields) -> str:
-      from science_tool.annotation.promote import PROMOTE_PROPOSITION
-      from science_tool.dag.entity_frontmatter import create_entity_file
+  `dag/entity_frontmatter.py:4-7` — the deferred-work paragraph is now stale; the writers it
+  names are contained. Replace it with:
 
-      ref = f"proposition:{slug}"
-      create_entity_file(
-          PropositionEntity(id=ref, title=title, **fields),
-          project_root=root,
-          ownership=PROMOTE_PROPOSITION,
-          create_body=body,
-      )
-      return ref
+  ```
+  Governs every writer of `proposition` / `evidence-line`: the workbench (create + update via
+  `workbench.compile_workbench` and `workbench_apply._entity_edit`) and the two annotation
+  writers (`annotation/promote.py` creates, `annotation/synthesize.py` updates). Each supplies
+  its own `Ownership`; there is no uncontained full-model dump left on these paths.
   ```
 
-  This is not cosmetic: the full-model dump seeds skeleton keys that `render_update` preserves
-  (they are not owned) and `certify_persisted` does not reject (base 2.0 deliberately omits
-  `unevaluatedProperties`). Left alone, the suite would certify containment against inputs only
-  the uncontained writer could produce.
+  `dag/workbench.py:353-356` — drop the "Deliberately NOT `entities.write_entity_file`" sentence
+  and say what is true now:
 
-  `_write_prop` is called with `**fields` that may include keys `PROMOTE_PROPOSITION` does not
-  own (e.g. `predicate`). If a caller needs such a key persisted, widen that *call site* to
-  write the frontmatter directly — do **not** widen `PROMOTE_PROPOSITION`, which is promote's
-  real ownership and is asserted in Task 4.
+  ```
+  An UPSERT. `compile_workbench` is re-run over the same rows routinely, so the destination
+  usually exists; rendering it as a create would overwrite the author's title, status and body
+  on every recompile. Delegates to `entity_frontmatter.upsert_entity_file`, which owns the
+  admit-then-render ordering.
+  ```
+
+  While in `workbench.py`, fix `compile_workbench`'s docstring too — it still says entities are
+  "(re)written via the canonical entity-layer writer", which stopped being true when piece 1
+  landed and is now actively wrong.
 
 - **Delete two tests** whose subject is the deleted writer:
   - `tests/test_entity_writer.py::test_write_entity_file_places_custom_body` (`:35`). Delete the
@@ -1334,21 +1420,24 @@ Expected: PASS.
 A guard that has never failed is an assertion, not a check. Run both mutations and confirm RED
 each time, then revert:
 
-```bash
-cd science
-# (a) re-introduce the definition
-printf '\n\ndef write_entity_file():\n    pass\n' >> src/science_tool/entities.py
-uv run --frozen pytest tests/test_write_entity_file_retired_guard.py -v   # expect FAIL (both tests)
-git checkout src/science_tool/entities.py
+Make each mutation as a **normal file edit, then revert it by editing the file back** — do not
+use `printf >>` or `git checkout` to stage and undo them. Appending via shell can corrupt the
+file's trailing structure, and `git checkout <path>` discards *every* uncommitted change in that
+file, which at this point in the task includes real work.
 
-# (b) re-introduce a caller
-printf '\n# write_entity_file(prop)\n' >> src/science_tool/annotation/promote.py
-uv run --frozen pytest tests/test_write_entity_file_retired_guard.py -v   # expect FAIL (tree walk)
-git checkout src/science_tool/annotation/promote.py
-```
+Run three mutations. Between each, restore the file to its previous content and re-run the guard
+to confirm it is GREEN again before starting the next.
 
-Confirm mutation (a) fails **both** tests and (b) fails the tree walk. If (b) passes, the
-underscore-exclusion regex is too narrow — fix it and re-run.
+| # | Mutation | Expected |
+|---|---|---|
+| (a) | Add `def write_entity_file(entity): ...` back to `src/science_tool/entities.py` | **Both** guard tests FAIL |
+| (b) | Add a call `write_entity_file(prop)` inside any function in `src/science_tool/annotation/promote.py` | The tree-walk test FAILS |
+| (c) | Add a *comment* line `# _write_entity_file is fine` to `src/science_tool/dag/workbench.py` | Guard stays **GREEN** |
+
+(a) and (b) prove the guard fires. (c) proves the underscore exclusion still admits the private
+workbench method — without it, a guard that passes (a) and (b) could still be one that fails on
+everything and is therefore useless. If (b) passes or (c) fails, the regex is wrong: fix it and
+re-run all three.
 
 - [ ] **Step 6: Commit**
 
@@ -1374,7 +1463,7 @@ retired; the containment tests prove the dump stayed gone."
 - [ ] **Step 1: Confirm the branch**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/proposition-corpus-remediation
+cd ~/d/science/.worktrees/proposition-corpus-remediation
 git branch --show-current   # must print: annotation-writer-containment
 git status --short           # must be clean
 ```
@@ -1419,11 +1508,19 @@ failure at the merge-base (`0c7a6ba6`) before attributing it to this branch.
 
 - [ ] **Step 6: Confirm the 697 records were not touched**
 
+All three measured projects, not just mm30 — the 697 spans mm30 (681) and protein-landscape (16);
+natural-systems is already clean (§2.1) and is checked to confirm it stayed that way.
+
 ```bash
-cd ~/d/r/mm30 && git status --short entities/
+for r in ~/d/r/mm30 ~/d/protein-landscape ~/d/natural-systems; do
+  echo "== $r"; git -C "$r" status --short entities/
+done
 ```
 
-Expected: **empty**. This slice repairs no records (§6); any modification here is a bug.
+Expected: **empty under every heading**. This slice repairs no records (§6); any modification
+here is a bug. Note `science validate` WRITES entity files as a side effect — if you ran it
+during this task, `git -C <repo> checkout entities/` before reading this result, and never commit
+a run's `graph.trig`.
 
 ---
 
