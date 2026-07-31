@@ -76,9 +76,10 @@ MAX_RUN_SERVED_BYTES: int      # MAX_BUDGET * MAX_SERVED_BYTES
 REPLAY_PROTOCOL_VERSION: int   # 2
 
 # science_tool/autonomy/git.py
-class GitOutputTooLarge(RuntimeError):
+class GitOutputTooLarge(GitError):     # a GitError SUBCLASS -- see Task 3
     stream: str    # "stdout" or "stderr"
     limit: int
+    consumed: int  # bytes buffered when it raised; how §7 proves the check runs during capture
 def is_shallow(repo_root: Path) -> bool: ...
 def run_git(
     repo_root: Path, *args: str, input: bytes | None = None, stdout_limit: int | None = None
@@ -460,8 +461,8 @@ git commit -m "feat(autonomy): pin GIT_SHALLOW_FILE and GIT_NO_LAZY_FETCH in the
 - Consumes: `MAX_SERVED_BYTES` is *not* used here — this task supplies the mechanism, Task 4 supplies
   that value at the served call sites.
 - Produces:
-  - `class GitOutputTooLarge(RuntimeError)` with attributes `stream: str` (`"stdout"` or `"stderr"`)
-    and `limit: int`.
+  - `class GitOutputTooLarge(GitError)` with attributes `stream: str` (`"stdout"` or `"stderr"`),
+    `limit: int`, and `consumed: int`.
   - `run_git(repo_root, *args, input=None, stdout_limit: int | None = None)`.
   - `MAX_GIT_STDERR_BYTES: int` and `MAX_CONFIG_LIST_BYTES: int`, module-level in `git.py`.
 
@@ -539,6 +540,38 @@ def test_stderr_is_bounded_on_every_call(three_commit_repo: Path, monkeypatch) -
     assert caught.value.stream == "stderr"
 
 
+def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> None:
+    """The regression guard for the shape this task replaces.
+
+    Writing all of stdin before reading anything deadlocks once the child's own output fills its
+    pipe: the child blocks on stdout, stops reading stdin, and the parent blocks on stdin.
+    MEASURED with `cat` and a 4 MiB write -- never returns. `check-ignore --stdin -z --verbose`
+    both consumes a large stdin and emits a large stdout, so it exercises both directions at once.
+
+    THE ALARM IS LOAD-BEARING. `pytest-timeout` is not a dependency of this package, and a
+    deadlock's failure mode is SILENCE -- without this the regression hangs the suite instead of
+    failing it, which is worse than not testing it at all. SIGALRM is POSIX-only; this suite
+    already runs Linux-only tooling, and a handler that raises propagates through the blocked
+    write (PEP 475 retries on EINTR only when the handler does NOT raise).
+    """
+    def _timeout(signum, frame):
+        raise TimeoutError("run_git deadlocked writing stdin while the child wrote stdout")
+
+    paths = b"\0".join(f"dir{n}/file{n}.txt".encode() for n in range(50000))
+    previous = signal.signal(signal.SIGALRM, _timeout)
+    signal.alarm(30)
+    try:
+        completed = run_git(
+            three_commit_repo, "check-ignore", "--stdin", "-z", "--verbose", "--no-index",
+            input=paths,
+        )
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+    assert completed.returncode in (0, 1)  # 1 == nothing ignored, which is an answer
+
+
 def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -> None:
     """The preflight runs before EVERY `run_git` call and its size is the actor's to choose.
 
@@ -560,7 +593,11 @@ def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -
         run_git(three_commit_repo, "rev-parse", "HEAD")
 ```
 
-Add `GitError, GitOutputTooLarge` to the module's imports from `science_tool.autonomy.git`.
+Add `GitError, GitOutputTooLarge` to the module's imports from `science_tool.autonomy.git`, and
+`import signal`.
+
+**`pytest-timeout` is NOT installed in this package** — do not reach for `@pytest.mark.timeout`; it
+is silently ignored as an unknown mark, which is how a deadlock guard becomes a hang.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -576,22 +613,33 @@ In `science/src/science_tool/autonomy/git.py`, add the exception and the two cei
 existing constants:
 
 ```python
-class GitOutputTooLarge(RuntimeError):
+class GitOutputTooLarge(GitError):
     """A git invocation produced more output than its caller allowed.
 
-    NOT a subclass of `GitError`: `GitError` means git could not be invoked at all, and the two
-    reach different dispositions. Callers choose what an overflow means -- design §3.2 gives four
-    answers for four call sites, and a shared exception with a shared disposition would rebuild
-    the fail-open revision 21 removed.
+    A SUBCLASS OF `GitError`, so the DEFAULT disposition is the safe one. Five call sites already
+    convert `GitError` into a run-level `unwired` -- `autonomy/extract.py:48`,
+    `autonomy/toolkit.py:43`, `boundary/gitio.py:83` and `:166`, and
+    `validate/checks/autonomous_runs.py:75`. An exception outside that hierarchy would escape all
+    five and surface as an unhandled traceback: exit 1, which the documented codes read as
+    `quarantined` rather than `unwired`. Overflow IS a failure to complete the invocation, which
+    is what `GitError` already means.
+
+    Subclassing costs no precision. A call site wanting a different disposition catches
+    `GitOutputTooLarge` specifically, and `serve.py` does exactly that for its stdout case. ORDER
+    MATTERS: an `except GitOutputTooLarge` must precede any `except GitError` in the same `try`.
+
+    `consumed` is how §7 certifies that the ceiling is enforced DURING capture rather than after:
+    a check moved to the end of the loop would report the whole output here.
     """
 
-    def __init__(self, stream: str, limit: int, args: tuple[str, ...]) -> None:
+    def __init__(self, stream: str, limit: int, consumed: int, args: tuple[str, ...]) -> None:
         super().__init__(
             f"git {' '.join(args)} produced more than {limit} bytes on {stream}; refused rather "
             "than truncated, because a truncated answer is indistinguishable from a short one"
         )
         self.stream = stream
         self.limit = limit
+        self.consumed = consumed
 
 
 #: Diagnostics are never legitimately large, and this one is actor-influenced (§3.2.1).
@@ -606,49 +654,80 @@ Replace `_run` with a bounded capture. It reads both pipes with `selectors` so n
 deadlock the other, and kills the child the moment a ceiling is passed:
 
 ```python
+_CHUNK = 65536
+
+
 def _capture(
     process: subprocess.Popen[bytes],
     *,
+    input: bytes | None,
     stdout_limit: int | None,
     stderr_limit: int,
     args: tuple[str, ...],
 ) -> tuple[bytes, bytes]:
-    """Read both pipes to EOF or to a ceiling, whichever comes first.
+    """Pump stdin and drain both output pipes in ONE loop.
 
-    Both streams are drained in one loop rather than one after the other: git writes to both, and
-    a reader that finished stdout before starting stderr would deadlock the moment a diagnostic
-    filled its pipe buffer.
+    ALL THREE STREAMS MUST SHARE THE LOOP, and this is not defensive coding -- it is the only
+    shape that terminates. Pipe buffers are finite (~64 KiB each). Writing all of stdin before
+    reading anything deadlocks the moment the child's own output fills its pipe: the child blocks
+    writing stdout, so it stops reading stdin, so the parent blocks writing stdin, forever.
+    MEASURED: `Popen(["cat"])` plus a 4 MiB `stdin.write` never returns. `boundary/sync.py` and
+    `boundary/gitio.py` both pass payloads through `input=`, so this is a live path, not a
+    hypothetical. Draining stdout fully before stderr fails the same way for the same reason.
 
-    The ceiling is checked as the bytes ARRIVE. A cap tested after `communicate()` returns has
-    already spent the memory it exists to protect.
+    The ceiling is checked as the bytes ARRIVE. A cap tested after the loop has already spent the
+    memory it exists to protect, which is why `GitOutputTooLarge` carries `consumed`.
     """
     limits = {"stdout": stdout_limit, "stderr": stderr_limit}
     buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
-    streams = {"stdout": process.stdout, "stderr": process.stderr}
 
     selector = selectors.DefaultSelector()
-    for name, stream in streams.items():
+    pending = memoryview(input) if input else None
+    if pending is not None:
+        assert process.stdin is not None
+        selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+    elif process.stdin is not None:
+        process.stdin.close()
+    for name in ("stdout", "stderr"):
+        stream = getattr(process, name)
         assert stream is not None
         selector.register(stream, selectors.EVENT_READ, name)
+
     try:
-        open_streams = len(streams)
-        while open_streams:
+        while selector.get_map():
             for key, _ in selector.select():
+                if key.data == "stdin":
+                    assert pending is not None
+                    try:
+                        written = key.fileobj.write(pending[:_CHUNK])  # type: ignore[union-attr]
+                    except BrokenPipeError:
+                        # The child exited without reading its input. That is an ANSWER (git
+                        # refused early), not a failure to invoke, so it is not an error here.
+                        written = None
+                    if written is None:
+                        pending = None
+                    else:
+                        pending = pending[written:]
+                    if not pending:
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()  # type: ignore[union-attr]
+                        pending = None
+                    continue
+
                 name = key.data
-                chunk = key.fileobj.read(65536)  # type: ignore[union-attr]
+                chunk = key.fileobj.read1(_CHUNK)  # type: ignore[union-attr]
                 if not chunk:
                     selector.unregister(key.fileobj)
-                    open_streams -= 1
                     continue
                 buffers[name] += chunk
                 limit = limits[name]
                 if limit is not None and len(buffers[name]) > limit:
                     process.kill()
-                    raise GitOutputTooLarge(name, limit, args)
+                    raise GitOutputTooLarge(name, limit, len(buffers[name]), args)
     finally:
         selector.close()
-        for stream in streams.values():
-            if stream is not None:
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
                 stream.close()
         if process.poll() is None:
             process.kill()
@@ -677,21 +756,19 @@ def _run(
     except (OSError, ValueError) as exc:
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
 
-    if input is not None:
-        assert process.stdin is not None
-        try:
-            process.stdin.write(input)
-        except BrokenPipeError:
-            # The child exited before reading its input -- an answer, not a failure to invoke.
-            pass
-        finally:
-            process.stdin.close()
-
     stdout, stderr = _capture(
-        process, stdout_limit=stdout_limit, stderr_limit=stderr_limit, args=args
+        process,
+        input=input,
+        stdout_limit=stdout_limit,
+        stderr_limit=stderr_limit,
+        args=args,
     )
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 ```
+
+`read1` rather than `read`: `read(n)` on a `BufferedReader` loops until it has `n` bytes or hits
+EOF, which re-serialises the very interleaving the selector exists to avoid. `read1` returns what
+one underlying read produced.
 
 Add `import selectors` to the module's imports.
 
@@ -888,6 +965,24 @@ def test_an_oversized_refusal_is_identical_on_a_second_serve(tmp_path: Path, mon
     second = serve(root, commit, _search("secret"), OPEN)
 
     assert first == second
+
+
+def test_an_oversized_history_refuses(tmp_path: Path, monkeypatch):
+    """`history` has its OWN try/except in `_serve_history`, so it needs its own row.
+
+    Count the rules, not the functions: `search` and `history` are two call sites bounded by two
+    separate guards. A test that covers only `search` leaves `_serve_history`'s guard deletable
+    with the roster still green.
+    """
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", 8)
+
+    # No `_history` helper exists in this module; history requests are built inline, as at line 185.
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), OPEN)
+
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "payload-too-large"
 
 
 def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkeypatch):
@@ -1088,6 +1183,26 @@ def test_a_brokered_run_refuses_to_open_against_an_nfd_tree(
     _add_nfd_path(project)
 
     with pytest.raises(BaselineError, match="NFC"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_brokered_run_refuses_to_open_against_a_non_utf8_path(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A SEPARATE BRANCH from the NFD case, and therefore a separate row.
+
+    `_assert_tree_is_citeable` enforces two rules -- decodes as UTF-8, and is already NFC. One
+    test covering only NFD leaves the decode branch deletable with the roster green. Count the
+    rules, not the functions.
+
+    The filename is written as raw bytes: `0xff` is valid in a POSIX filename and in a git tree,
+    and invalid as UTF-8, which is exactly the gap `LocationEvidence.path` cannot express.
+    """
+    (project / os.fsdecode(b"bad\xff.txt")).write_bytes(b"content\n")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "add a non-UTF-8 path")
+
+    with pytest.raises(BaselineError, match="UTF-8"):
         _start_brokered(project, tmp_path, monkeypatch)
 
 
@@ -1337,32 +1452,67 @@ then `git checkout` the file.
 | Exempt the `config --list` preflight | `test_the_config_preflight_is_bounded` |
 | Exempt the tree scan from the ceiling | `test_an_oversized_tree_scan_refuses_to_open` |
 | Remove the `cat-file -s` pre-check and refuse after capture | `test_an_oversized_read_refuses_without_reading_the_blob` |
+| Delete `_serve_history`'s bound, leaving `_serve_search`'s | `test_an_oversized_history_refuses` |
 | Journal a `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_a_served_op_is_not_a_denial` |
-| Delete the NFC/UTF-8 tree check at open | `test_a_brokered_run_refuses_to_open_against_an_nfd_tree` |
+| Make `GitOutputTooLarge` inherit `RuntimeError` again | `test_an_overflow_reaches_an_existing_git_error_handler` (Step 2) |
+| Write all of stdin before draining the pipes | `test_a_large_stdin_payload_does_not_deadlock` |
+| Delete the NFC branch of the tree check | `test_a_brokered_run_refuses_to_open_against_an_nfd_tree` |
+| Delete the UTF-8 branch of the tree check | `test_a_brokered_run_refuses_to_open_against_a_non_utf8_path` |
 | Make the tree check refuse every tree | `test_a_valid_utf8_nfc_tree_opens` |
 | Apply the tree check to non-brokered runs | `test_a_non_brokered_run_opens_against_an_nfd_tree` |
 | Revert `REPLAY_PROTOCOL_VERSION` to 1 | `test_replay_protocol_version_is_two` |
 
-- [ ] **Step 2: Close the one row that cannot be certified by outcome alone**
+- [ ] **Step 2: Close the two rows that cannot be certified by outcome alone**
+
+The `GitError` subclassing row needs a test of its own, because nothing else notices it. Every
+existing caller catches `GitError`; if `GitOutputTooLarge` leaves that hierarchy, an overflow in
+`extract`, `toolkit`, `gitio` or the `validate` check escapes as an unhandled traceback — exit 1,
+which the documented codes read as `quarantined` rather than `unwired`. Add to
+`science/tests/test_autonomy_git_canonical.py`:
+
+```python
+def test_an_overflow_reaches_an_existing_git_error_handler(three_commit_repo: Path) -> None:
+    """Five call sites convert `GitError` into `unwired`. An overflow must land in that net.
+
+    Asserted through the HIERARCHY rather than by importing a caller: the claim is that any of
+    the five keeps working, and `except GitError` is exactly what all five spell.
+    """
+    _commit(three_commit_repo, "big.txt", "x" * 4096)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert issubclass(GitOutputTooLarge, GitError)
+    with pytest.raises(GitError):
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:big.txt", stdout_limit=64)
+```
+
+And the during-capture row: 
 
 "Check the cap after capture" and "refuse rather than truncate" produce the *same outcome* for a
-caller that only inspects the exception — both raise. The difference is whether the memory was spent.
-Certify it structurally instead: assert that `_capture` raises before reading the whole stream.
+caller that only inspects the exception type — both raise. The difference is **how many bytes were
+buffered before it raised**, and that has to be asserted, not described. This is why
+`GitOutputTooLarge` carries `consumed`.
 
 ```python
 def test_the_ceiling_is_checked_during_capture_not_after(three_commit_repo: Path) -> None:
-    """A cap tested after `communicate()` has already spent the memory it exists to protect.
+    """A cap tested after the loop has already spent the memory it exists to protect.
 
-    Measured by what the reader consumed, not by the exception: both dispositions raise, so an
-    outcome assertion cannot separate them.
+    ASSERTED ON `consumed`, not on the exception type: both dispositions raise
+    `GitOutputTooLarge`, so `pytest.raises` alone cannot separate them. Enforced during capture,
+    the buffer holds at most the limit plus the one chunk that crossed it; enforced afterwards, it
+    holds the entire 1 MiB blob. A comment claiming the call "returns promptly" measures nothing.
     """
-    _commit(three_commit_repo, "huge.txt", "z" * (1 << 20))
+    payload = "z" * (1 << 20)
+    _commit(three_commit_repo, "huge.txt", payload)
     commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
 
-    with pytest.raises(GitOutputTooLarge):
+    with pytest.raises(GitOutputTooLarge) as caught:
         run_git(three_commit_repo, "cat-file", "blob", f"{commit}:huge.txt", stdout_limit=1024)
-    # The child was killed rather than drained: the call returns promptly and no 1 MiB buffer was
-    # retained. If this ever becomes slow or memory-hungry, the check moved back to the end.
+
+    assert caught.value.consumed <= 1024 + 65536, (
+        f"buffered {caught.value.consumed} bytes before refusing a 1024-byte ceiling; "
+        "the check ran after capture, not during it"
+    )
+    assert caught.value.consumed < len(payload)
 ```
 
 - [ ] **Step 3: Record the result**
@@ -1386,12 +1536,15 @@ crosses the package boundary — two of AGENTS.md's stated triggers for a full r
 
 ```bash
 cd science/model && uv run --frozen pytest
-cd science && uv run --frozen pytest --timeout=900
+cd science && uv run --frozen pytest
 ```
 
-The CLI suite is ~12k tests and takes 6:42–7:24 on a Dropbox-backed checkout. **Give it an explicit
-long timeout, run it from the top-level agent, and never run two suites concurrently in one
-worktree** — they race on shared test-output paths.
+The CLI suite is ~12k tests and takes 6:42–7:24 on a Dropbox-backed checkout — longer than the
+default 120s command timeout. **Pass an explicit long timeout on the tool call** (900000 ms), not as
+a pytest flag: `pytest-timeout` is not a dependency here and `--timeout=…` would fail as an
+unrecognized argument. **Run it from the top-level agent** — a foreground full run otherwise
+auto-backgrounds and a subagent that yields waiting on it will not reliably resume. **Never run two
+suites concurrently in one worktree**; they race on shared test-output paths.
 
 ---
 
