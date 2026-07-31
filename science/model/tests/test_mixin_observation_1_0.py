@@ -284,8 +284,13 @@ def test_superseded_by_is_refused(strict):
     `observation` is `supersedable=False` (profiles/core.py:151), and
     `consolidation.py:641` derives the supersedes policy's `supported_kinds` from exactly
     that flag, so `mark_superseded` can never stamp an observation. Contrast
-    `mixin-method-1.0`, which omits the field for a kind that IS supersedable -- a
-    reachable defect filed as F7.
+    `mixin-method-1.0`, which omitted the field for a kind that IS supersedable -- a
+    reachable defect filed as F7 and since closed by `mixin-method-1.1`, which admits
+    both `superseded_by` and the `relations` carrier that makes it producible. The
+    contrast is what makes this omission a RULING rather than the same oversight: an
+    omission that matches the descriptor and one that contradicts it look identical in
+    the schema file, and only the descriptor tells them apart. `test_GATE_5` now holds
+    the general form.
     """
     assert "superseded_by" in _refuses(
         strict, _record(status="retired", superseded_by="observation:other")

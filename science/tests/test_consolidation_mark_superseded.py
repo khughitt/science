@@ -222,6 +222,15 @@ def _interp(root: Path, name: str, **fm: Any) -> Path:
     return _write(root, "interpretations", name, {"id": f"interpretation:{name}", "kind": "interpretation", **fm})
 
 
+def _method(root: Path, name: str, **fm: Any) -> Path:
+    # Same `created`/`updated` requirement as `_hypothesis`: entity-base 2.0 requires both, and a
+    # fixture omitting them would fail for a reason having nothing to do with supersession.
+    return _write(root, "methods", name, {
+        "id": f"method:{name}", "kind": "method",
+        "created": "2026-07-30", "updated": "2026-07-30", **fm,
+    })
+
+
 def _hypothesis(root: Path, name: str, **fm: Any) -> Path:
     # `created`/`updated` are REQUIRED by entity-base 2.0, and this fixture is validated against the
     # real profile by `test_a_stamped_HYPOTHESIS_satisfies_its_own_schema` -- so a fixture that omits
@@ -1333,3 +1342,70 @@ def test_an_INTERPRETATION_may_not_supersede_a_HYPOTHESIS(tmp_path: Path) -> Non
     # BYTE-UNCHANGED, not merely "superseded_by absent". A blocked apply must leave the corpus
     # exactly as it found it -- the all-or-none contract is about the FILE, not about one key.
     assert (tmp_path / "entities/hypotheses/0001-x.md").read_bytes() == before
+
+
+# ---------------------------------------------------------------------------------------------
+# METHOD -- the same D4 triangle, on the kind whose 1.0 mixin admitted neither carrier.
+#
+# `method` shipped ARMED with `supersedable=True` and a `superseded` terminal status, and a mixin
+# that declared neither `relations` nor `superseded_by`. Filed as F7 naming only the inverse; the
+# carrier was the half that made the inverse unreachable. Under mixin-method-1.0 the apply below
+# raised at `entities/methods/0002-new.md: 'relations' was unexpected` -- the SUPERSEDER's file,
+# before the operation ever reached the member it wanted to stamp.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_stamped_METHOD_satisfies_its_own_schema(tmp_path: Path) -> None:
+    # The four legs again, on `method`: the schema admits the edge, the relation admits the endpoint
+    # PAIR, the operation writes a resolvable inverse, and the descriptor makes `superseded` a status
+    # the kind can hold. Under 1.0 the FIRST leg was missing and this raised.
+    _seed(tmp_path, pinned=True)
+    _method(tmp_path, "0001-old", status="active")
+    _method(tmp_path, "0002-new", status="active", relations=[_supersedes("method:0001-old")])
+
+    report = mark_superseded(tmp_path, apply=True)
+    fm = read_frontmatter(tmp_path / "entities/methods/0001-old.md")
+
+    assert report["applied"] == ["method:0001-old"]   # NOT skipped_kinds
+    assert report["skipped_kinds"] == []
+    assert fm is not None
+    assert fm["status"] == "superseded"
+    assert fm["superseded_by"] == "method:0002-new"
+
+    # THE STAMPED RECORD VALIDATES, through the profile the generation table actually selects --
+    # `default_profile_for_kind` with no version argument, so a row left on 1.0 fails here.
+    EntityValidator().validate_as(fm, default_profile_for_kind("method"))
+
+
+def test_a_method_CHAIN_records_the_immediate_superseder(tmp_path: Path) -> None:
+    # A <- B <- C. Proves the write path is genuinely live for `method` rather than routing every
+    # member down the skip path, where every assertion about lineage is vacuously true.
+    _seed(tmp_path, pinned=True)
+    _method(tmp_path, "0003-c", status="active")
+    _method(tmp_path, "0002-b", status="active", relations=[_supersedes("method:0003-c")])
+    _method(tmp_path, "0001-a", status="active", relations=[_supersedes("method:0002-b")])
+
+    report = mark_superseded(tmp_path, apply=True)
+
+    assert set(report["applied"]) == {"method:0002-b", "method:0003-c"}
+    c = read_frontmatter(tmp_path / "entities/methods/0003-c.md")
+    assert c is not None
+    assert c["superseded_by"] == "method:0002-b"      # NOT 0001-a, the survivor
+
+
+def test_a_method_supersession_is_refused_on_an_UNPINNED_project(tmp_path: Path) -> None:
+    # The write boundary's other leg. `_schema_gate_or_raise` cannot apply the composed schema to an
+    # unpinned project, so it refuses the schema-2 vocabulary instead -- `status: superseded` among
+    # it. Admitting the carriers in 1.1 widens what a PINNED project may author; it does not hand
+    # the new vocabulary to a project that has not migrated.
+    _seed(tmp_path)  # unpinned
+    _method(tmp_path, "0001-old", status="active")
+    _method(tmp_path, "0002-new", status="active", relations=[_supersedes("method:0001-old")])
+    before = (tmp_path / "entities/methods/0001-old.md").read_bytes()
+
+    # `match` on the REASON, not merely the type: an unpinned project trips several unrelated
+    # failures, and a bare `raises` here would pass on any of them.
+    with pytest.raises(EntityCommandError, match="entity_schema_version"):
+        mark_superseded(tmp_path, apply=True)
+
+    assert (tmp_path / "entities/methods/0001-old.md").read_bytes() == before

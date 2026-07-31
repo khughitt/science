@@ -241,6 +241,24 @@ UNHELD[("method", "version")] = (
         "apply: it resolves a commons canonical by id, and no method id resolves to one"
     ),
 )
+# SEVENTH, arriving with mixin-method-1.1 rather than with the slice. The other six above were
+# swept for at slice time; this one did not exist then, because 1.0 admitted neither supersession
+# carrier. `relations`, the other half of the same bump, does NOT appear here: MethodEntity
+# declares it, so it is reconciled by the projection rather than by a reader.
+UNHELD[("method", "superseded_by")] = (
+    _BOTH,
+    Reader(
+        "science_tool.graph.materialize",
+        "_live_lineage_targets",
+        "entity frontmatter (`frontmatter.get('superseded_by')`, materialize.py:185), "
+        "kind-agnostic: `_add_live_lineage_edges` iterates `sources.markdown_documents` with no "
+        "kind filter (materialize.py:219), so entities/methods/*.md is in scope. Confirmed by "
+        "reading that call site rather than inferred from the identical `finding` entry, which "
+        "the procedure forbids. ZERO of the 38 live methods carry it, and that is exactly why "
+        "the mixin must admit it -- `method` is supersedable=True and `mark_superseded` stamps "
+        "the key, so this reader would otherwise be reading a field the schema refused",
+    ),
+)
 
 # `search` (schema-closure slice, 2026-07-30). Untyped, like `concept`, so the gap is computed
 # against `ProjectEntity`. FIVE names, not six: `promoted_from` is absent because the mixin does

@@ -32,7 +32,11 @@ import pytest
 from science_tool.graph.entity_registry import EntityRegistry
 
 _BASE = "science-entity-base-2.0.json"
-_MIXIN = "mixin-method-1.0.json"
+# The version the generation table SELECTS, not the one the slice authored. Reconciling the
+# contracts of a schema nothing can select would be an assertion that cannot fail -- and 1.1 is
+# where the two supersession carriers live, so pinning 1.0 here would have kept this file green
+# over precisely the defect the bump exists to close.
+_MIXIN = "mixin-method-1.1.json"
 
 
 def _composed_properties() -> dict[str, object]:
@@ -76,6 +80,11 @@ _SAMPLE: dict[str, object] = {
     "sources": ["knowledge/sources/local/terms.yaml"],
     "same_as": ["method:null-model-v2"],
     "dataset_usage": [],
+    # The two carriers added in mixin-method-1.1. Both must reach the projection: `relations` is
+    # what `materialize` builds the canonical `sci:supersedes` edge from, and `superseded_by` is
+    # the inverse `mark_superseded` stamps and `graph.materialize._live_lineage_targets` reads.
+    "relations": [{"predicate": "sci:supersedes", "target": "method:0002-new"}],
+    "superseded_by": "method:0002-new",
 }
 
 # What the loader supplies; `ProjectEntity` requires these but no author writes them.
