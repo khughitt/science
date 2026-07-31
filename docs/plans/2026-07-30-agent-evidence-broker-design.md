@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 8)
+**Status:** proposed (revision 9)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -20,7 +20,14 @@ build on: the journal was to be created through `findings/paths.py`, whose every
 *inside* a project root, while the journal is deliberately outside one (§3.4.1). A fifth instance of
 the fourth pattern — the named component was real, and guaranteed the opposite of what was wanted.
 
-Four patterns run through what review kept finding, and each predicts where the implementation will go
+Revision 9 removes replay from the seal (§3.4.1). It is the first defect found by reading three
+sections *against each other* rather than any one of them closely: §3.4.1 said `finish_run` replays the
+journal, §6 enumerated a missing or unreadable journal as the only way a seal fails, and §5.2 placed
+replay at review-append time. Each section was locally coherent, which is why eight revisions of
+section-by-section review did not surface it — and it was slicing-relevant, since a replaying seal
+would have dragged §5's replay machinery into the session slice. A fifth pattern, below.
+
+Five patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
 
 **Guards narrower than the rule they enforce.** `any(location)` where the rule was "everything was
@@ -46,6 +53,13 @@ in-tree write — the run's own report (`autonomy/path_gate.py`). Every served f
 gate denial. Six review rounds inside one document cannot find that, because the contradiction is not
 in the document. It is between the document and the system it runs inside, and it surfaced the moment
 the two were placed in one program (§0, §3.5).
+
+**Locally coherent, globally contradictory.** The seal replayed in §3.4.1, did not in §5.2, and could
+fail for exactly one non-replay reason in §6. No section was wrong on its own terms; the document was
+wrong only as a whole. Review that reads a section closely cannot find this, and neither can a reader
+who trusts the section nearest to hand — which, for an implementer, is whichever one the task cites.
+The countermeasure is to read every section that touches a mechanism together before building it, and
+to state the mechanism once, in the section that owns it, with the others pointing at it.
 
 Hence §7's discipline, and three additions to it: where the document *claims* a property, the suite
 establishes that property **under the condition the claim names** — replay with the control-plane
@@ -466,10 +480,20 @@ cross-process and needs a contract rather than an object.
 - **Spend.** `requests_used` is **derived by counting `request` events**, not stored as mutable state.
   There is no counter to reset. Truncating the journal to buy rounds destroys the entries that make
   the truncator's own citations correspond, so the move is self-defeating rather than merely detected.
-- **Seal.** `finish_run` reads the journal, replays it, and copies it into the run record as
-  `EvidenceExposure`. After sealing, the record is self-sufficient (§4.1): re-checking needs the record
-  and a repository. The journal is retained as the supervisor's own copy of what it served, not as an
-  input anything later depends on.
+- **Seal.** `finish_run` reads the journal and copies it into the run record as `EvidenceExposure`.
+  After sealing, the record is self-sufficient (§4.1): re-checking needs the record and a repository.
+  The journal is retained as the supervisor's own copy of what it served, not as an input anything
+  later depends on.
+
+  **The seal does not replay.** Revisions 1–8 said it did, contradicting §6 — which enumerates a
+  *missing or unreadable* journal as the only condition under which a seal fails — and contradicting
+  §5.2, which places replay at review-append time. A replaying seal would refuse a forged-but-readable
+  journal by writing no record at all, so a run would vanish for a reason §6's table does not list; and
+  it would strip §5.3's `violated`/`EXPOSURE_UNREPRODUCIBLE` row of nearly all its reach, since after
+  sealing every `sha256` replay compares against is one this toolkit wrote itself. The forgeable-journal
+  argument of §5.2 is not answered by replaying at seal time: a forged hash copied into the exposure is
+  caught when the exposure is replayed against the pinned commit, which is exactly where §5.2 puts it.
+  Sealing is a copy; checking is §5's.
 
 `Session` is also usable in-process, without the CLI, so 2b can hold sessions in the supervisor where
 its dispatch shape allows. That mode has an authentic journal, since the actor never touches it. The
