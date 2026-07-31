@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 23)
+**Status:** partially implemented (revision 25)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` pin plus the shallow diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 24, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 24, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 24, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the shallow diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 25, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 25, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 25, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -98,6 +98,25 @@ this design has had.
    initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
    executing anything at all. It must spawn a fresh interpreter on
    `import science_model.evidence_broker`.
+
+Revision 25 closes one defect, in revision 24's fix, plus a stale status line.
+
+1. **The shallow pin closed one of two ways a repository declines to hold its own history, and the
+   other one reaches the network.** A `--filter=tree:0` partial clone does not truncate and does not
+   fail — it **lazily fetches** the missing objects from its promisor remote, mid-request, at exit 0.
+   Measured against the canonical `_LOG_ARGV`: **two `git fetch` subprocesses spawned**, full answer
+   returned, nothing in the output disclosing it. `GIT_NO_LAZY_FETCH=1` joins `GIT_SHALLOW_FILE` in
+   `_ENVIRONMENT`; the same probe then fails locally at exit 128 having spawned nothing. Clause 3 of
+   the forward guarantee is restated from *ancestors* to *objects the local repository already held*,
+   and §7 gains the row plus the two ways its fixture goes vacuously green.
+
+**This one is worse than a determinism defect and the design should say so.** The promisor remote's
+URL lives in `.git/config`, the actor-owned file this entire module exists to defend against. Lazy
+fetch therefore hands the actor an **egress channel out of the control plane** — it can point the
+supervisor at a host of its choosing and make it emit a request — and a served payload whose content
+depends on what that host returns. `-c` cannot close it, because the neutralization would have to
+name the remote and the remote's name is the actor's to pick: a roster, again, where the environment
+variable is the predicate.
 
 **Revision 23's first defect and revision 24's first defect are one lesson, one axis apart.** Both
 took a property that is *true at a moment* for a property that is *fixed*: a commit pin fixes
@@ -559,19 +578,26 @@ on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`
 
 1. was served from a tree whose every path is valid UTF-8 and already NFC;
 2. was served under a per-request byte ceiling, with overflow refusing rather than truncating; and
-3. carries `history` payloads produced only by a traversal git did not silently truncate — a
-   repository unable to supply an ancestor **fails the invocation** instead of answering short
-   (§3.2).
+3. was served **entirely from objects the local repository already held**, by a traversal git did not
+   silently truncate. A repository that cannot supply an object locally **fails the invocation** —
+   it neither answers short nor goes to the network to fill the gap (§3.2).
 
 Clause 3 is deliberately not "was served from a complete clone." Revisions 22 and 23 both claimed
 more than the mechanism delivers: `is_shallow() == False` is a statement about one file, and the
-`GIT_SHALLOW_FILE` pin converts truncation into failure — neither certifies that every object is
-present, and a partial or damaged repository remains possible. What 4b may rely on is that a short
-answer is not among the outcomes; a repository broken some other way surfaces as a non-zero exit and
-reads `unwired`, which 4b already handles. **Ask what a guarantee is *about*, not what it is near** —
-revision 22 said "no `history` entry originating in a shallow repository" (false, because revision 18
-journaled such refusals); revision 23 said "complete clone" (unobservable). Three tries at one
-sentence, each overshooting in the same direction.
+pins convert missing data into failure — neither certifies that every object is present, and a
+damaged repository remains possible. What 4b may rely on is *what is not among the outcomes*: a
+truncated answer, and a payload assembled from a remote. A repository broken some other way surfaces
+as a non-zero exit and reads `unwired`, which 4b already handles.
+
+**Ask what a guarantee is *about*, not what it is near.** This clause has now been wrong three ways,
+each a different overshoot or undershoot: revision 22 said "no `history` entry originating in a
+shallow repository" (false — revision 18 journaled such refusals); revision 23 said "complete clone"
+(unobservable); revision 24 said "unable to supply an **ancestor**", which named the shallow case and
+missed the partial-clone case sitting next to it, where the missing object is a *tree* and git
+fetches it rather than failing. Revision 24's own correction of revision 23 was for claiming more
+than the mechanism delivered — and it then wrote a clause narrower than the hazard. **Overshooting
+and undershooting the same sentence are one error**: describing the mechanism you happen to be
+looking at instead of the property the consumer needs.
 
 Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising.
 
@@ -598,9 +624,10 @@ needed on both sides of the seam, and each would otherwise be written twice with
 - **`autonomy/git.py::is_shallow(repo) -> bool`** — 4a refuses to open a run, 4b classifies a replay
   environment. Revision 22 declared it shared without naming a module, which is how one mechanism
   becomes two functions.
-- **`GIT_SHALLOW_FILE=/dev/null` in `_ENVIRONMENT`** (§3.2). 4b inherits it by calling `serve.py`,
-  and inherits it *silently* — which is the point: replay is deterministic in history because the
-  environment is pinned, not because 4b remembered to check anything.
+- **`GIT_SHALLOW_FILE=/dev/null` and `GIT_NO_LAZY_FETCH=1` in `_ENVIRONMENT`** (§3.2). 4b inherits
+  them by calling `serve.py`, and inherits them *silently* — which is the point: replay is
+  deterministic, and stays off the network, because the environment is pinned, not because 4b
+  remembered to check anything.
 - The `run_git` output ceiling, including its refuse-not-truncate discipline.
 - `MAX_SERVED_BYTES` and `MAX_RUN_SERVED_BYTES`, in `science_model/evidence_broker.py` with the
   other bounds.
@@ -750,20 +777,42 @@ at exit 0*. This is `.git/config`'s vector with a different filename, and the mo
 `autonomy/git.py` already states the doctrine that answers it: the actor owns the file, so the
 defense is an input git no longer reads, not a check racing the write.
 
-- **`GIT_SHALLOW_FILE=/dev/null` joins `LC_ALL` and `LANG` in `_ENVIRONMENT`.** It stands to
-  `.git/shallow` exactly as `-c` stands to `.git/config`: it outranks the repository-local file and
-  cannot be un-set from inside the worktree. Measured across both cases that matter:
+**Two pins, not one — and the second closes a channel, not just a variance.** `.git/shallow` is one
+way a repository declines to hold its own history; a **partial clone** is the other, and it fails in a
+worse direction. A `--filter=tree:0` clone does not refuse the traversal: it **goes and gets the
+missing objects from the promisor remote**, mid-request, at exit 0. Measured, git 2.55, against the
+canonical `_LOG_ARGV`: **two `git fetch` subprocesses spawned**, three commits returned, nothing in
+the output saying the network was touched. (The fixture must set `uploadpack.allowFilter=true` on the
+serving side — it defaults to false, and without it the filter is silently ignored and the clone
+comes back complete, which is the first way this test goes vacuously green.)
 
-  | repository | default | under the pin |
+That is not merely non-deterministic. It makes a served payload depend on what a **remote** holds and
+whether it is reachable, and the promisor remote's URL lives in `.git/config` — actor-owned, the
+premise this whole module is built on. A supervisor that lazily fetches is a supervisor the actor can
+point at a host of its choosing and cause to emit a request. Neutralizing on the remote *name* via
+`-c` would be a roster (the name is the actor's to choose); the environment variable is the
+predicate.
+
+- **`GIT_SHALLOW_FILE=/dev/null` and `GIT_NO_LAZY_FETCH=1` join `LC_ALL` and `LANG` in
+  `_ENVIRONMENT`.** They stand to `.git/shallow` and to promisor configuration exactly as `-c` stands
+  to `.git/config`: they outrank the repository-local state and cannot be un-set from inside the
+  worktree. Under `GIT_NO_LAZY_FETCH=1` the same partial-clone probe **fails locally at exit 128**,
+  `fatal: unable to read tree`, having spawned nothing. Measured across the cases that matter:
+
+  | repository | default | under the pins |
   |---|---|---|
   | `.git/shallow` planted, objects present | 2 of 3, **exit 0** | 3 of 3, exit 0 |
   | genuine `--depth 1`, objects absent | 1 of 3, **exit 0** | **exit 128**, `fatal: Failed to traverse parents` |
+  | `--filter=tree:0`, objects fetchable | 3 of 3, **exit 0, 2 `git fetch` spawned** | **exit 128**, `fatal: unable to read tree` |
 
-  Both rows move the right way. A planted boundary is ignored, and a repository that genuinely cannot
-  supply an ancestor **stops answering short and starts failing**, which is this design's standing
+  Every row moves the right way. A planted boundary is ignored, and a repository that cannot supply
+  an object locally **stops answering and starts failing**, which is this design's standing
   preference: `run_git` returns non-zero, no defined-miss message matches, the run halts `unwired`.
-  No new disposition rule is needed — §3.2's table already routes it. The pin is a no-op in a normal
-  repository, where neither location holds a boundary.
+  No new disposition rule is needed — §3.2's table already routes it. Both pins are no-ops in an
+  ordinary complete clone, which has no boundary file and nothing to fetch. `GIT_NO_LAZY_FETCH`
+  covers `read` and `search` as well as `history`, since a partial clone withholds blobs from
+  `cat-file blob` and `grep` by exactly the same mechanism — putting it in `_ENVIRONMENT` rather than
+  at one call site is what makes that automatic.
 
 - **A brokered run still refuses to open against a shallow repository**, decided by
   `autonomy/git.py::is_shallow` (`git rev-parse --is-shallow-repository`), in `start_run` beside the
@@ -2190,6 +2239,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 |---|---|---|
 | 4a | Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
 | 4a | Drop `GIT_SHALLOW_FILE` from `_ENVIRONMENT` | `history` served after `.git/shallow` is written mid-run does not match the same request served before it |
+| 4a | Drop `GIT_NO_LAZY_FETCH` from `_ENVIRONMENT` | a request against a `--filter=tree:0` clone whose promisor remote **still holds the objects** fails, rather than serving them |
 | 4a | Drop the shallow check at open | a brokered run against a genuinely shallow clone opens |
 | 4a | Journal a shallow-`history` refusal instead of refusing at open | an exposure sealed in a shallow clone and replayed in a complete one is not `EXPOSURE_UNREPRODUCIBLE` |
 | 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
@@ -2225,6 +2275,15 @@ interpreter** entering `science_model.evidence_broker`, which reaches `audit/__i
 into a partially initialised `audit.record`. Spawn it; do not trust the ambient module cache. This is
 the general form: *a cycle test that shares a process with its own test runner tests the runner's
 import order.*
+
+**The lazy-fetch row has two ways to go vacuously green, and both must be closed in the fixture.**
+First, `uploadpack.allowFilter` defaults to **false**: a `--filter=tree:0` clone from a serving
+repository without it comes back *complete*, so the mutation has nothing to expose and the test
+passes against the defect. Set it on the serving side and assert the filter took — `git cat-file -e`
+on a parent commit's tree must report the object **absent** — before serving anything. Second, the
+promisor remote must still hold the objects and be reachable: point it at a `file://` path that
+exists. With the remote gone, both the pinned and unpinned runs fail, and the pair proves nothing.
+The distinction the row is testing is *whether git goes and gets it*, not whether the request errors.
 
 **The two shallow rows are not redundant, and the first is the one that carries the guarantee.**
 Dropping the env pin leaves the open-time check green — the run opens against a clean repository,
