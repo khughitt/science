@@ -65,6 +65,44 @@ def test_create_entity_file_refuses_destination_created_during_render(
     assert dest.read_text(encoding="utf-8") == "winner\n"
 
 
+def test_create_entity_file_removes_partial_stage_after_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seed(tmp_path)
+    dest = root / "entities" / "propositions" / "p.md"
+    real_open = Path.open
+
+    class FailingWriter:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self.handle.close()
+
+        def write(self, text):
+            self.handle.write(text[:8])
+            self.handle.flush()
+            raise OSError("injected write failure")
+
+    def fail_exclusive_write(path, mode="r", *args, **kwargs):
+        handle = real_open(path, mode, *args, **kwargs)
+        return FailingWriter(handle) if mode == "x" else handle
+
+    monkeypatch.setattr(Path, "open", fail_exclusive_write)
+
+    # Mutation caught: writing directly through an exclusive handle on `dest` leaves the
+    # partial final file behind and leaks OSError instead of the writer's boundary error.
+    with pytest.raises(EntityWriteError, match="could not create.*injected write failure"):
+        create_entity_file(
+            _prop(), project_root=root, ownership=OWNERSHIP,
+            create_body="# body\n", as_of=date(2026, 7, 31),
+        )
+    assert not dest.exists()
+
+
 def test_update_entity_file_refuses_missing_destination(tmp_path: Path) -> None:
     root = _seed(tmp_path)
     with pytest.raises(EntityWriteError, match="does not exist"):

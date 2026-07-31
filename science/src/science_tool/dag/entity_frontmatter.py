@@ -19,6 +19,8 @@ No dump-mode flag can express "required for the model, not for the file"; only a
 
 from __future__ import annotations
 
+import os
+import secrets
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -263,7 +265,7 @@ def create_entity_file(
     create_body: str,
     as_of: date | None = None,
 ) -> Path:
-    """Write a NEW entity file. Refuses an existing destination."""
+    """Write a NEW entity file, publishing only a complete no-clobber result."""
     dest = _entity_dest(entity, project_root)
     if dest.exists():
         raise EntityWriteError(f"refusing to create {dest}: it already exists")
@@ -273,10 +275,25 @@ def create_entity_file(
     )
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with dest.open("x", encoding="utf-8", newline="") as handle:
-            handle.write(text)
+        while True:
+            staged = dest.with_name(f".{dest.name}.{secrets.token_hex(8)}.tmp")
+            try:
+                handle = staged.open("x", encoding="utf-8", newline="")
+                break
+            except FileExistsError:
+                continue
+        try:
+            with handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.link(staged, dest)
+        finally:
+            staged.unlink(missing_ok=True)
     except FileExistsError as exc:
         raise EntityWriteError(f"refusing to create {dest}: it already exists") from exc
+    except OSError as exc:
+        raise EntityWriteError(f"could not create {dest}: {exc}") from exc
     return dest
 
 
