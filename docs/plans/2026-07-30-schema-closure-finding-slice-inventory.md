@@ -106,7 +106,7 @@ base 2.0 properties, keyed consumer reads, and kind-agnostic mutators. Counts ar
 | `observations` | 25 / 0 | template-prescribed |
 | `mode` | 23 / 0 | natural-systems; values `empirical-measurement` (19), `confirmatory` (2), `structural-audit`, `literature-synthesis` |
 | `input` | 22 / 0 | natural-systems; a declared provenance field (`project_config.py:101` `DEFAULT_PROVENANCE_FIELDS`) |
-| `relations` | 3 / 0 | the `sci:amends` amendment chain — `{predicate, target, note}` items |
+| `relations` | 3 / 0 | the `sci:amends` amendment chain; reuses `$defs/authored_relation` verbatim — see the `note` ruling |
 | `promoted_from` | 26 / 0 | the per-kind ownership ruling; shape copied from the frozen literal oracle |
 | `superseded_by` | **0 / 0** | zero-occurrence and load-bearing — see the mutator section |
 | `schema_profile` | — | `false`, as every mixin declares |
@@ -172,6 +172,50 @@ path already setdefaults it (`entities.py:469`), and all 52 markdown findings ar
 — but the step-3 test must assert this semantics directly rather than leaning on schema
 validity, for the same reason the `updated` migration must.
 
+## RULING: `relations[].note` — A Corpus Migration
+
+`mixin-hypothesis-2.0` defines `$defs/authored_relation` as
+`{predicate, target, graph_layer}` with `additionalProperties: false`, and says why: "a
+typo'd key INSIDE a relation is silently dropped today, which is the class of defect this
+arc exists to end." Its oracle is `AuthoredTargetedRelation`
+(`science/model/src/science_model/source_contracts.py:18`), which declares exactly those
+three fields.
+
+All 3 `finding` records that author `relations` also author a fourth key, `note`, carrying
+several lines of prose. Verified empirically on a real load of `~/d/natural-systems` — not
+inferred from the model definition — the constructed entity keeps:
+
+```python
+[{'predicate': 'sci:amends', 'target': 'finding:0016-...', 'graph_layer': 'graph/knowledge'}]
+```
+
+**The `note` is silently discarded today.** It is the exact defect the `$comment` names,
+sitting in the corpus of the kind being closed.
+
+**Ruling: migrate the corpus; reuse `authored_relation` verbatim.** The 3 records drop
+`note:` from their `relations` entries, and the mixin carves no finding-specific exception.
+After the migration the schema **refuses** `note`, converting a silent discard into a
+load-time failure.
+
+Nothing is lost, and that was checked rather than assumed: each of the 3 notes is a
+compressed restatement of that same record's `## Summary`, which already states the
+amendment in full. Read side by side for all three (`0017`, `0018`, `0019`) before ruling.
+The prose survives where it is actually rendered and read.
+
+Rejected alternatives, by name:
+
+| Alternative | Ruling |
+|---|---|
+| Drop `note` from the 3 records; reuse `authored_relation` | **Selected.** Nothing reads it, the model discards it, and the content is already in the body. |
+| Add `note` to `AuthoredTargetedRelation` | Rejected. It stores prose no consumer reads, and it is a kind-agnostic model change made inside a kind's slice — the same objection the procedure raises against doing date normalization here. |
+| Declare a finding-local relation `$def` admitting `note` | Rejected. The schema would vouch for a key the projection drops — "vouched but not preserved", the exact mirror of the defect this arc closes, and it would weaken a deliberate `additionalProperties: false` ruling for one kind. |
+
+**Recorded for the `interpretation` slice:** 19 `interpretation` records in the same project
+author `relations[].note` the same way. They are untouched here — each kind's slice owns its
+own corpus — and that slice owes the same duplicate check rather than copying this ruling.
+This is why the ruling is stated as "verified duplicates of the body", not as "`note` is
+worthless".
+
 ## The Source Migration
 
 One edit to `~/d/natural-systems/knowledge/sources/project_specific/finding.yaml`,
@@ -215,14 +259,27 @@ look.
 
 ## Follow-Up Filed by This Slice
 
-**F9 — `_STRUCTURED_INJECTED_KEYS`' comment makes a claim that is false for `aliases`.**
-`sources.py:122-125` justifies not hiding `profile`, `aliases`, `ontology_terms`,
-`related` and `source_refs` on the grounds that they "are admitted (measured)". Measured
-here: `ontology_terms` is in base 2.0; `related`/`source_refs`/`profile` are admitted by
-mixins that declare them; **`aliases` is admitted by no base, no overlay, and no mixin in
-the package.** It does not bite this slice — 26 protein-landscape records author `aliases`
-on markdown, so `mixin-finding-1.0` admits it regardless — but the next kind routed
-through the structured loader that does *not* author `aliases` will have 100% of its rows
-refused for a key the loader backfilled as `[]`. The fix is either to add `aliases` to
-`_STRUCTURED_INJECTED_KEYS` or to correct the comment; the choice needs the same
-"who reads it?" analysis slice 4 applied to `consolidated_into`.
+**F9 — `_STRUCTURED_INJECTED_KEYS`' comment generalizes from the armed kinds that happen
+to admit these keys.** `sources.py:122-125` justifies not hiding `profile`, `aliases`,
+`ontology_terms`, `related` and `source_refs` on the grounds that they "are admitted
+(measured)". Measured per key across every packaged schema:
+
+| key | admitted by |
+|---|---|
+| `ontology_terms` | base 2.0 — every kind |
+| `related`, `source_refs` | the mixins that declare them (all five armed kinds do) |
+| `profile` | `concept`, `search`, `hypothesis`, `method` — **not** `observation` |
+| `aliases` | `hypothesis` 1.0/2.0, `method` 1.0 — **not** `concept`, `search`, `observation`; and no base, no overlay |
+
+So the claim holds for the kinds it was measured against and does **not** generalize. It
+does not bite this slice — 26 protein-landscape records author `aliases` on markdown, so
+`mixin-finding-1.0` admits it regardless — and it cannot bite today, because until
+`finding` is armed no armed kind takes the structured path at all. But the next kind routed
+through the structured loader that does not itself author `aliases` or `profile` will have
+100% of its rows refused for keys the loader backfilled as `[]`. The fix is either to widen
+`_STRUCTURED_INJECTED_KEYS` or to restate the comment as the per-kind claim it actually is;
+the choice needs the "who reads it?" analysis slice 4 applied to `consolidated_into`.
+
+*(Filed first as the stronger claim "`aliases` is admitted by no mixin in the package",
+which was wrong — `mixin-hypothesis-2.0` admits it. Corrected here by reading all sixteen
+packaged schemas rather than the three this slice had already opened.)*
