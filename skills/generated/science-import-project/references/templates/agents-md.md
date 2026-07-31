@@ -33,6 +33,18 @@ project's `AGENTS.md` body, edit that project's file directly.
 
 ## Validation
 
+Use the narrowest project-specific check that covers the change while iterating.
+When the project has application tests, run the tests for touched code plus
+adjacent integration or contract guards before handoff. Run the full application
+suite only when changes affect shared configuration, dependencies, schemas, or
+cross-cutting behavior; touch multiple subsystems; produce unexpected broader
+effects; prepare a release; or when explicitly requested.
+
+Run Science structural validation once before handoff when Science-managed data,
+configuration, references, workflows, or generated artifacts changed. Do not
+repeat a passing validation after a fast-forward integration when the exact
+commit and its base are unchanged.
+
 ```bash
 bash validate.sh --verbose
 ```
