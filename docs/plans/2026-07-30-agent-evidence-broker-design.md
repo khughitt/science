@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 19)
+**Status:** partially implemented (revision 20)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,9 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 19, not implemented |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 19, not implemented |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 19, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule, §3.2's shallow refusal and payload bound, the `run_git` output ceiling, the protocol bump | designed at revision 20, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 20, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 20, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -52,6 +52,32 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 20 comes from review of revision 19 and closes four defects, three blocking. Three of them
+are **failures of the split itself** — not of the design that was split — which is the lesson worth
+carrying: dividing a plan creates new claims about what each side may assume, and those claims
+inherit none of the review the undivided design received.
+
+1. **The checker depended on a field its own consumer's slice would add** (§5). `check_correspondence`
+   took a `review`, but the merged `Review` has no `evidence`; that field arrives with 4c. Fixed by
+   taking `Sequence[Evidence]` — which is also the honest signature, since the checker reads nothing
+   else off a review — leaving 4b touching no audit-record model at all.
+2. **The agent cross-checks were stated as one rule with one precondition** (§4.2). `agent` and
+   `model` live on the run record; the instrument lives on the *exposure*, which the `NO_EXPOSURE`
+   path is defined by not having. The boundary demanded an instrument in the one case defined by its
+   absence. The lens check is now conditional, and costs nothing where it is dropped because an
+   unbrokered review is `unwired` and earns no support.
+3. **Revision 18 wrote a classification rule the checker cannot implement** (§3.2). Calling
+   git-version drift `unwired` requires observing a cause no sealed term records; only shallowness is
+   checkable. Every completed replay mismatch is `violated`, and the residual is stated instead.
+4. **The payload ceiling covered the requests an actor asks for and not the captures the broker
+   performs itself** (§3.2) — `stderr` on every call, the `config --list` preflight that runs before
+   every call, and the new full-tree scan.
+
+The fourth is the same shape as revision 18's third and worth naming as a pattern: **a bound placed
+on the quantity that prompted the question rather than on the mechanism that holds it.** The journal
+was bounded and the payload was not; then the payload was bounded and every other capture was not.
+The mechanism here is `run_git`, and the bound belongs there.
 
 Revision 19 splits plan 4 in three rather than two, on a seam revision 18's own findings exposed.
 Three of its five defects — the NFC tree rule, the shallow refusal, the payload bound — are not
@@ -524,9 +550,26 @@ completeness is what remains. The rule:
   here would be the could-not-check / checked-and-found-false confusion §5.3 exists to prevent, and
   it would refuse reviews for the property of the machine replaying them.
 
-The same reasoning covers a git version or runtime whose `log` output differs: unreproducible for
-environmental reasons is `unwired`. `violated` is reserved for a record that disagrees with a
-repository that *could* answer.
+**This reasoning does NOT extend to a git version or runtime whose output differs, and revision 18
+wrote that it did** (corrected at revision 20). Shallowness is checkable: `--is-shallow-repository`
+answers it before replay, so the cause is known and `unwired` is a conclusion the checker can reach.
+A git-version difference is not — the checker sees only that bytes disagree, exactly what a forged
+record produces, and there is no sealed runtime term to distinguish them. A rule that classifies by a
+cause the classifier cannot observe is unimplementable, and an implementer forced to guess would
+reach for the fail-open: treat mismatches as environmental and stop refusing anything.
+
+So **every completed replay mismatch is `violated`** (§5.3), without exception. Sealing a git version
+into the exposure to recover the distinction was rejected for the reason §5.2 already gives against
+comparing `toolkit_revision`: it would zero the support of every prior run on every git upgrade, and
+a signal that fires on every upgrade is one people learn to ignore.
+
+The residual is real and is stated rather than defended away: if git ever changes the output of one
+of the three pinned invocations, honest historical exposures become `EXPOSURE_UNREPRODUCIBLE`. What
+makes that acceptable is that it is *loud and caught upstream* — `tests/test_evidence_broker_
+canonical.py` exercises these invocations against real git, so such a change surfaces as a suite
+failure rather than as silently refused reviews, and the response is a deliberate re-probe under
+§3.2.1 and a `REPLAY_PROTOCOL_VERSION` bump. That is the mechanism §5.2 designed for precisely this
+event; it is a decision someone makes, not a classification the checker invents.
 
 **Served payloads are bounded, and the bound is enforced before the bytes are held** (revision 18).
 `run_git` captures a child's entire stdout in memory and the session then writes it to `served/`,
@@ -545,6 +588,23 @@ the *payload* unbounded, which is the same omission in a different quantity.
   advance. `run_git` gains an explicit output ceiling; exceeding it terminates the child and refuses.
   A cap that only checks after `communicate()` returns has already spent the memory it exists to
   protect.
+- **The ceiling belongs to `run_git`, not to the served operations** (revision 20). Revision 18
+  bounded the three requests an actor asks for and left unbounded every capture the broker performs
+  on its own behalf — which is the larger surface, and the one an actor reaches without asking:
+  - **`stderr`, on every call.** It is captured with `capture_output=True` alongside stdout, it is
+    actor-influenced (§3.2.1 records `alternates` emitting a warning on ordinary commands), and
+    §3.2's own classifier reads it. An unbounded diagnostic is an unbounded allocation.
+  - **The `config --list --name-only -z` preflight**, which `_filter_driver_overrides` runs before
+    *every* `run_git` call. Its size is the actor's to choose — `include.path` pulls in arbitrary
+    files — so it is unbounded input on the path that executes most often, and it is spent before
+    the request it precedes is even authorized.
+  - **The §3.1 tree scan.** `ls-tree -r -z --name-only` over a whole tree is proportional to the
+    repository, not to any request, and it too runs before a session is allowed to open.
+
+  Each is bounded by the same ceiling and fails the same way: exceeding it is a refusal, not a
+  truncation. Truncating any of the three would be worse than refusing — a truncated config listing
+  silently under-blanks filter drivers, a truncated tree scan silently declares an unscanned tree
+  NFC, and both are fail-opens dressed as robustness.
 - The refusal is a `Denial` with its own reason, distinct from a policy denial, and it is
   **deterministic given the commit** — the same request refuses identically at replay, which is what
   keeps §5.2 sound. Under §5.1 it contributes no coverage, like every other refusal.
@@ -1226,12 +1286,24 @@ trusted caller can still be wrong:
 
 - `reviewer_ref` must equal the run record's `agent`, and `model` its `model`. Both are sealed
   fields on `AutonomousRunRecord` and neither is derivable from the submission.
-- `lens` must equal `exposure.instrument.ref`. The instrument is what defined the judgement
-  procedure and is sealed at §4.1; a review claiming a lens the run was not opened under is
-  describing a different run.
+- `lens` must equal `exposure.instrument.ref` **when the run record carries an exposure**. The
+  instrument is what defined the judgement procedure and is sealed at §4.1; a review claiming a lens
+  the run was not opened under is describing a different run.
 
 Mismatch is an `IngestError`, not a weaker correspondence: this is not "could not check", it is a
 record disagreeing with the run it names.
+
+**The two cross-checks have different preconditions, and revision 19 stated them as one**
+(revision 20). `agent` and `model` are fields of `AutonomousRunRecord` itself, so those comparisons
+hold for every agent review. The instrument is a field of the *exposure*, which an unbrokered run
+does not have — and §5.3 requires exactly that case to be stored as `unwired` / `NO_EXPOSURE`. As
+written, the boundary demanded an instrument in the one situation defined by its absence.
+
+Making the lens check conditional gives up nothing that was being protected. `lens` is attested, so a
+producer cannot vary it in the first place; the check defends against a mistaken trusted caller. And
+a review with no exposure is `unwired`, which §4.2.1 excludes from `confirmation_count` — so a wrong
+lens on an unbrokered review cannot buy support, and cannot mint a countable second `review_id`
+either. The check is dropped exactly where its subject does not exist and its absence costs nothing.
 
 `Correspondence` mirrors `InstrumentResult`'s invariant — `unwired` requires a machine-readable code
 — so both ways this toolkit says "could not run" have one shape.
@@ -1407,10 +1479,21 @@ and under `--broker-spec` it is derived from `control_plane.run_dir()` rather th
 ## 5. Correspondence
 
 ```python
-def check_correspondence(review, exposure, *, repo) -> Correspondence
+def check_correspondence(
+    evidence: Sequence[Evidence], exposure: EvidenceExposure, *, repo: Path
+) -> Correspondence
 ```
 
 The live session is gone from the signature: everything replay needs is sealed into `exposure`.
+
+**It takes citations, not a `Review`** (revision 20). Revisions 1–19 passed a `review`, which made
+the checker depend on a field the merged `Review` does not have — `evidence` arrives with §4.2's
+changes, and those belong to plan 4c. A checker that cannot be written until its consumer's model
+lands is a slice boundary that does not hold. Taking `Sequence[Evidence]` removes the dependency
+outright rather than resequencing to work around it: plan 4b then touches **no audit-record model at
+all**, and §5.4 passes `submission.evidence` at the boundary. It is also the honest signature — the
+checker never reads a reviewer's identity, outcome, or note, and a parameter it does not use is a
+coupling it should not have.
 
 **Modules (plan 4b).** `evidence_broker/hits.py` parses `git grep -n -z` output into hits and runs no
 git of its own — pure bytes in, `(path, line)` out — so the NUL-record contract of §5.1 can be
@@ -1827,6 +1910,10 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Drop the shallow check at serving | `history` is refused in a shallow repository |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
+| 4a | Bound stdout only | an oversized `stderr` refuses |
+| 4a | Exempt the `config --list` preflight | a repository whose `include.path` yields an oversized listing refuses |
+| 4a | Exempt the tree scan | an oversized `ls-tree` refuses instead of declaring the tree NFC |
+| 4a | Truncate instead of refusing at the ceiling | an over-ceiling config listing does not silently under-blank filter drivers |
 | 4b | Key the served map on the tree's raw path bytes | an honest citation into a non-ASCII path corresponds |
 | 4b | Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
 | 4b | Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
@@ -1841,6 +1928,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Re-add `reviewer_kind` to `ReviewSubmission` and branch on it | constructing a submission carrying `reviewer_kind` raises |
 | 4c | Skip the agent cross-check against the run record | an attested agent whose `model` disagrees with its run record is stored |
 | 4c | Skip the lens cross-check | an attested `lens` that is not `exposure.instrument.ref` is stored |
+| 4c | Apply the lens cross-check unconditionally | an agent review whose run has **no** exposure stores as `unwired`, not `IngestError` |
 
 **The first 4c row is a different kind of pair and must not be graded like the others.** Identity is
 prevented structurally, not checked, so on the fixed tree there is no behaviour to negative-test —
