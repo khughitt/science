@@ -122,6 +122,12 @@ Remove `]` from title rejection at the two shared code sites:
 - `_validate_task_title`, which covers split frontmatter plus task creation and
   editing.
 
+After `_parse_task_header` normalizes the captured title with `strip()`, route
+it through `_validate_task_title` instead of retaining a header-specific
+predicate. This also closes the pre-existing spaces-only header hole: today
+`## [t014]    ` parses to an empty title. A fleet-wide sweep found no empty
+titles, so this adds a fail-early invariant without changing stored data.
+
 Update `_validate_task_title`'s error text as well as its predicate so it no
 longer claims that titles may not contain `]`.
 
@@ -141,6 +147,7 @@ Tests prove that:
 - a title containing `[UNVERIFIED]` parses and round-trips unchanged;
 - a title beginning with `[UNVERIFIED]` round-trips through split-store YAML
   frontmatter, exercising `yaml.safe_dump`'s quoting of a leading bracket;
+- a spaces-only aggregate title is rejected by the shared title validator;
 - a migration with those titles in existing done ledgers proceeds;
 - multiline titles remain rejected;
 - the other fail-closed migration checks remain armed.

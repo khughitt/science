@@ -6,7 +6,7 @@
 
 **Architecture:** A published toolkit commit is the only prerequisite. Each consumer then migrates in its own worktree, records complete unbudgeted evidence outside Git, proves normalized task and task-domain graph parity, and merges one atomic local commit into its local `main`. Composite graphs are rebuilt only after every local graph is current, preserving the authored peer lists and default Commons behavior.
 
-**Tech Stack:** Python 3.13, Click, Pydantic `Task`, PyYAML, RDFLib, uv, pytest, Ruff, Pyright, Git worktrees, jq.
+**Tech Stack:** Python 3.13, Click, Pydantic `Task`, PyYAML, RDFLib, uv, pytest, Ruff, Pyright, Git worktrees, jq, yq.
 
 ## Global Constraints
 
@@ -74,7 +74,7 @@ Consumer migration matrix:
 
 **Interfaces:**
 - Consumes: `_HEADER_RE = ^##\s+\[(tNNN)\]\s+(.+)$`, `render_task_file(Task) -> str`, and `plan_migration(Path, today=date) -> MigrationPlan`.
-- Produces: every valid single-line `Task.title`, including `]`, is accepted by aggregate, split-frontmatter, create, edit, validation, and migration paths; newline and edge-whitespace rejection remain unchanged.
+- Produces: every valid single-line `Task.title`, including `]`, is accepted by aggregate, split-frontmatter, create, edit, validation, and migration paths; aggregate titles pass through the shared validator after normalization, and existing newline/edge-whitespace rules remain.
 
 - [ ] **Step 1: Replace the false bracket-rejection tests with acceptance regressions**
 
@@ -89,6 +89,11 @@ def test_bracketed_title_roundtrips_through_ledger(title: str) -> None:
     task = Task(id="t014", title=title, status="done", created=date(2026, 3, 1))
 
     assert _roundtrip(task).title == title
+
+
+def test_rejects_blank_title_via_header() -> None:
+    with pytest.raises(ValueError, match="non-empty"):
+        _parse_task_block(["## [t015]    ", "- created: 2026-03-01", "", "x"])
 ```
 
 In `test_task_file_format.py`, remove `"contains ] bracket"` from `test_rejects_non_single_line_title`, leaving the newline case, and add:
@@ -135,23 +140,32 @@ def test_plan_accepts_bracketed_titles_in_done_ledgers(tmp_path: Path) -> None:
 
 In `test_checks_tasks.py`, change the `title: Bad]` invalid fixture to `title: " leading"` and retain its expected canonical title error.
 
-- [ ] **Step 2: Run the four focused tests and confirm the old predicates fail**
+- [ ] **Step 2: Run the focused tests and confirm the old predicates fail**
 
 Run from `science/`:
 
 ```bash
 uv run --frozen pytest -q \
   tests/test_tasks_dsl_roundtrip.py::test_bracketed_title_roundtrips_through_ledger \
+  tests/test_tasks_dsl_roundtrip.py::test_rejects_blank_title_via_header \
   tests/test_task_file_format.py::test_leading_bracket_title_roundtrips_through_frontmatter \
   tests/test_migrate_storage.py::test_plan_accepts_bracketed_titles_in_done_ledgers \
   tests/validate/test_checks_tasks.py
 ```
 
-Expected: the three new acceptance tests fail on the `]` restriction; the replacement whitespace fixture remains green.
+Expected: bracket acceptance fails on the `]` restriction, the blank aggregate-title test fails because no shared title validation runs there yet, and the replacement frontmatter whitespace fixture remains green.
 
 - [ ] **Step 3: Remove the two unsupported predicates and correct the error text**
 
-In `_parse_task_header`, delete only the `if "]" in title` branch. In `_validate_task_title`, remove only `or "]" in title` and change the message to:
+In `_parse_task_header`, replace the dedicated `]` branch with the shared validation call after title normalization:
+
+```python
+task_id, title = match.group(1), match.group(2).strip()
+_validate_task_title(title)
+return task_id, title
+```
+
+In `_validate_task_title`, remove only `or "]" in title` and change the message to:
 
 ```python
 "task title must be non-empty, have no leading or trailing whitespace, and be single-line"
@@ -444,12 +458,16 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
    ```bash
    uv run --frozen python /tmp/task-storage-rollout-closure/snapshot_tasks.py \
      . "$EVIDENCE_DIR/tasks-before.json"
+   exit_code=0
    uv run --frozen science tasks migrate-storage --format json \
-     --output "$EVIDENCE_DIR/migration-before.json"
+     --output "$EVIDENCE_DIR/migration-before.json" || exit_code=$?
+   printf '%s\n' "$exit_code" | tee "$EVIDENCE_DIR/migration-before.exit"
+   test "$exit_code" -le 1
    jq -e --argjson expected "$EXPECTED_COUNT" \
      '.meta.mode == "dry-run" and .meta.source_count == $expected and
       (.rows | length) == $expected and all(.rows[]; .status != "refusal")' \
      "$EVIDENCE_DIR/migration-before.json"
+   test "$exit_code" -eq 0
    uv run --frozen science graph diff --format json \
      --output "$EVIDENCE_DIR/local-graph-diff-before.json"
    uv run --frozen python /tmp/task-storage-rollout-closure/project_task_graph.py \
