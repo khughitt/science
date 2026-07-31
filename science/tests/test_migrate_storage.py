@@ -175,6 +175,91 @@ def test_plan_reports_open_and_terminal_destinations_without_writing(tmp_path: P
     assert not (tasks_dir / JOURNAL).exists()
 
 
+def test_plan_allows_scaffolding_before_first_task(tmp_path: Path) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    _write_legacy(
+        tasks_dir,
+        [_task("t001", "Open analysis")],
+        preamble="\n# Active Tasks\n<!-- generated task ledger -->\n\n",
+    )
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == []
+    assert [entry.task.id for entry in plan.entries] == ["t001"]
+
+
+def test_plan_allows_comment_only_empty_store(tmp_path: Path) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    _write_raw_legacy(tasks_dir, "<!-- No active tasks. -->\n")
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert plan.refusals == []
+    assert plan.entries == []
+    assert plan.post_images == {}
+
+
+@pytest.mark.parametrize(
+    ("preamble", "line_number", "content"),
+    [
+        (
+            "# Active Tasks\n\n- [ ] Preserve compatibility symlinks before cleanup.\n\n",
+            3,
+            "Preserve compatibility symlinks",
+        ),
+        (
+            "# Active Tasks\n\n- [ ] t-tx003 Reconcile treatment evidence\n\n",
+            3,
+            "t-tx003",
+        ),
+        (
+            "<!-- note --> live reminder <!-- end -->\n",
+            1,
+            "live reminder",
+        ),
+    ],
+)
+def test_plan_refuses_substantive_preamble_without_planning_writes(
+    tmp_path: Path,
+    preamble: str,
+    line_number: int,
+    content: str,
+) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    _write_legacy(tasks_dir, [_task("t001", "Open analysis")], preamble=preamble)
+
+    plan = migrate.plan_migration(tasks_dir, today=TODAY)
+
+    assert any(
+        f"tasks/active.md:{line_number}" in reason and content in reason
+        for reason in plan.refusals
+    )
+    assert plan.entries == []
+    assert plan.post_images == {}
+
+
+def test_apply_refuses_substantive_preamble_without_mutation(tmp_path: Path) -> None:
+    migrate = _migrate_module()
+    tasks_dir = tmp_path / "tasks"
+    source = _write_legacy(
+        tasks_dir,
+        [_task("t001", "Open analysis")],
+        preamble="- [ ] Preserve compatibility symlinks before cleanup.\n\n",
+    )
+    before = source.read_bytes()
+
+    with pytest.raises(migrate.MigrationRefused, match=r"tasks/active\.md:1"):
+        migrate.apply_migration(tasks_dir, today=TODAY)
+
+    assert source.read_bytes() == before
+    assert not (tasks_dir / "active").exists()
+    assert not (tasks_dir / JOURNAL).exists()
+
+
 def test_plan_refuses_duplicate_source_ids_and_lists_the_offender(tmp_path: Path) -> None:
     migrate = _migrate_module()
     tasks_dir = tmp_path / "tasks"

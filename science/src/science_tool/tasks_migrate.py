@@ -315,6 +315,28 @@ def plan_migration(tasks_dir: Path, *, today: date) -> MigrationPlan:
             refusals.append(
                 f"malformed task heading at tasks/active.md:{line_number}: {line!r}"
             )
+    for line_number, line in enumerate(source_text.splitlines(), start=1):
+        if _ANY_TASK_HEADER_RE.match(line):
+            break
+        stripped = line.strip()
+        if (
+            not stripped
+            or line == "# Active Tasks"
+            or re.fullmatch(r"<!--(?:(?!-->).)*-->", stripped)
+        ):
+            continue
+        return MigrationPlan(
+            tasks_dir=tasks_dir,
+            source_sha256=source_sha256,
+            entries=[],
+            open_post_images={},
+            ledger_post_images={},
+            refusals=[
+                *refusals,
+                f"substantive preamble content at tasks/active.md:{line_number}: "
+                f"{line!r}; preserve or reconcile it before migration",
+            ],
+        )
     try:
         source_tasks = _parse_tasks_text(source_text, path=source)
     except ValueError as exc:
