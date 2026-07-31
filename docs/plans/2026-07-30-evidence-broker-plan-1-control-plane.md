@@ -1,5 +1,9 @@
 # Evidence Broker Plan 1 — Control Plane and Canonical Git Invocation
 
+**Status:** **merged** at `57b09bf0`. Plan 1 of four (see the design's implementation-status table).
+Ships `autonomy/control_plane.py` and the `run_git` hardening, with complete tests and no production
+caller — the shape §0 argues for.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make an autonomous run addressable from its id, and close the two determinism hazards that live *below* argv — the parent locale, and any git config key that executes a program under `grep` or `log`.

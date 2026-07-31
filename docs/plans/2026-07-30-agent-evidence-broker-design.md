@@ -1,8 +1,22 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 9)
+**Status:** partially implemented (revision 11)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
+
+**Implementation status.** This design ships as **four** plans, not the three its section grouping
+suggests; the boundary was drawn by tracing module dependencies rather than section headings.
+
+| Plan | Owns | State |
+|---|---|---|
+| [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
+| [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
+| Plan 3 | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3 | not designed |
+| Plan 4 | correspondence — §5 entire, §4.2, §4.2.1 | not designed |
+
+Sections carry no per-section status marker: a section describes the design, and a section that is
+half-built is still describing the whole thing. The table above is the only status claim, and the
+plan documents record what each landed and what each deviated on.
 
 Revisions 2 through 6 respond to design review: six production-boundary defects in revision 1, six in
 revision 2, six in revision 3, five in revision 4, six in revision 5. Each is closed below and named at
@@ -35,6 +49,17 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revisions 10 and 11 come from *building* plan 2 rather than reading it, and both are the second
+pattern again. Revision 10 corrects §5.1's grep output format, which said `<commit>:<path>:<line>:`
+through nine revisions while §3.2.1's own table pinned `-z` — the two sections were each internally
+right and disagreed with each other, and plan 3 is the reader that would have been wrong. It also
+records the two actor-owned channels `-c` hardening does not reach, found by the whole-branch review
+after all four per-task reviews had passed: an untracked `.gitattributes` with `* binary` blinds every
+grep hit at exit 0, and `.git/objects/info/alternates` prepends a warning that turns every defined
+miss into a halted run. Revision 11 records the parked NFD residual in §3.1. The lesson these three
+share is §7's, arrived at from the other side: none was found by reading the design, and none would
+have been found by a suite that did not try to break its own guards.
 
 Five patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
@@ -84,7 +109,7 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–2 merged, 3–4 undesigned** |
 | Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
