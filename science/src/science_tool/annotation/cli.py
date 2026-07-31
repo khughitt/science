@@ -2729,6 +2729,11 @@ def synthesize_cmd(
     from science_tool.budget.projection import project_single_list_report
     from science_tool.budget.registry import lookup
     from science_tool.budget.sink import BoundedSink
+    from science_tool.dag.entity_frontmatter import (
+        EntityWriteError,
+        MalformedTargetError,
+        PersistedShapeError,
+    )
     from science_tool.entities import _parse_markdown_file
 
     if do_apply and input_path is None:
@@ -2808,6 +2813,8 @@ def synthesize_cmd(
     except SynthesisReadError as exc:
         raise click.ClickException(str(exc)) from exc
     except SynthesisApplyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except (PersistedShapeError, MalformedTargetError, EntityWriteError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     full = {"updated": report.updated, "skipped": dict(report.skipped), "written": report.written_paths}

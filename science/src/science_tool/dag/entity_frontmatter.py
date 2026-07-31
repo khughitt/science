@@ -268,9 +268,16 @@ def create_entity_file(
     if dest.exists():
         raise EntityWriteError(f"refusing to create {dest}: it already exists")
     today = (as_of or date.today()).isoformat()
-    return _write(dest, render_create(
+    text = render_create(
         entity, ownership=ownership, body=create_body, created=today, updated=today
-    ))
+    )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with dest.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+    except FileExistsError as exc:
+        raise EntityWriteError(f"refusing to create {dest}: it already exists") from exc
+    return dest
 
 
 def update_entity_file(

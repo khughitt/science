@@ -407,7 +407,7 @@ def apply_synthesis(
         fm = dict(current[cand.proposition])
         fm.update(plan.writes)
         fm["reasoning_source"] = source            # a synthesis-owned write (stamped on real change)
-        _write_proposition(fm, project_root, as_of)
+        _write_proposition(cand.proposition, fm, project_root, as_of)
         report.updated += 1
         report.written_paths.append(str(entity_dest(cand.proposition, project_root)))
 
@@ -419,19 +419,17 @@ def apply_synthesis(
 
 
 def _write_proposition(
-    merged_fm: dict[str, Any], project_root: Path, as_of: date | None
+    proposition: str, merged_fm: dict[str, Any], project_root: Path, as_of: date | None
 ) -> None:
     """Contained frontmatter update: only synthesis-owned keys are overwritten.
 
-    The typed reconstruction stays -- `render_update` renders owned keys from an entity. The
-    body and the identity check now come from `read_existing_target` inside
-    `update_entity_file`, which is the only writer-side reader of the destination. The synthesize
-    command still reads the same file separately when it builds its `current` frontmatter map
-    (`annotation/cli.py`), via `entities._parse_markdown_file`, which parses frontmatter differently -- it splits on
-    `---\n` as a substring anywhere, where `split_frontmatter` requires the closing fence to
-    own its own line.
+    `proposition` is the trusted candidate identity; a mismatched `id` or `kind` in the current
+    frontmatter cannot redirect the update. The body and identity admission come from
+    `read_existing_target` inside `update_entity_file`, the only writer-side destination reader.
     """
-    prop = PropositionEntity(**merged_fm)          # re-runs interlock validator
+    trusted_fm = dict(merged_fm)
+    trusted_fm.update(id=proposition, kind="proposition")
+    prop = PropositionEntity(**trusted_fm)
     update_entity_file(
         prop,
         project_root=project_root,

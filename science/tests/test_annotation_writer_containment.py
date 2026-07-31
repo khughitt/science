@@ -41,6 +41,30 @@ def test_create_entity_file_refuses_existing_destination(tmp_path: Path) -> None
                            create_body="# body\n", as_of=date(2026, 7, 31))
 
 
+def test_create_entity_file_refuses_destination_created_during_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.dag import entity_frontmatter
+
+    root = _seed(tmp_path)
+    dest = root / "entities" / "propositions" / "p.md"
+    real_render_create = entity_frontmatter.render_create
+
+    def render_then_lose_race(*args, **kwargs):
+        text = real_render_create(*args, **kwargs)
+        dest.write_text("winner\n", encoding="utf-8")
+        return text
+
+    monkeypatch.setattr(entity_frontmatter, "render_create", render_then_lose_race)
+
+    with pytest.raises(EntityWriteError, match="already exists"):
+        create_entity_file(
+            _prop(), project_root=root, ownership=OWNERSHIP,
+            create_body="# body\n", as_of=date(2026, 7, 31),
+        )
+    assert dest.read_text(encoding="utf-8") == "winner\n"
+
+
 def test_update_entity_file_refuses_missing_destination(tmp_path: Path) -> None:
     root = _seed(tmp_path)
     with pytest.raises(EntityWriteError, match="does not exist"):
@@ -332,5 +356,5 @@ def test_synthesize_refuses_pre_containment_record(tmp_path: Path) -> None:
               "reasoning_source": "llm-synth:m:proposition-synthesize-v1"}
 
     with pytest.raises(PersistedShapeError, match="legacy"):
-        _write_proposition(merged, root, date(2026, 7, 31))
+        _write_proposition("proposition:legacy", merged, root, date(2026, 7, 31))
     assert "title: ''" in dest.read_text(encoding="utf-8")   # untouched
