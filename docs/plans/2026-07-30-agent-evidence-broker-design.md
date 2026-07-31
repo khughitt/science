@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 13)
+**Status:** partially implemented (revision 14)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -49,6 +49,14 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 14 comes from a fourth review round on plan 3 and is the second pattern in its
+filesystem form. §3.5 said `served/` "is created under the same containment check as the journal" and
+stopped there — a claim about *where* the directory is, standing in for a claim about *how it is
+reached*. Because `run_dir` holds an actor-writable `served/`, every name in it is actor-controlled,
+so a lexical check followed by a pathname `open()` checks one object and opens another. §3.5 now
+states the descriptor-anchoring rule the repository already follows, and states it once, at the place
+that owns the run directory, so plan 4 inherits it rather than rediscovering it.
 
 Revision 13 comes from review of plan 3 and closes two more fail-opens, both of the first pattern.
 `InlineInput.target` had no specified spelling, and the absolute path an implementer would naturally
@@ -791,6 +799,30 @@ Content addressing is what removes the name from the actor's control: `served/<s
 bytes cannot be aimed, and two requests that produce identical bytes coincide harmlessly. The
 directory is created under the same containment check as the journal, so a relocated
 `SCIENCE_CONTROL_PLANE` cannot land it in the project tree.
+
+**Every operation on `run_dir` is anchored to a descriptor; none re-resolves a pathname.** This is a
+consequence of the table above rather than a separate rule, and it is stated here because it is the
+easiest thing in this design to implement almost-correctly. `served/` is actor-writable, and a
+directory an actor can write is a directory whose *entries are actor-controlled names* — including
+`journal.jsonl` beside it. A containment check on a pathname, followed by an `open()` of that same
+pathname, checks one object and opens another: between the two, `served`, `journal.jsonl`, or any
+component of `run_dir` itself can become a symlink into the project tree, a hard link to a project
+file (which `O_NOFOLLOW` does not see), or a FIFO (which blocks the reader forever). The consequence
+is the same fail-open in each case — the run's own broker performs an in-tree write and the tier's
+gate denies the run for it, or the exposure record silently reads as empty and the budget never
+exhausts.
+
+So the run directory is captured **once**, by walking its components with `O_NOFOLLOW`, and the lock,
+the count, the append, and the `served/` write are all performed through that one descriptor. Two
+checks are owed and they answer different questions: containment is lexical and asks whether the
+supervisor pointed this run's record inside the project tree; the anchored walk is a filesystem
+operation and asks whether we reached it without traversing something an actor planted. Neither
+implies the other. The repository already has this discipline and its primitives — see
+`findings/paths.py`; §3.4.1's objection to that module is to its *project-containment* helpers, not
+to its descriptor-anchored ones.
+
+Plan 4's replay and correspondence work inherits this: anything that later reads `run_dir` reads it
+the same way.
 
 **The served file is written before the journal line, not after.** The journal is the record of what
 the requester was *shown*, so an entry appended before delivery succeeded claims an exposure that may
