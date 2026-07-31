@@ -549,7 +549,11 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
    sha256sum -c "$EVIDENCE_DIR/science-yaml-before.sha256"
    ```
 
-   Inspect `validate.delta`. Expected removals/additions are the task-storage state and graph-freshness messages; the only newly reachable prose families allowed are `short-form-ids` and `frontmatter-inline-gap`.
+   Inspect `validate.delta`. Expected removals/additions are the task-storage
+   state and graph-freshness messages. Map every newly reachable finding family
+   to a named pre-migration `validate.check-error`; known storage-dependent
+   examples include `short-form-ids` and `frontmatter-inline-gap`. Any family
+   without that exact explanation stops the project.
 
 8. **Commit and merge locally.** Inspect `git diff --check`, `git diff --stat`, and the full diff. Stage the complete intentional project transaction with `git add -A`, inspect `git diff --cached --check` and `git diff --cached`, commit with the task's exact message, record `git rev-parse HEAD | tee "$EVIDENCE_DIR/local-commit.txt"`, then run `git -C "$PROJECT_ROOT" merge --ff-only task-storage-rollout-closure`. Do not push. Keep composite-bearing worktrees for Tasks 18-19; Task 13 may remove its worktree after the merge because therapeutics has no composite.
 
