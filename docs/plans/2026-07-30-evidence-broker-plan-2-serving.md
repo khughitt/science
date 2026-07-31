@@ -66,6 +66,33 @@ than a choice this plan is making:
 
 Read §3.2 and §3.2.1 of the design at revision 9 before starting. Do not work from an older copy.
 
+## What review found in this plan's first draft
+
+Six findings, all reproduced against git 2.55 before being fixed. They are recorded because each
+predicts a way the implementation can still go wrong, and four of them were guards that looked
+correct on the page:
+
+1. **Raw paths became pathspecs.** `authorize` normalized and then discarded the result, so git
+   received the caller's own string. With deny prefix `private`, the history target `priv*`
+   authorized and git expanded it onto `private/x.txt` — a policy bypass in both `log` and
+   `grep`. Fixed by `Authorization.path` and `literal_pathspec`.
+2. **Read-miss classification was substring-based.** A committed directory named
+   `does not exist in` produced an error containing git's own miss sentence, so a present tree
+   classified as an absent path. Fixed by `cat-file -t` plus fully interpolated sentences.
+3. **The unknown-stderr test never reached the code it named.** Its fake failed every call, so
+   `verify_commit` raised first. Fixed by answering the verification truthfully.
+4. **The dispatch guard proved membership, not ordering.** Moving a helper above `authorize`
+   still passed. Fixed by comparing source positions.
+5. **Authorization ordering contradicted its own documentation**, including a test named
+   `..._without_reaching_git` that never checked whether git was reached. Fixed by authorizing
+   first and asserting it with a landmine.
+6. **NUL-bearing patterns halted the run** as `GitError` instead of being refused as retryable.
+   Fixed by judging argv validity in `authorize`.
+
+The through-line: **four of the six were tests that passed against the defect they were written
+to catch.** Step 5 of Task 3 and Step 3 of Task 4 exist to make that impossible to repeat by
+accident — do not treat them as optional.
+
 ## Global Constraints
 
 - Work in the `feat/evidence-broker-serving` worktree at `.worktrees/evidence-broker-serving`, on
@@ -99,7 +126,7 @@ Read §3.2 and §3.2.1 of the design at revision 9 before starting. Do not work 
 |---|---|
 | `science/model/src/science_model/evidence_broker.py` | **Create.** The broker's shared model vocabulary. This plan puts `SurfacePolicy` here; plan 3 adds `InstrumentIdentity`, `InlineInput`, `ExposureEntry`, `EvidenceExposure`. It must be a model module and not a tool module because plan 3 hangs `EvidenceExposure` on `AutonomousRunRecord` (`science_model/autonomous_runs.py`), and `science_model` cannot import `science_tool`. |
 | `science/src/science_tool/evidence_broker/__init__.py` | **Create.** Package marker; no re-exports (callers import from the submodule that owns the name). |
-| `science/src/science_tool/evidence_broker/policy.py` | **Create.** `EvidenceOp`, `EvidenceRequest`, `Denial`, `authorize`, `exclude_pathspecs`. Decides *whether*; never runs git. |
+| `science/src/science_tool/evidence_broker/policy.py` | **Create.** `EvidenceOp`, `EvidenceRequest`, `Denial`, `Authorization`, `authorize`, `exclude_pathspecs`, `literal_pathspec`. Decides *whether*, and owns the one normalized spelling every downstream caller must use. Never runs git. |
 | `science/src/science_tool/evidence_broker/serve.py` | **Create.** `verify_commit`, `serve`, `ServeError`, the canonical argv, the defined-miss classifier. Decides *what bytes*; never decides policy. |
 | `science/src/science_tool/autonomy/git.py` | **Modify** (Task 1, docstring only). Admit `cat-file` to the documented probe set. |
 | `science/model/tests/test_evidence_broker_model.py` | **Create.** `SurfacePolicy` normalization and refusal. |
@@ -308,9 +335,23 @@ INERT is a finding about the command rather than about the fixture."
       reason: str      # categorised, parent-side, for the audit
       notice: str      # policy-supplied, what the requester sees
 
-  def authorize(request: EvidenceRequest, policy: SurfacePolicy) -> Denial | None
+  @dataclass(frozen=True)
+  class Authorization:
+      denial: Denial | None      # None means: may be served
+      path: str | None           # THE NORMALIZED PATH GIT MUST USE. None when the op names none.
+
+  def authorize(request: EvidenceRequest, policy: SurfacePolicy) -> Authorization
   def exclude_pathspecs(policy: SurfacePolicy) -> tuple[str, ...]
+  def literal_pathspec(path: str) -> str
   ```
+
+**`authorize` returns the normalized path, and callers must use it.** An earlier draft returned
+only `Denial | None` and discarded the normalized value, so `serve` passed the caller's *raw*
+string to git. Measured, that is a policy bypass and a wrong-file read at once: `a\b` normalizes
+to `a/b` and authorizes against that, while git reads a file literally named `a\b`; the
+authorization and the read are then about two different paths. Normalizing twice would be no
+better — one function must own the spelling, and the only way to enforce that is to make the
+authorized spelling the thing it hands back.
 
 - [ ] **Step 1: Write the failing model test**
 
@@ -434,11 +475,11 @@ import pytest
 from science_model.evidence_broker import SurfacePolicy
 
 from science_tool.evidence_broker.policy import (
-    Denial,
     EvidenceOp,
     EvidenceRequest,
     authorize,
     exclude_pathspecs,
+    literal_pathspec,
 )
 
 POLICY = SurfacePolicy(deny_prefixes=("private", "notes/a[b].md"), notice="withheld by policy")
@@ -449,51 +490,85 @@ def _read(target: str) -> EvidenceRequest:
 
 
 def test_a_path_under_a_deny_prefix_is_refused():
-    denial = authorize(_read("private/x.txt"), POLICY)
-    assert isinstance(denial, Denial)
-    assert denial.notice == "withheld by policy"
-    assert denial.reason == "path-denied"
+    auth = authorize(_read("private/x.txt"), POLICY)
+    assert auth.denial is not None
+    assert auth.denial.notice == "withheld by policy"
+    assert auth.denial.reason == "path-denied"
+    assert auth.path is None
 
 
 def test_the_prefix_itself_is_refused():
-    assert authorize(_read("private"), POLICY) is not None
+    assert authorize(_read("private"), POLICY).denial is not None
 
 
 def test_a_prefix_denies_on_component_boundaries_only():
     """`private` must deny `private/x` and must NOT deny `privateer/x`. A bare
     `startswith` would deny both, and would silently withhold an unrelated tree."""
-    assert authorize(_read("privateer/x.txt"), POLICY) is None
+    assert authorize(_read("privateer/x.txt"), POLICY).denial is None
 
 
 def test_containment_is_checked_before_any_prefix():
     """A prefix check alone is walked around with `..`, so traversal is refused first
     and is refused as MALFORMED rather than as denied -- the two are different facts and
     a requester that cannot tell them apart cannot correct its own input."""
-    denial = authorize(_read("private/../public/x.txt"), POLICY)
-    assert denial is not None
-    assert denial.reason == "path-malformed"
+    auth = authorize(_read("private/../public/x.txt"), POLICY)
+    assert auth.denial is not None
+    assert auth.denial.reason == "path-malformed"
 
 
 def test_an_absolute_path_is_refused_lexically():
-    denial = authorize(_read("/etc/passwd"), POLICY)
-    assert denial is not None
-    assert denial.reason == "path-malformed"
+    auth = authorize(_read("/etc/passwd"), POLICY)
+    assert auth.denial is not None
+    assert auth.denial.reason == "path-malformed"
 
 
 def test_an_undenied_path_is_authorized():
-    assert authorize(_read("src/main.py"), POLICY) is None
+    assert authorize(_read("src/main.py"), POLICY).denial is None
+
+
+def test_the_authorized_path_is_the_normalized_one():
+    """The value the caller must hand to git. `a\\b` normalizes to `a/b`, and a caller
+    that passed its own raw string would authorize one path and read another -- git
+    reads a file literally named `a\\b`, which no prefix was ever compared against."""
+    auth = authorize(_read("./docs//a\\b"), POLICY)
+    assert auth.denial is None
+    assert auth.path == "docs/a/b"
 
 
 def test_a_search_carries_no_path_so_only_its_pathspec_is_judged():
     """SEARCH's target is a PATTERN. Judging it as a path would refuse legitimate
     patterns for containing `/` or `..`, and would say nothing about what git reads."""
-    assert authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target="../secret"), POLICY) is None
+    assert authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target="../secret"), POLICY).denial is None
     denied = EvidenceRequest(op=EvidenceOp.SEARCH, target="x", pathspec="private/x.txt")
-    assert authorize(denied, POLICY) is not None
+    assert authorize(denied, POLICY).denial is not None
+
+
+def test_a_pattern_containing_NUL_is_refused_not_passed_to_git():
+    """A NUL cannot cross the argv boundary: `subprocess` raises `ValueError`, `run_git`
+    turns that into `GitError`, and an ordinary bad input would HALT the run instead of
+    being refused as retryable. Argv validity is judged here; regex validity is git's."""
+    auth = authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target="a\0b"), POLICY)
+    assert auth.denial is not None
+    assert auth.denial.reason == "pattern-malformed"
+
+
+def test_an_empty_pattern_is_refused():
+    auth = authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target=""), POLICY)
+    assert auth.denial is not None
+    assert auth.denial.reason == "pattern-malformed"
 
 
 def test_history_is_judged_as_a_path():
-    assert authorize(EvidenceRequest(op=EvidenceOp.HISTORY, target="private/x.txt"), POLICY) is not None
+    auth = authorize(EvidenceRequest(op=EvidenceOp.HISTORY, target="private/x.txt"), POLICY)
+    assert auth.denial is not None
+
+
+def test_a_glob_target_is_authorized_but_must_reach_git_literally():
+    """MEASURED policy bypass: `priv*` is not under any deny prefix as text, and as a
+    bare pathspec git expands it onto `private/x.txt`. `literal_pathspec` is what makes
+    the authorized spelling and the searched spelling the same string."""
+    assert authorize(EvidenceRequest(op=EvidenceOp.HISTORY, target="priv*"), POLICY).denial is None
+    assert literal_pathspec("priv*") == ":(top,literal)priv*"
 
 
 def test_exclusions_are_top_literal_and_exclude():
@@ -522,7 +597,7 @@ AGREEMENT = (
 
 @pytest.mark.parametrize("path,denied", AGREEMENT)
 def test_read_denial_matches_the_table(path: str, denied: bool):
-    assert (authorize(_read(path), POLICY) is not None) is denied
+    assert (authorize(_read(path), POLICY).denial is not None) is denied
 ```
 
 The other half of this table — that `git grep` under `exclude_pathspecs(POLICY)` withholds
@@ -597,29 +672,85 @@ class Denial:
     notice: str
 
 
+@dataclass(frozen=True)
+class Authorization:
+    """The verdict AND the spelling git must use.
+
+    Returning only a verdict is what let an earlier draft authorize one path and read another:
+    `a\\b` normalizes to `a/b` and is judged as that, while git reads a file literally named
+    `a\\b`. Handing the normalized value back makes the authorized spelling the only spelling
+    available downstream, which is stronger than asking every caller to normalize again.
+    """
+
+    denial: Denial | None
+    path: str | None = None
+
+
 def _denied_by_prefix(path: str, prefix: str) -> bool:
     """Component-boundary matching. `private` denies `private` and `private/x`, not `privateer`."""
     return path == prefix or path.startswith(f"{prefix}/")
 
 
-def _judge_path(raw: str, policy: SurfacePolicy) -> Denial | None:
+def _judge_path(raw: str, policy: SurfacePolicy) -> Authorization:
     try:
         path = normalize_project_path(raw)
     except SubjectError as exc:
         # Containment BEFORE any prefix: a prefix check alone is walked around with `..`.
         # Reported as malformed rather than denied because they are different facts -- one is
         # the requester's own error and correctable, the other is the study's boundary.
-        return Denial(reason="path-malformed", notice=str(exc))
+        return Authorization(denial=Denial(reason="path-malformed", notice=str(exc)))
     if any(_denied_by_prefix(path, prefix) for prefix in policy.deny_prefixes):
-        return Denial(reason="path-denied", notice=policy.notice)
-    return None
+        return Authorization(denial=Denial(reason="path-denied", notice=policy.notice))
+    return Authorization(denial=None, path=path)
 
 
-def authorize(request: EvidenceRequest, policy: SurfacePolicy) -> Denial | None:
-    """`None` means the request may be served. Judging happens before any join or any git call."""
-    if request.op is EvidenceOp.SEARCH:
-        return None if request.pathspec is None else _judge_path(request.pathspec, policy)
-    return _judge_path(request.target, policy)
+def _judge_pattern(pattern: str) -> Authorization:
+    """Argv validity only. Whether the regex COMPILES is git's answer to give, not this module's.
+
+    A NUL cannot cross the argv boundary: `subprocess` raises `ValueError` and `run_git` turns
+    that into `GitError`, which HALTS the run. That is the wrong disposition for the requester's
+    own bad input, which §6 classifies as retryable, so it is refused here before git is reached.
+    """
+    if not pattern:
+        return Authorization(
+            denial=Denial(reason="pattern-malformed", notice="search pattern is empty")
+        )
+    if "\0" in pattern:
+        return Authorization(
+            denial=Denial(
+                reason="pattern-malformed", notice="search pattern contains a NUL character"
+            )
+        )
+    return Authorization(denial=None)
+
+
+def authorize(request: EvidenceRequest, policy: SurfacePolicy) -> Authorization:
+    """Judge one request. Happens before any join, any pathspec build, and any git call.
+
+    `Authorization.path` is populated for the operations that name a path and is `None` for a
+    search, whose target is a pattern. A search's optional pathspec IS a path and is judged and
+    normalized like any other.
+    """
+    if request.op is not EvidenceOp.SEARCH:
+        return _judge_path(request.target, policy)
+    pattern = _judge_pattern(request.target)
+    if pattern.denial is not None:
+        return pattern
+    if request.pathspec is None:
+        return Authorization(denial=None)
+    return _judge_path(request.pathspec, policy)
+
+
+def literal_pathspec(path: str) -> str:
+    """A caller-supplied path as a pathspec git cannot expand.
+
+    MEASURED against git 2.55: with a deny prefix `private`, the history target `priv*` is under
+    no prefix as text and passes authorization -- and as a bare pathspec git expands it onto
+    `private/x.txt`, so `log` and `grep` both report the denied tree. `:(literal)priv*` matches
+    nothing. Without this, every deny prefix is walked around by a glob, which is the policy
+    bypass `exclude_pathspecs` exists to prevent on the other side of the same call.
+    """
+    return f":(top,literal){path}"
 
 
 def exclude_pathspecs(policy: SurfacePolicy) -> tuple[str, ...]:
@@ -646,13 +777,18 @@ cd science && uv run --frozen pytest tests/test_evidence_broker_policy.py -v
 
 Expected: PASS (all, including the 6 parametrized table rows).
 
-- [ ] **Step 9: Prove the boundary guard can fail**
+- [ ] **Step 9: Prove each guard can fail**
 
-Temporarily change `_denied_by_prefix` to `return path.startswith(prefix)` and re-run.
+For each, restore the prior behaviour, confirm the named test fails, then restore:
 
-Expected: `test_a_prefix_denies_on_component_boundaries_only` and the
-`privateer/x.txt` table row FAIL. Restore the correct implementation and confirm green. Record
-the observed failure in the commit message.
+| Change | Expected failure |
+|---|---|
+| `_denied_by_prefix` → `return path.startswith(prefix)` | `test_a_prefix_denies_on_component_boundaries_only` and the `privateer/x.txt` table row |
+| `_judge_path` returns `Authorization(denial=None)` without `path` | `test_the_authorized_path_is_the_normalized_one` |
+| `literal_pathspec` → `return path` | `test_a_glob_target_is_authorized_but_must_reach_git_literally` |
+| `_judge_pattern` → `return Authorization(denial=None)` | the NUL and empty-pattern tests |
+
+Record the observed failures in the commit message.
 
 - [ ] **Step 10: Lint, type-check, commit**
 
@@ -677,8 +813,19 @@ one is the requester's correctable error, the other is the study's boundary.
 Prefixes match on component boundaries -- 'private' denies 'private/x' and not
 'privateer/x'; a startswith spelling was confirmed to fail that test.
 
+It returns the NORMALIZED path rather than a bare verdict. Discarding it let a
+caller authorize one path and read another: 'a\\b' is judged as 'a/b' while git
+reads a file literally named 'a\\b'.
+
+literal_pathspec closes the matching bypass on the other side. Measured against
+git 2.55, the history target 'priv*' is under no deny prefix as text and, as a
+bare pathspec, git expands it onto private/x.txt; ':(literal)priv*' matches
+nothing.
+
 SEARCH's target is a pattern and is never judged as a path; only its optional
-pathspec is."
+pathspec is. Argv validity of the pattern IS judged here -- a NUL would raise
+ValueError inside subprocess and surface as GitError, halting the run over input
+6 classifies as retryable."
 ```
 
 ---
@@ -690,8 +837,16 @@ pathspec is."
 - Test: `science/tests/test_evidence_broker_serve.py`
 
 **Interfaces:**
-- Consumes: `run_git` (plan 1); `authorize`, `exclude_pathspecs`, `EvidenceOp`,
-  `EvidenceRequest`, `Denial` (Task 2); `SurfacePolicy`.
+- Consumes: `run_git` (plan 1); `authorize`, `exclude_pathspecs`, `literal_pathspec`,
+  `EvidenceOp`, `EvidenceRequest`, `Authorization`, `Denial` (Task 2); `SurfacePolicy`.
+
+**`authorize` runs before any git call, including `verify_commit`.** An earlier draft verified
+first and then authorized, while claiming in the same docstring that a refused request never
+reaches git. Both cannot be true. The contract this task implements and tests is the one the
+design's threat model wants: **a denied request produces no git invocation at all**, so a
+withheld path leaves no trace in a process table, a trace log, or a timing difference. The
+`0`×40 regression still holds, because an *authorized* request reaches `verify_commit` before
+anything is classified.
 - Produces, for plan 3's `session.py`:
   ```python
   class ServeError(RuntimeError): ...
@@ -718,6 +873,8 @@ inferred):
 
 | situation | exit | output |
 |---|---|---|
+| `cat-file -t <c>:<directory>` | 0 | `tree` |
+| `cat-file -t <c>:<file>` | 0 | `blob` |
 | `cat-file blob <c>:<absent, not on disk>` | 128 | `fatal: path 'x' does not exist in '<c>'` |
 | `cat-file blob <c>:<absent, present on disk>` | 128 | `fatal: path 'x' exists on disk, but not in '<c>'` |
 | `cat-file blob <c>:<directory>` | 128 | `fatal: git cat-file <c>:<path>: bad file` |
@@ -734,6 +891,17 @@ therefore answers "absent at commit" for an entirely bogus revision, and every l
 that session answers the same way. `verify_commit` first is what makes classification sound, and
 §7 names this as the regression test precisely because `"0" * 40` would let a broken
 implementation pass.
+
+**Miss classification is anchored, not substring-matched.** An earlier draft asked whether
+`does not exist in` appeared anywhere in stderr. Measured on git 2.55, a committed **directory
+named `does not exist in`** yields
+`fatal: git cat-file <c>:does not exist in: bad file` — which contains that substring, so a tree
+would have been served as a defined miss and the reviewer told the path was absent when it was
+present. The classifier therefore does two structured things instead: it asks `cat-file -t` for
+the object type, which answers `tree` at exit 0 and removes the "bad file" case entirely, and it
+compares stderr against the **fully interpolated sentences** git emits for the path and commit
+in hand. Neither can be spoofed by a filename, because a filename cannot make the whole sentence
+match while naming a different path.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -773,6 +941,14 @@ def _repo(tmp_path: Path) -> tuple[Path, str]:
     (root / "privateer" / "p.txt").write_text("secret\n", encoding="utf-8")
     (root / "notes" / "a[b].md").write_text("secret\n", encoding="utf-8")
     (root / "notes" / "ab.md").write_text("secret\n", encoding="utf-8")
+    # A directory whose NAME is git's own miss sentence, so a substring classifier reports
+    # it absent. It is committed, so `cat-file -t` must answer `tree`.
+    (root / "does not exist in").mkdir()
+    (root / "does not exist in" / "f.txt").write_text("present\n", encoding="utf-8")
+    # A file whose name contains a literal backslash, with NOTHING at `a/b`. The two
+    # spellings therefore read different things, which is what makes the normalization
+    # test below able to fail.
+    (root / "a\\b").write_text("raw\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", "-A"], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(root), "commit", "-q", "-m", "seed"], check=True, capture_output=True
@@ -835,12 +1011,62 @@ def test_read_refuses_a_directory(tmp_path: Path):
         serve(root, commit, _read("private"), OPEN)
 
 
-def test_a_denied_read_is_refused_without_reaching_git(tmp_path: Path):
+def test_a_directory_named_like_the_miss_message_is_not_a_miss(tmp_path: Path):
+    """MEASURED: `cat-file blob <c>:does not exist in` fails with
+    `fatal: git cat-file <c>:does not exist in: bad file`, which CONTAINS git's miss
+    sentence. A substring classifier serves a present directory as an absent path, and
+    tells the reviewer a file is missing when it is there."""
     root, commit = _repo(tmp_path)
+    with pytest.raises(ServeError):
+        serve(root, commit, _read("does not exist in"), OPEN)
+
+
+def test_a_denied_read_makes_no_git_call_at_all(tmp_path: Path, monkeypatch):
+    """Not merely "is refused": a withheld path must leave no trace in a process table or
+    a timing difference, so `authorize` runs before `verify_commit` and before anything
+    else. `run_git` is replaced with a landmine rather than observed after the fact."""
+    root, commit = _repo(tmp_path)
+    import science_tool.evidence_broker.serve as serve_module
+
+    def _landmine(*args, **kwargs):
+        raise AssertionError(f"a denied request reached git: {args}")
+
+    monkeypatch.setattr(serve_module, "run_git", _landmine)
     served = serve(root, commit, _read("private/x.txt"), CLOSED)
+
     assert served.outcome is Outcome.REFUSED
     assert served.denial is not None
     assert served.payload == b""
+
+
+def test_a_history_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path):
+    """MEASURED policy bypass: `priv*` is under no deny prefix as text, and as a bare
+    pathspec git expands it onto `private/x.txt`. The literal pathspec is what keeps the
+    authorized spelling and the searched spelling the same string."""
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="priv*"), CLOSED)
+    assert served.outcome is Outcome.MISS_NO_COMMITS
+
+
+def test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path):
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _search("secret", pathspec="priv*"), CLOSED)
+    assert served.outcome is Outcome.MISS_NO_MATCH
+
+
+def test_the_normalized_path_is_what_git_reads(tmp_path: Path):
+    """`a\\b` normalizes to `a/b`, and the fixture commits a file at the FORMER and nothing
+    at the latter. So the two spellings read different things, and the outcome says which
+    one `serve` used: a request judged as `a/b` must miss, while a caller passing its own
+    raw string would be served `raw\\n` -- authorizing one path and reading another.
+
+    A gentler spelling such as `.//a.txt` proves nothing here: git resolves it to `a.txt`
+    itself, so both the raw and the normalized form succeed and the test cannot fail.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(root, commit, _read("a\\b"), OPEN)
+    assert served.outcome is Outcome.MISS_ABSENT
+    assert served.payload != b"raw\n"
 
 
 def test_search_hits_carry_commit_path_and_line(tmp_path: Path):
@@ -906,18 +1132,37 @@ def test_a_wellformed_nonexistent_commit_halts_rather_than_answering(tmp_path: P
 
 def test_unrecognised_git_output_raises(tmp_path: Path, monkeypatch):
     """Anything git reports that is not a defined miss halts the run. A broker that
-    guessed would turn an instrument failure into evidence."""
+    guessed would turn an instrument failure into evidence.
+
+    THE EARLIER FAKE FAILED EVERY CALL, so `verify_commit` raised and the read
+    classifier was never reached -- the test passed without exercising the code it
+    names. This one answers the verification truthfully and only then goes strange.
+    """
     root, commit = _repo(tmp_path)
     import science_tool.evidence_broker.serve as serve_module
 
-    class _Fake:
-        returncode = 128
-        stdout = b""
-        stderr = b"fatal: something nobody has seen before\n"
+    real_run_git = serve_module.run_git
+    calls: list[tuple] = []
 
-    monkeypatch.setattr(serve_module, "run_git", lambda *a, **k: _Fake())
-    with pytest.raises(ServeError):
+    def _fake(repo_root, *args, **kwargs):
+        calls.append(args)
+        if args[0] == "rev-parse":
+            return real_run_git(repo_root, *args, **kwargs)
+
+        class _Strange:
+            returncode = 128
+            stdout = b""
+            stderr = b"fatal: something nobody has seen before\n"
+
+        return _Strange()
+
+    monkeypatch.setattr(serve_module, "run_git", _fake)
+    with pytest.raises(ServeError, match="could not be classified"):
         serve(root, commit, _read("a.txt"), OPEN)
+
+    # The verification really did run, so the raise came from the read classifier.
+    assert calls[0][0] == "rev-parse"
+    assert len(calls) > 1
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -954,6 +1199,7 @@ from science_tool.evidence_broker.policy import (
     EvidenceRequest,
     authorize,
     exclude_pathspecs,
+    literal_pathspec,
 )
 
 
@@ -981,9 +1227,21 @@ MISS_MARKERS: dict[Outcome, bytes] = {
     Outcome.MISS_NO_COMMITS: b"science-evidence: no commits for this query\n",
 }
 
-#: The two spellings git gives one fact. Which one appears depends on the working tree, which the
-#: actor owns, so both must classify the same way.
-_ABSENT_MARKERS: tuple[bytes, ...] = (b"does not exist in", b"exists on disk, but not in")
+def _absent_sentences(commit: str, path: str) -> tuple[bytes, ...]:
+    """The two spellings git gives one fact, FULLY INTERPOLATED.
+
+    Which one appears depends on whether the path is in the working tree, which the actor owns,
+    so both must classify the same way. They are built with the path and commit in hand and
+    compared whole, rather than searched for as substrings: a committed directory named
+    `does not exist in` makes `cat-file blob` fail with
+    `fatal: git cat-file <c>:does not exist in: bad file`, which CONTAINS the shorter marker.
+    A substring test therefore serves a present tree as an absent path -- measured, git 2.55.
+    A filename cannot make the whole sentence match while naming a different path.
+    """
+    return (
+        f"fatal: path '{path}' does not exist in '{commit}'".encode(),
+        f"fatal: path '{path}' exists on disk, but not in '{commit}'".encode(),
+    )
 
 #: `grep` renders through config unless argv says otherwise; `-E` is passed explicitly so
 #: `grep.patternType` cannot decide what the caller's pattern MEANS.
@@ -1038,30 +1296,49 @@ def verify_commit(repo_root: Path, commit: str) -> str:
 
 
 def _serve_read(repo_root: Path, commit: str, target: str) -> Served:
+    """Object TYPE first, then the blob. Two calls, because one cannot answer both questions.
+
+    Asking `cat-file blob` alone conflates "not there" with "there but not a file": both exit
+    128, and the tree's error text embeds git's own miss sentence. `-t` answers `tree` at exit 0,
+    which removes the ambiguous case entirely rather than parsing around it.
+    """
+    typed = run_git(repo_root, "cat-file", "-t", f"{commit}:{target}")
+    if typed.returncode != 0:
+        if typed.stderr.strip() in _absent_sentences(commit, target):
+            return _miss(Outcome.MISS_ABSENT)
+        raise ServeError(
+            f"read of {target!r} at {commit} could not be classified: "
+            f"{typed.stderr.decode('utf-8', 'replace').strip()}"
+        )
+    kind = typed.stdout.strip()
+    if kind != b"blob":
+        # A tree, or a submodule's commit. The path IS at the commit; it simply is not a file,
+        # and `git show` would answer it with a directory listing at exit 0 -- FULL coverage
+        # over a listing nobody can cite honestly.
+        raise ServeError(
+            f"read of {target!r} at {commit} names a {kind.decode('ascii', 'replace')}, not a file"
+        )
     completed = run_git(repo_root, "cat-file", "blob", f"{commit}:{target}")
-    if completed.returncode == 0:
-        return Served(outcome=Outcome.SERVED, payload=completed.stdout)
-    stderr = completed.stderr
-    if any(marker in stderr for marker in _ABSENT_MARKERS):
-        return _miss(Outcome.MISS_ABSENT)
-    # `bad file` is how `cat-file blob` refuses a TREE. It is not a miss: the path is at the
-    # commit, it simply is not a file, and serving `git show`'s directory listing instead would
-    # record FULL coverage over a listing nobody can cite honestly.
-    raise ServeError(
-        f"read of {target!r} at {commit} could not be classified: "
-        f"{stderr.decode('utf-8', 'replace').strip()}"
-    )
+    if completed.returncode != 0:
+        raise ServeError(
+            f"read of {target!r} at {commit} typed as a blob and then failed: "
+            f"{completed.stderr.decode('utf-8', 'replace').strip()}"
+        )
+    return Served(outcome=Outcome.SERVED, payload=completed.stdout)
 
 
 def _serve_search(
-    repo_root: Path, commit: str, request: EvidenceRequest, policy: SurfacePolicy
+    repo_root: Path, commit: str, pattern: str, policy: SurfacePolicy, pathspec: str | None
 ) -> Served:
+    # A PATTERN, not a request: the helper is given the two values it may use, so there is no
+    # `request.target` in reach for it to mistake for a path.
+    #
+    # `literal_pathspec` on the caller's own path, for the same reason the exclusions carry it:
+    # a bare `priv*` is under no deny prefix as text and expands onto `private/x.txt`.
     pathspecs = [*exclude_pathspecs(policy)]
-    if request.pathspec is not None:
-        pathspecs.insert(0, request.pathspec)
-    completed = run_git(
-        repo_root, *_GREP_ARGV, "-e", request.target, commit, "--", *pathspecs
-    )
+    if pathspec is not None:
+        pathspecs.insert(0, literal_pathspec(pathspec))
+    completed = run_git(repo_root, *_GREP_ARGV, "-e", pattern, commit, "--", *pathspecs)
     if completed.returncode == 0:
         return Served(outcome=Outcome.SERVED, payload=completed.stdout)
     if completed.returncode == 1:
@@ -1085,7 +1362,7 @@ def _serve_search(
 
 
 def _serve_history(repo_root: Path, commit: str, target: str) -> Served:
-    completed = run_git(repo_root, *_LOG_ARGV, commit, "--", target)
+    completed = run_git(repo_root, *_LOG_ARGV, commit, "--", literal_pathspec(target))
     if completed.returncode != 0:
         raise ServeError(
             f"history of {target!r} at {commit} could not be classified: "
@@ -1101,19 +1378,28 @@ def serve(
 ) -> Served:
     """Answer one request at a pinned commit, or refuse it, or halt.
 
-    `verify_commit` runs first and `authorize` runs second: a request that is going to be refused
-    should not reach git at all, and a request that IS going to reach git must not do so against
-    an unverified revision.
+    ORDER: authorize, then verify, then dispatch. `authorize` comes first so a denied request
+    produces NO git invocation at all -- a withheld path must leave no trace in a process table
+    and no timing difference, and a refusal that had already spawned a process would be a
+    refusal only in the return value. `verify_commit` comes second because miss classification
+    is unsound against an unverified revision (see its docstring), and every path below
+    classifies.
+
+    THE AUTHORIZED SPELLING IS THE ONLY SPELLING USED BELOW. `request.target` is not read again
+    for the operations that name a path: `auth.path` is the normalized value the policy was
+    actually compared against, and using the raw one would authorize one path and read another.
     """
+    auth = authorize(request, policy)
+    if auth.denial is not None:
+        return Served(outcome=Outcome.REFUSED, payload=b"", denial=auth.denial)
     resolved = verify_commit(repo_root, commit)
-    denial = authorize(request, policy)
-    if denial is not None:
-        return Served(outcome=Outcome.REFUSED, payload=b"", denial=denial)
     if request.op is EvidenceOp.READ:
-        return _serve_read(repo_root, resolved, request.target)
+        assert auth.path is not None  # a READ that authorized always carries its path
+        return _serve_read(repo_root, resolved, auth.path)
     if request.op is EvidenceOp.SEARCH:
-        return _serve_search(repo_root, resolved, request, policy)
-    return _serve_history(repo_root, resolved, request.target)
+        return _serve_search(repo_root, resolved, request.target, policy, auth.path)
+    assert auth.path is not None  # likewise for HISTORY
+    return _serve_history(repo_root, resolved, auth.path)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1124,20 +1410,28 @@ cd science && uv run --frozen pytest tests/test_evidence_broker_serve.py -v
 
 Expected: PASS (14 tests).
 
-- [ ] **Step 5: Prove the two load-bearing guards can fail**
+- [ ] **Step 5: Prove every load-bearing guard can fail**
 
-Both of these are guards the design says have looked right on the page before:
+These are guards the design says have looked right on the page before. For each, restore the
+prior behaviour, confirm the named test fails, then restore:
 
-1. **Commit ordering.** Move the `verify_commit(repo_root, commit)` call in `serve` to *after*
-   the `authorize` branch and pass `commit` through unresolved to the `_serve_*` helpers. Re-run.
-   Expected: `test_a_wellformed_nonexistent_commit_halts_rather_than_answering` still passes,
-   because `serve` still calls `verify_commit` at all — **so also** delete the call entirely and
-   confirm the test then reports `MISS_ABSENT` instead of raising. Restore.
-2. **The second absent spelling.** Remove `b"exists on disk, but not in"` from `_ABSENT_MARKERS`
-   and re-run. Expected:
-   `test_an_absent_path_that_exists_on_disk_is_the_same_miss` FAILS with `ServeError`. Restore.
+| Change | Expected failure |
+|---|---|
+| Delete the `verify_commit` call from `serve` | `test_a_wellformed_nonexistent_commit_halts_rather_than_answering` reports `MISS_ABSENT` instead of raising |
+| Drop the second sentence from `_absent_sentences` | `test_an_absent_path_that_exists_on_disk_is_the_same_miss` raises `ServeError` |
+| Replace `_absent_sentences` matching with `b"does not exist in" in stderr` | `test_a_directory_named_like_the_miss_message_is_not_a_miss` returns `MISS_ABSENT` |
+| Skip the `cat-file -t` call and classify from `cat-file blob` alone | the same directory test |
+| `_serve_history` passes `target` instead of `literal_pathspec(target)` | `test_a_history_glob_cannot_walk_around_a_deny_prefix` serves the denied commit |
+| `_serve_search` inserts `pathspec` instead of `literal_pathspec(pathspec)` | `test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix` |
+| `serve` passes `request.target` instead of `auth.path` | `test_the_normalized_path_is_what_git_reads` |
+| Move `verify_commit` back above the `authorize` branch | `test_a_denied_read_makes_no_git_call_at_all` trips the landmine |
 
-Record both observed failures in the commit message.
+**Do not skip the last row.** Verifying ahead of authorizing is the ordering the first draft of
+this plan had, and it passed every other test in the file — including one *named*
+`..._without_reaching_git`, which asserted the outcome and never checked the claim in its own
+name.
+
+Record the observed failures in the commit message.
 
 - [ ] **Step 6: Lint, type-check, commit**
 
@@ -1152,10 +1446,21 @@ MISS message, so a lazy implementation answers 'absent at commit' for a bogus
 revision; deleting the call was confirmed to turn the regression test's raise
 into MISS_ABSENT.
 
-read is cat-file blob: it refuses a tree, where show answers with a listing at
-exit 0. The absent miss has two spellings depending on the working tree, which
-the actor owns; dropping either was confirmed to raise on an ordinary absent
-path.
+read types the object with cat-file -t before reading it. cat-file blob alone
+conflates 'not there' with 'there but not a file', and the tree's error text
+embeds git's own miss sentence: a committed directory named 'does not exist in'
+was confirmed to classify as MISS_ABSENT under substring matching. The two miss
+spellings are now compared as fully interpolated sentences, so a filename cannot
+spoof one.
+
+authorize runs before any git call, including verify_commit, so a denied request
+spawns no process at all -- asserted with a landmine rather than by inspecting
+the return value. The earlier ordering passed a test named
+'without_reaching_git' that never checked its own claim.
+
+Caller-supplied paths reach git as :(top,literal) pathspecs and as the
+normalized spelling authorize returned. Without either, 'priv*' walks around the
+deny prefix 'private' -- measured on git 2.55 for both log and grep.
 
 A malformed pattern is refused as retryable rather than raised -- it is the
 requester's own input and carries no repository fact. Every search carries the
@@ -1313,16 +1618,22 @@ def test_the_defined_miss_classifier_survives_a_translated_parent(tmp_path: Path
     assert served.outcome is Outcome.MISS_ABSENT
 
 
-def test_no_path_reaches_git_without_passing_authorize():
-    """Derived from the code, not from a list someone maintains -- same spirit as
-    `tests/test_instrument_boundary.py`. Every `run_git` call in the broker must sit in a
-    function `serve` reaches only after `authorize` has returned None, and `serve` is the
-    only exported entry point that takes a request."""
+GIT_TOUCHING = ("verify_commit", "_serve_read", "_serve_search", "_serve_history")
+
+
+def _serve_ast():
     # Located from the module, not from the working directory: a relative path here would
     # make the guard's reach depend on where pytest was invoked from.
     import science_tool.evidence_broker.serve as serve_module
 
-    tree = ast.parse(Path(serve_module.__file__).read_text(encoding="utf-8"))
+    return ast.parse(Path(serve_module.__file__).read_text(encoding="utf-8"))
+
+
+def test_every_git_call_in_the_broker_sits_in_a_known_helper():
+    """Derived from the code, not from a list someone maintains -- same spirit as
+    `tests/test_instrument_boundary.py`. A new `run_git` call site added anywhere else
+    fails here rather than quietly acquiring an unaudited path to git."""
+    tree = _serve_ast()
     callers = {
         node.name
         for node in ast.walk(tree)
@@ -1334,21 +1645,37 @@ def test_no_path_reaches_git_without_passing_authorize():
             for inner in ast.walk(node)
         )
     }
-    assert callers == {"verify_commit", "_serve_read", "_serve_search", "_serve_history"}
+    assert callers == set(GIT_TOUCHING)
 
+
+def test_authorize_precedes_every_git_call_in_serve():
+    """ORDERING, not membership. Asserting only that `serve` CONTAINS a call to
+    `authorize` passes when a helper is invoked above it -- which is exactly the defect
+    this guard exists to catch, and exactly the shape the first draft shipped.
+
+    Compares source positions: every git-touching call in `serve`'s body must begin after
+    the `authorize` call ends. `ast` gives real line/column offsets, so this is a fact
+    about the code rather than about a set.
+    """
     serve_fn = next(
         node
-        for node in ast.walk(tree)
+        for node in ast.walk(_serve_ast())
         if isinstance(node, ast.FunctionDef) and node.name == "serve"
     )
-    called = {
-        inner.func.id
-        for inner in ast.walk(serve_fn)
-        if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
-    }
-    assert "authorize" in called
-    # Every git-touching helper other than `verify_commit` is reached only from `serve`.
-    assert {"_serve_read", "_serve_search", "_serve_history"} <= called
+    positions: dict[str, list[tuple[int, int]]] = {}
+    for inner in ast.walk(serve_fn):
+        if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name):
+            positions.setdefault(inner.func.id, []).append((inner.lineno, inner.col_offset))
+
+    assert "authorize" in positions, "serve does not authorize at all"
+    assert len(positions["authorize"]) == 1, "one authorization, so there is one thing to order"
+    authorized_at = positions["authorize"][0]
+
+    reached = {name: positions[name] for name in GIT_TOUCHING if name in positions}
+    assert set(reached) == set(GIT_TOUCHING), f"serve does not dispatch to {set(GIT_TOUCHING) - set(reached)}"
+    for name, sites in reached.items():
+        for site in sites:
+            assert site > authorized_at, f"{name} is called at {site}, before authorize at {authorized_at}"
 
 
 def test_the_broker_makes_no_direct_subprocess_call():
@@ -1393,6 +1720,11 @@ For each, restore the prior behaviour, confirm the named test fails, then restor
 | `--pretty=format:%H %aI` | the `pretty` row |
 | `--no-decorate` | the `decorate` row |
 | `LC_ALL`/`LANG` from `git.py`'s `_ENVIRONMENT` | the locale replay and the translated-parent rows |
+| Move `verify_commit(repo_root, commit)` above the `authorize` branch in `serve` | `test_authorize_precedes_every_git_call_in_serve` |
+| Add a `run_git` call to `policy.py` | `test_every_git_call_in_the_broker_sits_in_a_known_helper` (and the subprocess guard, if spelled with `subprocess`) |
+
+The ordering row is the one that matters most: the guard it exercises replaced a membership
+check that passed against the very defect it was written to catch.
 
 The `log.showSignature` row is disarmed in `run_git`'s `_HARDENING`, not in `serve.py` — plan 1
 already proved that guard can fail, so do not re-prove it here.
@@ -1415,8 +1747,11 @@ rather than how it looks. A POSIX class replays identically across parent
 locales, and the defined-miss classifier survives a translated parent, which is
 the case that would turn an ordinary absent path into a halted run.
 
-Two derived guards, from the AST rather than a maintained list: every run_git
-call sits behind authorize, and the package makes no direct subprocess call."
+Three derived guards, from the AST rather than a maintained list: every run_git
+call sits in a known helper, authorize precedes every one of them by source
+position rather than by set membership, and the package makes no direct
+subprocess call. The membership spelling passed against a helper invoked above
+the authorization, which is the defect the guard exists to catch."
 ```
 
 ---
@@ -1434,11 +1769,19 @@ establish it **under the condition the claim names**? Specifically: the locale t
 replay across differing parents, not as a single run under one locale; the hostile-config tests
 compare against a baseline built in a *separate* repository, not against a hard-coded string.
 
-**3. Type consistency.** `Outcome`, `Served`, `ServeError`, `Denial`, `EvidenceOp`,
-`EvidenceRequest`, `SurfacePolicy`, `authorize`, `exclude_pathspecs`, `verify_commit`, `serve` —
-spelled identically in every task and in plan 3's Interfaces expectations.
+**3. Type consistency.** `Outcome`, `Served`, `ServeError`, `Denial`, `Authorization`,
+`EvidenceOp`, `EvidenceRequest`, `SurfacePolicy`, `authorize`, `exclude_pathspecs`,
+`literal_pathspec`, `verify_commit`, `serve` — spelled identically in every task and in plan 3's
+Interfaces expectations.
 
-**4. Parked items from plan 1 that do NOT belong here.** `run_slug`'s unbounded handle length and
+**4. The path-spelling invariant.** Grep the finished `serve.py` for `request.`. It must appear
+**only inside `serve` itself**, which destructures the request once and passes a pattern or an
+`auth.path` downward; no `_serve_*` helper may take an `EvidenceRequest` at all. A helper holding
+the request is a helper that can reach the raw target, which is the defect review found in the
+first draft — authorizing one spelling and handing git another. Then grep for `"--"` and confirm
+every caller-supplied path in the argv built after it is wrapped in `literal_pathspec`.
+
+**5. Parked items from plan 1 that do NOT belong here.** `run_slug`'s unbounded handle length and
 the `ControlPlaneError`/`BaselineError` CLI handler both wait for plan 3, where the first `mkdir`
 and the first CLI handler appear. Do not fix them here — there is nothing to hold them to.
 
