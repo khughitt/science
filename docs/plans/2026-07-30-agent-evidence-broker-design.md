@@ -375,8 +375,29 @@ the argv the broker builds, so that determinism does not depend on a config file
 
 | Op | Pinned |
 |---|---|
-| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` with `core.quotePath=false` for stable path encoding; `--no-recurse-submodules` |
-| `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `log.showSignature=false` |
+| `grep` | pattern type passed explicitly, never inherited; `--no-color`; `--no-column`; `-n`; `-z` (which makes `core.quotePath` inert — pinning the config key as well was measured to be unnecessary, so it is not passed); `-a`; `--no-recurse-submodules` |
+| `log` | explicit `--pretty=format:` with `%H`/`%aI`; `--no-decorate`; `--no-notes`; `--no-abbrev-commit`; `--no-follow`; `log.showSignature=false` |
+
+**`-c` hardening does not reach every actor-owned channel, and this table's first nine revisions
+assumed it did.** Two channels sit outside `.git/config` entirely and were found only by a
+whole-branch review, after all four per-task reviews passed:
+
+- **The attribute stack.** An *untracked* `.gitattributes`, or `$GIT_DIR/info/attributes`, carrying
+  `* binary` turns every grep hit into `Binary file <commit>:<path> matches` at exit 0 — a served
+  payload with no line numbers and no content, reported as success. There is no config key to pin
+  and `--attr-source` replaces only the tracked layer. `-a` neutralizes it, at the cost of raw bytes
+  for genuinely binary blobs. `-I` is not an alternative: binary-ness would still be
+  attribute-derived, which is to say actor-controlled.
+- **`.git/objects/info/alternates`.** An unresolvable path there makes git prepend
+  `error: unable to normalize alternate object path: …` to stderr on an otherwise ordinary command.
+  Any classifier comparing the *whole* stderr buffer then fails to recognize a defined miss and
+  halts the run — so a hostile repository can guarantee the auditor never records an absent path,
+  which §5.1 calls frequently the decisive finding. Classify against the last line, not the buffer.
+
+The rule that produced §3.2.1 — *only what was shown to execute is neutralized* — is sound, but its
+scope was the set of channels someone thought to probe. `log.follow` was missed the same way: it
+changes served history whenever exactly one pathspec is given, which is any policy with no deny
+prefixes.
 | `cat-file blob <commit>:<path>` | nothing further — a blob read; a new subcommand to `git.py`, so probed under §3.2.1's rule before it ships |
 | all three | `LC_ALL=C`, `LANG=C` in the child environment |
 
@@ -973,8 +994,13 @@ legitimate and often decisive review finding that this design cannot mechanicall
 checkable needs a `SearchEvidence` variant carrying the pattern and pathspec, which belongs with the
 consumer that needs it (2c) rather than being speculatively added here.
 
-`git grep -n <pattern> <commit>` prefixes every hit with `<commit>:<path>:<line>:`, so the matched
-lines are recoverable from the served bytes — which is a second reason replay is not optional, since
+`git grep -n -z <pattern> <commit>` prefixes every hit with `<commit>:<path>\0<line>\0`, so the
+matched lines are recoverable from the served bytes — **NUL-separated, not colon-separated.**
+Revisions 1–9 said `<commit>:<path>:<line>:` here while §3.2.1's own table pinned `-z`, which
+changes the separator. A parser written to the colon spelling recovers no line numbers at all, so
+every search-derived citation would be `CITATION_UNSERVED` and §5.3 would refuse an honest review.
+The NUL form is what ships and what plan 3 must parse; a path is unambiguous under it, which is why
+`-z` is pinned in the first place — which is a second reason replay is not optional, since
 the journal stores only a hash of them. Where a path is both read and searched, `FULL` supersedes
 `LINES`.
 
