@@ -178,18 +178,20 @@ Overlay files are project-authored sources. Their graph identity is the stable,
 project-relative POSIX path, such as `overlays/papers/Garraway2006.md`, not the
 absolute directory from which a build happened to run.
 
-Keep `ProjectSources.commons_overlay_paths` absolute. Loaders, diagnostics, and
-arbitration use those paths to open files, and changing that interface would
-broaden this correction unnecessarily. Normalize only at the graph-emission
-boundary: resolve the recorded overlay path, require it to be contained by
-`sources.project_root`, and serialize `relative_to(project_root).as_posix()`.
+Keep `ProjectSources.commons_overlay_paths` absolute. It is the direct
+projection of `borrower.declaration.source_ref.path`, and the Commons canary
+pins that `SourceRef.path`-derived value to an absolute filename. Normalize
+only at the graph-emission boundary, its sole reader: resolve both
+`sources.project_root` and the recorded overlay path, require the latter to be
+contained by the former, and serialize `relative_to(project_root).as_posix()`.
 An overlay outside the project root is a compiler error rather than a fallback
 to machine-specific provenance.
 
 This is the smallest shared fix because every graph-emission path already
-passes through `_emit_phase`. Changing `ProjectSources` would alter an internal
-loading contract with filesystem consumers. Mapping a worktree to the primary
-checkout's absolute path would still make graph bytes machine- and
+passes through `_emit_phase`. Changing `ProjectSources` would redefine its
+`SourceRef.path`-derived projection and invalidate the absolute-path canary even
+though only persisted graph identity is defective. Mapping a worktree to the
+primary checkout's absolute path would still make graph bytes machine- and
 location-dependent.
 
 Tests prove that:
@@ -200,7 +202,9 @@ Tests prove that:
 - an overlay path outside the project root fails early;
 - identical project content built from a primary checkout and a linked
   worktree produces byte-identical local graph output;
-- generated graphs contain no `.worktrees/` overlay provenance.
+- generated graphs contain no absolute `/.../overlays/...` source identifier;
+- two peers with the same relative overlay path retain separate source quads in
+  their respective project named graphs.
 
 This correction is published as a second prerequisite revision; the already
 published parser revision is not rewritten.
@@ -328,10 +332,18 @@ of per-task source paths, and corresponding provenance-node changes. Task IDs
 and task-domain triples remain equivalent.
 
 Overlay-bearing graphs also replace absolute overlay provenance with stable
-project-relative paths. Before any local commit, reject `.worktrees/` in the
-complete generated graph. Rebuilds from the primary checkout and rollout
-worktree must produce identical local graph bytes once both name the same
-content and corrected toolkit revision.
+project-relative paths. Before any local commit, require zero source identifiers
+matching an absolute `/.../overlays/...` path; checking only for `.worktrees/`
+would miss the same defect in a primary-checkout build. Rebuilds from the
+primary checkout and rollout worktree must produce identical local graph bytes
+once both name the same content and corrected toolkit revision.
+
+The artifact gate is the direct persisted predicate:
+
+```bash
+test "$(rg -o 'schema:identifier "/[^"]*/overlays/[^"]*"' \
+  knowledge/graph.trig | wc -l)" -eq 0
+```
 
 ### 6.3 Composite phase
 
@@ -377,6 +389,14 @@ after. Default Commons behavior remains in force. A Commons-resolution failure
 is reported and blocks the affected build; `--no-commons` is not a silent
 fallback.
 
+Relative overlay source URIs are project-local identities, not globally unique
+federation identities. Composite assembly places each peer's complete local
+graph into that peer's project named graph. Two peers may therefore contain the
+same `overlays/<kind>/<name>.md` source URI without losing quads; the named graph
+is the required qualifier. Composite consumers inspecting provenance must read
+quads or otherwise preserve graph context rather than flattening peer graphs
+into one union and treating a source URI as globally unique.
+
 ## 7. Validation contract
 
 Validation is compared within each worktree using complete JSON output and
@@ -418,6 +438,13 @@ its regression tests, and this rollout amendment. Run focused graph tests,
 Ruff, Pyright, and the full default Science suite before pushing it to
 `origin/main`. Consumer locks use the second public SHA; it contains the parser
 correction by ancestry.
+
+That sentence describes the corrective commit's scope, not the complete
+revision history consumers receive. At amendment review, toolkit `main` was
+eight commits ahead and zero behind `origin/main`, including the entity-index
+path scrub and scoped-validation documentation. Reconcile the rollout branch
+with that local `main` before the release gate; the published corrective SHA
+inherits those commits rather than pretending to be parser-plus-overlay only.
 
 At design review, local toolkit `main` was one commit ahead and zero behind
 `origin/main`, so the first prerequisite push had a clean ancestry. Reconfirm
@@ -497,10 +524,11 @@ parity impossible to interpret.
 
 ### 10.4 Make overlay paths relative in `ProjectSources`
 
-The loader's absolute paths are useful for opening files and reporting precise
-diagnostics. Changing that contract would touch arbitration and inventory
-consumers when only persisted graph identity is defective. Normalize at graph
-emission instead.
+`commons_overlay_paths` itself has one reader, graph materialization, but its
+value is projected directly from `SourceRef.path`; the Commons canary pins that
+upstream path as absolute. Changing the loader projection would redefine the
+source-reference contract to repair a persistence-only defect. Normalize at
+graph emission instead.
 
 ### 10.5 Serialize the primary checkout's absolute overlay path
 
@@ -541,5 +569,6 @@ The rollout is complete when:
 8. Cancer and health peer checks complete without storage errors.
 9. Validation emits no traceback or task-storage fallback warning.
 10. Registry and peer topology are unchanged.
-11. No closure-target graph contains `.worktrees/` overlay provenance, and an
-    overlay-bearing primary/worktree rebuild is byte-identical.
+11. No closure-target graph contains a source identifier that is an absolute
+    path containing `/overlays/`, and an overlay-bearing primary/worktree
+    rebuild is byte-identical.
