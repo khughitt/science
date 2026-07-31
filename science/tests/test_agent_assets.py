@@ -93,26 +93,19 @@ def test_coding_agent_docs_distinguish_claude_code_support() -> None:
     assert "| Intent | Claude Code | Agent Skill | CLI |" in workflows
 
 
-@pytest.fixture
-def generated(tmp_path: Path) -> GenerationResult:
+@pytest.fixture(scope="module")
+def generated(tmp_path_factory: pytest.TempPathFactory) -> GenerationResult:
+    root = tmp_path_factory.mktemp("agent-assets")
     return generate_agent_assets(
         ROOT,
-        tmp_path / "skills",
-        tmp_path / "commands",
+        root / "skills",
+        root / "commands",
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def skills_root(generated: GenerationResult) -> Path:
     return generated.skill_paths["science-status"].parent.parent
-
-
-def _generate(tmp_path: Path) -> GenerationResult:
-    return generate_agent_assets(
-        ROOT,
-        tmp_path / "skills",
-        tmp_path / "commands",
-    )
 
 
 def _read_skill(skills_root: Path, name: str) -> str:
@@ -1219,7 +1212,7 @@ def test_generated_command_skill_loads_name_emitted_packages(
         "_validate_dependencies",
         capture_dependencies,
     )
-    generated = _generate(tmp_path)
+    generated = generate_agent_assets(ROOT, tmp_path / "skills", tmp_path / "commands")
     emitted_names = set(generated.skill_paths)
     command_names = {command_to_skill_name(path) for path in sorted((ROOT / "commands").glob("*.md"))}
     for command_name in sorted(command_names):
@@ -1581,9 +1574,8 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness(
         assert expected in text
 
 
-def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     expected_strings = (
         "Proteomics, phosphoproteomics, mass spectrometry, peptide intensity, TMT, LFQ",
@@ -1602,9 +1594,8 @@ def test_generated_plan_analysis_skill_routes_proteomics_and_sensor_time_series(
     assert "statistics-time-series-and-longitudinal-models` if present" not in text
 
 
-def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+def test_generated_plan_analysis_skill_routes_network_dyadic_permutation_designs(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     expected_strings = (
         "Network/graph edges, dyadic data, edge prediction, node-label permutation, QAP/MRQAP",
@@ -1631,9 +1622,8 @@ def test_generated_command_skills_preserve_domain_and_entity_vocabulary(
     assert "`science-research-package`" not in review
 
 
-def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+def test_catalog_datasets_generated_skill_is_layout_v3_aware(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-catalog-datasets")
 
     assert "entities/questions/" in text
     assert "entities/hypotheses/" in text
@@ -1645,9 +1635,8 @@ def test_catalog_datasets_generated_skill_is_layout_v3_aware(tmp_path: Path) -> 
     assert "- `specs/scope-boundaries.md`" not in text
 
 
-def test_catalog_datasets_generated_skill_warns_about_metadata_completion(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+def test_catalog_datasets_generated_skill_warns_about_metadata_completion(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-catalog-datasets")
     normalized = _norm(text)
 
     assert "Metadata completion" in text
@@ -1661,9 +1650,8 @@ def test_catalog_datasets_generated_skill_warns_about_metadata_completion(tmp_pa
     assert 'role: "training"' in text
 
 
-def test_catalog_datasets_generated_skill_documents_dataset_link_helper(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-catalog-datasets"].read_text(encoding="utf-8")
+def test_catalog_datasets_generated_skill_documents_dataset_link_helper(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-catalog-datasets")
 
     assert "science dataset reconcile-links --format json" in text
     assert "science dataset reconcile-links --fix" in text
@@ -1711,9 +1699,8 @@ def test_plan_pipeline_skill_uses_current_dataset_verify_access_gate(
     assert "future `science dataset verify`" not in text
 
 
-def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+def test_generated_plan_pipeline_respects_project_plan_numbering_convention(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-plan-pipeline")
 
     assert (
         "Do not blindly use `YYYY-MM-DD-<slug>` in projects whose `entities/plans/` use numeric `NNNN-` stems" in text
@@ -1721,9 +1708,8 @@ def test_generated_plan_pipeline_respects_project_plan_numbering_convention(tmp_
     assert "entities/plans/<NNNN>-<slug>.md" in text
 
 
-def test_generated_plan_pipeline_keeps_core_decisions_out_of_related_refs(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+def test_generated_plan_pipeline_keeps_core_decisions_out_of_related_refs(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-plan-pipeline")
     normalized = _norm(text)
 
     assert "Core-log decisions are not graph refs" in text
@@ -1734,40 +1720,36 @@ def test_generated_plan_pipeline_keeps_core_decisions_out_of_related_refs(tmp_pa
     assert "it is not a resolvable entity kind" not in text
 
 
-def test_generated_task_skills_use_aspects_for_task_creation(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
+def test_generated_task_skills_use_aspects_for_task_creation(skills_root: Path) -> None:
     for skill_name in ("science-tasks", "science-review-tasks"):
-        text = generated[skill_name].read_text(encoding="utf-8")
+        text = _read_skill(skills_root, skill_name)
 
         assert 'tasks add "<title>" --type' not in text
         assert 'tasks add "<title>" --aspects=<aspect>' in text
 
 
 def test_generated_tasks_skill_allows_task_scoped_aspects_without_project_declaration(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-tasks"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-tasks")
 
     assert "Task-scoped aspects do not need to be declared in `science.yaml`" in text
     assert "project-wide aspect behavior" in text
 
 
 def test_generated_plan_analysis_skill_reuses_task_scoped_aspects_for_blockers(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     assert "Reuse task-scoped aspects" in text
     assert "do not mutate `science.yaml` solely to create blocker tasks" in text
 
 
 def test_generated_plan_analysis_skill_discovers_legacy_doc_meta_pre_registrations(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     assert "Pre-registration discovery" in text
     assert "entities/pre-registrations/" in text
@@ -1778,10 +1760,9 @@ def test_generated_plan_analysis_skill_discovers_legacy_doc_meta_pre_registratio
 
 
 def test_generated_plan_analysis_skill_requires_per_input_data_profile(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     assert "Per-Input Data Profile" in text
     assert "one row per input artifact or dataset" in text
@@ -1794,10 +1775,9 @@ def test_generated_plan_analysis_skill_requires_per_input_data_profile(
 
 
 def test_generated_plan_analysis_skill_preserves_locked_pre_registration_criteria(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-analysis"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-plan-analysis")
 
     assert "When a Pre-Registration Already Exists" in text
     assert "do **not** re-derive decision" in text
@@ -1807,10 +1787,9 @@ def test_generated_plan_analysis_skill_preserves_locked_pre_registration_criteri
 
 
 def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-plan-pipeline")
 
     assert "`access.level: mixed` with public-slice consumption" in text
     assert "PASS/DEFER only for the named public slice" in text
@@ -1818,9 +1797,8 @@ def test_generated_plan_pipeline_skill_documents_mixed_access_public_slice_gate(
     assert "HALT if the plan would consume any restricted sibling" in text
 
 
-def test_generated_pre_register_skill_documents_runnable_now_gate(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+def test_generated_pre_register_skill_documents_runnable_now_gate(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-pre-register")
 
     assert "Execution-readiness gate" in text
     assert "runnable-now mode" in text
@@ -1829,10 +1807,9 @@ def test_generated_pre_register_skill_documents_runnable_now_gate(tmp_path: Path
 
 
 def test_generated_pre_register_skill_documents_multi_analysis_registry(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-pre-register")
 
     assert "Analysis Registry" in text
     assert "one pre-registration covers multiple analyses" in text
@@ -1842,10 +1819,9 @@ def test_generated_pre_register_skill_documents_multi_analysis_registry(
 
 
 def test_generated_pre_register_skill_documents_in_run_calibration_gate(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-pre-register")
 
     assert "Calibration Gate" in text
     assert "in-run, no-peeking, marginal-derived threshold" in text
@@ -1855,10 +1831,9 @@ def test_generated_pre_register_skill_documents_in_run_calibration_gate(
 
 
 def test_generated_pre_register_skill_loads_real_artifacts_before_locking_thresholds(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-pre-register")
 
     assert "Feasibility Against Real Input Artifacts" in text
     assert "Before locking any threshold in § 3" in text
@@ -1872,10 +1847,9 @@ def test_generated_pre_register_skill_loads_real_artifacts_before_locking_thresh
 
 
 def test_generated_pre_register_skill_rederives_every_referenced_count_from_artifacts(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-pre-register")
 
     assert "Count ledger" in text
     assert "every numeric count referenced anywhere in the pre-registration" in text
@@ -1886,10 +1860,9 @@ def test_generated_pre_register_skill_rederives_every_referenced_count_from_arti
 
 
 def test_generated_pre_register_skill_documents_derivation_cohort_circularity(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-pre-register"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-pre-register")
     normalized = _norm(text)
 
     assert "Derivation-cohort circularity" in text
@@ -1900,10 +1873,9 @@ def test_generated_pre_register_skill_documents_derivation_cohort_circularity(
 
 
 def test_generated_interpret_results_skill_clarifies_single_line_authoring_vs_touching(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-interpret-results"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-interpret-results")
     normalized = _norm(text)
 
     assert "Authoring a new single-line proposition" in text
@@ -1913,10 +1885,9 @@ def test_generated_interpret_results_skill_clarifies_single_line_authoring_vs_to
 
 
 def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-specify-model"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-specify-model")
 
     assert "`proxy_directness:` must be one of `direct`, `indirect`, or `derived`" in text
     assert "Do not write `proxy`; graph build rejects it." in text
@@ -1925,10 +1896,9 @@ def test_generated_specify_model_skill_documents_proxy_directness_vocabulary(
 
 
 def test_generated_specify_model_skill_routes_hypotheses_to_proposition_bundles(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-specify-model"].read_text(encoding="utf-8")
+    text = _read_skill(skills_root, "science-specify-model")
 
     assert "**Hypothesis / epistemic entity with no DAG yet**" in text
     assert "decompose the hypothesis into durable `proposition:` entities" in text
@@ -1937,17 +1907,15 @@ def test_generated_specify_model_skill_routes_hypotheses_to_proposition_bundles(
     assert "Do not leave the decomposition only as prose inside the hypothesis file." in text
 
 
-def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-review-pipeline"].read_text(encoding="utf-8")
+def test_review_pipeline_generated_skill_uses_doc_reviews_for_reports(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-review-pipeline")
 
     assert "doc/reviews/<stem>-pipeline-review.md" in text
     assert "entities/plans/<stem>-review.md" not in text
 
 
-def test_review_pipeline_skill_documents_data_availability_tightening(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    text = generated["science-review-pipeline"].read_text(encoding="utf-8")
+def test_review_pipeline_skill_documents_data_availability_tightening(skills_root: Path) -> None:
+    text = _read_skill(skills_root, "science-review-pipeline")
     normalized = " ".join(text.split())
 
     assert "locked pre-registration model" in text
@@ -2106,13 +2074,12 @@ def test_concept_ownership_skills_reflect_command_boundaries(
 
 
 def test_generated_concept_ownership_skills_reflect_command_boundaries(
-    tmp_path: Path,
+    skills_root: Path,
 ) -> None:
-    generated = _generate(tmp_path).skill_paths
-    sketch_model_raw = generated["science-sketch-model"].read_text(encoding="utf-8")
+    sketch_model_raw = _read_skill(skills_root, "science-sketch-model")
     sketch_model = _norm(sketch_model_raw)
-    specify_model = _norm(generated["science-specify-model"].read_text(encoding="utf-8"))
-    plan_pipeline_raw = generated["science-plan-pipeline"].read_text(encoding="utf-8")
+    specify_model = _norm(_read_skill(skills_root, "science-specify-model"))
+    plan_pipeline_raw = _read_skill(skills_root, "science-plan-pipeline")
     plan_pipeline = _norm(plan_pipeline_raw)
 
     assert "Use the most specific registered source kind available before creating a local concept." in sketch_model
@@ -2142,10 +2109,9 @@ def test_concept_authoring_skills_use_entity_owners(skills_root: Path) -> None:
     assert 'create a concept entity with `science entity create concept "<title>"`' in health
 
 
-def test_concept_authoring_generated_skills_use_entity_owners(tmp_path: Path) -> None:
-    generated = _generate(tmp_path).skill_paths
-    create_graph = _norm(generated["science-create-graph"].read_text(encoding="utf-8"))
-    health = _norm(generated["science-health"].read_text(encoding="utf-8"))
+def test_concept_authoring_generated_skills_use_entity_owners(skills_root: Path) -> None:
+    create_graph = _norm(_read_skill(skills_root, "science-create-graph"))
+    health = _norm(_read_skill(skills_root, "science-health"))
 
     assert (
         'Use `science entity create concept "<title>"` when a project-scoped concept needs a durable graph identity'
