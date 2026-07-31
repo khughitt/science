@@ -1724,6 +1724,61 @@ Task 3 proved `serve` answers correctly in a clean repository. This task proves 
 **identically in a hostile one** — which is the property replay actually depends on, and the one
 no test inside Task 3 establishes.
 
+> **Shipped with eight accepted corrections** (`f36dafda` → `f8b96278`, 20 tests). The review's
+> method is the reusable part: patch `_GREP_ARGV` to `("grep",)` and `_LOG_ARGV` to `("log",)` —
+> remove *all* argv pinning at once — and ask which rows notice. **Six of the twelve
+> parametrizations below noticed nothing.** What the table above calls a hostile repository was, in
+> three cases, a repository with git's own defaults:
+>
+> | row as planned | measured | corrected to |
+> |---|---|---|
+> | `grep.patternType=basic` | ≡ unset; git's default grammar | `extended` |
+> | `core.quotePath=true` | ≡ unset; the default | `false`, plus a `café.txt` fixture file |
+> | `grep.lineNumber=false` | ≡ unset; the default | `true` |
+>
+> Two more rows were inert for a different reason: the fixture's content could not tell the
+> grammars apart. `alpha.beta` matched the same lines under `fixed` and `extended` because nothing
+> in the fixture exercised the `.`. The content now carries `alphaXbeta` (separates `fixed`),
+> `alpha1` searched with `alpha\d` (separates `perl`), and `gammaadelta` searched with
+> `gamma+delta` (separates `extended`).
+>
+> **`-E` cannot be certified differentially at all.** Git's default grammar is basic, so the
+> baseline repository degrades in lockstep with the hostile one and the two agree either way. It
+> needs a non-differential assertion — `gamma+delta` must match `gammaadelta` — which is now
+> `test_grep_dash_e_is_pinned_against_an_unconfigured_repository`. A differential test cannot see a
+> flag whose absence moves both sides.
+>
+> The three derived guards needed four repairs, all of the same kind:
+>
+> - `_module_asts` globbed `*.py` non-recursively while its docstring claimed *every* module. A
+>   file at `evidence_broker/impl/raw.py` carrying `import subprocess`, a raw
+>   `subprocess.run(["git", ...])` and an unaudited `run_git` call was admitted **silently by both**
+>   derived guards. `rglob` closes it. Plan 3 adds modules to this package.
+> - `test_the_broker_makes_no_direct_subprocess_call` passed over zero modules. It now asserts it
+>   saw the modules it claims to cover.
+> - The known-helper guard matched only `ast.FunctionDef`, so a module-level `run_git(...)` call and
+>   an `async def` wrapper were both invisible.
+> - `_SPAWNING_PREFIXES` contained `"exec"`, which rejects an innocuous `execute_plan()`. Narrowed
+>   to `("execl", "execv")` — every `os` exec spelling is `exec` + `l` or `v` — and re-verified: all
+>   23 spawn-family names still caught, 0 of 7 innocuous `exec*` names rejected.
+>
+> **Mutation-table footnotes.** Two rows the plan claims are proven singly are not: `--no-decorate`
+> and `--no-abbrev-commit` are inert while `--pretty=format:%H %aI` carries no `%d`/`%D`, and only
+> fail under a **two-token** mutation that drops the pretty format as well. That is defence
+> outliving a format change, and it is why both flags stay. `--no-notes` is certified by nothing at
+> all. The `signature` row is proven in plan 1, not here.
+>
+> The locale rows discriminate according to the **ambient** locale of the test runner, which the
+> plan never said: under ambient `LANG=en_US.UTF-8` the `C` and `fr_FR.UTF-8` rows bite and
+> `en_US.UTF-8` does not; under `LC_ALL=C`, exactly the reverse. `fr_FR.UTF-8` is not installed
+> here, so glibc falls back to C and that row duplicates the `C` row rather than adding a third
+> locale. Both facts are now in the test's own docstring. No `pytest.skip` — a guard that skips on
+> the machine where it matters is a guard that never runs.
+>
+> Six of these eight are one pattern, for the fifth and sixth time in this plan: **a check whose
+> scope is narrower than the rule it enforces.** A non-recursive glob, a roster of `os` names, a
+> single `ast` node type, a default value dressed as a hostile one.
+
 **Files:**
 - Test: `science/tests/test_evidence_broker_canonical.py`
 
