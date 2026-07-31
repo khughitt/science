@@ -27,6 +27,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from science_tool.autonomy.git import GitError, run_git
 from science_tool.boundary.config import strip_git_trailing_spaces
 
 
@@ -77,12 +78,12 @@ def _nearest_git_marker(project_root: Path) -> Path | None:
 
 def is_git_worktree(project_root: Path) -> bool:
     """Discover Git from `project_root`, distinguishing absence from corruption."""
-    proc = subprocess.run(
-        ["git", "-C", str(project_root), "rev-parse", "--is-inside-work-tree"],
-        capture_output=True,
-        check=False,
-        env={**os.environ, "LC_ALL": "C"},
-    )
+    try:
+        proc = run_git(project_root, "rev-parse", "--is-inside-work-tree")
+    except GitError as exc:
+        raise BoundaryGitError(
+            f"Git repository discovery from {project_root} failed: {exc}"
+        ) from exc
     if proc.returncode == 0:
         answer = proc.stdout.decode("utf-8", "replace").strip()
         if answer == "true":
@@ -160,12 +161,10 @@ def _git(
     git failure must never be silently reported as an empty (clean) result.
     `check-ignore` documents 1 as "nothing matched", which is a success here.
     """
-    proc = subprocess.run(
-        ["git", "-C", str(project_root), *args],
-        input=stdin,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        proc = run_git(project_root, *args, input=stdin)
+    except GitError as exc:
+        raise BoundaryGitError(f"git {' '.join(args)} failed: {exc}") from exc
     if proc.returncode not in ok:
         detail = proc.stderr.decode("utf-8", "replace").strip()
         raise BoundaryGitError(f"git {' '.join(args)} failed ({proc.returncode}): {detail}")

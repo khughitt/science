@@ -28,7 +28,8 @@ v1.4 retirement table is implemented in `_retired_by`:
 
 The durable authoring contract is meta/evidence/t034-causal-graph-contract.md.
 The historical prototypes in doc/plans/historical/ were extracted into
-meta/tests/test_t034_validator.py. This package is what runs at validate-time.
+meta/tests/test_t034_validator.py. Run this package manually; `science validate`
+does not invoke it.
 """
 from __future__ import annotations
 

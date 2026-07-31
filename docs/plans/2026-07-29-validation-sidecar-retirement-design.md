@@ -1,7 +1,7 @@
 # Validation sidecar retirement — design
 
 **Date:** 2026-07-29
-**Status:** approved, awaiting implementation plan
+**Status:** implemented and published
 **Amends:** [`2026-07-27-finding-convergence-design.md`](2026-07-27-finding-convergence-design.md)
 **Supersedes:** [`2026-07-28-finding-convergence-plan-2-producer-cutover.md`](2026-07-28-finding-convergence-plan-2-producer-cutover.md) Step 3, sidecar paragraph
 **Sequenced after:** `finding-convergence-plan-3` (§6)

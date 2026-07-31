@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import subprocess
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -31,6 +30,7 @@ from typing import Any
 from science_model.audit import FindingRule
 from science_model.audit.fingerprint import canonical_json
 
+from science_tool.autonomy.git import run_git
 from science_tool.validate.findings import validation_observation
 from science_tool.validate.findings import declare_validation_rules
 from science_tool.entities import resolve_path_policy
@@ -101,7 +101,7 @@ def _result(
 
 def _git_ok(root: Path, *args: str) -> bool:
     """True when git exits 0. Used for the two boolean queries below."""
-    completed = subprocess.run(["git", *args], cwd=root, capture_output=True)
+    completed = run_git(root, *args)
     return completed.returncode == 0
 
 
@@ -129,7 +129,7 @@ def _git_query(root: Path, *args: str) -> bool | None:
     error, so the prose rule needs the tri-state answer below rather than
     `_git_ok`'s collapse.
     """
-    completed = subprocess.run(["git", *args], cwd=root, capture_output=True)
+    completed = run_git(root, *args)
     if completed.returncode == 0:
         return True
     if completed.returncode == 1:
