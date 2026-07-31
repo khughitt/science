@@ -247,6 +247,25 @@ and resolving would buy no security in exchange, because there is no filesystem 
 it refuses `..` rather than collapsing it, refuses absolute paths, refuses NUL, and normalizes UTF-8.
 Deny prefixes are then matched against the normalized form.
 
+**Unicode normalization is where the two mechanisms can still disagree, and only half of it is
+closed.** `normalize_project_path` maps a path to NFC; git stores path bytes verbatim and matches
+pathspecs byte-exactly. So a policy and a repository can be spelled differently and both be right:
+
+- *Authoring side, CLOSED.* A deny prefix written in NFD used to be silently stored as NFC, which
+  meant the author's spelling never reached git and the policy they wrote was not the policy they
+  got. `SurfacePolicy` now **refuses** a prefix whose NFC form differs from what was written, so the
+  caller learns the policy cannot express what they meant. Failing early beats a silent weakening.
+- *Repository side, OPEN and deliberately parked.* Against a tree holding an NFD path
+  (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling the model accepts — denies under
+  `read` and **still serves under `search`**, because `:(top,literal,exclude)café` in NFC matches no
+  NFD tree entry. Measured on git 2.55. Closing it honestly means `serve` inspecting the tree's own
+  path bytes, which is a traversal the serving surface has no place for; the natural home is the
+  session layer of plan 3, which already walks served paths.
+
+Recorded rather than hidden: a non-ASCII, NFD-authored repository (macOS-authored trees routinely
+are) can be searched past a policy that `read` honours. Any consumer relying on `deny_prefixes` as a
+confidentiality boundary needs this closed first.
+
 The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
 are opened: the baseline, the journal, the control-plane root, and the `served/` directory of §3.5.
 All four are derived from `RunBaseline` rather than supplied, so the check defends the derivation
