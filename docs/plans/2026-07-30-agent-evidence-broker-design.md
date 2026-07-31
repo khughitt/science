@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 15)
+**Status:** partially implemented (revision 16)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -50,14 +50,26 @@ never denied, which breaks the agreement between `read` and `search` in the oppo
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
 
+Revision 16 comes from a sixth review round and closes three gaps in revision 15's fixes. The
+"derived" journal bound counted one `\\uXXXX` escape per Python character, but a non-BMP character
+is encoded as a UTF-16 surrogate pair -- twelve JSON bytes, not six -- and inline seeding never
+consulted the per-entry bound at all. The model now constrains every variable-width journal field,
+the ceiling is checked against actual maximally encoded request and inline events, and *every* line
+is bounded before the journal is created or served bytes are delivered. Descriptor anchoring also
+protected the write while leaving the receipt behind: if an ancestor is renamed after capture, the
+bytes land safely through the descriptor but the original pathname no longer names them. The served
+directory's descriptor and receipt pathname must therefore still identify the same directory before
+the exposure is appended.
+
 Revision 15 comes from a fifth round and is the *same* rule again, twice more, plus one claim that
 outran what the plan delivers. Anchoring the directory is not anchoring the file: a re-opened name
 passes every check on both opens because none of those checks is about identity, so a count taken
 from one inode and an append made to another silently un-spends a round. And §3.5's bound on the
 journal was a chosen constant with no relationship to what the model admits, which is a run able to
 *write* a journal it can never *read back* — the fail-open arriving through arithmetic rather than
-through a filesystem call. §3.5 now derives the bound from the model's own limits and refuses
-over-long input before the spend. Revision 14's claim that "every operation on `run_dir` is
+through a filesystem call. Revision 15 attempted to derive the bound from the model's own limits and
+to refuse over-long input before the spend; revision 16 corrects that derivation. Revision 14's claim
+that "every operation on `run_dir` is
 anchored" was also broader than the truth: `baseline.json` is still pathname-based, and that residual
 is now named rather than implied away.
 
@@ -843,12 +855,20 @@ un-spends a round and disables the budget the count enforces. The journal is ope
 
 **Bounds are declared where they can be enforced, and the read bound is derived from them.** The
 journal's maximum size is not a chosen constant: it is `(max budget + max inline inputs) × max entry
-size`, with `target` and `pathspec` length-bounded on the model. Choosing a read bound independently
-of what the model admits creates a run that can *write* a journal it can never *read back* — the
-first over-long entry is accepted, and every later request and the seal itself then fail on the
-oversized journal, which §6 turns into no record at all. Over-long input is refused before the lock
-and before the spend; it is decided on the requester's own string, before any policy is consulted,
-so it is not an oracle.
+size`. `target` and `pathspec` have a character bound; digest fields have their exact hexadecimal
+width, and the entry commit is either forty hexadecimal characters or the empty inline-journal
+sentinel; the inline line count has an integer bound. The maximum entry size accounts for
+the actual JSON encoding: one non-BMP Python character becomes a twelve-byte UTF-16 surrogate pair
+under `json.dumps`'s default `ensure_ascii=True`, not one six-byte `\\uXXXX` escape. Tests construct
+the maximally encoded request and inline events rather than merely restating the constants.
+
+Choosing a read bound independently of what the model admits creates a run that can *write* a
+journal it can never *read back* — the first over-long entry is accepted, and every later request and
+the seal itself then fail on the oversized journal, which §6 turns into no record at all. Every line,
+including supervisor-seeded inline events, is encoded and checked before the journal is created or
+served bytes are delivered. Over-long requester input is refused before the lock and before the
+spend; it is decided on the requester's own string, before any policy is consulted, so it is not an
+oracle.
 
 **What this rule does not yet cover: `baseline.json`.** It is read by `finish_run` and written by
 `start_run` through pathnames, and `finish` runs while the actor may still exist. The exposure is
@@ -869,6 +889,14 @@ copies an entry saying `served`, and replay — which re-serves from the commit 
 it never received, which is support for a citation it could only have invented. Writing first inverts
 the failure: bytes on disk with no journal line are bytes nothing counts, so the round is not spent
 and no coverage is granted. Both orderings can fail; only one fails closed.
+
+Descriptor anchoring proves where the bytes were written; it does not by itself prove that the path
+printed in the receipt still names them. Before appending the exposure, serving compares the opened
+`served/` descriptor with the receipt pathname using inode identity. If an ancestor was renamed after
+capture, that comparison fails, no receipt is returned and no journal line is appended. The already
+written content-addressed bytes are then an unrecorded orphan, which grants no coverage. This is not
+a defence against deliberate same-uid artifact forgery (excluded by the threat model); it prevents
+the broker itself from knowingly recording delivery after its own pathname has gone stale.
 
 **A refusal writes no file.** A policy denial, a malformed pattern and an exhausted budget all serve
 zero bytes, and content addressing maps all of them onto the digest of the empty string — so every
@@ -1144,6 +1172,12 @@ class EvidenceSession(_Frozen):
 # RunBaseline
     evidence: EvidenceSession | None = None
 ```
+
+The concrete model bounds are part of this contract: `target` and `pathspec` admit at most 4096
+Python characters; journal digests are exactly 64 lowercase hexadecimal characters; commits are 40
+lowercase hexadecimal characters except for the empty pre-seal inline sentinel; inline line counts
+fit a non-negative signed 64-bit integer; budgets and inline manifests each admit at most 100 items.
+Those are the inputs to §3.5's encoded-byte ceiling, not merely validation conveniences.
 
 **This is the fix for inline evidence bypassing replay.** Revision 1 had inline entries contributing
 trusted correspondence targets on the strength of a hash in the journal — the same journal it argued
@@ -1439,14 +1473,20 @@ downgrade is a lie about what was checked.
   revision reintroducing an in-tree destination, which no test inside this package would catch. Also:
   the served name is the sha256 of the served bytes, so a request cannot choose it; two requests
   serving identical bytes coincide; and `finish_run` seals a run whose `served/` directory has been
-  emptied, since nothing trusted reads it.
+  emptied, since nothing trusted reads it. If an ancestor is renamed after the run-directory
+  descriptor is captured, serving fails before the journal append rather than returning a stale
+  receipt path; the regression asserts both that the project remains untouched and that no exposure
+  was recorded.
 - **`session.py`** — a denial spends a round; exhaustion refuses without further spend **and appends
   no journal line**, asserted by sealing a run whose actor kept asking past its budget and confirming
   the record validates rather than that the refusal was returned; no unbudgeted path to `serve` is
   exported; `--session` cannot override the baseline's journal path, budget, or surface policy;
   `start --broker-spec` against an existing journal refuses; **seeding N inline inputs leaves
   `requests_used` at zero**; a denied request and a malformed pattern each raise it by one; a refusal
-  writes no file into `served/`, while a defined miss writes its marker.
+  writes no file into `served/`, while a defined miss writes its marker. A maximally encoded request
+  and inline event fit the derived journal bound, a forged over-bound event is refused before any
+  artifact is created or delivered, and an over-long CLI request exits as a usage error without a
+  spend.
 - **Refusals do not become coverage** — a run that reads a denied path, is refused, and cites that
   path is **not** corresponding, asserted end-to-end through `append_review` rather than against the
   map builder, since the fail-open this closes is reachable only from the production path. Written as

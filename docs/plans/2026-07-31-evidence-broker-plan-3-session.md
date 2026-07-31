@@ -20,7 +20,7 @@ output at `finish`; `evidence/cli.py` gives the actor exactly one command.
 
 Implements Spec 2a of the autonomous-audit program:
 [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-**revision 15** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
+**revision 16** — §3.3 (journal), §3.4 (session), §3.4.1 (cross-process contract), §3.5 (CLI and
 `served/`), §4.1 (run record), §4.3 (baseline), §6 (seal failure), and the §7 bullets named below.
 
 Plan 1 (`57b09bf0`) and plan 2 (`dab47dc3`) are merged. This is plan 3 of four.
@@ -168,18 +168,35 @@ finished until both directions are stated.**
 
 The remaining two are claims that outran their mechanism. `MAX_JOURNAL_BYTES` was a chosen megabyte
 with no relationship to what the model admits, so one long target produced a journal that could be
-written and never read — the fail-open arriving through arithmetic instead of a syscall; the bound is
-now derived from model-declared limits and the write side refuses first. And `create_journal` called
+written and never read — the fail-open arriving through arithmetic instead of a syscall; that round
+introduced the model-derived bound which round six corrects. And `create_journal` called
 `Path.mkdir(parents=True)` *before* the anchored walk, which is hazard 3 in `findings/paths.py`'s own
 header — mutating before validating — so a planted ancestor got directories created in its target
 before the refusal.
 
+**A sixth round found six, three in revision 15's new bound and delivery guards.** The maximum-entry
+arithmetic counted six JSON bytes per Python character, but a non-BMP character becomes a twelve-byte
+surrogate pair; a model-valid search with maximum `target` and `pathspec` therefore exceeded the
+claimed ceiling. The test written for the opposite boundary used one ASCII field and was more than
+sixty kilobytes *under* it, so it would fail against the implementation it prescribed. Inline seeding
+did not check the per-line ceiling at all, and its digest and line count were not model-bounded, so a
+valid session could create a journal it could never read.
+
+The descriptor-safe ancestor-swap regression proved only that the write stayed out of the project.
+It ignored the returned receipt: the bytes landed under the renamed directory while the receipt's
+original pathname named nothing, and the session still appended an exposure. The fix checks that the
+opened `served/` directory and the receipt pathname identify the same inode before the append; a
+mismatch is a delivery failure, leaving only unrecorded orphan bytes. The remaining three are
+plan-level: `SessionError` was not translated to the usage error the plan promised, the global commit
+discipline was still absent from four steps (and Task 4 still used `-am`), and one mutation named a
+call in a function where it does not exist.
+
 **The compounding lesson: a fix is a new claim, and inherits none of the certification of what it
-replaced.** Five rounds, and each round's *fixes* were where the next round's findings landed. Its
-sharpest form is the descriptor rule, which has now been applied four times and been one step short
-three times — the file's directory, then the directory's ancestors, then the file's *identity*. The
-rule is not "protect the file", nor "protect the file's directory": it is *hold a descriptor and
-never name the thing again*.
+replaced.** Six rounds, and each round's *fixes* were where the next round's findings landed. Its
+sharpest form is the descriptor rule: the file's directory, then the directory's ancestors, then the
+file's identity, then the returned pathname's identity. The rule is not "protect the file", nor
+"protect the file's directory": it is *hold a descriptor, and verify any pathname promised to a
+caller still names what the descriptor reached*.
 
 ## Global Constraints
 
@@ -210,8 +227,9 @@ Every task's requirements implicitly include this section.
    subshell — `(cd science && …)` — including single `Run:` lines. If you find one that is not,
    that is a defect in the plan; wrap it rather than reproducing it.
 8. Conventional commits. No AI-attribution trailer or footer.
-9. **`git commit -am` stages only tracked files.** Every task here creates new files; `git add`
-   them explicitly before committing, and check `git status --porcelain` is clean afterwards. A
+9. **`git commit -am` stages only tracked files.** Several tasks here create new files; `git add`
+   every touched path explicitly before committing, and check `git status --porcelain` is clean
+   afterwards. A
    task that "committed" while leaving its module untracked passes its own tests and fails the
    next task's import. Where a step already runs an explicit `git add`, commit with `-m`, not
    `-am`: the `-a` would also sweep in unrelated tracked edits the step never named. **The two
@@ -229,6 +247,7 @@ Every task's requirements implicitly include this section.
 - Modify: `science/model/src/science_model/evidence_broker.py`
 - Modify: `science/model/src/science_model/autonomous_runs.py`
 - Modify: `science/src/science_tool/evidence_broker/serve.py:45-50` (delete `Outcome`, import it)
+- Modify: `science/tests/test_evidence_broker_serve.py` (authorized spelling and all outcomes)
 - Test: `science/model/tests/test_evidence_broker_model.py`
 - Test: `science/model/tests/test_autonomous_run_record.py`
 
@@ -254,9 +273,12 @@ import pytest
 from pydantic import ValidationError
 
 from science_model.evidence_broker import (
+    MAX_INLINE_LINES,
+    MAX_TARGET_CHARS,
     REPLAY_PROTOCOL_VERSION,
     EvidenceExposure,
     ExposureEntry,
+    EvidenceSession,
     InlineInput,
     InstrumentIdentity,
     Outcome,
@@ -293,7 +315,7 @@ def test_requests_used_must_equal_the_non_inline_entry_count() -> None:
 
 def test_a_refusal_counts_toward_the_spend() -> None:
     """Denials spend rounds (design §3.4), so they are entries like any other."""
-    exposure = _exposure(requests_used=1, entries=(_entry(outcome=Outcome.REFUSED, sha256=""),))
+    exposure = _exposure(requests_used=1, entries=(_entry(outcome=Outcome.REFUSED),))
     assert exposure.requests_used == 1
 
 
@@ -326,6 +348,47 @@ def test_the_instrument_is_required() -> None:
 def test_a_budget_of_zero_is_legitimate() -> None:
     """Inline seeding with no requests permitted is a real study design, not a config error."""
     assert _exposure(budget=0, requests_used=0).budget == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("target", "a" * (MAX_TARGET_CHARS + 1)),
+        ("pathspec", "a" * (MAX_TARGET_CHARS + 1)),
+        ("commit", "a" * 39),
+        ("sha256", "e" * 63),
+    ],
+)
+def test_request_fields_have_the_bounds_the_journal_assumes(field, value) -> None:
+    with pytest.raises(ValidationError):
+        _entry(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("target", "a" * (MAX_TARGET_CHARS + 1)),
+        ("sha256", "e" * 63),
+        ("lines", MAX_INLINE_LINES + 1),
+    ],
+)
+def test_inline_fields_have_the_bounds_the_journal_assumes(field, value) -> None:
+    fields = {
+        "target": "a.md", "sha256": "e" * 64, "lines": 1, field: value,
+    }
+    with pytest.raises(ValidationError):
+        InlineInput(**fields)
+
+
+def test_surface_commits_have_the_fixed_width_the_journal_assumes() -> None:
+    with pytest.raises(ValidationError):
+        _exposure(commit="a" * 39)
+    with pytest.raises(ValidationError):
+        EvidenceSession(
+            session_id="run-x", journal_path="journal.jsonl",
+            commit="a" * 39, budget=0,
+            surface_policy=POLICY, instrument=INSTRUMENT,
+        )
 ```
 
 - [ ] **Step 2: Run them and watch every one fail**
@@ -343,18 +406,25 @@ Append to `science/model/src/science_model/evidence_broker.py`:
 #: release is a signal people learn to ignore, and a mismatch REFUSES honest historical work.
 REPLAY_PROTOCOL_VERSION = 1
 
-#: THE THREE BOUNDS THAT MAKE THE JOURNAL'S SIZE KNOWABLE IN ADVANCE, and the reason they live
+#: THE MODEL BOUNDS THAT MAKE THE JOURNAL'S SIZE KNOWABLE IN ADVANCE, and the reason they live
 #: here rather than in `journal.py`: the journal's read bound is DERIVED from them
 #: (`MAX_JOURNAL_BYTES = (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES`). A read bound chosen
 #: independently of what the model admits is a run that can write a journal it cannot read back --
 #: and since an unreadable journal is design §6's `UNWIRED`, that is a supervisor-side failure
 #: produced by an input the model accepted. Bound the inputs, then compute the bound.
 #:
-#: `MAX_TARGET_BYTES` is `PATH_MAX` on Linux, which is the largest path git could return anyway;
-#: a longer `target` is a usage error, not a probe, so refusing it discloses nothing.
-MAX_TARGET_BYTES = 4096
+#: This is a CHARACTER bound because that is what Pydantic's `max_length` enforces. It is
+#: deliberately not named or documented as a byte/PATH_MAX bound: a non-BMP character occupies
+#: four UTF-8 bytes and twelve bytes in the journal's ASCII JSON encoding. A longer value is a
+#: usage error, not a probe, so refusing it discloses nothing.
+MAX_TARGET_CHARS = 4096
 MAX_BUDGET = 100
 MAX_INLINE_INPUTS = 100
+MAX_INLINE_LINES = (1 << 63) - 1
+
+COMMIT_PATTERN = r"^[0-9a-f]{40}$"
+ENTRY_COMMIT_PATTERN = r"^(?:[0-9a-f]{40})?$"  # inline journal events have no commit yet
+SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
 class Outcome(StrEnum):
@@ -389,9 +459,9 @@ class InlineInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    target: str = Field(max_length=MAX_TARGET_BYTES)
-    sha256: str
-    lines: int = Field(ge=0)
+    target: str = Field(max_length=MAX_TARGET_CHARS)
+    sha256: str = Field(pattern=SHA256_PATTERN)
+    lines: int = Field(ge=0, le=MAX_INLINE_LINES)
 
 
 class ExposureEntry(BaseModel):
@@ -411,10 +481,10 @@ class ExposureEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     op: Literal["read", "search", "history", "inline"]
-    target: str = Field(max_length=MAX_TARGET_BYTES)
-    pathspec: str | None = Field(default=None, max_length=MAX_TARGET_BYTES)
-    commit: str
-    sha256: str
+    target: str = Field(max_length=MAX_TARGET_CHARS)
+    pathspec: str | None = Field(default=None, max_length=MAX_TARGET_CHARS)
+    commit: str = Field(pattern=ENTRY_COMMIT_PATTERN)
+    sha256: str = Field(pattern=SHA256_PATTERN)
     outcome: Outcome
 
 
@@ -429,7 +499,7 @@ class EvidenceExposure(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    commit: str
+    commit: str = Field(pattern=COMMIT_PATTERN)
     budget: int = Field(ge=0, le=MAX_BUDGET)
     requests_used: int = Field(ge=0)
     instrument: InstrumentIdentity
@@ -491,7 +561,7 @@ class EvidenceSession(BaseModel):
 
     session_id: str
     journal_path: Path
-    commit: str
+    commit: str = Field(pattern=COMMIT_PATTERN)
     budget: int = Field(ge=0, le=MAX_BUDGET)
     surface_policy: SurfacePolicy
     instrument: InstrumentIdentity
@@ -527,7 +597,8 @@ evidence.)
 - [ ] **Step 5: Certify each validator by mutation**
 
 There are **three** validators on `EvidenceExposure`, and one of them enforces a conjunction — so
-this is four mutations, not three, and not the "one per validator" the count suggests:
+this is four mutations, not three, and not the "one per validator" the count suggests. The three
+field bounds that make the journal ceiling true are certified separately:
 
 | Mutation | Must fail | Must still pass |
 |---|---|---|
@@ -535,6 +606,15 @@ this is four mutations, not three, and not the "one per validator" the count sug
 | `_spend_is_derived_then_bounded`: delete the **bound** branch only | `test_requests_used_may_not_exceed_the_budget` | the count test |
 | `_one_evidence_surface` → `return self` | `test_entries_must_agree_with_the_exposure_commit` | others |
 | `_inline_entries_were_served` → `return self` | `test_an_inline_entry_carries_served` | others |
+| delete `ExposureEntry.target`'s `max_length` | the `target` id of `test_request_fields_have_the_bounds_the_journal_assumes` | its other ids |
+| delete `ExposureEntry.pathspec`'s `max_length` | the `pathspec` id of that test | its other ids |
+| delete `ExposureEntry.commit`'s pattern | the `commit` id of that test | its other ids |
+| delete `ExposureEntry.sha256`'s pattern | the `sha256` id of that test | its other ids |
+| delete `InlineInput.target`'s `max_length` | the `target` id of `test_inline_fields_have_the_bounds_the_journal_assumes` | its other ids |
+| delete `InlineInput.sha256`'s pattern | the `sha256` id of that test | its other ids |
+| delete `InlineInput.lines`'s `le` bound | the `lines` id of that test | its other ids |
+| delete `EvidenceExposure.commit`'s pattern | `test_surface_commits_have_the_fixed_width_the_journal_assumes` | the request and inline field tests |
+| delete `EvidenceSession.commit`'s pattern | `test_surface_commits_have_the_fixed_width_the_journal_assumes` | the request and inline field tests |
 
 **Do not mutate `_spend_is_derived_then_bounded` as a whole.** Removing it fails *both* tests, which
 proves neither branch: a guard that certifies a conjunction certifies neither half, and this
@@ -652,8 +732,14 @@ Expected: exit 0. An import move that changes behaviour is not an import move.
 ```bash
 (cd science && uv run ruff check && uv run pyright)
 (cd science/model && uv run ruff check)
-git add science/model/src science/model/tests science/src/science_tool/evidence_broker/serve.py
+git add science/model/src/science_model/evidence_broker.py \
+        science/model/src/science_model/autonomous_runs.py \
+        science/model/tests/test_evidence_broker_model.py \
+        science/model/tests/test_autonomous_run_record.py \
+        science/src/science_tool/evidence_broker/serve.py \
+        science/tests/test_evidence_broker_serve.py
 git commit -m "feat(evidence-broker): seal the exposure vocabulary"
+git status --porcelain      # must be empty
 ```
 
 ---
@@ -1036,6 +1122,7 @@ Commit this separately — it is a change to a shipped module and belongs in its
 (cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/findings/paths.py science/tests/test_findings_paths.py
 git commit -m "feat(findings): add anchored directory-walk and append primitives"
+git status --porcelain      # must be empty
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -1049,9 +1136,17 @@ from pathlib import Path
 
 import pytest
 
-from science_model.evidence_broker import ExposureEntry, InlineInput, Outcome
+from science_model.evidence_broker import (
+    MAX_BUDGET,
+    MAX_INLINE_INPUTS,
+    MAX_INLINE_LINES,
+    MAX_TARGET_CHARS,
+    ExposureEntry,
+    InlineInput,
+    Outcome,
+)
 from science_tool.autonomy.baseline import BaselineError
-from science_model.evidence_broker import MAX_BUDGET, MAX_INLINE_INPUTS, MAX_TARGET_BYTES
+from science_tool.evidence_broker import journal as journal_module
 from science_tool.evidence_broker.journal import (
     MAX_ENTRY_BYTES,
     MAX_JOURNAL_BYTES,
@@ -1191,17 +1286,47 @@ def test_an_entry_over_the_line_bound_is_refused_before_it_is_written(tmp_path: 
     project.mkdir()
     (tmp_path / "run").mkdir()
     create_journal(journal, project_root=project, inline=())
+    # Deliberately bypass the model: every model-valid entry fits, while the journal boundary must
+    # still refuse a forged in-memory value before it writes.
+    forged = ExposureEntry.model_construct(
+        op="read", target="a" * MAX_ENTRY_BYTES, pathspec=None, commit=COMMIT,
+        sha256="e" * 64, outcome=Outcome.SERVED,
+    )
     with pytest.raises(JournalError, match="bound"):
-        _append(journal, project, _entry(target="a" * MAX_TARGET_BYTES))
+        _append(journal, project, forged)
     assert _read(journal, project) == ()
 
 
-def test_the_read_bound_admits_a_maximally_sized_journal(tmp_path: Path) -> None:
-    """The derivation, asserted rather than trusted: `MAX_BUDGET` entries at `MAX_ENTRY_BYTES`
-    must fit under `MAX_JOURNAL_BYTES`. If someone later tunes one constant without the others,
-    this is what says so -- an arithmetic relationship nobody checks is an arithmetic
-    relationship that drifts."""
-    assert (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES <= MAX_JOURNAL_BYTES
+def test_the_bound_admits_the_actual_maximally_encoded_events() -> None:
+    """Construct the boundary; restating constants is what missed surrogate pairs."""
+    astral = "\U00010000" * MAX_TARGET_CHARS
+    request = ExposureEntry(
+        op="history", target=astral, pathspec=astral, commit=COMMIT,
+        sha256="e" * 64, outcome=Outcome.MISS_NO_COMMITS,
+    )
+    inline = InlineInput(target=astral, sha256="e" * 64, lines=MAX_INLINE_LINES)
+    request_line = (journal_module._encode_request(request) + "\n").encode("utf-8")
+    inline_line = (journal_module._encode_inline(inline) + "\n").encode("utf-8")
+    assert len(request_line) <= MAX_ENTRY_BYTES
+    assert len(inline_line) <= MAX_ENTRY_BYTES
+    assert (
+        MAX_BUDGET * len(request_line) + MAX_INLINE_INPUTS * len(inline_line)
+        <= MAX_JOURNAL_BYTES
+    )
+
+
+def test_an_over_bound_inline_event_is_refused_before_the_journal_is_created(
+    tmp_path: Path,
+) -> None:
+    """Seed validation precedes creation, so failure leaves no retry-blocking record."""
+    journal, project = tmp_path / "run" / "j.jsonl", tmp_path / "project"
+    project.mkdir()
+    forged = InlineInput.model_construct(
+        target="a.md", sha256="e" * MAX_ENTRY_BYTES, lines=1
+    )
+    with pytest.raises(JournalError, match="bound"):
+        create_journal(journal, project_root=project, inline=(forged,))
+    assert not journal.parent.exists()
 
 
 def test_the_journal_read_and_the_append_address_one_inode(tmp_path: Path) -> None:
@@ -1363,7 +1488,7 @@ from typing import NamedTuple
 from science_model.evidence_broker import (
     MAX_BUDGET,
     MAX_INLINE_INPUTS,
-    MAX_TARGET_BYTES,
+    MAX_TARGET_CHARS,
     ExposureEntry,
     InlineInput,
     Outcome,
@@ -1383,25 +1508,24 @@ from science_tool.findings.paths import (
 
 _LOCK_SUFFIX = ".lock"
 
-MAX_ENTRY_BYTES = 16 * MAX_TARGET_BYTES
+MAX_ENTRY_BYTES = 24 * MAX_TARGET_CHARS + 512
 """One encoded line's ceiling, and the factor is arithmetic rather than a guess.
 
-`MAX_TARGET_BYTES` is a pydantic `max_length`, which counts CHARACTERS, not bytes -- so the two
-bounded fields (`target`, `pathspec`) can each be 4096 characters, each character can escape to
-`\\uXXXX` (six bytes) in the JSON encoding, and 2 x 4096 x 6 = 49152. Sixteen times the character
-bound is 65536, which covers that with room for the fixed vocabulary, the 64-character digest and
-the 40-character commit. Getting this backwards -- assuming `max_length` bounds bytes -- would put
-`MAX_ENTRY_BYTES` below what the model admits, which is the same write-what-you-cannot-read defect
-one layer down."""
+The two bounded fields (`target`, `pathspec`) can each contain `MAX_TARGET_CHARS` non-BMP characters.
+With `json.dumps`'s default `ensure_ascii=True`, each becomes a twelve-byte UTF-16 surrogate pair:
+2 x 4096 x 12 = 98304. The final 512 bytes cover the model-bounded commit, digest, outcome, operation
+and JSON vocabulary. The boundary test constructs both maximally encoded event shapes; an arithmetic
+assertion involving only these constants would merely restate this claim."""
 
 MAX_JOURNAL_BYTES = (MAX_BUDGET + MAX_INLINE_INPUTS) * MAX_ENTRY_BYTES
 """DERIVED, not chosen. A magic megabyte here would be a bound with no relationship to what the
 model permits, and the gap between the two is a live failure mode rather than slack: if the model
 admits inputs whose journal exceeds the read bound, a run can WRITE a journal it can never read
-back. The first over-long request is accepted and journaled without reaching git; every later
-request and the seal itself then fail on the oversized journal, and design §6 turns that into no
+back. The first over-long request is accepted and written; every later request and the seal itself
+then fail on the oversized journal, and design §6 turns that into no
 record at all. So the read bound is computed from the same constants that gate what can be
-written, and `append_request` refuses any single line over `MAX_ENTRY_BYTES` before writing it.
+written, and the shared line encoder refuses any request or inline line over `MAX_ENTRY_BYTES` before
+creating a journal or delivering served bytes.
 
 The bound is needed at all because `journal.jsonl` is an actor-controlled NAME in an
 actor-writable directory: without it, a planted enormous file is read whole into memory.
@@ -1450,6 +1574,16 @@ def _encode_request(entry: ExposureEntry) -> str:
         },
         sort_keys=True,
     )
+
+
+def _bounded_line(encoded: str) -> bytes:
+    line = (encoded + "\n").encode("utf-8")
+    if len(line) > MAX_ENTRY_BYTES:
+        raise JournalError(
+            f"the encoded entry is {len(line)} bytes, over the {MAX_ENTRY_BYTES} bound that "
+            f"keeps a full journal under {MAX_JOURNAL_BYTES}"
+        )
+    return line
 
 
 @contextmanager
@@ -1547,6 +1681,9 @@ def create_journal(path: Path, *, project_root: Path, inline: tuple[InlineInput,
     none yet.
     """
     reject_baseline_inside_project(path, project_root)
+    # Validate every seed before creating even the run directory. A later failure must not leave a
+    # partial journal that blocks retry, and inline events obey the same bound as request events.
+    lines = tuple(_bounded_line(_encode_inline(entry)) for entry in inline)
     try:
         directory = open_dir_anchored(path.parent, create=True)
     except PathSafetyError as exc:
@@ -1561,8 +1698,8 @@ def create_journal(path: Path, *, project_root: Path, inline: tuple[InlineInput,
         except PathSafetyError as exc:
             raise JournalError(f"could not create journal {path}: {exc}") from exc
         try:
-            for entry in inline:
-                write_all(descriptor, (_encode_inline(entry) + "\n").encode("utf-8"))
+            for line in lines:
+                write_all(descriptor, line)
         except PathSafetyError as exc:
             raise JournalError(f"could not seed journal {path}: {exc}") from exc
         finally:
@@ -1578,12 +1715,7 @@ def append_request(handle: JournalHandle, entry: ExposureEntry) -> None:
     journal unparseable -- design §6's `UNWIRED` -- while this function's caller believes the
     exposure was recorded.
     """
-    line = (_encode_request(entry) + "\n").encode("utf-8")
-    if len(line) > MAX_ENTRY_BYTES:
-        raise JournalError(
-            f"the encoded entry is {len(line)} bytes, over the {MAX_ENTRY_BYTES} bound that "
-            f"keeps a full journal under {MAX_JOURNAL_BYTES}"
-        )
+    line = _bounded_line(_encode_request(entry))
     try:
         write_all(handle.fd, line)
     except PathSafetyError as exc:
@@ -1671,11 +1803,11 @@ restoring between rows — a mutation left in place makes the next row's result 
 | `create_regular_file_at(directory, path.name)` → `os.open(path, os.O_WRONLY \| os.O_CREAT \| os.O_TRUNC)` | `test_creating_over_an_existing_journal_refuses` | drops `O_EXCL`; a non-exclusive create silently discards the record of whatever run owns the path |
 | wrap `json.loads` in `try: … except json.JSONDecodeError: continue` | `test_a_truncated_line_is_an_error_not_an_empty_journal` | a parser that skips damaged lines converts a tampered journal into a shorter honest one |
 | delete the `isinstance(event, dict)` check | every parametrization of `test_valid_json_of_the_wrong_shape_is_a_journal_error`, **with `TypeError`** | the point is the exception *type*: `TypeError` is what escapes `finish_run`'s handler |
-| `open_record_at(directory, path.name)` → `Path(...).open("a")` inside `append_request` (reconstructing the path) | all three parametrizations of `test_a_journal_replaced_after_creation_is_refused_not_followed` | if only the `symlink` id fails, the implementation kept `O_NOFOLLOW` and dropped `S_ISREG`/`st_nlink`, and the roster is short again |
+| `open_record_at(directory, path.name)` → `os.open(path.name, os.O_RDWR \| os.O_APPEND \| os.O_NONBLOCK, dir_fd=directory)` in `open_journal` | all three parametrizations of `test_a_journal_replaced_after_creation_is_refused_not_followed` | executable at the actual call site; it preserves the descriptor shape while dropping `O_NOFOLLOW`, `S_ISREG` and `st_nlink`, so each plant reaches the append |
 | `open_dir_anchored(path.parent)` → `os.open(path.parent, os.O_RDONLY \| os.O_DIRECTORY)` | `test_a_symlinked_run_directory_is_refused` | leaf protection with a pathname-resolved parent is the shape this branch has now hit twice |
 | `read_regular_fd(handle.fd, MAX_JOURNAL_BYTES)` → `read_regular_fd(handle.fd, 1 << 40)` | `test_a_journal_larger_than_the_bound_is_an_error` | mutate the **bound**, not the call: swapping the call for `path.read_text()` would fail several tests at once and prove none of them separately |
-| delete `append_request`'s `len(line) > MAX_ENTRY_BYTES` check | `test_an_entry_over_the_line_bound_is_refused_before_it_is_written` | the write side of the bound; without it a run can journal what it can never read back |
-| make `JournalHandle` carry `dir_fd`/`name` only, reopening with `open_record_at` inside each of `read_journal` and `append_request` | `test_the_journal_read_and_the_append_address_one_inode` | **the round-five P1.** Every safety check still passes on both opens — they are checks on two different inodes, and none of them is a claim about identity |
+| delete `_bounded_line`'s `len(line) > MAX_ENTRY_BYTES` branch | `test_an_entry_over_the_line_bound_is_refused_before_it_is_written` **and** `test_an_over_bound_inline_event_is_refused_before_the_journal_is_created` | one shared guard owns both write paths; both tests must fail or one path bypasses the bound |
+| replace `write_all(handle.fd, line)` in `append_request` with an `open_record_at(handle.dir_fd, handle.name)` / `write_all(reopened, line)` / `close(reopened)` block | `test_the_journal_read_and_the_append_address_one_inode` | executable without changing `JournalHandle`; every safety check passes on the second open, but it addresses the replacement inode |
 | `write_all(handle.fd, line)` → `os.write(handle.fd, line)` | `test_a_short_write_does_not_truncate_an_entry` | a short write raises nothing; the caller records a truncated line believing it recorded a whole one |
 | `open_dir_anchored(path.parent, create=True)` → `path.parent.mkdir(parents=True, exist_ok=True)` then `open_dir_anchored(path.parent)` | `test_create_makes_nothing_through_a_symlinked_ancestor` | `mkdir(parents=True)` follows links and creates inside the target *before* the refusal — mutating before validating |
 
@@ -1702,6 +1834,7 @@ it is proven by nothing.
 (cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/evidence_broker/journal.py science/tests/test_evidence_broker_journal.py
 git commit -m "feat(evidence-broker): add the append-only exposure journal"
+git status --porcelain      # must be empty
 ```
 
 ---
@@ -1745,7 +1878,9 @@ In `science/tests/test_evidence_broker_session.py`. Build a real temporary git r
 Import the module under test as `session_module`
 (`from science_tool.evidence_broker import session as session_module`), never as `session` — that
 name is a local variable in nearly every test below, and the shadowing would make the AST guard
-read `Session.__file__` off whatever object the last assignment left behind.
+read `Session.__file__` off whatever object the last assignment left behind. Import
+`MAX_TARGET_CHARS` from `science_model.evidence_broker` and `SessionError` with `Session` from the
+module under test; the boundary regression below uses both explicitly.
 
 **The fixture must create the journal**, and this is not incidental: `open_journal` walks the run
 directory's components and `open_record_at` refuses to create, so a session whose journal was never
@@ -1806,6 +1941,38 @@ def session_at(project: Path, session_model: EvidenceSession):
 ```
 
 ```python
+@pytest.mark.parametrize(
+    "request",
+    [
+        pytest.param(
+            EvidenceRequest(
+                op=EvidenceOp.READ, target="a" * (MAX_TARGET_CHARS + 1)
+            ),
+            id="target",
+        ),
+        pytest.param(
+            EvidenceRequest(
+                op=EvidenceOp.SEARCH, target="pattern",
+                pathspec="a" * (MAX_TARGET_CHARS + 1),
+            ),
+            id="pathspec",
+        ),
+    ],
+)
+def test_an_overlong_request_is_a_usage_error_before_git_or_spend(
+    session_at, monkeypatch, request
+) -> None:
+    session = session_at(budget=3)
+
+    def git_is_a_landmine(*_args, **_kwargs):
+        raise AssertionError("an overlong requester-owned value must not reach git")
+
+    monkeypatch.setattr(session_module, "_serve", git_is_a_landmine)
+    with pytest.raises(SessionError, match="characters"):
+        session.request(request)
+    assert session.requests_used() == 0
+
+
 def test_a_denial_spends_a_round(session_at) -> None:
     """Free denials make probing the deny policy unlimited."""
     session = session_at(budget=3, deny_prefixes=("private",))
@@ -1957,7 +2124,8 @@ def test_an_ancestor_swapped_inside_the_critical_section_is_not_followed(
     seam: it is called inside the lock and before `_write_served`, which is exactly the window.
     """
     session = session_at(budget=3)
-    (project / "run-x").mkdir()
+    project_served = project / "run-x" / "served"
+    project_served.mkdir(parents=True)
     control_plane = tmp_path / "control-plane"
     inner = session_module._serve
 
@@ -1968,8 +2136,12 @@ def test_an_ancestor_swapped_inside_the_critical_section_is_not_followed(
         return inner(*args, **kwargs)
 
     monkeypatch.setattr(session_module, "_serve", swap_then_serve)
-    session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
-    assert list((project / "run-x").rglob("*")) == []
+    with pytest.raises(SessionError, match="delivery path"):
+        session.request(EvidenceRequest(op=EvidenceOp.READ, target="a.md"))
+    assert list(project_served.iterdir()) == []
+    assert (
+        tmp_path / "control-plane-moved" / "run-x" / "journal.jsonl"
+    ).read_text(encoding="utf-8") == ""       # stale receipt means no recorded exposure
 
 
 def _raising_oserror(*_args: object, **_kwargs: object) -> Path:
@@ -2037,7 +2209,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from science_model.evidence_broker import (
-    MAX_TARGET_BYTES,
+    MAX_TARGET_CHARS,
     EvidenceSession,
     ExposureEntry,
     Outcome,
@@ -2124,13 +2296,13 @@ class Session:
         # `pathspec` so a full journal stays under `MAX_JOURNAL_BYTES`; checking that only at
         # entry-construction time would mean the request is served, the round is spent, and THEN
         # a `ValidationError` propagates out of a locked block -- an actor halting its own run
-        # with a long string. Refusing here costs nothing and is not an oracle: the answer is a
+        # with a long string. Rejecting here costs nothing and is not an oracle: the answer is a
         # property of the requester's own string, decided before the policy is consulted, so it
         # discloses nothing about the tree or the deny list.
         for field, value in (("target", request.target), ("pathspec", request.pathspec)):
-            if value is not None and len(value) > MAX_TARGET_BYTES:
+            if value is not None and len(value) > MAX_TARGET_CHARS:
                 raise SessionError(
-                    f"{field} is {len(value)} characters, over the {MAX_TARGET_BYTES} bound"
+                    f"{field} is {len(value)} characters, over the {MAX_TARGET_CHARS} bound"
                 )
 
         with journal_lock(
@@ -2232,9 +2404,21 @@ class Session:
             temporary = f".{digest}.{os.getpid()}.partial"
             descriptor = create_regular_file_at(directory, temporary)
             try:
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(payload)
+                with os.fdopen(descriptor, "wb") as destination:
+                    destination.write(payload)
                 replace_at(directory, temporary, digest)
+                try:
+                    receipt_directory = self._served_dir.stat()
+                except OSError as exc:
+                    raise SessionError(
+                        "served bytes were written but their delivery path is no longer "
+                        f"reachable: {exc}"
+                    ) from exc
+                if not os.path.samestat(os.fstat(directory), receipt_directory):
+                    raise SessionError(
+                        "served bytes were written but their delivery path now names another "
+                        "directory"
+                    )
             except BaseException:
                 unlink_at(directory, temporary)
                 raise
@@ -2269,13 +2453,13 @@ Expected: exit 0.
 
 - [ ] **Step 5: Certify every guard in `request` by mutation**
 
-`request` holds five separate rules in twenty lines, and the obvious mutations do not map onto them
-one-to-one — three of the six rows below exist because a more natural-sounding mutation either does
-not compile or does not change behaviour. Run one row at a time, restoring between rows.
+`request` and its delivery helper hold separate rules whose obvious mutations do not map onto them
+one-to-one. Run one row at a time, restoring between rows.
 
 | Revert | Must fail | Note |
 |---|---|---|
 | replace the exhaustion branch's `return Receipt(...)` with an `append_request(handle, ExposureEntry(op=request.op.value, target=request.target, pathspec=None, commit=self._session.commit, sha256=hashlib.sha256(b"").hexdigest(), outcome=Outcome.REFUSED))` *before* the return | `test_exhaustion_refuses_and_appends_nothing` | "record the refusal too" is the plausible slip and the actual defect. Do **not** try to move the existing `append_request` call above the check — its `served` and `digest` arguments do not exist yet, so that mutation does not run at all |
+| delete the `len(value) > MAX_TARGET_CHARS` branch | both parametrizations of `test_an_overlong_request_is_a_usage_error_before_git_or_spend` | the landmine proves rejection happens before git, while the spend assertion proves it happens before the critical section; both ids are required because checking only `target` leaves `pathspec` as the original fail-open |
 | `>=` → `>` in the exhaustion check | some test | if none fails, the suite does not pin the off-by-one — add one asserting a budget of `N` permits exactly `N` requests, then re-run |
 | delete the `if served.outcome is not Outcome.REFUSED:` guard, making `path = self._write_served(...)` unconditional | `test_a_refusal_writes_no_served_file` | this is the guard that controls file creation. The *other* `if served.outcome is Outcome.REFUSED:` further down only chooses which `Receipt` to build, so deleting that one leaves the file behaviour untouched and the test green |
 | move the `append_request(...)` call *above* the `if served.outcome is not Outcome.REFUSED:` block | `test_a_failed_served_write_records_nothing` | the delivery-ordering rule. Both call sites exist at that point, so this one does run |
@@ -2283,6 +2467,7 @@ not compile or does not change behaviour. Run one row at a time, restoring betwe
 | the same, but guarded: `if not (self._served_dir / digest).exists(): (self._served_dir / digest).write_bytes(payload)` | `test_a_truncated_file_at_the_digest_name_is_replaced` | the existence-check defect specifically. This is the mutation the truncation test was written against, and the row above is not a substitute for it |
 | `self._open_served_dir(handle.dir_fd)` → `os.open(self._served_dir, os.O_RDONLY \| os.O_DIRECTORY \| os.O_NOFOLLOW)` | `test_an_ancestor_swapped_inside_the_critical_section_is_not_followed` | the round-three P1. It does **not** fail `test_a_planted_DIRECTORY_symlink_is_refused` — that test plants the *final* `served` component, which the mutation's own `O_NOFOLLOW` still refuses. Only swapping an **ancestor**, after the handle is captured, separates the two |
 | drop `O_NOFOLLOW` from `_open_served_dir`'s reopen | `test_a_planted_DIRECTORY_symlink_is_refused` | what that test actually certifies, now that the row above is aimed at the ancestor case |
+| delete the `os.path.samestat(...)` identity check | `test_an_ancestor_swapped_inside_the_critical_section_is_not_followed` | anchoring keeps the write safe but cannot make the old receipt pathname name the renamed directory; without this separate check the request journals an exposure and returns a stale path |
 
 Record each row's actual result in the report, including any row that did not fail. Two rows here
 exist because the previous draft named mutations that leave their claimed test green — a mutation
@@ -2394,6 +2579,7 @@ that the structural assertion is what certifies the property.
 (cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/evidence_broker/session.py science/tests/test_evidence_broker_session.py
 git commit -m "feat(evidence-broker): enforce the round budget in a session"
+git status --porcelain      # must be empty
 ```
 
 ---
@@ -2404,7 +2590,8 @@ git commit -m "feat(evidence-broker): enforce the round budget in a session"
 - Modify: `science/src/science_tool/autonomy/lifecycle.py:120-164` (`start_run`)
 - Modify: `science/src/science_tool/autonomy/cli.py:97-176` (`start_command`)
 - Modify: `science/src/science_tool/autonomy/baseline.py:30-42` (`RunBaseline.evidence`)
-- Test: `science/tests/test_autonomy_lifecycle.py`, `science/tests/test_autonomy_cli.py`
+- Test: `science/tests/test_autonomy_lifecycle.py`, `science/tests/test_autonomy_cli.py`,
+  `science/tests/test_autonomy_baseline.py`
 
 **Interfaces:**
 - Consumes: `EvidenceSessionSpec`, `EvidenceSession`, `InlineInput` (Task 1); `create_journal`,
@@ -2710,7 +2897,14 @@ Assert that passing both flags exits 2 and that passing neither exits 2, through
 
 ```bash
 (cd science && uv run ruff check && uv run pyright && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_autonomy_cli.py tests/test_autonomy_baseline.py)
-git commit -am "feat(autonomy): open a brokered run from a broker spec"
+git add science/src/science_tool/autonomy/lifecycle.py \
+        science/src/science_tool/autonomy/cli.py \
+        science/src/science_tool/autonomy/baseline.py \
+        science/tests/test_autonomy_lifecycle.py \
+        science/tests/test_autonomy_cli.py \
+        science/tests/test_autonomy_baseline.py
+git commit -m "feat(autonomy): open a brokered run from a broker spec"
+git status --porcelain      # must be empty
 ```
 
 ---
@@ -2724,7 +2918,7 @@ git commit -am "feat(autonomy): open a brokered run from a broker spec"
 - Test: `science/tests/test_evidence_broker_cli.py`
 
 **Interfaces:**
-- Consumes: `Session`, `Receipt` (Task 3); `run_dir`, `run_slug`, `ControlPlaneError` (plan 1);
+- Consumes: `Session`, `SessionError`, `Receipt` (Task 3); `run_dir`, `run_slug`, `ControlPlaneError` (plan 1);
   `read_baseline` (`autonomy/baseline.py`).
 - Produces: `science evidence serve --session <run-id> --op <op> --target <str> [--pathspec <str>]`.
 
@@ -2737,12 +2931,25 @@ resolving to another run's baseline.
 
 - [ ] **Step 1: Write the failing tests**
 
+Import `MAX_TARGET_CHARS` from `science_model.evidence_broker`; the usage-error test constructs the
+boundary from the same contract the command enforces rather than copying `4096`.
+
 ```python
 def test_a_traversing_handle_is_refused_before_any_path_join(runner, project) -> None:
     result = runner.invoke(cli, ["evidence", "serve", "--session", "../../elsewhere",
                                  "--op", "read", "--target", "a.md"])
     assert result.exit_code == 2
     assert "run id" in result.output
+
+
+def test_an_overlong_target_is_reported_as_a_usage_error(runner, brokered) -> None:
+    result = runner.invoke(
+        cli,
+        ["evidence", "serve", "--session", HANDLE, "--op", "read",
+         "--target", "a" * (MAX_TARGET_CHARS + 1)],
+    )
+    assert result.exit_code == 2
+    assert "characters" in result.output
 
 
 def test_a_handle_whose_baseline_names_another_run_is_refused_after_loading(runner, project) -> None:
@@ -2816,14 +3023,21 @@ lines there or raise `click.UsageError`, which click renders and exits 2 on its 
         _fail(f"run {handle!r} was not opened with a broker spec; there is no surface to serve")
 
     session = Session(project_root, baseline.evidence)
-    receipt = session.request(EvidenceRequest(op=EvidenceOp(op), target=target, pathspec=pathspec))
+    try:
+        receipt = session.request(
+            EvidenceRequest(op=EvidenceOp(op), target=target, pathspec=pathspec)
+        )
+    except SessionError as exc:
+        _fail(f"could not serve evidence for {handle!r}: {exc}")
 ```
 
 The payload is `{"outcome", "sha256", "path", "notice"}` and nothing else — never `payload`, never
 the bytes. **All four keys are always present**, with `null` for the ones that do not apply: a
-conditionally-omitted key makes every consumer branch on presence rather than on value. Let `ServeError` and `JournalError` propagate: design §6's last row is "anything else from
-git raises, halts the run", and a broker that answered around an unreadable journal would be
-answering from a record it could not read.
+conditionally-omitted key makes every consumer branch on presence rather than on value.
+`SessionError` is requester-visible failure before an answer and is translated to the command's
+usage-error path. Let `ServeError` and `JournalError` propagate: design §6's last row is "anything
+else from git raises, halts the run", and a broker that answered around an unreadable journal would
+be answering from a record it could not read.
 
 - [ ] **Step 4: Run the tests and watch them pass**
 
@@ -2835,6 +3049,10 @@ the *first* validation (call `control_plane_root(...) / project_key(...) / handl
 of `run_dir`) and confirm the traversal test fails. **Both mutations are required**: two defenses
 that each look proven because breaking both fails a test, while breaking either alone fails nothing,
 is the conjunction defect plan 2 hit twice.
+
+Then delete only the `except SessionError` branch and confirm
+`test_an_overlong_target_is_reported_as_a_usage_error` fails with exit 1 rather than exit 2. The
+session-level landmine proves ordering; this CLI mutation proves translation at the public boundary.
 
 - [ ] **Step 6: Lint, type-check, commit**
 
