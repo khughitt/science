@@ -14,7 +14,7 @@ actor-controlled layer, so the hardening below cannot be un-set from inside the 
 WHAT WAS PROBED, AND WHAT ACTUALLY EXECUTES. Each key below was built as a working attack
 in a scratch repository against git 2.55, under exactly the commands this package runs --
 `rev-parse`, `status --porcelain`, `log`, `show <commit>:<path>`, `diff --raw`,
-`diff --name-status`, `grep`:
+`diff --name-status`, `grep`, `cat-file -t <commit>:<path>` and `cat-file blob <commit>:<path>`:
 
 * `core.fsmonitor` -- EXECUTES, under `status`.
 * `core.hooksPath` -- EXECUTES, under `status`, via the `post-index-change` hook. So does
@@ -43,6 +43,19 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   `pager.grep` -- all INERT, under `grep`. `grep` never invokes a textconv filter and,
   like every other call in this module, always runs with captured output, so no pager is
   ever spawned.
+* `cat-file -t <commit>:<path>` and `cat-file blob <commit>:<path>` -- probed separately,
+  identical results. Every key probed is INERT: `core.pager`, `pager.cat-file`,
+  `diff.<driver>.textconv`, `diff.<driver>.command`, `diff.external`, `filter.<driver>.clean`
+  / `.smudge` / `.process`, `core.fsmonitor`, `core.hooksPath`, `core.quotePath`,
+  `core.autocrlf`, `core.eol`, `log.showSignature`, `gpg.program`, `core.sshCommand`,
+  `core.alternateRefsCommand` -- probed with `.gitattributes` binding the driver keys to the
+  path, so each had a reason to fire. `cat-file blob` is a raw object read: it applies no
+  smudge filter, no textconv and no eol conversion, and captured output means no pager. So
+  `_HARDENING` gains NOTHING for this subcommand, per this module's standing rule.
+
+  The broker uses this rather than `show <commit>:<path>` because `show` answers a path naming
+  a TREE with a directory listing at exit 0, which the evidence broker cannot distinguish from
+  a file read (design §3.2). `cat-file blob` refuses it.
 * `grep.column=true`, `color.grep=always`, `color.ui=always` -- RENDER, under `grep`:
   they change output but spawn nothing. The broker pins the argv keys this shapes
   (`--no-color`, etc.) rather than neutralizing them here, since there is nothing here
