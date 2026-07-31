@@ -40,6 +40,31 @@ def _scaffold(root: Path) -> None:
     (root / "README.md").write_text("# Demo Project\n")
 
 
+def test_check_refs_parses_regular_markdown_frontmatter_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import science_tool.refs as refs
+
+    entity_dir = tmp_path / "entities" / "questions"
+    entity_dir.mkdir(parents=True)
+    (entity_dir / "one.md").write_text(
+        "---\nid: question:one\nkind: question\ntitle: One\n---\nBody.\n",
+        encoding="utf-8",
+    )
+    calls = 0
+    parse_frontmatter = refs.parse_frontmatter
+
+    def counted_parse_frontmatter(path: Path):
+        nonlocal calls
+        calls += 1
+        return parse_frontmatter(path)
+
+    monkeypatch.setattr(refs, "parse_frontmatter", counted_parse_frontmatter)
+
+    assert check_refs(tmp_path) == []
+    assert calls == 1
+
+
 def test_valid_hypothesis_ref() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:

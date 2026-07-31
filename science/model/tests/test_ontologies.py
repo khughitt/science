@@ -1,7 +1,18 @@
+from functools import cache
+
 import pytest
 
 from science_model.ontologies import available_ontology_names, load_catalogs_for_names, load_registry
 from science_model.ontologies.schema import OntologyCatalog, OntologyTermType
+
+
+@cache
+def _loaded_catalog(name: str) -> OntologyCatalog:
+    return load_catalogs_for_names([name])[0]
+
+
+def _catalog(name: str) -> OntologyCatalog:
+    return _loaded_catalog(name).model_copy(deep=True)
 
 
 def test_load_registry_returns_biology_entry() -> None:
@@ -11,9 +22,7 @@ def test_load_registry_returns_biology_entry() -> None:
 
 
 def test_load_biology_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     assert catalog.ontology == "biology"
     type_names = {et.name for et in catalog.entity_types}
     assert "gene" in type_names
@@ -28,8 +37,7 @@ def test_load_biology_catalog_parses_entity_types() -> None:
 
 
 def test_load_biology_catalog_parses_predicates() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     pred_names = {p.name for p in catalog.predicates}
     assert "interacts_with" in pred_names
     assert "encodes" in pred_names
@@ -48,6 +56,13 @@ def test_load_catalogs_for_names_returns_declared() -> None:
     catalogs = load_catalogs_for_names(["biology"])
     assert len(catalogs) == 1
     assert catalogs[0].ontology == "biology"
+
+
+def test_catalog_helper_returns_independent_models() -> None:
+    catalog = _catalog("biology")
+    catalog.entity_types.clear()
+
+    assert _catalog("biology").entity_types
 
 
 def test_available_ontology_names() -> None:
@@ -74,9 +89,7 @@ def test_ontology_term_type_round_trip() -> None:
 
 
 def test_load_physics_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["physics"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("physics")
     assert catalog.ontology == "physics"
     type_names = {et.name for et in catalog.entity_types}
     assert "elementary_particle" in type_names
@@ -90,8 +103,7 @@ def test_load_physics_catalog_parses_entity_types() -> None:
 
 
 def test_load_physics_catalog_parses_predicates() -> None:
-    catalogs = load_catalogs_for_names(["physics"])
-    catalog = catalogs[0]
+    catalog = _catalog("physics")
     pred_names = {p.name for p in catalog.predicates}
     assert "decays_to" in pred_names
     assert "mediates" in pred_names
@@ -102,8 +114,7 @@ def test_load_physics_catalog_parses_predicates() -> None:
 
 
 def test_physics_recommended_counts() -> None:
-    catalogs = load_catalogs_for_names(["physics"])
-    catalog = catalogs[0]
+    catalog = _catalog("physics")
     rec_types = sum(1 for et in catalog.entity_types if et.recommended)
     rec_preds = sum(1 for p in catalog.predicates if p.recommended)
     assert 20 <= rec_types <= 50, f"Expected 20-50 recommended types, got {rec_types}"
@@ -111,8 +122,7 @@ def test_physics_recommended_counts() -> None:
 
 
 def test_physics_curie_prefixes() -> None:
-    catalogs = load_catalogs_for_names(["physics"])
-    catalog = catalogs[0]
+    catalog = _catalog("physics")
     quark = next(et for et in catalog.entity_types if et.name == "quark")
     assert len(quark.curie_prefixes) > 0
     crystal = next(et for et in catalog.entity_types if et.name == "crystal")
@@ -123,9 +133,7 @@ def test_physics_curie_prefixes() -> None:
 
 
 def test_load_units_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["units"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("units")
     assert catalog.ontology == "units"
     type_names = {et.name for et in catalog.entity_types}
     assert "mass" in type_names
@@ -135,8 +143,7 @@ def test_load_units_catalog_parses_entity_types() -> None:
 
 
 def test_load_units_catalog_parses_predicates() -> None:
-    catalogs = load_catalogs_for_names(["units"])
-    catalog = catalogs[0]
+    catalog = _catalog("units")
     pred_names = {p.name for p in catalog.predicates}
     assert "has_quantity_kind" in pred_names
     assert "has_unit" in pred_names
@@ -145,8 +152,7 @@ def test_load_units_catalog_parses_predicates() -> None:
 
 
 def test_units_recommended_counts() -> None:
-    catalogs = load_catalogs_for_names(["units"])
-    catalog = catalogs[0]
+    catalog = _catalog("units")
     rec_types = sum(1 for et in catalog.entity_types if et.recommended)
     assert 20 <= rec_types <= 50, f"Expected 20-50 recommended quantity kinds, got {rec_types}"
     rec_preds = sum(1 for p in catalog.predicates if p.recommended)
@@ -154,8 +160,7 @@ def test_units_recommended_counts() -> None:
 
 
 def test_units_curie_prefixes() -> None:
-    catalogs = load_catalogs_for_names(["units"])
-    catalog = catalogs[0]
+    catalog = _catalog("units")
     mass = next(et for et in catalog.entity_types if et.name == "mass")
     assert "QUDT" in mass.curie_prefixes
 
@@ -167,9 +172,7 @@ def test_load_registry_returns_math_entry() -> None:
 
 
 def test_load_math_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["math"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("math")
     assert catalog.ontology == "math"
     assert catalog.prefix == "math"
     type_names = {et.name for et in catalog.entity_types}
@@ -181,15 +184,13 @@ def test_load_math_catalog_parses_entity_types() -> None:
 
 
 def test_math_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["math"])
-    catalog = catalogs[0]
+    catalog = _catalog("math")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 20 <= len(recommended) <= 50
 
 
 def test_math_catalog_has_predicates() -> None:
-    catalogs = load_catalogs_for_names(["math"])
-    catalog = catalogs[0]
+    catalog = _catalog("math")
     pred_names = {p.name for p in catalog.predicates}
     assert "operates_on" in pred_names
     assert "generalizes" in pred_names
@@ -197,8 +198,7 @@ def test_math_catalog_has_predicates() -> None:
 
 
 def test_math_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["math"])
-    catalog = catalogs[0]
+    catalog = _catalog("math")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 10 <= len(recommended) <= 35
 
@@ -210,9 +210,7 @@ def test_load_registry_returns_earth_entry() -> None:
 
 
 def test_load_earth_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["earth"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("earth")
     assert catalog.ontology == "earth"
     assert catalog.prefix == "earth"
     type_names = {et.name for et in catalog.entity_types}
@@ -224,15 +222,13 @@ def test_load_earth_catalog_parses_entity_types() -> None:
 
 
 def test_earth_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["earth"])
-    catalog = catalogs[0]
+    catalog = _catalog("earth")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 20 <= len(recommended) <= 55
 
 
 def test_earth_catalog_has_predicates() -> None:
-    catalogs = load_catalogs_for_names(["earth"])
-    catalog = catalogs[0]
+    catalog = _catalog("earth")
     pred_names = {p.name for p in catalog.predicates}
     assert "occurs_in" in pred_names
     assert "shaped_by" in pred_names
@@ -240,8 +236,7 @@ def test_earth_catalog_has_predicates() -> None:
 
 
 def test_earth_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["earth"])
-    catalog = catalogs[0]
+    catalog = _catalog("earth")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 8 <= len(recommended) <= 35
 
@@ -253,9 +248,7 @@ def test_load_registry_returns_chemistry_entry() -> None:
 
 
 def test_load_chemistry_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["chemistry"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("chemistry")
     assert catalog.ontology == "chemistry"
     assert catalog.prefix == "chemistry"
     type_names = {et.name for et in catalog.entity_types}
@@ -267,15 +260,13 @@ def test_load_chemistry_catalog_parses_entity_types() -> None:
 
 
 def test_chemistry_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["chemistry"])
-    catalog = catalogs[0]
+    catalog = _catalog("chemistry")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 15 <= len(recommended) <= 35
 
 
 def test_chemistry_catalog_has_predicates() -> None:
-    catalogs = load_catalogs_for_names(["chemistry"])
-    catalog = catalogs[0]
+    catalog = _catalog("chemistry")
     pred_names = {p.name for p in catalog.predicates}
     assert "reacts_with" in pred_names
     assert "catalyzes" in pred_names
@@ -283,8 +274,7 @@ def test_chemistry_catalog_has_predicates() -> None:
 
 
 def test_chemistry_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["chemistry"])
-    catalog = catalogs[0]
+    catalog = _catalog("chemistry")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 8 <= len(recommended) <= 35
 
@@ -296,9 +286,7 @@ def test_load_registry_returns_astronomy_entry() -> None:
 
 
 def test_load_astronomy_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["astronomy"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("astronomy")
     assert catalog.ontology == "astronomy"
     assert catalog.prefix == "astronomy"
     type_names = {et.name for et in catalog.entity_types}
@@ -310,15 +298,13 @@ def test_load_astronomy_catalog_parses_entity_types() -> None:
 
 
 def test_astronomy_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["astronomy"])
-    catalog = catalogs[0]
+    catalog = _catalog("astronomy")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 15 <= len(recommended) <= 35
 
 
 def test_astronomy_catalog_has_predicates() -> None:
-    catalogs = load_catalogs_for_names(["astronomy"])
-    catalog = catalogs[0]
+    catalog = _catalog("astronomy")
     pred_names = {p.name for p in catalog.predicates}
     assert "orbits" in pred_names
     assert "emits" in pred_names
@@ -326,8 +312,7 @@ def test_astronomy_catalog_has_predicates() -> None:
 
 
 def test_astronomy_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["astronomy"])
-    catalog = catalogs[0]
+    catalog = _catalog("astronomy")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 8 <= len(recommended) <= 35
 
@@ -339,9 +324,7 @@ def test_load_registry_returns_information_entry() -> None:
 
 
 def test_load_information_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["information"])
-    assert len(catalogs) == 1
-    catalog = catalogs[0]
+    catalog = _catalog("information")
     assert catalog.ontology == "information"
     assert catalog.prefix == "information"
     type_names = {et.name for et in catalog.entity_types}
@@ -353,15 +336,13 @@ def test_load_information_catalog_parses_entity_types() -> None:
 
 
 def test_information_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["information"])
-    catalog = catalogs[0]
+    catalog = _catalog("information")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 12 <= len(recommended) <= 30
 
 
 def test_information_catalog_has_predicates() -> None:
-    catalogs = load_catalogs_for_names(["information"])
-    catalog = catalogs[0]
+    catalog = _catalog("information")
     pred_names = {p.name for p in catalog.predicates}
     assert "encodes" in pred_names
     assert "connected_to" in pred_names
@@ -369,15 +350,13 @@ def test_information_catalog_has_predicates() -> None:
 
 
 def test_information_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["information"])
-    catalog = catalogs[0]
+    catalog = _catalog("information")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 8 <= len(recommended) <= 35
 
 
 def test_biology_catalog_has_ecology_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     type_names = {et.name for et in catalog.entity_types}
     assert "population" in type_names
     assert "ecosystem" in type_names
@@ -387,8 +366,7 @@ def test_biology_catalog_has_ecology_entity_types() -> None:
 
 
 def test_biology_catalog_has_ecology_predicates() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     pred_names = {p.name for p in catalog.predicates}
     assert "preys_on" in pred_names
     assert "competes_with" in pred_names
@@ -396,15 +374,13 @@ def test_biology_catalog_has_ecology_predicates() -> None:
 
 
 def test_biology_catalog_has_recommended_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     recommended = [et for et in catalog.entity_types if et.recommended]
     assert 20 <= len(recommended) <= 70
 
 
 def test_biology_catalog_has_recommended_predicates() -> None:
-    catalogs = load_catalogs_for_names(["biology"])
-    catalog = catalogs[0]
+    catalog = _catalog("biology")
     recommended = [p for p in catalog.predicates if p.recommended]
     assert 20 <= len(recommended) <= 70
 

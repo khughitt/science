@@ -26,7 +26,16 @@ from science_model.entity_schema.profile import _MIXIN_VERSION_BY_GENERATION
 # `method` is the second schema-closure slice, same rule: `test_method_entity.py`, 17 shared
 # fields against both profiles. It is the only one of these whose shared surface is computed
 # against a TYPED subclass (`MethodEntity`) rather than the generic `ProjectEntity`.
-VALUE_RECONCILED_KINDS = frozenset({"hypothesis", "concept", "method"})
+# `observation` is the fourth, and its battery is the first whose shared surface INCLUDES
+# `promoted_from`: `search` omits the field and `concept`/`method` admit it, so the size of a
+# battery is a per-kind fact, not a tranche constant.
+# `finding` is the fifth and last tranche kind. Its battery is the largest of the five: the
+# mixin admits 17 properties, five of which no earlier tranche mixin declared, so the shared
+# surface with `ProjectEntity` is wider than any predecessor's. A battery's size is a
+# per-kind fact, never a tranche constant.
+VALUE_RECONCILED_KINDS = frozenset(
+    {"hypothesis", "concept", "method", "search", "observation", "finding"}
+)
 
 # The exact remainder, frozen. This is a RATCHET, not a target: it must SHRINK deliberately as
 # S1b authors batteries, and any growth means a mixin was declared without anyone classifying it.
@@ -71,8 +80,12 @@ def test_the_reconciled_profiles_are_the_complement() -> None:
             (2, "hypothesis"), (3, "hypothesis"),
             (2, "concept"), (3, "concept"),
             (2, "method"), (3, "method"),
+            (2, "search"), (3, "search"),
+            (2, "observation"), (3, "observation"),
+            (2, "finding"), (3, "finding"),
         }
     ), (
         f"value-reconciled profiles are {sorted(reconciled)}; "
-        f"expected both generations of hypothesis, concept and method, and nothing else"
+        f"expected both generations of hypothesis, concept, method, search, observation "
+        f"and finding, and nothing else"
     )

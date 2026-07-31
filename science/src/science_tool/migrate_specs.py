@@ -21,7 +21,6 @@ import yaml
 from science_model.frontmatter import atomic_write_text, render_frontmatter, split_frontmatter
 
 from science_tool.entities import (
-    _REFERENCE_SCAN_SKIP_DIRS,
     _REMOVABLE_FRONTMATTER_REF_KEYS,
     derive_slug,
     local_part_conforms,
@@ -32,6 +31,7 @@ from science_tool.entity_import import _restore, _snapshot, apply_reference_rewr
 from science_tool.entity_reservation import claim_number_in_dir, propose_number
 from science_tool.graph.store.constants import DEFAULT_GRAPH_PATH
 from science_tool.markdown_scan import iter_prose_matches
+from science_tool.project_walk import iter_project_files
 from science_tool.reference_rewrite import (
     _LINK_RE,
     RewriteReport,
@@ -254,16 +254,10 @@ def discover_specs(project_root: Path) -> Discovery:
     singletons: list[Singleton] = []
     scan_skips: list[ScanSkip] = []
 
-    for path in sorted(project_root.rglob("*")):
-        if not path.is_file():
-            continue
+    for path in iter_project_files(project_root, suffixes=TEXT_SUFFIXES):
         rel = path.relative_to(project_root).as_posix()
-        if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in path.relative_to(project_root).parts):
-            continue
         if rel == _DERIVED_GRAPH_REL:
             continue  # the compiled graph is regenerated from source — never scanned, never a skip
-        if path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
         try:
             oversized = path.stat().st_size > MAX_SCANNABLE_BYTES
         except OSError as exc:

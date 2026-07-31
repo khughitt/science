@@ -34,6 +34,8 @@ from science_tool.validate.runtime import (
 )
 
 if TYPE_CHECKING:
+    from science_tool.graph.sources import ProjectSources
+
     ValidationProfile = Literal["full", "commit"]
 else:
     ValidationProfile = str
@@ -69,6 +71,7 @@ def run(
     fail_on: str | None = None,
     profile: ValidationProfile = "full",
     include_all_checks: bool = False,
+    project_sources: ProjectSources | None = None,
 ) -> RunResult:
     checks = _checks_for_profile(profile)
     skipped_checks = _skipped_checks_for_profile(profile)
@@ -77,6 +80,7 @@ def run(
         strict=strict,
         verbose=verbose,
         include_all_checks=include_all_checks,
+        project_sources=project_sources,
     )
     registry = _validation_registry(ctx.project_root)
     producer_results: dict[str, FindingProducerResult] = {}

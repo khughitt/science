@@ -330,6 +330,7 @@ def _one_issue_result(
             "Smith 2020 reported this result.\nJones 2021 repeated it.\n",
             encoding="utf-8",
         )
+        context.sources = None
         result = validate_health.CHECK.run(context)
         assert sum(finding.rule_id == "prose-lints.hit" for finding in result.instrument.rows) == 2
         return result, len(result.instrument.rows)

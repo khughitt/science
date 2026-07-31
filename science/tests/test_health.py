@@ -83,6 +83,45 @@ def test_fast_health_never_loads_project_sources(
     assert "identity_policy" not in report.meta.producers_run
 
 
+def test_health_parses_each_task_once_per_commons_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from collections import Counter
+    from datetime import date
+
+    from science_model.tasks import Task
+
+    from science_tool.graph.storage_adapters import task as task_adapter
+    from science_tool.tasks import render_task_file
+
+    (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+    active = tmp_path / "tasks" / "active"
+    active.mkdir(parents=True)
+    for index in range(2):
+        task = Task(
+            id=f"t{index:03d}",
+            title=f"Task {index}",
+            priority="P2",
+            status="active",
+            created=date(2026, 1, 1),
+        )
+        (active / f"{task.id}-task.md").write_text(render_task_file(task), encoding="utf-8")
+
+    real = task_adapter._parse_task_path
+    parsed: list[str] = []
+
+    def counted(path: Path):
+        parsed.append(path.name)
+        return real(path)
+
+    monkeypatch.setattr(task_adapter, "_parse_task_path", counted)
+
+    _report(tmp_path)
+
+    assert Counter(parsed) == {"t000-task.md": 2, "t001-task.md": 2}
+
+
 def test_agent_context_rows_are_declared_findings(tmp_path: Path) -> None:
     (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n@core/overview.md\n", encoding="utf-8")
     (tmp_path / "AGENTS.md").write_text("# Guide\n", encoding="utf-8")

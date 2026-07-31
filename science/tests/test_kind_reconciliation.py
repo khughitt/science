@@ -242,6 +242,224 @@ UNHELD[("method", "version")] = (
     ),
 )
 
+# `search` (schema-closure slice, 2026-07-30). Untyped, like `concept`, so the gap is computed
+# against `ProjectEntity`. FIVE names, not six: `promoted_from` is absent because the mixin does
+# not admit it -- nothing promotes into `search`, so it never becomes admitted-but-undeclared.
+#
+# Swept for again rather than copied from `concept`/`method`. The two kind-agnostic facts were
+# re-confirmed against this kind specifically: `iter_entity_markdown` rglobs the whole `entities/`
+# tree (entity_scan.py:44), so `entities/searches/` is in scope for the `tags` reader; and the
+# `sources`/`version` keyed reads across the tree all consume something that is not a search
+# entity's frontmatter.
+UNHELD[("search", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter (`frontmatter.get('tags')`, labnote_export.py:861), kind-agnostic: "
+        "it walks every markdown under entities/ via iter_entity_markdown, so "
+        "entities/searches/*.md is in scope",
+    ),
+)
+UNHELD[("search", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("search", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("search", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "23 keyed `sources` reads exist across the tree -- uv config (tooling_dependency:73), a "
+        "dataset proxy (datasets_register:381), skill frontmatter (skills_lint.lint:184), prose "
+        "manifests (annotation.prose_health:105) -- and none reads a search entity's frontmatter"
+    ),
+)
+UNHELD[("search", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- the project config "
+        "(labnote_export:876, project_package.serialize:102), a fetched API record "
+        "(paper_fetch:494), or a migration journal (tasks_migrate:650). None is search "
+        "frontmatter. The commons `version` reader does not apply: it resolves a commons "
+        "canonical by id, and no search id resolves to one"
+    ),
+)
+
+# `observation` (schema-closure slice, 2026-07-30). Untyped, like `concept` and `search`, so the
+# gap is computed against `ProjectEntity`. SIX names, back to the `concept`/`method` count rather
+# than `search`'s five: this mixin admits `promoted_from` (14 of the 21 records carry it), so it
+# IS admitted-but-undeclared here. The count is derived per kind; copying the neighbouring block
+# in either direction would have been wrong, in opposite ways.
+#
+# Swept for again rather than copied. Two results worth recording because they differ from a
+# neighbour's entry: `iter_entity_markdown` was re-confirmed to reach `entities/observations/`
+# (labnote_export._discover_entities applies no kind filter at all -- entity_scan.py:44 rglobs the
+# whole tree), and `entities_inventory.py:144`, which looks like a second `tags` reader, reads
+# `science.yaml`'s project config rather than any entity's frontmatter.
+UNHELD[("observation", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter (`frontmatter.get('tags')`, labnote_export.py:861), kind-agnostic: "
+        "it walks every markdown under entities/ via iter_entity_markdown with no kind filter, "
+        "so entities/observations/*.md is in scope",
+    ),
+)
+UNHELD[("observation", "promoted_from")] = (
+    _BOTH,
+    PendingRuling(
+        "14 of the 21 observations author it and NOTHING reads it -- the same standing as "
+        "`concept`, reached differently. The only occurrence in the tree is a WRITE "
+        "(graph/decision_log.py:157) which stamps it onto `type: decision` owners, a different "
+        "kind, so it is not this population's writer either. The command that DID write these "
+        "(`science entities triage-aggregate --promote-coined`, used by health/processes/cycles "
+        "commit 433ad02) no longer exists in the toolkit, and all 14 values name "
+        "doc/observations/observations.yaml -- a file that same commit deliberately deleted. "
+        "Absent from the project's materialized graph (measured: 0 occurrences in both "
+        "graph.trig and composite.trig). Real provenance with no consumer and no live writer, "
+        "not a gap to close by deleting the field"
+    ),
+)
+UNHELD[("observation", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("observation", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("observation", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "the same finding as concept/paper/theme/topic: keyed `sources` reads exist across the "
+        "tree (uv config at tooling_dependency:73, a dataset proxy at datasets_register:381, "
+        "prose manifests at prose_epistemics:224, provenance-derived row dicts in "
+        "graph.store.queries), but none reads an observation entity's frontmatter `sources`"
+    ),
+)
+UNHELD[("observation", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- a fetched API record "
+        "(paper_fetch:494), the project config (labnote_export:876, project_package.serialize:102), "
+        "a migration journal (tasks_migrate:650), or a derived row dict (managed_artifacts:96). "
+        "None is observation frontmatter. The commons `version` reader does not apply: it "
+        "resolves a commons canonical by id, and no observation id resolves to one"
+    ),
+)
+
+# --- finding (slice 5, 2026-07-30): ELEVEN, the widest gap in the tranche -------------
+#
+# Not a copy of the `observation` block. This mixin admits five properties no earlier tranche
+# mixin declared (`mode`, `input`, `propositions`, `observations`, `superseded_by`), so five
+# entries here have no predecessor to copy from and each needed its own reader search. Two of
+# those five turned out to HAVE readers, which no reasoning by analogy would have produced.
+
+UNHELD[("finding", "tags")] = (
+    _BOTH,
+    Reader(
+        "science_tool.labnote_export",
+        "_discover_entities",
+        "entity frontmatter (`frontmatter.get('tags')`, labnote_export.py:861), kind-agnostic: "
+        "it walks every markdown under entities/ via iter_entity_markdown with no kind filter, "
+        "so entities/findings/*.md is in scope",
+    ),
+)
+UNHELD[("finding", "input")] = (
+    _BOTH,
+    Reader(
+        "science_tool.curate.inventory",
+        "_has_provenance_edge",
+        "entity frontmatter (`fm.get('input')`, inventory.py:220), kind-agnostic: the function "
+        "treats `input:` as one of three ways an entity may record provenance, and "
+        "project_config.py:101 declares it in DEFAULT_PROVENANCE_FIELDS. 22 of the 52 markdown "
+        "findings carry it",
+    ),
+)
+UNHELD[("finding", "superseded_by")] = (
+    _BOTH,
+    Reader(
+        "science_tool.graph.materialize",
+        "_live_lineage_targets",
+        "entity frontmatter (`frontmatter.get('superseded_by')`, materialize.py:185), "
+        "kind-agnostic: it resolves live lineage for any record whose status is `superseded`. "
+        "ZERO findings carry it today, and that is exactly why the mixin admits it -- "
+        "`finding` is supersedable=True and `mark_superseded` stamps the key, so this reader "
+        "would otherwise be reading a field the schema refused",
+    ),
+)
+UNHELD[("finding", "promoted_from")] = (
+    _BOTH,
+    PendingRuling(
+        "26 of the 52 markdown findings author it (all in ~/d/protein-landscape) and NOTHING "
+        "reads it -- the same standing as `concept` and `observation`, reached again. The only "
+        "occurrence in the tree is a WRITE (graph/decision_log.py:157), which stamps it onto "
+        "`type: decision` owners, a different kind, so it is not this population's writer "
+        "either. Real provenance with no consumer, not a gap to close by deleting the field"
+    ),
+)
+UNHELD[("finding", "propositions")] = (
+    _BOTH,
+    PendingRuling(
+        "25 of the 52 author it and no keyed read consumes finding frontmatter. The keyed "
+        "`propositions` reads that exist take report/payload dicts "
+        "(annotation/cli.py:461, graph/health_checks/cross_paper_evidence.py:139) or a "
+        "PROMOTED-proposition materialization list (commons_sources._MATERIALIZED_LIST_FIELDS). "
+        "labnote_export's TYPE_DIR_MAP entry maps the DIRECTORY name `propositions` to a type "
+        "and reads no field at all -- the closest near-miss in the tree, and not a reader"
+    ),
+)
+UNHELD[("finding", "observations")] = (
+    _BOTH,
+    PendingRuling(
+        "25 of the 52 author it and there is no keyed read of `observations` anywhere in "
+        "science_tool or science_model. The one textual hit (findings/ingest.py:527) is inside "
+        "the AuditFinding machinery, which is keyed on `doc_kind` and never touches entity "
+        "frontmatter -- a package-name collision with this kind, not a reader"
+    ),
+)
+UNHELD[("finding", "mode")] = (
+    _BOTH,
+    PendingRuling(
+        "23 of the 52 author it (all in ~/d/natural-systems) and every keyed `mode` read in the "
+        "tree consumes a dataset ACCESS exception -- `exception.get('mode')` in "
+        "datasets_catalog.py:444/483, dataset_prioritize.py:313 and datasets/semantics.py:43. "
+        "None is entity frontmatter, and none is this kind's"
+    ),
+)
+UNHELD[("finding", "contributors")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `contributors` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("finding", "licenses")] = (
+    _BOTH,
+    PendingRuling("no keyed read of `licenses` exists anywhere in science_tool or science_model"),
+)
+UNHELD[("finding", "sources")] = (
+    _BOTH,
+    PendingRuling(
+        "keyed `sources` reads exist but none reads finding frontmatter -- the same survey "
+        "recorded for the commons kinds below, plus datasets_register._proxy_source_datasets, "
+        "which reads a nested identity_contract key and is the demonstration in "
+        "`test_the_reader_check_is_not_sufficient_on_its_own` that the AST check alone proves "
+        "nothing about WHICH mapping is read"
+    ),
+)
+UNHELD[("finding", "version")] = (
+    _BOTH,
+    PendingRuling(
+        "every keyed `version` read consumes something else -- a fetched API record "
+        "(paper_fetch:494), the project config (labnote_export:876, project_package.serialize:102), "
+        "a migration journal (tasks_migrate:650), or a derived row dict (managed_artifacts:96). "
+        "None is finding frontmatter"
+    ),
+)
+
+
 for _kind in ("paper", "theme", "topic"):
     UNHELD[(_kind, "sources")] = (
         _BOTH,

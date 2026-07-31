@@ -13,11 +13,16 @@ Requiring an explanation for each would mean writing the same sentence 50+ times
 the slice procedure's "unexplained fields on either side" was written against
 `hypothesis`, whose projection is kind-specific.
 
-Six admitted fields survive only because `ProjectEntity` is `extra="allow"`. Five carry
-no concept records; `promoted_from` carries 132. That preservation is load-bearing and
-currently accidental -- `Entity` itself is `extra="ignore"`, so a typed `ConceptEntity`
-added later without `extra="allow"` would silently drop the field that 132 records use
-to record where they came from. These tests are what makes that fail loudly.
+Six admitted fields survive on `extra="allow"`. Five carry no concept records;
+`promoted_from` carries 132, so that preservation is load-bearing.
+
+CORRECTION (2026-07-30, found by mutation-testing the search slice's copy of this
+paragraph): this previously said the preservation was "currently accidental -- `Entity`
+itself is `extra="ignore"`". **That is false.** `Entity` sets
+`model_config = ConfigDict(extra="allow")` (entities.py:325) and its docstring cites
+D3.3: *"Never return to `extra='ignore'` -- that is the original defect."* `ProjectEntity`
+inherits it, so preservation is a ruling rather than an accident. The risk these tests
+guard is a subclass that explicitly overrides `model_config`, which D3.3 forbids.
 """
 
 from __future__ import annotations

@@ -249,8 +249,6 @@ def test_graph_import_reports_retirement_for_existing_snapshot() -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-
         snapshot = Path("snapshot.ttl")
         snapshot.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
 

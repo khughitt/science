@@ -188,7 +188,17 @@ def check_prose_lints(ctx: "ValidateContext") -> Iterable[CheckObservation]:
     # mention via a project shorthand satisfies a canonical `related:` entry),
     # so build it when either check is active.
     resolver_checks = {"short-form-ids", "frontmatter-inline-gap"}
-    resolver = build_short_form_resolver(ctx.project_root) if resolver_checks & set(effective_checks) else None
+    resolver = (
+        build_short_form_resolver(
+            ctx.project_root,
+            sources=ctx.project_sources(
+                strict_core_schema=False,
+                strict_identity=False,
+            ),
+        )
+        if resolver_checks & set(effective_checks)
+        else None
+    )
     bib_surnames = load_bib_author_surnames(ctx.project_root) if "bare-author-year" in effective_checks else None
 
     lint_result = scan_root(

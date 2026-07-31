@@ -857,6 +857,25 @@ def load_project_sources(
     )
 
 
+def enforce_project_source_strictness(
+    sources: ProjectSources,
+    *,
+    strict_core_schema: bool,
+    strict_identity: bool,
+) -> ProjectSources:
+    """Apply strict loader errors to an already collected diagnostic bundle."""
+    if strict_core_schema:
+        for skipped in sources.skipped_entities:
+            if skipped.reason == "core_schema_validation_failed":
+                raise ValueError(
+                    f"schema validation failed for registered entity kind {skipped.kind!r} "
+                    f"at {skipped.path}: {skipped.details}"
+                )
+    if strict_identity:
+        _raise_first_arbitration_error(sources.arbitration_errors)
+    return sources
+
+
 # Alias provenance, most-authoritative first. The ONLY collision resolved silently is
 # (mappings, derived): a `mappings.yaml` mapping is an explicit, external human
 # declaration and wins over an auto-derived convenience token. Every other cross-target

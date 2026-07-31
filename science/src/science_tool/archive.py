@@ -289,6 +289,55 @@ def archive_entities(
     return report
 
 
+ARCHIVE_TIER_FRONTMATTER_KEYS: frozenset[str] = frozenset({"consolidated_into"})
+"""Bookkeeping keys a mutator writes into frontmatter while an entity is IN the archive
+tier, stripped when it comes back out (`_restore_live_frontmatter`).
+
+`consolidate.py` stamps `consolidated_into` onto each member before relocating it under
+``_archive/``, where nothing loads it. The archive INDEX is the authority for the fact --
+``entities.py`` and ``big_picture/digests.py`` both read ``ArchiveRow.consolidated_into``,
+never the frontmatter -- so the frontmatter copy is a breadcrumb for a human reading the
+archived file, valid only while the file is archived.
+
+It must not survive restoration. `entity_scan` skips ``_archive/``, so an archived record
+is never schema-validated; a restored one is. A closed kind's mixin does not admit this key
+(none of `hypothesis`, `method`, `search`, `observation` or `finding` declares it), and
+``unevaluatedProperties: false`` then fails the WHOLE project load, not just the record --
+verified end-to-end against armed `search` before this strip existed. Ruled in
+docs/plans/2026-07-30-schema-closure-observation-slice-inventory.md: one authority, and the
+schema agrees with the writer rather than admitting archive-tier bookkeeping into every
+consolidatable kind's versioned schema.
+
+The `finding` slice inherited this rather than re-deciding it, and checked the inheritance:
+`finding` is the third consolidatable closed kind (its statuses include ``archived``), and
+`test_the_strip_is_kind_agnostic_by_construction` pins that `_restore_live_frontmatter`
+takes a path and nothing else, so coverage is structural rather than a list to maintain.
+
+Named explicitly rather than pattern-matched: this is the set a mutator writes, and a
+speculative deny list would strip keys an author legitimately wrote.
+"""
+
+
+def _restore_live_frontmatter(path: Path) -> None:
+    """Strip archive-tier bookkeeping from a just-restored entity file, in place.
+
+    No-op when the file carries none of the keys, so an entity archived by plain
+    `entities archive` (which performs no frontmatter edits) is not rewritten at all.
+    """
+    from science_tool.entities import (
+        _atomic_replace_text,
+        _parse_markdown_file_preserving_body,
+        _render_markdown,
+    )
+
+    frontmatter, body = _parse_markdown_file_preserving_body(path)
+    if not ARCHIVE_TIER_FRONTMATTER_KEYS & frontmatter.keys():
+        return
+    for key in ARCHIVE_TIER_FRONTMATTER_KEYS:
+        frontmatter.pop(key, None)
+    _atomic_replace_text(path, _render_markdown(frontmatter, body))
+
+
 def unarchive_entities(
     project_root: Path,
     ids: list[str],
@@ -297,7 +346,11 @@ def unarchive_entities(
     now: str | None = None,
 ) -> dict:
     """Restore archived entities to their original path; append unarchive tombstone.
-    Collision (target exists) fails before moving — never overwrite."""
+    Collision (target exists) fails before moving — never overwrite.
+
+    Restoration also strips `ARCHIVE_TIER_FRONTMATTER_KEYS`: a file leaving the archive
+    tier re-enters the scanned, schema-validated corpus, and archive-tier bookkeeping is
+    not part of any kind's authored contract."""
     project_root = Path(project_root).resolve()
     idx = load_archive_index(project_root)
     report: dict = {"candidates": [], "applied": [], "skipped": []}
@@ -323,6 +376,15 @@ def unarchive_entities(
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))
         _fsync_dir(dst.parent)
+        # The strip shares the move's guard: a file restored to a live path with
+        # archive-tier bookkeeping still in it would fail the whole project load, so a
+        # failure here rolls the move back rather than leaving that record in the corpus.
+        try:
+            _restore_live_frontmatter(dst)
+        except Exception:
+            shutil.move(str(dst), str(src))
+            _fsync_dir(src.parent)
+            raise
         append_row(index_path, ArchiveRow(op="unarchive", id=row.id,
                                           restored_path=row.original_path, unarchived_at=now))
         report["applied"].append(row.id)

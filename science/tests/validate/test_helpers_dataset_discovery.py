@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 
 from science_tool.validate._helpers import dataset_frontmatters, raw_frontmatter
+from science_tool.validate.context import ValidateContext
 
 
 class _Ctx:
@@ -10,8 +11,10 @@ class _Ctx:
         self.project_root = root
 
 
-def _ctx(root: Path) -> _Ctx:
-    return _Ctx(root)
+def _ctx(root: Path) -> ValidateContext:
+    if not (root / "science.yaml").exists():
+        (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    return ValidateContext.from_project_root(root, strict=False, verbose=False)
 
 
 def test_dataset_frontmatters_covers_markdown_and_datapackage(tmp_path: Path) -> None:
@@ -77,6 +80,23 @@ def test_entity_frontmatters_discovers_papers_and_datapackage_datasets(tmp_path:
     by_id = {row["id"]: row for row in rows}
     assert by_id["paper:Adams2025"]["_path"] == "entities/papers/Adams2025.md"
     assert by_id["dataset:gtex-v8"]["_path"] == "data/gtex/datapackage.yaml"
+
+
+def test_entity_frontmatters_reuses_discovery_within_validation_run(tmp_path: Path) -> None:
+    from science_tool.validate._helpers import entity_frontmatters
+
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    entity_dir = tmp_path / "entities" / "questions"
+    entity_dir.mkdir(parents=True)
+    (entity_dir / "one.md").write_text(
+        "---\nid: question:one\nkind: question\ntitle: One\n---\n",
+        encoding="utf-8",
+    )
+    ctx = ValidateContext.from_project_root(tmp_path, strict=False, verbose=False)
+
+    first = entity_frontmatters(ctx)
+
+    assert entity_frontmatters(ctx) is first
 
 
 def test_entity_frontmatters_tolerates_entity_datapackage_missing_title(tmp_path: Path) -> None:

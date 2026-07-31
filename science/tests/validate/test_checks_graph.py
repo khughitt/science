@@ -52,7 +52,7 @@ def test_peer_valid_empty_audit_no_graph_stops_before_graph_calls(
         raise AssertionError("graph.trig-gated API should not be called")
 
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph", fail_call)
     monkeypatch.setattr(ValidateContext, "graph_dataset", fail_call)
     monkeypatch.setattr(graph, "validate_graph_dataset", fail_call)
@@ -74,7 +74,7 @@ def test_validate_check_audit_side_unwired_emits_error(tmp_path, monkeypatch) ->
     monkeypatch.setattr(
         graph,
         "materialization_audit",
-        lambda _root: ValidationVerdict.unwired(code="unparseable", reason="boom"),
+        lambda _root, **_kwargs: ValidationVerdict.unwired(code="unparseable", reason="boom"),
     )
     results = list(graph.check_graph(_ctx(tmp_path)))
     errors = [
@@ -104,7 +104,7 @@ def test_peer_errors_emit_all_cli_lines_and_summary(monkeypatch: pytest.MonkeyPa
         ),
     ]
     monkeypatch.setattr(graph, "validate_peers", lambda _root: issues)
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
 
     results = list(
         graph.check_graph(
@@ -137,7 +137,7 @@ def test_graph_audit_rows_map_fail_to_error_and_others_to_warn(monkeypatch: pyte
     monkeypatch.setattr(
         graph,
         "materialization_audit",
-        lambda _root: ValidationVerdict.from_has_failures(
+        lambda _root, **_kwargs: ValidationVerdict.from_has_failures(
             [
                 {
                     "check": "broken_ref",
@@ -173,7 +173,7 @@ def test_graph_validate_rows_map_statuses(monkeypatch: pytest.MonkeyPatch, tmp_p
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
@@ -209,7 +209,7 @@ def test_graph_validate_skip_status_is_info_not_a_crash(monkeypatch: pytest.Monk
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
@@ -248,7 +248,7 @@ def test_validate_check_unwired_emits_error_and_skips_diff(tmp_path, monkeypatch
         "validate_graph",
         lambda _p: ValidationVerdict.unwired(code="unparseable", reason="bad"),
     )
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
 
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda *a, **k: called.__setitem__("diff", True))
     # force the except branch: make ctx.graph_dataset raise (a broken graph.trig on disk)
@@ -278,7 +278,7 @@ def test_graph_validate_fallback_renders_rows_and_skips_dataset_followups(
         raise AssertionError("dataset follow-up should not be called after fallback validation")
 
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(ValidateContext, "graph_dataset", fail_load)
     monkeypatch.setattr(
         graph,
@@ -314,7 +314,7 @@ def test_graph_check_reuses_one_loaded_dataset_for_graph_followups(
         raise AssertionError("path-based graph API should not be called by validate.checks.graph")
 
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(ValidateContext, "graph_dataset", lambda _ctx, path: load_dataset(path))
     monkeypatch.setattr(
         graph,
@@ -359,7 +359,7 @@ def test_parseable_trig_failure_stops_graph_followups(monkeypatch: pytest.Monkey
     graph_path.parent.mkdir()
     graph_path.write_text("not trig", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "validate_graph",
@@ -390,7 +390,7 @@ def test_graph_audit_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setattr(
         graph,
         "materialization_audit",
-        lambda _root: ValidationVerdict.from_has_failures(
+        lambda _root, **_kwargs: ValidationVerdict.from_has_failures(
             [
                 {
                     "check": "broken_ref",
@@ -416,7 +416,7 @@ def test_graph_validate_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, t
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
         "validate_graph_dataset",
@@ -434,7 +434,7 @@ def test_diff_rows_emit_stale_warning_and_verbose_details(monkeypatch: pytest.Mo
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
@@ -462,7 +462,7 @@ def test_diff_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(
         graph,
@@ -483,7 +483,7 @@ def test_inquiry_validation_maps_statuses_and_verbose_passes(monkeypatch: pytest
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
@@ -529,7 +529,7 @@ def test_inquiry_no_inquiry_block_is_info_but_missing_subgraph_warns(
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
@@ -559,7 +559,7 @@ def test_inquiry_value_error_propagates(monkeypatch: pytest.MonkeyPatch, tmp_pat
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(
@@ -582,7 +582,7 @@ def test_inquiry_unknown_status_raises(monkeypatch: pytest.MonkeyPatch, tmp_path
     graph_path.parent.mkdir()
     graph_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(graph, "validate_peers", lambda _root: [])
-    monkeypatch.setattr(graph, "materialization_audit", lambda _root: ValidationVerdict.passed([]))
+    monkeypatch.setattr(graph, "materialization_audit", lambda _root, **_kwargs: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "validate_graph_dataset", lambda _dataset: ValidationVerdict.passed([]))
     monkeypatch.setattr(graph, "diff_graph_inputs_dataset", lambda _dataset, **_kwargs: InstrumentResult[dict].empty())
     monkeypatch.setattr(

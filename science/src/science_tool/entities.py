@@ -39,6 +39,7 @@ from science_tool.graph.sources import (
     resolve_local_profile_name,
 )
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+from science_tool.project_walk import iter_project_files
 
 LOCAL_PART_WIDTH = 4
 
@@ -1389,36 +1390,13 @@ _REMOVABLE_FRONTMATTER_REF_KEYS: frozenset[str] = frozenset(
     }
 )
 
-# `.worktrees` is this toolkit's own convention; `worktrees` also covers nested linked-worktree
-# containers such as `.claude/worktrees/<agent>/` — another branch's checkout, never project content.
-# `.snakemake` is Snakemake's working dir (vendored conda envs, logs); `.ai` is this toolkit's own
-# agent-scaffolding root (`.ai/templates`, `.ai/prompts` per paths.py) — placeholder templates, not
-# entities. All are tool-managed and never reference surfaces, like `.venv`/`.tox`/`node_modules`.
-_REFERENCE_SCAN_SKIP_DIRS: frozenset[str] = frozenset(
-    {
-        ".ai",
-        ".git",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".snakemake",
-        ".tox",
-        ".venv",
-        ".worktrees",
-        "__pycache__",
-        "node_modules",
-        "worktrees",
-    }
-)
-
-
 def plan_entity_removal(project_root: Path, target: str) -> EntityRemovalPlan:
     project_root = project_root.resolve()
     location = _resolve_removal_location(project_root, target)
     terms = _removal_search_terms(location)
     safe_hits: list[EntityReferenceHit] = []
     manual_hits: list[EntityReferenceHit] = []
-    for path in _iter_reference_scan_files(project_root):
+    for path in iter_project_files(project_root):
         if path == location.path:
             continue
         try:
@@ -1503,17 +1481,6 @@ def _removal_search_terms_from_plan(plan: EntityRemovalPlan) -> tuple[str, ...]:
     local_part = plan.entity_id.split(":", 1)[1] if ":" in plan.entity_id else Path(plan.rel_path).stem
     terms = {plan.entity_id, local_part, plan.rel_path, Path(plan.rel_path).stem}
     return tuple(sorted(term for term in terms if term))
-
-
-def _iter_reference_scan_files(project_root: Path) -> list[Path]:
-    files: list[Path] = []
-    for path in project_root.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in _REFERENCE_SCAN_SKIP_DIRS for part in path.relative_to(project_root).parts):
-            continue
-        files.append(path)
-    return files
 
 
 def _removable_frontmatter_refs(frontmatter: dict[str, Any], terms: tuple[str, ...]) -> list[tuple[str, str]]:

@@ -50,7 +50,6 @@ from collections.abc import Iterator
 from science_tool.validate.findings import validation_observation
 from science_tool.validate.findings import declare_validation_rules
 from science_tool.graph.relation_audit import audit_relations
-from science_tool.graph.sources import load_project_sources
 from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.result import Severity
@@ -89,7 +88,7 @@ RELATION_RULES = {
 
 @Check(section=SECTION, order=28, producer_id="validate.relations", rules=tuple(RULES.values()))
 def check_authored_relations(ctx: ValidateContext) -> Iterator[CheckObservation]:
-    audit = audit_relations(ctx.project_root, load_project_sources(ctx.project_root))
+    audit = audit_relations(ctx.project_root, ctx.project_sources())
 
     for defect in audit.defects:
         yield validation_observation(

@@ -430,26 +430,18 @@ def _scan_body_typed_refs(
     return issues
 
 
-def _extract_autonomous_run_ref(path: Path) -> str | None:
+def _extract_autonomous_run_ref(frontmatter: dict) -> str | None:
     """The file's `autonomous_run` value, or None.
 
     Deliberately not folded into `_extract_frontmatter_refs`: those values are
     classified against `_LOCAL_ENTITY_KINDS`, and `run` is not an entity kind, so
     every valid reference would come back as `unknown-namespace`.
     """
-    parsed = parse_frontmatter(path)
-    if parsed is None:
-        return None
-    frontmatter, _body = parsed
     value = frontmatter.get("autonomous_run")
     return value if isinstance(value, str) and value else None
 
 
-def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
-    parsed = parse_frontmatter(path)
-    if parsed is None:
-        return []
-    fm, _body = parsed
+def _extract_frontmatter_refs(fm: dict) -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
     for key in ("related", "blocked_by", "blocked-by", "source_refs", "evidence_refs"):
         value = fm.get(key)
@@ -629,7 +621,9 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
         frontmatter_lines = _frontmatter_line_numbers(file_path)
-        run_ref = _extract_autonomous_run_ref(file_path)
+        parsed = parse_frontmatter(file_path)
+        frontmatter = parsed[0] if parsed is not None else {}
+        run_ref = _extract_autonomous_run_ref(frontmatter)
         if run_ref is not None and run_ref not in run_ids:
             issues.append(
                 RefIssue(
@@ -640,7 +634,7 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
                     message=f"{run_ref} — no run record in runs/",
                 )
             )
-        for field_name, raw_ref in _extract_frontmatter_refs(file_path):
+        for field_name, raw_ref in _extract_frontmatter_refs(frontmatter):
             if field_name in {"source_refs", "evidence_refs"}:
                 bibkey = bibliography_key_from_reference(raw_ref)
                 if bibkey is not None:

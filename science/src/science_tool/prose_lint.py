@@ -24,6 +24,7 @@ from science_tool.markdown_utils import (
 )
 
 if TYPE_CHECKING:
+    from science_tool.graph.sources import ProjectSources
     from science_tool.numeric_provenance import ResolutionIndex
     from science_tool.numeric_verification import VerificationResult
 
@@ -824,7 +825,11 @@ def merge_anchor_patterns(base: list[str], additional: list[str]) -> list[str]:
     return merged
 
 
-def build_short_form_resolver(root: Path) -> dict[str, str] | None:
+def build_short_form_resolver(
+    root: Path,
+    *,
+    sources: ProjectSources | None = None,
+) -> dict[str, str] | None:
     """Build an alias → canonical-id map for resolver-aware short-form-ids.
 
     A bare short form (e.g. ``h006``) that resolves through this map is an
@@ -838,7 +843,8 @@ def build_short_form_resolver(root: Path) -> dict[str, str] | None:
     try:
         from science_tool.graph.sources import build_alias_map, load_project_sources
 
-        sources = load_project_sources(root.resolve())
+        if sources is None:
+            sources = load_project_sources(root.resolve())
     except Exception as exc:  # noqa: BLE001 - a lint must not hard-fail on graph-load issues
         logger.warning("short-form-ids resolver unavailable (%s); falling back to deny-list only", exc)
         return None

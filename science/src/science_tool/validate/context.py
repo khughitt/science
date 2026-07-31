@@ -32,9 +32,9 @@ class ValidateContext:
     strict: bool
     verbose: bool
     include_all_checks: bool = False
-    _text_cache: dict[tuple[Path, int], str] = field(default_factory=dict, init=False, repr=False)
-    _yaml_cache: dict[tuple[Path, int], Any] = field(default_factory=dict, init=False, repr=False)
-    _split_cache: dict[tuple[Path, int], tuple[dict[str, Any], str]] = field(default_factory=dict, init=False, repr=False)
+    _text_cache: dict[Path, str] = field(default_factory=dict, init=False, repr=False)
+    _yaml_cache: dict[Path, Any] = field(default_factory=dict, init=False, repr=False)
+    _split_cache: dict[Path, tuple[dict[str, Any], str]] = field(default_factory=dict, init=False, repr=False)
     _resource_cache: dict[tuple[object, ...], Any] = field(default_factory=dict, init=False, repr=False)
 
     @classmethod
@@ -45,6 +45,7 @@ class ValidateContext:
         strict: bool,
         verbose: bool,
         include_all_checks: bool = False,
+        project_sources: ProjectSources | None = None,
     ) -> "ValidateContext":
         root = project_root.resolve()
         manifest_path = project_config_path(root)
@@ -60,7 +61,7 @@ class ValidateContext:
         except ValueError as exc:
             raise ValidateContextError(str(exc)) from exc
         doc_dir = paths.doc_dir
-        return cls(
+        context = cls(
             project_root=root,
             doc_dir=doc_dir,
             specs_dir=paths.specs_dir,
@@ -69,21 +70,23 @@ class ValidateContext:
             verbose=verbose,
             include_all_checks=include_all_checks,
         )
+        if project_sources is not None:
+            context._resource_cache[("project_sources", True)] = project_sources
+        return context
 
-    def _cache_key(self, path: Path) -> tuple[Path, int]:
-        absolute = path.resolve()
-        return (absolute, absolute.stat().st_mtime_ns)
+    def _cache_key(self, path: Path) -> Path:
+        return path.absolute()
 
     def read_text_cached(self, path: Path) -> str:
         key = self._cache_key(path)
         if key not in self._text_cache:
-            self._text_cache[key] = key[0].read_text(encoding="utf-8")
+            self._text_cache[key] = key.read_text(encoding="utf-8")
         return self._text_cache[key]
 
     def read_yaml(self, path: Path) -> Any:
         key = self._cache_key(path)
         if key not in self._yaml_cache:
-            self._yaml_cache[key] = yaml.safe_load(self.read_text_cached(key[0])) or {}
+            self._yaml_cache[key] = yaml.safe_load(self.read_text_cached(key)) or {}
         return self._yaml_cache[key]
 
     def _split(self, path: Path) -> tuple[dict[str, Any], str]:
@@ -94,7 +97,7 @@ class ValidateContext:
         # without checking every read_text_cached consumer.
         key = self._cache_key(path)
         if key not in self._split_cache:
-            fm, body = split_frontmatter(self.read_text_cached(key[0]))
+            fm, body = split_frontmatter(self.read_text_cached(key))
             self._split_cache[key] = (fm if isinstance(fm, dict) else {}, body)
         return self._split_cache[key]
 
@@ -116,16 +119,24 @@ class ValidateContext:
         strict_core_schema: bool = True,
         strict_identity: bool = True,
     ) -> ProjectSources:
-        from science_tool.graph.sources import load_project_sources
+        from science_tool.graph.sources import (
+            enforce_project_source_strictness,
+            load_project_sources,
+        )
 
-        return self.cached_resource(
-            ("project_sources", include_commons, strict_core_schema, strict_identity),
+        sources = self.cached_resource(
+            ("project_sources", include_commons),
             lambda: load_project_sources(
                 self.project_root,
                 include_commons=include_commons,
-                strict_core_schema=strict_core_schema,
-                strict_identity=strict_identity,
+                strict_core_schema=False,
+                strict_identity=False,
             ),
+        )
+        return enforce_project_source_strictness(
+            sources,
+            strict_core_schema=strict_core_schema,
+            strict_identity=strict_identity,
         )
 
     def graph_dataset(self, graph_path: Path) -> Dataset:

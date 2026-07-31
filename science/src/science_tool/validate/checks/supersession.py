@@ -90,7 +90,12 @@ def supersession_rule(
     kind_rule_factory=supersession_rules,
 )
 def check_supersession(ctx: ValidateContext) -> Iterator[CheckObservation]:
-    graph = build_supersedes_graph(load_supersession_inputs(ctx.project_root))
+    graph = build_supersedes_graph(
+        load_supersession_inputs(
+            ctx.project_root,
+            sources=ctx.project_sources(),
+        )
+    )
 
     for unbacked in graph.unbacked_inverses:
         entity_id = unbacked["id"]
