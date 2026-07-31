@@ -425,9 +425,9 @@ def _write_proposition(
 
     The typed reconstruction stays -- `render_update` renders owned keys from an entity. The
     body and the identity check now come from `read_existing_target` inside
-    `update_entity_file`, which is the only writer-side reader of the destination. The planning
-    path in `cli.py` (`plan_writes`) still reads the same file separately, via
-    `entities._parse_markdown_file`, which parses frontmatter differently -- it splits on
+    `update_entity_file`, which is the only writer-side reader of the destination. The synthesize
+    command still reads the same file separately when it builds its `current` frontmatter map
+    (`annotation/cli.py`), via `entities._parse_markdown_file`, which parses frontmatter differently -- it splits on
     `---\n` as a substring anywhere, where `split_frontmatter` requires the closing fence to
     own its own line.
     """
