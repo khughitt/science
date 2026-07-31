@@ -165,7 +165,7 @@ CORE_PROFILE = ProfileManifest(
             default_status="active",
             statuses=["active", "superseded", "retired", "archived"],
             supersedable=True,
-            schema_closed=False,
+            schema_closed=True,
         ),
         EntityKind(
             name="interpretation",

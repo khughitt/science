@@ -34,14 +34,12 @@ from pathlib import Path
 
 import pytest
 from science_model.entity_schema import loader as loader_module
-from science_model.entity_schema.loader import SchemaNotFoundError
 from science_model.entity_schema import validator as validator_module
 from science_model.entity_schema.profile import (
     BASE_NAME,
     PROJECT_MIXIN_NAMES,
     TYPE_MIXIN_NAMES,
     ProfileComponent,
-    ProfileParseError,
     ProfileString,
     default_profile_for_kind,
 )
@@ -118,54 +116,52 @@ def _refuses(validator: EntityValidator, record: dict) -> str:
     return str(caught.value)
 
 
-# --- dormant: written INVERTED, flipped by the step-7 arming commit ----------------
+# --- armed: both lookups flipped, from one declaration ----------------------------
 
 
-def test_finding_is_NOT_yet_armed():
-    """Flipped at step 7. Until then neither lookup knows the kind."""
-    assert "finding" not in PROJECT_MIXIN_NAMES
-    assert "finding" not in TYPE_MIXIN_NAMES
+def test_finding_is_armed():
+    """Written INVERTED at step 2 and flipped here, which is what makes the arming commit
+    self-certifying rather than merely plausible."""
+    assert "finding" in PROJECT_MIXIN_NAMES
+    assert "finding" in TYPE_MIXIN_NAMES
 
 
 @pytest.mark.parametrize("generation", [2, 3])
-def test_no_generation_row_selects_the_finding_mixin_yet(generation):
-    """Flipped at step 7, when BOTH rows gain `finding: 1.0` in one edit.
-
-    Both rows, and not one: `sources.py` calls `default_profile_for_kind(entity.kind)`
+def test_both_generation_rows_select_the_finding_mixin(generation):
+    """Both rows, and not one: `sources.py` calls `default_profile_for_kind(entity.kind)`
     with no generation argument and always resolves row 2, so a row-3-only arming would
-    leave that call site resolving a profile the descriptor claims is closed. That risk
-    is live rather than theoretical for THIS kind -- ~/d/natural-systems is pinned to
-    generation 2 and holds 172 of the 201 records, while the other two roots are gen 3.
+    leave that call site resolving a profile the descriptor claims is closed.
+
+    That risk is LIVE rather than theoretical for this kind, unlike every earlier tranche
+    kind: ~/d/natural-systems is pinned to generation 2 and holds 172 of the 201 records,
+    while the other two roots are generation 3. This is the first slice where both rows
+    carry real corpus.
     """
-    with pytest.raises(ProfileParseError):
-        default_profile_for_kind("finding", generation=generation)
+    profile = default_profile_for_kind("finding", generation=generation)
+    assert profile.render() == "science-entity-base/2.0+finding/1.0"
 
 
-def test_the_mixin_is_not_yet_reachable_as_a_mixin():
+def test_the_mixin_is_now_reachable_as_a_mixin():
     """`loader.py:92` derives the filename prefix from `TYPE_MIXIN_NAMES`.
 
-    While dormant this resolves `extension-finding-1.0.json`, which does not exist: the
-    file on disk is not lax, it is UNREACHABLE. Flipped at step 7 to assert the record
-    validates.
-
-    The exception type is named rather than caught as `Exception`: a bare `Exception`
-    here would also pass if the record were merely INVALID, which is the opposite of
-    what this test claims.
+    While dormant this raised `SchemaNotFoundError` for `extension-finding-1.0.json`: the
+    file on disk was not lax, it was UNREACHABLE. That distinction is the one the slice
+    procedure insists on -- an unarmed mixin is not a weak mixin.
     """
-    with pytest.raises(SchemaNotFoundError, match="extension-finding-1.0.json"):
-        EntityValidator().validate_as(_record(), CANDIDATE)
+    EntityValidator().validate_as(_record(), CANDIDATE)
 
 
-def test_composition_does_not_yet_close(monkeypatch):
-    """The defect this slice closes, demonstrated against the real composer.
+def test_composition_now_closes():
+    """The defect this slice closes, asserted against the real composer.
 
-    Only the LOADER is patched here, isolating the second lookup: the mixin is found,
-    but `unevaluatedProperties: false` is not applied because `finding` is absent from
-    `PROJECT_MIXIN_NAMES`. An undeclared key sails through -- which is what "preserved
-    unvouched" means for this kind. Flipped at step 7 to assert refusal.
+    While dormant this patched ONLY the loader and asserted that `shadow_key` SAILED
+    THROUGH -- isolating the second lookup to demonstrate what "preserved unvouched" meant
+    for this kind. Now both lookups derive from `schema_closed=True` and the same record
+    is refused.
     """
-    monkeypatch.setattr(loader_module, "TYPE_MIXIN_NAMES", TYPE_MIXIN_NAMES | {"finding"})
-    EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    with pytest.raises(EntityValidationError) as caught:
+        EntityValidator().validate_as(_record(shadow_key="unvouched"), CANDIDATE)
+    assert "shadow_key" in str(caught.value)
 
 
 # --- the frozen field set -------------------------------------------------------
