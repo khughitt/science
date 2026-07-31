@@ -27,6 +27,7 @@ ALLOWLIST: set[str] = {
     # --- known non-entity / prose / migration recursive markdown scanners (reason each) ---
     "big_picture/validator.py",             # tasks/ rglob (entities branch routed)
     "graph/storage_adapters/markdown.py",   # research/packages else-branch (entities branch routed)
+    "graph/io.py",  # revision manifest scans research/packages, never entities/
     "graph/storage_adapters/task.py",       # tasks/ root
     "graph/health_checks/dataset_anomalies.py",  # health/datasets/runs roots
     "graph/health_checks/lingering_tags.py",  # doc/entities frontmatter + tasks scan

@@ -14,6 +14,8 @@ from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.reasoning import MembershipRole
 
 from science_tool.data_root import PROJECT_CONFIG_FILENAME, project_config_path
+from science_tool.graph.markdown_discovery import is_discoverable_markdown_leaf
+from science_tool.graph.storage_adapters.datapackage import is_entity_profile_datapackage
 
 PROJECT_NS = Namespace("http://example.org/project/")
 SCI_NS = Namespace("http://example.org/science/vocab/")
@@ -368,7 +370,6 @@ def build_input_manifest(graph_path: Path) -> RevisionManifest:
         pp.doc_dir,
         pp.specs_dir,
         pp.papers_dir / "summaries",
-        pp.code_dir,
         pp.tasks_dir,
         pp.knowledge_dir / "sources",
     ]
@@ -387,16 +388,65 @@ def build_input_manifest(graph_path: Path) -> RevisionManifest:
         if candidate.is_file():
             files.add(candidate)
 
-    walked: list[str] = []
+    walked: set[str] = set()
     for base in include_dirs:
         if not base.is_dir():
             continue
         # Record it as walked BEFORE the rglob: a directory that exists and holds no
         # files is walked-and-empty, which is a different fact from never-walked.
-        walked.append(base.relative_to(project_root).as_posix())
+        walked.add(base.relative_to(project_root).as_posix())
         for candidate in base.rglob("*"):
             if candidate.is_file():
                 files.add(candidate)
+
+    for base in pp.code_roots:
+        if not base.is_dir():
+            continue
+        walked.add(base.relative_to(project_root).as_posix())
+        for candidate in base.rglob("*"):
+            if not candidate.is_file():
+                continue
+            rel_path = candidate.relative_to(project_root).as_posix()
+            if any(fnmatch.fnmatch(rel_path, pattern) for pattern in pp.code_excludes):
+                continue
+            files.add(candidate)
+
+    research_packages = project_root / "research" / "packages"
+    if research_packages.is_dir():
+        walked.add(research_packages.relative_to(project_root).as_posix())
+        files.update(
+            candidate
+            for candidate in research_packages.rglob("*.md")
+            if candidate.is_file() and is_discoverable_markdown_leaf(candidate.name)
+        )
+
+    if pp.papers_dir.is_dir():
+        walked.add(pp.papers_dir.relative_to(project_root).as_posix())
+        bibliography = pp.papers_dir / "references.bib"
+        if bibliography.is_file():
+            files.add(bibliography)
+
+    for base in (pp.data_dir, project_root / "results"):
+        if not base.is_dir():
+            continue
+        walked.add(base.relative_to(project_root).as_posix())
+        for candidate in base.rglob("datapackage.yaml"):
+            try:
+                document = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
+            except (yaml.YAMLError, OSError):
+                continue
+            if is_entity_profile_datapackage(document):
+                files.add(candidate)
+        if base.name == "results":
+            files.update(candidate for candidate in base.rglob("datapackage.json") if candidate.is_file())
+
+    overlays = project_root / "overlays"
+    if overlays.is_dir():
+        walked.add(overlays.relative_to(project_root).as_posix())
+        for type_dir in ("datasets", "papers", "topics", "themes"):
+            base = overlays / type_dir
+            if base.is_dir():
+                files.update(candidate for candidate in base.iterdir() if candidate.is_file() and candidate.suffix == ".md")
 
     exclude_patterns = _revision_manifest_excludes(project_root)
     manifest_files: dict[str, dict[str, int | str]] = {}
@@ -428,6 +478,8 @@ def _is_generated_python_cache(rel_path: str) -> bool:
 # NOT directory-aligned: `doc/meta/` mixes transient `*-next-steps.md` with durable
 # crosswalks/memos, so the glob is `doc/meta/*-next-steps.md`, not `doc/meta/*`.
 DEFAULT_REVISION_MANIFEST_EXCLUDES: tuple[str, ...] = (
+    "tasks/.tasks.lock",
+    "**/__marimo__/session/*.json",
     "doc/curations/*.md",
     "doc/meta/*-next-steps.md",
     # Audit cases have the same property as curation ledgers, at higher volume: they

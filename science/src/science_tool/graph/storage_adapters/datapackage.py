@@ -48,6 +48,11 @@ _ENTITY_FIELDS = (
 )
 
 
+def is_entity_profile_datapackage(document: Any) -> bool:
+    """Whether a parsed datapackage is a canonical entity source."""
+    return isinstance(document, dict) and "science-pkg-entity-1.0" in (document.get("profiles") or [])
+
+
 class EntityDatapackageInvalidError(ValueError):
     """Raised when a science-pkg-entity-1.0 datapackage is missing required entity fields."""
 
@@ -72,8 +77,7 @@ class DatapackageAdapter(StorageAdapter):
                     dp = yaml.safe_load(dp_path.read_text(encoding="utf-8")) or {}
                 except (yaml.YAMLError, OSError):
                     continue  # malformed → can't tell if entity; skip quietly
-                profiles = dp.get("profiles") or []
-                if "science-pkg-entity-1.0" not in profiles:
+                if not is_entity_profile_datapackage(dp):
                     continue  # non-entity datapackage → ignore
                 try:
                     rel_path = str(dp_path.relative_to(project_root))

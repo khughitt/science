@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import pytest
+from rdflib import Dataset
 
-from science_tool.graph.io import build_input_manifest
+from science_tool.graph import diff_graph_inputs
+from science_tool.graph.io import build_input_manifest, save_canonical_graph_dataset
 
 
 def _seed_project(root: Path, science_yaml: str) -> None:
@@ -11,6 +13,100 @@ def _seed_project(root: Path, science_yaml: str) -> None:
     (root / "doc" / "reports" / "health-report.json").write_text('{"generated": true}\n', encoding="utf-8")
     (root / "doc" / "notes.md").write_text("# Notes\n", encoding="utf-8")
     (root / "knowledge").mkdir()
+
+
+def _write(root: Path, rel_path: str, content: str) -> None:
+    path = root / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def test_build_input_manifest_covers_project_local_graph_source_conventions(tmp_path: Path) -> None:
+    _seed_project(
+        tmp_path,
+        "name: fixture\n"
+        "profile: research\n"
+        "code_roots:\n"
+        "  - code\n"
+        "  - analysis\n"
+        "code_excludes:\n"
+        "  - analysis/vendor/**\n",
+    )
+    _write(tmp_path, "research/packages/example.md", "---\nid: dataset:package\n---\n")
+    _write(tmp_path, "research/packages/example.source.md", "sidecar\n")
+    _write(tmp_path, "papers/references.bib", "@article{Example2026, title={Example}}\n")
+    entity_datapackage = (
+        "profiles: [science-pkg-entity-1.0]\n"
+        "id: dataset:example\n"
+        "kind: dataset\n"
+        "title: Example\n"
+    )
+    _write(tmp_path, "data/example/datapackage.yaml", entity_datapackage)
+    _write(tmp_path, "results/entity/datapackage.yaml", entity_datapackage)
+    _write(tmp_path, "results/non-entity/datapackage.yaml", "profiles: [science-pkg-runtime-1.0]\n")
+    _write(tmp_path, "results/run/datapackage.json", '{"name": "run"}\n')
+    _write(tmp_path, "results/run/payload.tsv", "ignored\n")
+    _write(tmp_path, "data/example/payload.tsv", "ignored\n")
+    _write(
+        tmp_path,
+        "overlays/papers/example.md",
+        "---\noverlay_of: paper:example\n---\n",
+    )
+    _write(tmp_path, "tasks/.tasks.lock", "")
+    _write(tmp_path, "code/main.py", "VALUE = 1\n")
+    _write(tmp_path, "code/notebooks/__marimo__/session/state.py.json", "{}\n")
+    _write(tmp_path, "analysis/model.R", "value <- 1\n")
+    _write(tmp_path, "analysis/vendor/ignored.py", "VALUE = 2\n")
+
+    manifest = build_input_manifest(tmp_path / "knowledge" / "graph.trig")
+
+    assert {
+        "research/packages",
+        "papers",
+        "data",
+        "results",
+        "overlays",
+        "code",
+        "analysis",
+    } <= set(manifest["walked"])
+    assert {
+        "research/packages/example.md",
+        "papers/references.bib",
+        "data/example/datapackage.yaml",
+        "results/entity/datapackage.yaml",
+        "results/run/datapackage.json",
+        "overlays/papers/example.md",
+        "code/main.py",
+        "analysis/model.R",
+    } <= set(manifest["files"])
+    assert {
+        "research/packages/example.source.md",
+        "results/non-entity/datapackage.yaml",
+        "results/run/payload.tsv",
+        "data/example/payload.tsv",
+        "tasks/.tasks.lock",
+        "code/notebooks/__marimo__/session/state.py.json",
+        "analysis/vendor/ignored.py",
+    }.isdisjoint(manifest["files"])
+
+
+def test_workflow_run_manifest_hash_change_is_reported(tmp_path: Path) -> None:
+    _seed_project(tmp_path, "name: fixture\nprofile: research\n")
+    manifest_path = tmp_path / "results" / "run" / "datapackage.json"
+    _write(tmp_path, "results/run/datapackage.json", '{"name": "before"}\n')
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    save_canonical_graph_dataset(Dataset(), graph_path)
+
+    manifest_path.write_text('{"name": "after"}\n', encoding="utf-8")
+
+    result = diff_graph_inputs(graph_path=graph_path, mode="hash")
+    assert result.rows == [
+        {
+            "path": "results/run/datapackage.json",
+            "status": "stale",
+            "reason": "hash_changed",
+        }
+    ]
 
 
 def test_entities_dir_is_in_the_walk_set(tmp_path: Path) -> None:
