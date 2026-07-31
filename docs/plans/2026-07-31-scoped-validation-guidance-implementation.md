@@ -31,6 +31,11 @@ inspection commands.
 - Require every downstream checkout to remain on `main` and at its recorded
   starting commit until its guide-only commit is created.
 - Commit locally in each repository and push nothing.
+- If a downstream branch or HEAD changes after editing, inspect
+  `git diff -- AGENTS.md`. When the diff contains only the planned policy
+  insertion, run `git restore -- AGENTS.md`, confirm the guide is clean, and
+  stop. If the diff contains any unexpected edit, do not restore or commit it;
+  stop and request direction so concurrent work is preserved.
 - Never run two test or validation suites concurrently in one worktree.
 - Do not run full CLI, model, or downstream application suites for this
   Markdown-only change.
@@ -128,13 +133,13 @@ commit and its base are unchanged.
 ### Task 1: Capture the baseline and recovery ledger
 
 **Files:**
-- Create temporarily: `/tmp/scoped-validation-migration.tsv`
+- Create untracked: `.scoped-validation-migration.tsv` in the toolkit worktree
 - Read: `~/.config/science/config.yaml`
 - Read: the 20 downstream `AGENTS.md` files listed in Tasks 3 and 4
 
 **Interfaces:**
-- Produces: a tab-separated recovery ledger with repository, starting commit,
-  migration commit, and status columns.
+- Produces: a persistent, untracked tab-separated recovery ledger with all 21
+  repositories and their starting commit, migration commit, and status.
 - Produces: a green 42-case toolkit documentation-guard baseline.
 
 - [ ] **Step 1: Verify the toolkit worktree state**
@@ -165,6 +170,12 @@ uv run --frozen pytest \
 
 Expected: 42 tests pass. Stop and investigate any baseline failure before
 editing; do not attribute an existing failure to the new prose.
+
+This block is a compatibility baseline, not semantic coverage for the migration.
+The curate and managed-artifact cases mostly use temporary fixtures; the real
+root guide has only a negative-token guard, and `meta/AGENTS.md` has no direct
+test coverage. Twenty-one of the 23 changed files are protected by manual diff
+inspection alone, making Task 5, Step 4 the load-bearing verification.
 
 - [ ] **Step 3: Audit all downstream branches, commits, and target files**
 
@@ -206,20 +217,31 @@ Expected: every branch is `main` and every `AGENTS.md` is clean. Record the
 20 starting commits. If a target guide is dirty or a checkout is not on `main`,
 stop and request direction.
 
-- [ ] **Step 4: Create the temporary recovery ledger**
+- [ ] **Step 4: Create the untracked recovery ledger**
 
-Use `apply_patch` to create `/tmp/scoped-validation-migration.tsv` with this
-header and one row per repository using the exact hashes from Step 3:
+Use `apply_patch` to create `.scoped-validation-migration.tsv` at the toolkit
+worktree root with this header, one toolkit row using the HEAD from Step 1, and
+one row per downstream repository using the exact hashes from Step 3:
 
 ```text
 repository	starting_commit	migration_commit	status
 ```
 
-Set `migration_commit` empty and `status` to `pending`. After each downstream
-commit, update that row with the new commit hash and `complete`. The starting
-and migration hashes make an interrupted sweep auditable and are the rollback
-handle: revert a completed guide with its recorded migration commit rather than
-resetting a repository.
+Set `migration_commit` empty and `status` to `pending` in all 21 rows. Never add
+or commit this file. After each migration commit, update that row with the new
+commit hash and `complete`. The starting commit proves the intended pre-migration
+state; the migration commit supplies the safe `git revert` handle. Together they
+make an interrupted sweep auditable without resetting a repository.
+
+The ledger is not a single point of failure. Every migration uses the exact
+subject `docs: adopt scoped validation guidance`; a lost row can be reconstructed
+from the newest exact-subject match and its parent:
+
+```bash
+git -C "$project_repo" log -1 --format='%H %s' \
+  --grep='^docs: adopt scoped validation guidance$'
+git -C "$project_repo" rev-parse "$migration_commit^"
+```
 
 ### Task 2: Update and verify toolkit-owned guidance
 
@@ -317,12 +339,18 @@ git add AGENTS.md templates/agents-md.md meta/AGENTS.md
 git commit -m "docs: adopt scoped validation guidance"
 ```
 
+- [ ] **Step 7: Complete the toolkit ledger row**
+
+Record the new toolkit HEAD as `migration_commit` and set its ledger status to
+`complete`. Its recorded starting commit is the parent and rollback destination
+for the toolkit guidance commit.
+
 ### Task 3: Pilot the downstream migration
 
 **Files:**
 - Modify: `~/d/cats/AGENTS.md`
 - Modify: `~/d/cancer/cancer-types/multiple-myeloma/AGENTS.md`
-- Update temporarily: `/tmp/scoped-validation-migration.tsv`
+- Update untracked: `.scoped-validation-migration.tsv` in the toolkit worktree
 
 **Interfaces:**
 - Produces: one software-project example and one complex workflow-project
@@ -342,6 +370,9 @@ Science commands.
 Preserve the pytest, Ruff, formatting, pyright, and Science command list.
 
 - [ ] **Step 3: Verify and commit `cats`**
+
+Reconfirm `main` and the recorded starting HEAD. Apply the global post-edit
+abort rule if either changed. Then run:
 
 ```bash
 git -C ~/d/cats diff --check
@@ -375,6 +406,9 @@ boundary checks, 20-minute runtime warning, and six known pytest failures.
 
 - [ ] **Step 5: Verify and commit `multiple-myeloma`**
 
+Reconfirm `main` and the recorded starting HEAD. Apply the global post-edit
+abort rule if either changed. Then run:
+
 ```bash
 git -C ~/d/cancer/cancer-types/multiple-myeloma diff --check
 git -C ~/d/cancer/cancer-types/multiple-myeloma diff -- AGENTS.md
@@ -390,7 +424,7 @@ required for these Markdown-only edits.
 
 **Files:**
 - Modify: the 18 `AGENTS.md` files in the table below
-- Update temporarily: `/tmp/scoped-validation-migration.tsv`
+- Update untracked: `.scoped-validation-migration.tsv` in the toolkit worktree
 
 **Interfaces:**
 - Consumes: the approved pilot wording and recovery ledger.
@@ -401,7 +435,7 @@ required for these Markdown-only edits.
 | `~/d/protein-landscape/AGENTS.md` | Science-structure | Start of `## Validation`; preserve the separate expensive-artifact command and warning |
 | `~/d/natural-systems/AGENTS.md` | Application-test plus structural-validation addendum | Start of `## Testing Guidelines`; put the addendum at start of `### Validation`; preserve Vitest, build, workflow, and graph commands |
 | `~/d/cancer/meta/AGENTS.md` | Science-structure | Start of `## Validation Before Commit`; preserve validate, graph-build, peers-check, and graph-validate commands |
-| `~/d/cancer/mechanisms/evolution/AGENTS.md` | Science-structure | Start of `## Graph Refresh Order`; preserve the toolkit-owned guardrail statement and child-then-meta graph order |
+| `~/d/cancer/mechanisms/evolution/AGENTS.md` | Science-structure | Add a new `## Validation` section immediately before `## Graph Refresh Order`; preserve the toolkit-owned guardrail statement and keep the child-then-meta ordering section free of generic policy prose |
 | `~/d/cancer/conditions/pre-cancer/AGENTS.md` | Science-structure | Start of `## Validation Before Commit`; preserve validate and graph commands |
 | `~/d/cancer/data-sources/cbioportal/AGENTS.md` | Workflow | Start of `## Validation`; preserve Science, Snakemake lint, Ruff, and format commands plus the mtime idempotency contract |
 | `~/d/seq-feats/AGENTS.md` | Combined scaffold | Start of `## Validation`; preserve both existing structural-validation commands |
@@ -429,7 +463,8 @@ For each table row:
 3. Confirm `AGENTS.md` is clean.
 4. Apply only the mapped policy block at the mapped insertion point.
 5. Run `git diff --check` and inspect `git diff -- AGENTS.md`.
-6. Confirm the branch and starting HEAD again immediately before committing.
+6. Confirm the branch and starting HEAD again immediately before committing;
+   apply the global post-edit abort rule if either changed.
 7. Commit only `AGENTS.md` with message
    `docs: adopt scoped validation guidance`.
 8. Record the migration commit and `complete` in the ledger before moving to
@@ -439,7 +474,7 @@ Do not batch `git add`, `git commit`, or branch checks across repositories.
 
 - [ ] **Step 2: Audit the completed downstream ledger**
 
-Confirm all 20 rows are `complete`, every starting commit remains recorded, and
+Confirm all 21 rows are `complete`, every starting commit remains recorded, and
 every migration commit resolves in its named repository. If the sweep stopped
 partway, leave pending repositories untouched and use the ledger to report the
 exact completed boundary. Roll back only with `git revert` of the recorded
@@ -450,7 +485,7 @@ migration commits; never reset a repository to the starting hash.
 **Files:**
 - Verify: `AGENTS.md`, `templates/agents-md.md`, `meta/AGENTS.md`
 - Verify: all 20 downstream `AGENTS.md` files
-- Read temporarily: `/tmp/scoped-validation-migration.tsv`
+- Read untracked: `.scoped-validation-migration.tsv`
 
 **Interfaces:**
 - Produces: evidence that all 23 guidance files carry the intended policy and
@@ -479,7 +514,8 @@ git status --short
 ```
 
 Expected: the implementation commit changes exactly `AGENTS.md`,
-`templates/agents-md.md`, and `meta/AGENTS.md`; the worktree is clean.
+`templates/agents-md.md`, and `meta/AGENTS.md`. The only expected worktree entry
+is the untracked `.scoped-validation-migration.tsv` recovery ledger.
 
 - [ ] **Step 3: Verify every downstream migration commit**
 
@@ -493,9 +529,11 @@ git -C "$project_repo" status --short -- AGENTS.md
 Expected: each migration commit changes only `AGENTS.md`, and every target guide
 is clean afterward. Unrelated pre-existing dirty files may remain untouched.
 
-- [ ] **Step 4: Verify policy coverage and preserved exceptions**
+- [ ] **Step 4: Manually verify policy coverage and preserved exceptions**
 
-Inspect all 23 changed guidance files and confirm:
+This is the load-bearing verification because 21 of the 23 changed files have no
+automated test that reads them. Inspect all 23 changed guidance files and
+confirm:
 
 - scoped checks are the iteration default;
 - full suites have explicit triggers;
@@ -512,5 +550,6 @@ Inspect all 23 changed guidance files and confirm:
 - [ ] **Step 5: Report without pushing**
 
 Report the toolkit commit, the 20 downstream migration commits, the 42-test
-baseline and post-edit results, and any unrelated dirty files observed. State
-explicitly that no repository was pushed and that no full suite was run.
+compatibility-baseline and post-edit results, the completed manual 23-file
+inspection, and any unrelated dirty files observed. State explicitly that no
+repository was pushed and that no full suite was run.
