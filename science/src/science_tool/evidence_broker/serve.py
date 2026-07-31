@@ -18,10 +18,9 @@ is what neutralizes the attribute stack for `grep`, and it is the only lever tha
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
-from science_model.evidence_broker import SurfacePolicy
+from science_model.evidence_broker import Outcome, SurfacePolicy
 
 from science_tool.autonomy.git import run_git
 from science_tool.evidence_broker.policy import (
@@ -40,14 +39,6 @@ class ServeError(RuntimeError):
     Halts the run. A broker that guessed at unfamiliar output would turn an instrument failure
     into evidence, which is the one thing a record of what an agent was shown may not do.
     """
-
-
-class Outcome(StrEnum):
-    SERVED = "served"
-    MISS_ABSENT = "miss-absent"
-    MISS_NO_MATCH = "miss-no-match"
-    MISS_NO_COMMITS = "miss-no-commits"
-    REFUSED = "refused"
 
 
 #: Defined-miss markers. They are part of the served bytes so the hash covers the ANSWER and not
@@ -155,11 +146,18 @@ _LOG_ARGV: tuple[str, ...] = (
 class Served:
     outcome: Outcome
     payload: bytes
+    target: str
     denial: Denial | None = None
+    pathspec: str | None = None
 
 
-def _miss(outcome: Outcome) -> Served:
-    return Served(outcome=outcome, payload=MISS_MARKERS[outcome])
+def _miss(outcome: Outcome, target: str, pathspec: str | None = None) -> Served:
+    return Served(
+        outcome=outcome,
+        payload=MISS_MARKERS[outcome],
+        target=target,
+        pathspec=pathspec,
+    )
 
 
 def verify_commit(repo_root: Path, commit: str) -> str:
@@ -195,7 +193,7 @@ def _serve_read(repo_root: Path, commit: str, target: str) -> Served:
     typed = run_git(repo_root, "cat-file", "-t", f"{commit}:{target}")
     if typed.returncode != 0:
         if _verdict_line(typed.stderr) in _absent_sentences(commit, target):
-            return _miss(Outcome.MISS_ABSENT)
+            return _miss(Outcome.MISS_ABSENT, target)
         raise ServeError(
             f"read of {target!r} at {commit} could not be classified: "
             f"{typed.stderr.decode('utf-8', 'replace').strip()}"
@@ -214,7 +212,7 @@ def _serve_read(repo_root: Path, commit: str, target: str) -> Served:
             f"read of {target!r} at {commit} typed as a blob and then failed: "
             f"{completed.stderr.decode('utf-8', 'replace').strip()}"
         )
-    return Served(outcome=Outcome.SERVED, payload=completed.stdout)
+    return Served(outcome=Outcome.SERVED, payload=completed.stdout, target=target)
 
 
 def _serve_search(
@@ -230,9 +228,14 @@ def _serve_search(
         pathspecs.insert(0, literal_pathspec(pathspec))
     completed = run_git(repo_root, *_GREP_ARGV, "-e", pattern, commit, "--", *pathspecs)
     if completed.returncode == 0:
-        return Served(outcome=Outcome.SERVED, payload=completed.stdout)
+        return Served(
+            outcome=Outcome.SERVED,
+            payload=completed.stdout,
+            target=pattern,
+            pathspec=pathspec,
+        )
     if completed.returncode == 1:
-        return _miss(Outcome.MISS_NO_MATCH)
+        return _miss(Outcome.MISS_NO_MATCH, pattern, pathspec)
     stderr = completed.stderr
     verdict = _verdict_line(stderr)
     if verdict.startswith(_malformed_pattern_prefix(pattern)):
@@ -247,10 +250,12 @@ def _serve_search(
         return Served(
             outcome=Outcome.REFUSED,
             payload=b"",
+            target=pattern,
             denial=Denial(
                 reason="pattern-malformed",
                 notice=verdict.decode("utf-8", "replace"),
             ),
+            pathspec=pathspec,
         )
     raise ServeError(
         f"search for {pattern!r} at {commit} could not be classified: "
@@ -284,8 +289,8 @@ def _serve_history(
             f"{completed.stderr.decode('utf-8', 'replace').strip()}"
         )
     if not completed.stdout:
-        return _miss(Outcome.MISS_NO_COMMITS)
-    return Served(outcome=Outcome.SERVED, payload=completed.stdout)
+        return _miss(Outcome.MISS_NO_COMMITS, target)
+    return Served(outcome=Outcome.SERVED, payload=completed.stdout, target=target)
 
 
 def serve(
@@ -306,7 +311,13 @@ def serve(
     """
     auth = authorize(request, policy)
     if auth.denial is not None:
-        return Served(outcome=Outcome.REFUSED, payload=b"", denial=auth.denial)
+        return Served(
+            outcome=Outcome.REFUSED,
+            payload=b"",
+            target=request.target,
+            denial=auth.denial,
+            pathspec=request.pathspec,
+        )
     resolved = verify_commit(repo_root, commit)
     if request.op is EvidenceOp.READ:
         if auth.path is None:

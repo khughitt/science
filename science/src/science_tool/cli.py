@@ -26,6 +26,7 @@ from science_tool.discussions_cli import discussion_group
 from science_tool.distill_cli import distill_group
 from science_tool.entities_cli import entity_group
 from science_tool.entities_inventory_cli import entities_group
+from science_tool.evidence_broker.cli import evidence_group
 from science_tool.evidence_lines_cli import evidence_line_group
 from science_tool.explore_ideas_cli import explore_ideas_group
 from science_tool.feedback_cli import feedback_group
@@ -203,6 +204,7 @@ main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(annotate_group)
 main.add_command(autonomy_group)
+main.add_command(evidence_group)
 main.add_command(markers_group)
 main.add_command(prose_group)
 main.add_command(skills_group)

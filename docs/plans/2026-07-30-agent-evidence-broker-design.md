@@ -1,8 +1,22 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** proposed (revision 9)
+**Status:** partially implemented (revision 16)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
+
+**Implementation status.** This design ships as **four** plans, not the three its section grouping
+suggests; the boundary was drawn by tracing module dependencies rather than section headings.
+
+| Plan | Owns | State |
+|---|---|---|
+| [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
+| [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
+| [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **planned**, not implemented |
+| Plan 4 | correspondence — §5 entire, §4.2, §4.2.1 | not designed |
+
+Sections carry no per-section status marker: a section describes the design, and a section that is
+half-built is still describing the whole thing. The table above is the only status claim, and the
+plan documents record what each landed and what each deviated on.
 
 Revisions 2 through 6 respond to design review: six production-boundary defects in revision 1, six in
 revision 2, six in revision 3, five in revision 4, six in revision 5. Each is closed below and named at
@@ -35,6 +49,72 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 16 comes from a sixth review round and closes three gaps in revision 15's fixes. The
+"derived" journal bound counted one `\\uXXXX` escape per Python character, but a non-BMP character
+is encoded as a UTF-16 surrogate pair -- twelve JSON bytes, not six -- and inline seeding never
+consulted the per-entry bound at all. The model now constrains every variable-width journal field,
+the ceiling is checked against actual maximally encoded request and inline events, and *every* line
+is bounded before the journal is created or served bytes are delivered. Descriptor anchoring also
+protected the write while leaving the receipt behind: if an ancestor is renamed after capture, the
+bytes land safely through the descriptor but the original pathname no longer names them. The served
+directory's descriptor and receipt pathname must therefore still identify the same directory before
+the exposure is appended.
+
+Revision 15 comes from a fifth round and is the *same* rule again, twice more, plus one claim that
+outran what the plan delivers. Anchoring the directory is not anchoring the file: a re-opened name
+passes every check on both opens because none of those checks is about identity, so a count taken
+from one inode and an append made to another silently un-spends a round. And §3.5's bound on the
+journal was a chosen constant with no relationship to what the model admits, which is a run able to
+*write* a journal it can never *read back* — the fail-open arriving through arithmetic rather than
+through a filesystem call. Revision 15 attempted to derive the bound from the model's own limits and
+to refuse over-long input before the spend; revision 16 corrects that derivation. Revision 14's claim
+that "every operation on `run_dir` is
+anchored" was also broader than the truth: `baseline.json` is still pathname-based, and that residual
+is now named rather than implied away.
+
+Revision 14 comes from a fourth review round on plan 3 and is the second pattern in its
+filesystem form. §3.5 said `served/` "is created under the same containment check as the journal" and
+stopped there — a claim about *where* the directory is, standing in for a claim about *how it is
+reached*. Because `run_dir` holds an actor-writable `served/`, every name in it is actor-controlled,
+so a lexical check followed by a pathname `open()` checks one object and opens another. §3.5 now
+states the descriptor-anchoring rule the repository already follows, and states it once, at the place
+that owns the run directory, so plan 4 inherits it rather than rediscovering it.
+
+Revision 13 comes from review of plan 3 and closes two more fail-opens, both of the first pattern.
+`InlineInput.target` had no specified spelling, and the absolute path an implementer would naturally
+store is one `LocationEvidence` can never express — a manifest entry granting `FULL` coverage that no
+citation can reach (§4.3). And §3.5 did not order the served-file write against the journal append; an
+entry appended first claims an exposure a failed delivery never made, and replay confirms it, because
+replay re-serves from the commit and never looks at `served/` (§3.5). Both are cases where the honest
+path and the fail-open path look identical in prose and differ by one line of code.
+
+Revisions 10 and 11 come from *building* plan 2 rather than reading it, and both are the second
+pattern again. Revision 10 corrects §5.1's grep output format, which said `<commit>:<path>:<line>:`
+through nine revisions while §3.2.1's own table pinned `-z` — the two sections were each internally
+right and disagreed with each other, and plan 3 is the reader that would have been wrong. It also
+records the two actor-owned channels `-c` hardening does not reach, found by the whole-branch review
+after all four per-task reviews had passed: an untracked `.gitattributes` with `* binary` blinds every
+grep hit at exit 0, and `.git/objects/info/alternates` prepends a warning that turns every defined
+miss into a halted run. Revision 11 records the parked NFD residual in §3.1. The lesson these three
+share is §7's, arrived at from the other side: none was found by reading the design, and none would
+have been found by a suite that did not try to break its own guards.
+
+Revision 12 is what reading §3.3, §3.4, §3.5, §4.1, §5.1 and §6 *against each other* produced before
+planning the session slice, and its centre is the first pattern again, in the place it costs most. A
+**refused** request had no row in §5.1's coverage table. It must be stored — `requests_used` is
+derived by counting request events, so an entry omitted from the seal makes the record disagree with
+the log it counts — and it replays to an empty payload. A served-map builder that classifies by
+operation and payload rather than by outcome therefore records the *denied* path as `FULL` with a line
+count of zero, which under §5.1's own rules admits a path-only citation and permits `pointer`. An agent
+could request a withheld file, be refused, cite it, and earn support under §4.2.1. Every individual
+sentence was right; the table simply had no row for the case, and the missing row fails open onto the
+exact material a blinding study exists to withhold. §4.1 now seals the outcome and §5.2 checks it, on
+the same reasoning that already justified sealing `sha256`: a value that is *checked* is not the
+actor's account of itself. Three smaller corrections travel with it — journal creation moves to
+`start --broker-spec` (§3.4.1), an exhausted budget journals nothing because that is what keeps
+`requests_used <= budget` true rather than a courtesy (§3.3), and a refusal writes no `served/` file
+(§3.5).
 
 Five patterns run through what review kept finding, and each predicts where the implementation will go
 wrong.
@@ -84,7 +164,7 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–2 merged, 3 planned, 4 undesigned** |
 | Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
@@ -185,10 +265,12 @@ science/src/science_tool/evidence_broker/     # NEW
     journal.py    append-only per-run log, outside the project tree
     session.py    budget-enforcing session over policy + serve + journal
     correspond.py the join, the replay, the coverage-aware outcome
-    cli.py        `science evidence open | serve | show`
+    cli.py        `science evidence serve`   # the only actor-facing command; §3.4.1, §3.5
 
 science/model/src/science_model/
-    autonomous_runs.py   + ExposureEntry, InstrumentIdentity, InlineInput, EvidenceExposure
+    evidence_broker.py   SurfacePolicy (shipped, plan 2); + Outcome, ExposureEntry,
+                         InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure
+    autonomous_runs.py   + AutonomousRunRecord.evidence
     audit/record.py      + Uncertainty, Correspondence, ReviewSubmission; two Review fields;
                            confirmation_count() gains a correspondence term
 
@@ -493,13 +575,28 @@ Append-only, one line per event, and the events are **discriminated** rather tha
 ```jsonc
 {"event": "inline",  "target": "...", "sha256": "...", "lines": 120}
 {"event": "request", "op": "read", "target": "...", "pathspec": null,
- "commit": "...", "sha256": "...", "outcome": "served"}   // served | miss | denied | invalid
+ "commit": "...", "sha256": "...", "outcome": "served"}
+//  outcome is `Outcome`: served | miss-absent | miss-no-match | miss-no-commits | refused
 ```
+
+**`outcome` is the serving vocabulary, not a coarser one.** Revisions 1–11 wrote it here as
+`served | miss | denied | invalid`, which is a fourth spelling of a distinction the shipped
+`serve.Outcome` already makes — and it collapses the three defined misses, which §5.1 must tell apart
+because only a *read* miss proves a path absent. One concept with two vocabularies is how the two come
+to disagree; the journal records what `serve` returned.
 
 Revision 2 counted raw lines to derive spend, which cannot express the budget it claimed to enforce:
 inline seeds are lines but not requests, so seeding charged the reviewer for evidence it never asked
 for, and a denial is a request that produced no served response. `requests_used` counts `request`
 events; `inline` events are the supervisor's own seeding and cost nothing.
+
+**An exhausted budget writes no event at all**, which §6 states as "spends nothing further" and which
+reads there like a courtesy to the requester. It is not. `requests_used` is *derived* by counting these
+events and §4.1 validates `requests_used <= budget`, so journaling the requests that arrive after
+exhaustion would make the run's own seal reject its own record — and under §6 that means no record at
+all. An actor that simply kept asking would silently convert its run to `UNWIRED`, which is a
+supervisor-side failure triggered by ordinary actor misbehaviour. The refusal is returned, the round
+is not spent, and nothing is appended.
 
 It lives **outside the project tree**, for the reason `RunBaseline` does: a log inside the tree the
 actor can write is not a record of what the actor was shown.
@@ -546,9 +643,19 @@ cross-process and needs a contract rather than an object.
   checking what it opened would leave a directory that merely looks like a run id resolving to another
   run's baseline, which is the same class of defect as revision 4's unscoped project key: a name checked
   for shape and never for what it refers to.
-- **Open.** `science evidence open` creates the journal exclusively, for the same reason
-  `write_baseline` does: reusing a journal path discards the exposure record of whatever run already
-  owns it.
+- **Open.** `science autonomy start --broker-spec` creates the journal exclusively and writes its
+  `inline` events, in the same call that writes the baseline, for the same reason `write_baseline`
+  does: reusing a journal path discards the exposure record of whatever run already owns it.
+
+  **There is no separate `evidence open` command.** Revisions 1–11 gave journal creation to one, and
+  the argument against it is §3.4.2's own, applied consistently: a file is a legitimate trust channel
+  at `start` *specifically because there is no actor yet*. Creating the journal and seeding it from the
+  manifest are that same declaration, so performing them in a later command surrenders the only
+  property that made them trustworthy — and offers an actor holding the handle a command that creates
+  supervisor-owned state. It also sharpens §6 rather than weakening it: a brokered baseline beside a
+  missing journal is then unambiguously interference, where a two-step open leaves it
+  indistinguishable from a supervisor that omitted step two — a distinction §6 cannot afford to blur,
+  since it destroys the whole record either way.
 
   **Not through `findings/paths.py`.** Revisions 1–6 named those primitives, and they are the wrong
   ones: every function there anchors to a project root — `open_dir_inside(project_root, …)`,
@@ -637,7 +744,8 @@ class EvidenceSessionSpec(_Frozen):     # the supervisor's declaration, read fro
 
 `start` reads each `inline_paths` entry and computes its `sha256` and line count itself, producing the
 `InlineInput` manifest. A supervisor that declared those numbers would be attesting to bytes it had not
-necessarily read.
+necessarily read. It then creates `journal.jsonl` exclusively and writes one `inline` event per
+manifest entry (§3.4.1), so a brokered run is fully opened by the single call that opens it.
 
 **A file is a legitimate trust channel here specifically because there is no actor yet.** `start` is
 what opens the run; until it returns, nothing has been dispatched and every input is the supervisor's
@@ -715,6 +823,88 @@ bytes cannot be aimed, and two requests that produce identical bytes coincide ha
 directory is created under the same containment check as the journal, so a relocated
 `SCIENCE_CONTROL_PLANE` cannot land it in the project tree.
 
+**Every operation on the journal and on `served/` is anchored to a descriptor; none re-resolves a
+pathname.** This is a consequence of the table above rather than a separate rule, and it is stated
+here because it is the easiest thing in this design to implement almost-correctly. Note the scope:
+the rule as stated covers the two artifacts the *actor* can reach. `baseline.json` is discussed
+separately below. `served/` is actor-writable, and a
+directory an actor can write is a directory whose *entries are actor-controlled names* — including
+`journal.jsonl` beside it. A containment check on a pathname, followed by an `open()` of that same
+pathname, checks one object and opens another: between the two, `served`, `journal.jsonl`, or any
+component of `run_dir` itself can become a symlink into the project tree, a hard link to a project
+file (which `O_NOFOLLOW` does not see), or a FIFO (which blocks the reader forever). The consequence
+is the same fail-open in each case — the run's own broker performs an in-tree write and the tier's
+gate denies the run for it, or the exposure record silently reads as empty and the budget never
+exhausts.
+
+So the run directory is captured **once**, by walking its components with `O_NOFOLLOW`, and the lock,
+the count, the append, and the `served/` write are all performed through that one descriptor. Two
+checks are owed and they answer different questions: containment is lexical and asks whether the
+supervisor pointed this run's record inside the project tree; the anchored walk is a filesystem
+operation and asks whether we reached it without traversing something an actor planted. Neither
+implies the other. The repository already has this discipline and its primitives — see
+`findings/paths.py`; §3.4.1's objection to that module is to its *project-containment* helpers, not
+to its descriptor-anchored ones.
+
+**And the journal's own descriptor, not just its directory's.** A directory descriptor plus a
+re-opened name is still two objects: `unlink` followed by an ordinary new file passes every check —
+not a symlink, a regular file, one link — on both opens, because none of those is a claim about
+*identity*. The count would be taken from one inode and the append made to another, which silently
+un-spends a round and disables the budget the count enforces. The journal is opened once,
+`O_RDWR | O_APPEND`, and read and appended through that descriptor for the life of the operation.
+
+**Bounds are declared where they can be enforced, and the read bound is derived from them.** The
+journal's maximum size is not a chosen constant: it is `(max budget + max inline inputs) × max entry
+size`. `target` and `pathspec` have a character bound; digest fields have their exact hexadecimal
+width, and the entry commit is either forty hexadecimal characters or the empty inline-journal
+sentinel; the inline line count has an integer bound. The maximum entry size accounts for
+the actual JSON encoding: one non-BMP Python character becomes a twelve-byte UTF-16 surrogate pair
+under `json.dumps`'s default `ensure_ascii=True`, not one six-byte `\\uXXXX` escape. Tests construct
+the maximally encoded request and inline events rather than merely restating the constants.
+
+Choosing a read bound independently of what the model admits creates a run that can *write* a
+journal it can never *read back* — the first over-long entry is accepted, and every later request and
+the seal itself then fail on the oversized journal, which §6 turns into no record at all. Every line,
+including supervisor-seeded inline events, is encoded and checked before the journal is created or
+served bytes are delivered. Over-long requester input is refused before the lock and before the
+spend; it is decided on the requester's own string, before any policy is consulted, so it is not an
+oracle.
+
+**What this rule does not yet cover: `baseline.json`.** It is read by `finish_run` and written by
+`start_run` through pathnames, and `finish` runs while the actor may still exist. The exposure is
+bounded rather than absent — §3.4.2's argument applies, a redirected or forged baseline costs the
+actor its support rather than buying any, and `reject_baseline_inside_project` still governs where it
+may live — but the honest statement is that the anchoring rule is enforced for the journal and
+`served/` and not for the baseline. Recorded here rather than implied away; closing it is a change to
+plan 1's shipped `autonomy/baseline.py` and belongs to whichever slice next touches that module.
+
+Plan 4's replay and correspondence work inherits this: anything that later reads the journal or
+`served/` reads it the same way.
+
+**The served file is written before the journal line, not after.** The journal is the record of what
+the requester was *shown*, so an entry appended before delivery succeeded claims an exposure that may
+not have happened: a failed write leaves the requester with no bytes and no receipt while the seal
+copies an entry saying `served`, and replay — which re-serves from the commit and never consults
+`served/` — reproduces that entry perfectly. The reviewer would then hold `FULL` coverage over a file
+it never received, which is support for a citation it could only have invented. Writing first inverts
+the failure: bytes on disk with no journal line are bytes nothing counts, so the round is not spent
+and no coverage is granted. Both orderings can fail; only one fails closed.
+
+Descriptor anchoring proves where the bytes were written; it does not by itself prove that the path
+printed in the receipt still names them. Before appending the exposure, serving compares the opened
+`served/` descriptor with the receipt pathname using inode identity. If an ancestor was renamed after
+capture, that comparison fails, no receipt is returned and no journal line is appended. The already
+written content-addressed bytes are then an unrecorded orphan, which grants no coverage. This is not
+a defence against deliberate same-uid artifact forgery (excluded by the threat model); it prevents
+the broker itself from knowingly recording delivery after its own pathname has gone stale.
+
+**A refusal writes no file.** A policy denial, a malformed pattern and an exhausted budget all serve
+zero bytes, and content addressing maps all of them onto the digest of the empty string — so every
+refusal in every run would coincide on one `served/e3b0c442…`, and the receipt would name a real,
+empty, readable file that is indistinguishable from a file that was genuinely served empty. The
+receipt for a refusal carries the outcome and the policy's notice, and no path. A defined *miss* does
+write one: its marker bytes are the served answer (§6), not an absence of one.
+
 ## 4. Model changes
 
 ### 4.1 Run record
@@ -726,6 +916,7 @@ class ExposureEntry(_Frozen):
     pathspec: str | None = None
     commit: str
     sha256: str
+    outcome: Outcome      # `inline` entries carry Outcome.SERVED; see below
 
 class InstrumentIdentity(_Frozen):
     ref: str          # what defined the judgement procedure
@@ -764,6 +955,30 @@ buys is now true rather than asserted: **a project move orphans unsealed session
 
 `ExposureEntry` deliberately does **not** store which lines a search matched. Those are re-derived at
 replay (§5.1); storing them would be storing the actor's account of its own exposure.
+
+**It does store `outcome`, and the difference is that `outcome` is checked.** Revisions 1–11 dropped
+it at the seal, on the reasoning above. That reasoning does not reach it: replay recomputes the
+outcome and §5.2 compares, exactly as it already does for `sha256`, so the stored value is testimony
+under audit rather than testimony taken on faith — and `sha256` was never objected to on those
+grounds. What dropping it cost was concrete. A **refusal** must appear in `entries` (the validator
+below counts them) and re-serves to an empty payload, so an exposure without `outcome` distinguishes
+a denied path from a genuinely empty file only by re-serving it, and any consumer that classifies by
+operation and payload maps the denied path to `FULL` with a line count of zero — which §5.1 reads as
+"every line was in front of the reviewer", admitting a path-only citation and permitting `pointer`.
+That is a fail-open onto exactly the material the surface policy withheld, reachable by requesting a
+denied file and citing the refusal. Storing the outcome makes the refusal unmistakable in the record,
+and lets a reader see what a run was refused without a repository to replay against.
+
+**`Outcome` moves to `science_model.evidence_broker`.** It ships today in
+`science_tool.evidence_broker.serve`, and `science_model` cannot import `science_tool` — so an
+`ExposureEntry` field typed by it needs the enum on the model side. Moved, not duplicated: a second
+enum with the same members is the two-vocabularies failure one paragraph up, and `SurfacePolicy` is
+already in that module for the same reason. `serve.py` imports it from the new home.
+
+`inline` entries carry `Outcome.SERVED`. They are not re-served (§5.2 checks them against
+`exposure.inline`), and the alternative — an `Outcome` member meaning "not applicable" — would put a
+value in the enum that `serve` can never return, which is how a vocabulary starts describing two
+things again.
 
 **Validators:**
 
@@ -958,6 +1173,12 @@ class EvidenceSession(_Frozen):
     evidence: EvidenceSession | None = None
 ```
 
+The concrete model bounds are part of this contract: `target` and `pathspec` admit at most 4096
+Python characters; journal digests are exactly 64 lowercase hexadecimal characters; commits are 40
+lowercase hexadecimal characters except for the empty pre-seal inline sentinel; inline line counts
+fit a non-negative signed 64-bit integer; budgets and inline manifests each admit at most 100 items.
+Those are the inputs to §3.5's encoded-byte ceiling, not merely validation conveniences.
+
 **This is the fix for inline evidence bypassing replay.** Revision 1 had inline entries contributing
 trusted correspondence targets on the strength of a hash in the journal — the same journal it argued
 was forgeable, which is why every other entry is replayed. Declaring them in the baseline moves them
@@ -967,6 +1188,20 @@ journal's `sha256` matches the manifest's.
 
 `lines` is carried so a line or span citation into an inline input can be checked the same way as one
 into a read file. Inline bytes are not in the tree, so a line count cannot be re-derived later.
+
+**`InlineInput.target` is a normalized project-relative path, and `EvidenceSessionSpec.inline_paths`
+are too.** Revisions 1–12 left the spelling open, and an implementation that stored the supervisor's
+own absolute path would produce a manifest entry **no citation can name**: `LocationEvidence.path`
+runs `normalize_project_path`, which refuses an absolute path outright, so an inline input would be
+granted `FULL` coverage under §5.1 that no `Evidence` value could ever reach. The motivating case in
+§3.4 is already in-tree — "an instrument that legitimately lives inside a denied prefix" — and that
+is the whole point of seeding: the file *is* a project path, and inline seeding is how it is accounted
+for despite the policy that denies it. A path outside the project can be *read* by `start`, but it
+cannot be cited, so seeding one accomplishes nothing and is refused rather than silently manifested.
+`start` therefore resolves each `inline_paths` entry against `project_root` to read the bytes, and
+stores the normalized project-relative spelling as `target` — the same spelling every other entry
+carries, which is what lets §5.1's "`FULL` supersedes `LINES`" compare an inline target against a read
+one at all.
 
 `surface_policy` is here for the reason given in §3.1: the deny prefixes are `:(exclude)` pathspecs on
 every search, so they are part of the query, and a query whose text is not fixed does not replay.
@@ -999,6 +1234,18 @@ fields that makes such a citation expressible. The served set is therefore a map
 | `history` | `PATH_ONLY` | the path's commits were shown; its contents were not |
 | `read` miss | `ABSENT` | the path is not at the commit, and that was served as the answer |
 | `search` miss, `history` miss | *nothing* | see below |
+| **any refusal** — policy denial, malformed pattern | ***nothing*** | **the requester was shown nothing; see below** |
+
+**Coverage is keyed on the replayed `Outcome`, never on whether the payload is empty.** Revisions
+1–11 had no row for a refusal at all, and the row cannot be omitted as self-evident: a refused entry
+*is* in the exposure — it spent a round, so `requests_used` counts it — and it re-serves to zero
+bytes at a real path the requester named. A builder that reaches the coverage table by operation and
+payload therefore files a denied `read` as `FULL` with a line count of zero, which this table's first
+row defines as "every line was in front of the reviewer". A path-only citation to the withheld file
+then corresponds, and `pointer` — permitted under `FULL` and nowhere else — comes with it. The
+material a surface policy exists to withhold is the last material that may validate a citation, so
+the rule is stated positively: `Outcome.REFUSED` contributes no entry to the served map, and an empty
+payload is never itself evidence of coverage.
 
 **Only a read miss proves a path is absent.** Revision 2 mapped all three defined misses onto
 `ABSENT`, which asserted three different facts as one. A search that matched nothing establishes that
@@ -1055,10 +1302,19 @@ using asks for absence to be recorded with the same care as presence.
 
 ### 5.2 The replay
 
-Every non-inline entry is re-served at the pinned commit and must reproduce its recorded `sha256`.
-When the broker writes the journal it is trustworthy by construction, but a record read back off disk
-was written by whatever wrote that file, and a `sha256` field is as forgeable as the rest of the JSON.
-Determinism comes from the pin **and** the canonical invocation in §3.2.1.
+Every non-inline entry is re-served at the pinned commit and must reproduce **both its recorded
+`sha256` and its recorded `outcome`**. When the broker writes the journal it is trustworthy by
+construction, but a record read back off disk was written by whatever wrote that file, and a `sha256`
+field is as forgeable as the rest of the JSON. Determinism comes from the pin **and** the canonical
+invocation in §3.2.1.
+
+Checking the outcome is not redundant beside the hash. The refusals share one hash — the digest of
+the empty payload — so a forged entry that relabels a refusal as a served read of an empty file
+reproduces its `sha256` exactly, and only the outcome comparison catches it. This is also where a
+policy *widened* between serving and replay is caught: the exposure seals the policy (§4.1), so a
+request refused when the reviewer worked must be refused again, and an entry that now serves bytes
+where the record says `refused` is `EXPOSURE_UNREPRODUCIBLE`. §5.1's over-exclusion case covers the
+narrowing direction; this covers the other one.
 
 Inline entries are not in the tree and cannot be re-served; they are checked against
 **`exposure.inline`** — the sealed copy of the manifest, not the baseline's. The baseline is where the
@@ -1155,6 +1411,15 @@ Plus two backstops:
 `EvidenceSession` in `RunBaseline`; at `finish_run`, a baseline that says "brokered" plus a missing or
 unreadable journal yields `RunOutcome(RunDisposition.UNWIRED, record=None)` — **no record at all.**
 
+**So the seal is attempted immediately after the baseline loads, before any other check.** Its
+failure is the one that returns no record, and it is indifferent to disposition: a brokered run whose
+journal is gone writes nothing whether its verdict would have been clean, quarantined or unwired. A
+seal placed with the other checks would compute a full verdict — belief basis, path gate, commit
+marks — and then discard it, and, worse, would invite an implementation that writes the record for
+the quarantined and unwired paths while honouring this rule only on the clean one. The sealed
+exposure then threads through every `_finalize` call, including the `_unwired` ones, because a run
+that was brokered was brokered no matter how it ended.
+
 Revision 5 said "yields `UNWIRED`, which blocks — rather than writing a record that reads as
 unbrokered", and specified no state in which that is possible. `evidence` is `EvidenceExposure | None`
 and `None` is defined as "never brokered", so a failed seal has nothing honest to write: an exposure
@@ -1208,11 +1473,31 @@ downgrade is a lie about what was checked.
   revision reintroducing an in-tree destination, which no test inside this package would catch. Also:
   the served name is the sha256 of the served bytes, so a request cannot choose it; two requests
   serving identical bytes coincide; and `finish_run` seals a run whose `served/` directory has been
-  emptied, since nothing trusted reads it.
-- **`session.py`** — a denial spends a round; exhaustion refuses without further spend; no unbudgeted
-  path to `serve` is exported; `--session` cannot override the baseline's journal path, budget, or
-  surface policy; `open` on an existing journal refuses; **seeding N inline inputs leaves
-  `requests_used` at zero**; a denied request and a malformed pattern each raise it by one.
+  emptied, since nothing trusted reads it. If an ancestor is renamed after the run-directory
+  descriptor is captured, serving fails before the journal append rather than returning a stale
+  receipt path; the regression asserts both that the project remains untouched and that no exposure
+  was recorded.
+- **`session.py`** — a denial spends a round; exhaustion refuses without further spend **and appends
+  no journal line**, asserted by sealing a run whose actor kept asking past its budget and confirming
+  the record validates rather than that the refusal was returned; no unbudgeted path to `serve` is
+  exported; `--session` cannot override the baseline's journal path, budget, or surface policy;
+  `start --broker-spec` against an existing journal refuses; **seeding N inline inputs leaves
+  `requests_used` at zero**; a denied request and a malformed pattern each raise it by one; a refusal
+  writes no file into `served/`, while a defined miss writes its marker. A maximally encoded request
+  and inline event fit the derived journal bound, a forged over-bound event is refused before any
+  artifact is created or delivered, and an over-long CLI request exits as a usage error without a
+  spend.
+- **Refusals do not become coverage** — a run that reads a denied path, is refused, and cites that
+  path is **not** corresponding, asserted end-to-end through `append_review` rather than against the
+  map builder, since the fail-open this closes is reachable only from the production path. Written as
+  a negative test that fails if the builder classifies by payload emptiness rather than by `Outcome`
+  (§5.1), and paired with one asserting a genuinely **empty file** at the commit *does* give `FULL`
+  coverage with a line count of zero — the two cases the empty payload makes identical, which is why
+  neither is provable without the other.
+- **A relabelled refusal does not replay** — an exposure whose refused entry is edited to
+  `outcome: served`, `sha256` untouched, yields `violated` / `EXPOSURE_UNREPRODUCIBLE`. The hash
+  reproduces, so this guard is proven only by the outcome comparison, and it fails if that comparison
+  is dropped.
 - **`control_plane.py`** — `run_dir` is a pure function of `(project root, run id)`; **two projects
   producing the same run slug get different directories**, and a fork of a project does not resolve its
   parent's; **a `science.yaml` name containing `/` or `..`, or one 4096 characters long, changes no
@@ -1220,7 +1505,10 @@ downgrade is a lie about what was checked.
   `--broker-spec` and `--baseline-out` together are refused, as are `--session` and `--baseline` on
   `finish`; a brokered run whose baseline is elsewhere is refused rather than searched for; a
   control-plane root inside the project is refused.
-- **Sealing** — a sealed run replays from `(record, repo)` alone with the control-plane directory
+- **Sealing** — a brokered run whose journal is deleted writes **no record in every disposition**,
+  asserted for clean, quarantined and unwired separately rather than once, since §6's rule is
+  indifferent to disposition and a seal placed late would satisfy it on one path only; a sealed run
+  replays from `(record, repo)` alone with the control-plane directory
   **deleted**, asserted **through `append_review`** and not only against `check_correspondence`: the
   production path is the one the claim is about, and revision 5's version of this guard would have
   passed while production still resolved a baseline. A failed seal returns

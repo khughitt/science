@@ -11,16 +11,26 @@ otherwise.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
+from science_model.audit.subjects import SubjectError, normalize_project_path
 from science_model.autonomous_runs import (
+    RUN_ID_PREFIX,
     AutonomousRunRecord,
     PolicyIdentity,
     RunBudget,
     RunDisposition,
     RunTier,
+)
+from science_model.evidence_broker import (
+    REPLAY_PROTOCOL_VERSION,
+    EvidenceExposure,
+    EvidenceSession,
+    EvidenceSessionSpec,
+    InlineInput,
 )
 
 from science_tool.autonomy.baseline import (
@@ -29,6 +39,7 @@ from science_tool.autonomy.baseline import (
     read_baseline,
     write_baseline,
 )
+from science_tool.autonomy.control_plane import run_dir, run_slug
 from science_tool.autonomy.extract import ExtractError, _git, extract_change_set
 from science_tool.autonomy.marks import MarkIssue, verify_marks
 from science_tool.autonomy.path_gate import Denial, GateInputError, evaluate
@@ -53,6 +64,13 @@ from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.identity import graph_uri
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
+from science_tool.evidence_broker.journal import (
+    JournalError,
+    count_requests,
+    create_journal,
+    open_journal,
+    read_journal,
+)
 
 
 class RepositoryStateError(ValueError):
@@ -125,7 +143,8 @@ def start_run(
     tier: RunTier,
     short_id: str,
     started: datetime,
-    baseline_out: Path,
+    baseline_out: Path | None = None,
+    evidence: EvidenceSessionSpec | None = None,
 ) -> RunBaseline:
     """Open a run and return its baseline.
 
@@ -139,12 +158,32 @@ def start_run(
     there is nothing to be `unwired` about -- the caller reports the failure and exits.
     """
     run_id = generate_run_id(started.date(), agent, short_id)
+    if (baseline_out is None) == (evidence is None):
+        raise BaselineError(
+            "start requires exactly one of a baseline path or a broker spec; they are mutually "
+            "exclusive because a brokered run's baseline is derived from the control plane"
+        )
     assert_gate_is_external(project_root)
     base_commit = assert_repository_is_at(project_root)
 
     result = _capture(project_root)
     if result.status == "unwired":
         raise BaselineError(f"no belief basis to open a run against: ({result.code}) {result.reason}")
+
+    session: EvidenceSession | None = None
+    if evidence is not None:
+        directory = run_dir(project_root, run_id)
+        baseline_out = directory / "baseline.json"
+        session = EvidenceSession(
+            session_id=run_slug(run_id),
+            journal_path=directory / "journal.jsonl",
+            commit=base_commit,
+            budget=evidence.budget,
+            surface_policy=evidence.surface_policy,
+            instrument=evidence.instrument,
+            inline=_read_inline_manifest(evidence.inline_paths, project_root=project_root),
+        )
+        create_journal(session.journal_path, project_root=project_root, inline=session.inline)
 
     baseline = RunBaseline(
         run_id=run_id,
@@ -159,15 +198,41 @@ def start_run(
         ),
         started=started,
         snapshot=build_snapshot(result.rows),
+        evidence=session,
     )
+    assert baseline_out is not None
     write_baseline(baseline_out, baseline, project_root=project_root)
     return baseline
+
+
+def _read_inline_manifest(
+    paths: tuple[Path, ...], *, project_root: Path
+) -> tuple[InlineInput, ...]:
+    manifest: list[InlineInput] = []
+    for path in paths:
+        try:
+            target = normalize_project_path(str(path))
+        except SubjectError as exc:
+            raise BaselineError(f"inline input {path} is not a project-relative path: {exc}") from exc
+        try:
+            payload = (project_root / target).read_bytes()
+        except OSError as exc:
+            raise BaselineError(f"could not read inline input {target}: {exc}") from exc
+        manifest.append(
+            InlineInput(
+                target=target,
+                sha256=hashlib.sha256(payload).hexdigest(),
+                lines=len(payload.splitlines()),
+            )
+        )
+    return tuple(manifest)
 
 
 def finish_run(
     project_root: Path,
     *,
     baseline_path: Path,
+    expect_run: str | None = None,
     head: str,
     ended: datetime,
     tokens: int | None,
@@ -191,11 +256,32 @@ def finish_run(
     except BaselineError as exc:
         return RunOutcome(disposition=RunDisposition.UNWIRED, record=None, reason=str(exc))
 
+    if expect_run is not None and baseline.run_id.removeprefix(
+        RUN_ID_PREFIX
+    ) != expect_run.removeprefix(RUN_ID_PREFIX):
+        return RunOutcome(
+            disposition=RunDisposition.UNWIRED,
+            record=None,
+            reason=f"the baseline at {baseline_path} names {baseline.run_id!r}, not {expect_run!r}",
+        )
+
+    exposure: EvidenceExposure | None = None
+    if baseline.evidence is not None:
+        try:
+            exposure = _seal_evidence(baseline.evidence, project_root=project_root)
+        except (JournalError, ValidationError) as exc:
+            return RunOutcome(
+                disposition=RunDisposition.UNWIRED,
+                record=None,
+                reason=f"the brokered run's exposure could not be sealed: {exc}",
+            )
+
     def _unwired(reason: str) -> RunOutcome:
         return _finalize(
             project_root, baseline,
             disposition=RunDisposition.UNWIRED, reason=reason, head=head, ended=ended,
             tokens=tokens, wall_clock_seconds=wall_clock_seconds,
+            evidence=exposure,
         )
 
     try:
@@ -251,6 +337,7 @@ def finish_run(
             ),
             head=head, ended=ended, tokens=tokens, wall_clock_seconds=wall_clock_seconds,
             deltas=deltas, denials=tuple(verdict.denials), mark_issues=mark_issues,
+            evidence=exposure,
         )
 
     return _finalize(
@@ -258,6 +345,27 @@ def finish_run(
         disposition=RunDisposition.CLEAN,
         reason="belief basis unmoved, every change on the tier's allowlist, marks consistent",
         head=head, ended=ended, tokens=tokens, wall_clock_seconds=wall_clock_seconds,
+        evidence=exposure,
+    )
+
+
+def _seal_evidence(session: EvidenceSession, *, project_root: Path) -> EvidenceExposure:
+    """Copy the descriptor-pinned journal into the permanent run record."""
+    with open_journal(session.journal_path, project_root=project_root) as handle:
+        entries = read_journal(handle)
+    stamped = tuple(
+        entry.model_copy(update={"commit": session.commit}) if entry.op == "inline" else entry
+        for entry in entries
+    )
+    return EvidenceExposure(
+        commit=session.commit,
+        budget=session.budget,
+        requests_used=count_requests(stamped),
+        instrument=session.instrument,
+        surface_policy=session.surface_policy,
+        inline=session.inline,
+        replay_protocol=REPLAY_PROTOCOL_VERSION,
+        entries=stamped,
     )
 
 
@@ -320,6 +428,7 @@ def _finalize(
     deltas: tuple[BasisDelta, ...] = (),
     denials: tuple[Denial, ...] = (),
     mark_issues: tuple[MarkIssue, ...] = (),
+    evidence: EvidenceExposure | None = None,
 ) -> RunOutcome:
     """Build and write the attestation. The single place a record comes into existence.
 
@@ -345,6 +454,7 @@ def _finalize(
             ended=ended,
             budget=RunBudget(tokens=tokens, wall_clock_seconds=wall_clock_seconds),
             disposition=disposition,
+            evidence=evidence,
         )
     except ValidationError as exc:
         # The record could not even be constructed, so nothing is attested. Report it as

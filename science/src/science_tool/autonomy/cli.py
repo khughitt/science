@@ -108,8 +108,14 @@ def path_gate_command(
 @click.option(
     "--baseline-out",
     type=click.Path(path_type=Path),
-    required=True,
+    default=None,
     help="Where to write the baseline. MUST be outside the project root.",
+)
+@click.option(
+    "--broker-spec",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=None,
+    help="EvidenceSessionSpec JSON. Mutually exclusive with --baseline-out.",
 )
 @click.option(
     "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
@@ -120,7 +126,8 @@ def path_gate_command(
     help="Output format. `--json` is kept as a convenience alias.",
 )
 def start_command(
-    agent: str, model: str, tier: str, short_id: str, baseline_out: Path,
+    agent: str, model: str, tier: str, short_id: str, baseline_out: Path | None,
+    broker_spec: Path | None,
     project_root: Path, as_json: bool, output_format: str,
 ) -> None:
     """Open a run: capture the belief basis and write the supervisor's baseline.
@@ -132,23 +139,38 @@ def start_command(
     """
     from datetime import UTC, datetime
 
+    from pydantic import ValidationError
     from science_model.autonomous_runs import RunRecordError
+    from science_model.evidence_broker import EvidenceSessionSpec
 
     from science_tool.autonomy.baseline import BaselineError
     from science_tool.autonomy.extract import ExtractError
     from science_tool.autonomy.lifecycle import RepositoryStateError, start_run
     from science_tool.autonomy.toolkit import ToolkitError
+    from science_tool.evidence_broker.journal import JournalError
 
     effective_format = "json" if as_json else output_format
     try:
+        evidence = None
+        if broker_spec is not None:
+            evidence = EvidenceSessionSpec.model_validate_json(broker_spec.read_text(encoding="utf-8"))
         baseline = start_run(
             project_root, agent=agent, model=model, tier=RunTier(tier), short_id=short_id,
-            started=datetime.now(UTC), baseline_out=baseline_out,
+            started=datetime.now(UTC), baseline_out=baseline_out, evidence=evidence,
         )
     # `ExtractError` too: `assert_repository_is_at` asks git through `extract._git`, which
     # fails closed on any non-zero exit -- a `--project-root` that is not a repository at
     # all arrives here, and without it `start` tracebacks instead of exiting 2.
-    except (RunRecordError, ToolkitError, RepositoryStateError, BaselineError, ExtractError) as exc:
+    except (
+        RunRecordError,
+        ToolkitError,
+        RepositoryStateError,
+        BaselineError,
+        ExtractError,
+        OSError,
+        ValidationError,
+        JournalError,
+    ) as exc:
         message = f"could not start: {exc}"
         emit(
             output_format=effective_format,
@@ -157,6 +179,8 @@ def start_command(
         )
         sys.exit(2)
 
+    directory = None if baseline.evidence is None else baseline.evidence.journal_path.parent
+    written_baseline = baseline_out if directory is None else directory / "baseline.json"
     payload = {
         "started": True,
         "run_id": baseline.run_id,
@@ -164,13 +188,14 @@ def start_command(
         "base_commit": baseline.base_commit,
         "toolkit_revision": baseline.toolkit_revision,
         "basis_digest": baseline.snapshot.digest,
-        "baseline_path": str(baseline_out),
+        "baseline_path": str(written_baseline),
+        "run_dir": None if directory is None else str(directory),
     }
     emit(
         output_format=effective_format,
         payload=payload,
         render_text=lambda: click.echo(
-            f"started {baseline.run_id} (base {baseline.base_commit[:12]}) -> {baseline_out}"
+            f"started {baseline.run_id} (base {baseline.base_commit[:12]}) -> {written_baseline}"
         ),
     )
     sys.exit(0)
@@ -178,9 +203,10 @@ def start_command(
 
 @autonomy_group.command("finish")
 @click.option(
-    "--baseline", "baseline_path", type=click.Path(path_type=Path), required=True,
+    "--baseline", "baseline_path", type=click.Path(path_type=Path), default=None,
     help="Baseline written by `autonomy start`. MUST be outside the project root.",
 )
+@click.option("--session", "session_handle", default=None, help="Brokered run id or run slug.")
 @click.option("--head", required=True, help="Commit the run ended at.")
 @click.option(
     "--tokens", type=int, default=None,
@@ -202,7 +228,8 @@ def start_command(
     "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True,
 )
 def finish_command(
-    baseline_path: Path, head: str, tokens: int | None, wall_clock_seconds: float | None,
+    baseline_path: Path | None, session_handle: str | None, head: str,
+    tokens: int | None, wall_clock_seconds: float | None,
     report_path: str | None, project_root: Path, as_json: bool, output_format: str,
 ) -> None:
     """Close a run: re-materialize, recapture the basis, gate, and attest.
@@ -214,6 +241,8 @@ def finish_command(
 
     from science_model.autonomous_runs import RunDisposition
 
+    from science_tool.autonomy.baseline import BaselineError
+    from science_tool.autonomy.control_plane import ControlPlaneError, run_dir
     from science_tool.autonomy.lifecycle import file_quarantine_feedback, finish_run
     from science_tool.feedback_cli import resolve_feedback_dir
 
@@ -223,11 +252,20 @@ def finish_command(
     # it here, where it is an argument error and nothing has run yet.
     if tokens is None and wall_clock_seconds is None:
         raise click.UsageError("pass --tokens, --wall-clock-seconds, or both")
+    if (baseline_path is None) == (session_handle is None):
+        raise click.UsageError("finish requires exactly one of --baseline or --session")
+    if session_handle is not None:
+        try:
+            baseline_path = run_dir(project_root, session_handle) / "baseline.json"
+        except (ControlPlaneError, BaselineError) as exc:
+            raise click.UsageError(f"could not address run id {session_handle!r}: {exc}") from exc
+    assert baseline_path is not None
 
     effective_format = "json" if as_json else output_format
     outcome = finish_run(
         project_root, baseline_path=baseline_path, head=head, ended=datetime.now(UTC),
-        tokens=tokens, wall_clock_seconds=wall_clock_seconds, report_path=report_path,
+        expect_run=session_handle, tokens=tokens, wall_clock_seconds=wall_clock_seconds,
+        report_path=report_path,
     )
 
     # The record is already on disk and cannot be rewritten. Escalation failing must not

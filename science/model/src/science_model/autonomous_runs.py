@@ -9,10 +9,9 @@ Named `AutonomousRunRecord`, not `RunRecord`: `science_tool/qa_audit/runs.py`
 already owns that name for fingerprinted *workflow* runs, which model compute
 reproducibility rather than agent authority.
 
-This module imports nothing from `science_model`. `entities.py` imports
-RUN_ID_PREFIX from here, and the loader that needs `parse_frontmatter` lives in
-`science_tool.graph.autonomous_runs` -- keeping this module import-free is what
-makes that safe.
+The only model-level import is the evidence vocabulary used by the record itself. The loader that
+needs `parse_frontmatter` remains in `science_tool.graph.autonomous_runs`, keeping tool dependencies
+out of this model boundary.
 """
 
 from __future__ import annotations
@@ -23,6 +22,8 @@ from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, model_validator
+
+from science_model.evidence_broker import EvidenceExposure
 
 RUN_ID_PREFIX = "run:"
 
@@ -141,8 +142,8 @@ class AutonomousRunRecord(BaseModel):
     ended: datetime
     budget: RunBudget
     disposition: RunDisposition
-    # The ONLY optional field, and only because the design marks it
-    # "Optional until S2; omitted, not blank, when absent".
+    evidence: EvidenceExposure | None = None
+    # Optional until S2; omitted, not blank, when absent.
     triggered_by: str | None = None
 
     @property
@@ -190,6 +191,15 @@ class AutonomousRunRecord(BaseModel):
             )
         if self.triggered_by is not None and not self.triggered_by.strip():
             raise ValueError("triggered_by must be omitted, not blank")
+        return self
+
+    @model_validator(mode="after")
+    def _exposure_is_bound_to_this_run(self) -> AutonomousRunRecord:
+        if self.evidence is not None and self.evidence.commit != self.base_commit:
+            raise ValueError(
+                f"the exposure is at commit {self.evidence.commit} but the run's base commit is "
+                f"{self.base_commit}; an exposure bound to another tree is bound to no run"
+            )
         return self
 
     def _validate_identity(self) -> None:

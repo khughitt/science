@@ -121,14 +121,25 @@ def _absolute_project_root(project_root: Path) -> Path:
 
 
 def _open_project_root(project_root: Path) -> tuple[Path, int]:
-    """Capture the absolute lexical root through one descriptor-anchored walk.
-
-    The first filesystem object captured is the trusted POSIX root descriptor. Each
-    project-root component is then opened relative to the descriptor for its already
-    captured parent. There is no filesystem resolution pass whose result is later
-    reopened by pathname.
-    """
+    """Capture the absolute lexical root through one descriptor-anchored walk."""
     root = _absolute_project_root(project_root)
+    try:
+        descriptor = open_dir_anchored(root)
+    except PathSafetyError as exc:
+        raise PathSafetyError(f"could not open project root {root}: {exc}") from exc
+    return root, descriptor
+
+
+def open_dir_anchored(directory: Path, *, create: bool = False) -> int:
+    """Open an absolute directory one component at a time, following no link.
+
+    Makes no containment claim. With ``create=True``, each missing component is made inside the
+    already-captured parent, so creation stops at a link without mutating its target.
+    """
+    if not directory.is_absolute():
+        raise PathSafetyError(f"{directory} must be absolute to be anchored")
+    if ".." in directory.parts:
+        raise PathSafetyError(f"{directory} contains a `..` segment")
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
         parent_fd = os.open(os.sep, flags)
@@ -137,17 +148,21 @@ def _open_project_root(project_root: Path) -> tuple[Path, int]:
 
     walked = Path(os.sep)
     try:
-        for segment in root.parts[1:]:
+        for segment in directory.parts[1:]:
             walked = walked / segment
+            name = _leaf_name(segment)
+            if create:
+                try:
+                    os.mkdir(name, mode=0o755, dir_fd=parent_fd)
+                except FileExistsError:
+                    pass
+                except OSError as exc:
+                    raise PathSafetyError(f"could not create {walked}: {exc}") from exc
             try:
-                child_fd = os.open(
-                    _leaf_name(segment),
-                    flags,
-                    dir_fd=parent_fd,
-                )
+                child_fd = os.open(name, flags, dir_fd=parent_fd)
             except OSError as exc:
                 raise PathSafetyError(
-                    f"project root {root} has a missing, inaccessible, symlink, or "
+                    f"{directory} has a missing, inaccessible, symlink, or "
                     f"non-directory component at {walked}: {exc}"
                 ) from exc
             os.close(parent_fd)
@@ -155,7 +170,7 @@ def _open_project_root(project_root: Path) -> tuple[Path, int]:
     except BaseException:
         os.close(parent_fd)
         raise
-    return root, parent_fd
+    return parent_fd
 
 
 def _walk_dirs_with_root(
@@ -426,27 +441,76 @@ def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
             f"could not open {name!r} without following a symlink: {exc}"
         ) from exc
     try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            raise PathSafetyError(f"{name!r} is not a regular file; refusing to read it")
-        if info.st_size > max_bytes:
-            raise PathSafetyError(
-                f"{name!r} is {info.st_size} bytes, which exceeds {max_bytes}"
-            )
-        data = bytearray()
-        while len(data) <= max_bytes:
-            chunk = os.read(descriptor, max_bytes + 1 - len(data))
-            if not chunk:
-                break
-            data.extend(chunk)
+        return read_regular_fd(descriptor, max_bytes)
+    except PathSafetyError as exc:
+        raise PathSafetyError(f"could not read {name!r}: {exc}") from exc
     finally:
         os.close(descriptor)
+
+
+def open_record_at(dir_fd: int, name: str) -> int:
+    """Open one existing regular file for reading and appending.
+
+    One descriptor pins identity across a count and its later append. ``O_NOFOLLOW`` rejects a
+    symlink, the regular-file check rejects blocking objects, and a one-link requirement rejects a
+    hard link whose other name the caller does not own.
+    """
+    name = _leaf_name(name)
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=dir_fd,
+        )
+    except OSError as exc:
+        raise PathSafetyError(f"could not open record {name!r}: {exc}") from exc
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise PathSafetyError(f"{name!r} is not a regular file; refusing to use it as a record")
+        if info.st_nlink != 1:
+            raise PathSafetyError(
+                f"{name!r} has {info.st_nlink} links; a hard-linked record lets whoever planted "
+                "the link choose where these bytes also land"
+            )
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def read_regular_fd(descriptor: int, max_bytes: int) -> str:
+    """Read an already-open regular file from offset zero without moving its offset."""
+    info = os.fstat(descriptor)
+    if not stat.S_ISREG(info.st_mode):
+        raise PathSafetyError("descriptor is not a regular file; refusing to read it")
+    if info.st_size > max_bytes:
+        raise PathSafetyError(f"{info.st_size} bytes exceeds {max_bytes}")
+    data = bytearray()
+    while len(data) <= max_bytes:
+        chunk = os.pread(descriptor, max_bytes + 1 - len(data), len(data))
+        if not chunk:
+            break
+        data.extend(chunk)
     if len(data) > max_bytes:
-        raise PathSafetyError(f"{name!r} exceeds {max_bytes} bytes")
+        raise PathSafetyError(f"record exceeds {max_bytes} bytes")
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise PathSafetyError(f"{name!r} is not valid UTF-8: {exc}") from exc
+        raise PathSafetyError(f"record is not valid UTF-8: {exc}") from exc
+
+
+def write_all(descriptor: int, payload: bytes) -> None:
+    """Write every byte or raise if the descriptor stops making progress."""
+    view = memoryview(payload)
+    while view:
+        try:
+            written = os.write(descriptor, view)
+        except OSError as exc:
+            raise PathSafetyError(f"could not write {len(view)} remaining bytes: {exc}") from exc
+        if written == 0:
+            raise PathSafetyError("write made no progress")
+        view = view[written:]
 
 
 def create_regular_file_at(dir_fd: int, name: str) -> int:

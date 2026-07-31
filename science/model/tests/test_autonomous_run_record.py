@@ -12,11 +12,30 @@ from science_model.autonomous_runs import (
     RunDisposition,
     RunTier,
 )
+from science_model.evidence_broker import (
+    REPLAY_PROTOCOL_VERSION,
+    EvidenceExposure,
+    InstrumentIdentity,
+    SurfacePolicy,
+)
 
 _BASE = "a" * 40
 _HEAD = "b" * 40
 _TOOLKIT = "c" * 40
 _DIGEST = "d" * 64
+
+
+def _exposure(commit: str) -> EvidenceExposure:
+    return EvidenceExposure(
+        commit=commit,
+        budget=0,
+        requests_used=0,
+        instrument=InstrumentIdentity(
+            ref="rubric.md", sha256="e" * 64, prompt_hash="f" * 64
+        ),
+        surface_policy=SurfacePolicy(notice="withheld"),
+        replay_protocol=REPLAY_PROTOCOL_VERSION,
+    )
 
 
 def _payload(**overrides: object) -> dict[str, object]:
@@ -236,3 +255,14 @@ def test_validate_run_identity_matches_the_records_own_rules():
     for agent, short_id in (("Curation_Sweep", "a3f1"), ("curation-sweep", "a3"), ("", "a3f1")):
         with pytest.raises(RunRecordError):
             validate_run_identity(agent=agent, short_id=short_id)
+
+
+def test_evidence_must_be_bound_to_the_run_base_commit() -> None:
+    with pytest.raises(ValidationError, match="base commit"):
+        AutonomousRunRecord.model_validate(_payload(evidence=_exposure(_TOOLKIT)))
+
+
+def test_evidence_at_the_head_commit_is_not_evidence_for_the_run() -> None:
+    assert _HEAD != _BASE
+    with pytest.raises(ValidationError, match="base commit"):
+        AutonomousRunRecord.model_validate(_payload(evidence=_exposure(_HEAD)))

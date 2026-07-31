@@ -6,6 +6,11 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from science_model.evidence_broker import (
+    EvidenceSessionSpec,
+    InstrumentIdentity,
+    SurfacePolicy,
+)
 
 from science_tool.cli import main
 
@@ -84,6 +89,16 @@ def _finish(project: Path, baseline_path: Path, *extra: str):
     )
 
 
+def _broker_spec(path: Path) -> Path:
+    spec = EvidenceSessionSpec(
+        budget=2,
+        surface_policy=SurfacePolicy(deny_prefixes=("private",), notice="withheld"),
+        instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
+    )
+    path.write_text(spec.model_dump_json(), encoding="utf-8")
+    return path
+
+
 def _edit_and_commit(project: Path, old: str, new: str, run_id: str, *, marked: bool = True) -> None:
     paper = project / "entities" / "papers" / "x.md"
     paper.write_text(paper.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
@@ -111,6 +126,64 @@ def test_start_json_names_the_run_and_the_baseline(project: Path, baseline_path:
     assert payload["baseline_path"] == str(baseline_path)
     assert payload["branch"] == f"auto/{payload['run_id'].removeprefix('run:')}"
     assert "snapshot" not in payload, "the payload is a summary, not the whole capture"
+
+
+def test_start_refuses_both_baseline_and_broker_spec(
+    project: Path, baseline_path: Path, tmp_path: Path
+) -> None:
+    result = _start(project, baseline_path, "--broker-spec", str(_broker_spec(tmp_path / "spec.json")))
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
+def test_start_refuses_neither_baseline_nor_broker_spec(project: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "start",
+            "--project-root",
+            str(project),
+            "--agent",
+            AGENT,
+            "--model",
+            "test-model",
+            "--short-id",
+            "a3f1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "requires exactly one" in result.output
+
+
+def test_brokered_start_receipt_names_the_paths_actually_written(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "start",
+            "--project-root",
+            str(project),
+            "--agent",
+            AGENT,
+            "--model",
+            "test-model",
+            "--short-id",
+            "a3f1",
+            "--broker-spec",
+            str(_broker_spec(tmp_path / "spec.json")),
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    run_dir = Path(payload["run_dir"])
+    assert Path(payload["baseline_path"]) == run_dir / "baseline.json"
+    assert (run_dir / "baseline.json").exists()
+    assert (run_dir / "journal.jsonl").exists()
 
 
 def test_start_refuses_a_baseline_inside_the_project(project: Path):
@@ -204,6 +277,75 @@ def test_a_finish_with_no_budget_option_is_an_argument_error(project: Path, base
     assert result.exit_code == 2
     assert "--tokens" in result.output
     assert not (project / "runs").exists(), "an argument error must attest nothing"
+
+
+def test_finish_refuses_both_baseline_and_session(project: Path, baseline_path: Path) -> None:
+    _start(project, baseline_path)
+    result = _finish(project, baseline_path, "--session", "2026-07-25-curation-sweep-a3f1")
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_finish_refuses_neither_baseline_nor_session(project: Path) -> None:
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "finish",
+            "--project-root",
+            str(project),
+            "--head",
+            _git(project, "rev-parse", "HEAD"),
+            "--tokens",
+            "1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "exactly one" in result.output
+
+
+def test_finish_resolves_a_brokered_session_handle(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    opened = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "start",
+            "--project-root",
+            str(project),
+            "--agent",
+            AGENT,
+            "--model",
+            "test-model",
+            "--short-id",
+            "a3f1",
+            "--broker-spec",
+            str(_broker_spec(tmp_path / "spec.json")),
+            "--json",
+        ],
+    )
+    assert opened.exit_code == 0, opened.output
+    run_id = json.loads(opened.output)["run_id"]
+    result = CliRunner().invoke(
+        main,
+        [
+            "autonomy",
+            "finish",
+            "--project-root",
+            str(project),
+            "--session",
+            run_id,
+            "--head",
+            _git(project, "rev-parse", "HEAD"),
+            "--tokens",
+            "1",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["record"]["evidence"] is not None
 
 
 def test_start_refuses_an_agent_slug_the_record_could_never_carry(project: Path, baseline_path: Path):

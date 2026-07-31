@@ -1,5 +1,10 @@
 # Evidence broker plan 2 — the serving surface
 
+**Status:** **merged** at `dab47dc3` (2026-07-31), 21 commits. Plan 2 of four (see the design's
+implementation-status table). Four tasks, each with a task review; 29 review findings closed across
+the per-task loops and one whole-branch fix wave. Per-task deviations are recorded under each task
+below; the two findings that changed the *design* rather than this plan became revisions 10 and 11.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
@@ -25,7 +30,8 @@ at `57b09bf0`. This is plan 2. The remaining two:
 - **Plan 3 — the session and its record.** `InstrumentIdentity`, `InlineInput`, `EvidenceSession`,
   `RunBaseline.evidence`, `EvidenceSessionSpec`, `ExposureEntry`, `EvidenceExposure` and its four
   validators, `AutonomousRunRecord.evidence`, `evidence_broker/session.py` (journal, rounds,
-  inline seeding), `served/<sha256>`, the CLI (`evidence open` / `evidence serve`,
+  inline seeding), `served/<sha256>`, the CLI (`evidence serve` — design revision 12 folded
+  `evidence open` into `start --broker-spec`,
   `--broker-spec`/`--baseline-out`, `--session`/`--baseline`), and the seal in `finish_run`.
 - **Plan 4 — correspondence.** §5 entire, plus `Review` / `ReviewSubmission` / `Correspondence`,
   `append_review`, eligibility, and the replay protocol version.

@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from science_model.audit import LocationEvidence
 from science_model.autonomous_runs import RunDisposition, RunTier
+from science_model.evidence_broker import (
+    EvidenceSessionSpec,
+    InstrumentIdentity,
+    SurfacePolicy,
+)
 
 from science_tool.autonomy import lifecycle as lifecycle_module
 from science_tool.autonomy import toolkit as toolkit_module
+from science_tool.autonomy.baseline import BaselineError
 from science_tool.autonomy.lifecycle import finish_run, start_run
 
 AGENT = "curation-sweep"
@@ -127,6 +135,148 @@ def _finish(project: Path, baseline_path: Path):
     )
 
 
+def _start_brokered(project: Path, tmp_path: Path, monkeypatch, *, inline_paths=()):
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    return start_run(
+        project,
+        agent=AGENT,
+        model="test-model",
+        tier=RunTier.BELIEF_NEUTRAL,
+        short_id="a3f1",
+        started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        evidence=_spec(inline_paths=inline_paths),
+    )
+
+
+def _spec(*, inline_paths: tuple[Path, ...] = ()) -> EvidenceSessionSpec:
+    return EvidenceSessionSpec(
+        budget=2,
+        surface_policy=SurfacePolicy(deny_prefixes=("private",), notice="withheld"),
+        instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
+        inline_paths=inline_paths,
+    )
+
+
+def test_broker_spec_and_baseline_out_are_mutually_exclusive(
+    project: Path, baseline_path: Path
+) -> None:
+    with pytest.raises(BaselineError, match="mutually exclusive"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            baseline_out=baseline_path,
+            evidence=_spec(),
+        )
+
+
+def test_one_of_baseline_out_or_broker_spec_is_required(project: Path) -> None:
+    with pytest.raises(BaselineError, match="requires"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            baseline_out=None,
+            evidence=None,
+        )
+
+
+def test_brokered_start_computes_inline_manifest_and_creates_journal(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.evidence_broker.journal import open_journal, read_journal
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    seed = project / "private" / "rubric.md"
+    seed.parent.mkdir()
+    seed.write_text("one\ntwo\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "seed inline")
+    baseline = start_run(
+        project,
+        agent=AGENT,
+        model="test-model",
+        tier=RunTier.BELIEF_NEUTRAL,
+        short_id="a3f1",
+        started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        evidence=_spec(inline_paths=(Path("private/rubric.md"),)),
+    )
+    assert baseline.evidence is not None
+    (inline,) = baseline.evidence.inline
+    assert (inline.target, inline.lines) == ("private/rubric.md", 2)
+    assert inline.sha256 == hashlib.sha256(seed.read_bytes()).hexdigest()
+    assert LocationEvidence(path=inline.target).path == inline.target
+    with open_journal(baseline.evidence.journal_path, project_root=project) as handle:
+        assert [entry.op for entry in read_journal(handle)] == ["inline"]
+
+
+def test_an_inline_path_outside_the_project_is_refused(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    outside = tmp_path / "prompt.md"
+    outside.write_text("x\n", encoding="utf-8")
+    with pytest.raises(BaselineError, match="project-relative"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            evidence=_spec(inline_paths=(outside,)),
+        )
+
+
+def test_the_journal_is_created_before_the_baseline(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.autonomy.control_plane import run_dir
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+
+    def _raising(*args, **kwargs):
+        raise BaselineError("baseline write failed")
+
+    monkeypatch.setattr(lifecycle_module, "write_baseline", _raising)
+    with pytest.raises(BaselineError, match="baseline write failed"):
+        start_run(
+            project,
+            agent=AGENT,
+            model="test-model",
+            tier=RunTier.BELIEF_NEUTRAL,
+            short_id="a3f1",
+            started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+            evidence=_spec(),
+        )
+    assert (run_dir(project, "run:2026-07-25-curation-sweep-a3f1") / "journal.jsonl").exists()
+
+
+def test_a_second_brokered_start_for_the_same_run_is_refused(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from science_tool.evidence_broker.journal import JournalError
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    kwargs = {
+        "agent": AGENT,
+        "model": "test-model",
+        "tier": RunTier.BELIEF_NEUTRAL,
+        "short_id": "a3f1",
+        "started": datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        "evidence": _spec(),
+    }
+    start_run(project, **kwargs)
+    with pytest.raises((BaselineError, JournalError)):
+        start_run(project, **kwargs)
+
+
 def test_the_fixture_has_a_non_empty_basis(project: Path):
     """Certification: a basis of zero units makes every assertion in this module vacuous
     -- each one would then pass by finding nothing rather than by finding the right
@@ -155,6 +305,79 @@ def test_start_writes_no_run_record(project: Path, baseline_path: Path):
         "materialize_graph is not byte-deterministic across two calls; every dirty-tree "
         "test in this module would then pass for the wrong reason"
     )
+
+
+def test_a_brokered_run_seals_its_exposure(project: Path, tmp_path: Path, monkeypatch) -> None:
+    from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+    from science_tool.evidence_broker.session import Session
+
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    Session(project, baseline.evidence).request(
+        EvidenceRequest(op=EvidenceOp.READ, target="science.yaml")
+    )
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.record is not None
+    exposure = outcome.record.evidence
+    assert exposure is not None
+    assert exposure.requests_used == 1
+    assert exposure.surface_policy == baseline.evidence.surface_policy
+    assert exposure.inline == baseline.evidence.inline
+    assert exposure.entries[0].target == "science.yaml"
+
+
+def test_inline_entries_are_stamped_with_the_session_commit(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    baseline = _start_brokered(
+        project, tmp_path, monkeypatch, inline_paths=(Path("science.yaml"),)
+    )
+    assert baseline.evidence is not None
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.record is not None and outcome.record.evidence is not None
+    assert {entry.commit for entry in outcome.record.evidence.entries} == {baseline.base_commit}
+
+
+@pytest.mark.parametrize("disposition", ["clean", "quarantined", "unwired"])
+def test_a_missing_journal_writes_no_record_in_every_disposition(
+    project: Path, tmp_path: Path, monkeypatch, disposition: str
+) -> None:
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    if disposition == "quarantined":
+        paper = project / "entities" / "papers" / "x.md"
+        paper.write_text(
+            paper.read_text(encoding="utf-8").replace(
+                "venue: Nature", "venue: Nature\nmethods_summary: rewritten"
+            ),
+            encoding="utf-8",
+        )
+        _commit_as_agent(project, "docs: rewrite methods", baseline.run_id)
+    elif disposition == "unwired":
+        monkeypatch.setattr(toolkit_module, "toolkit_is_clean", lambda root=None: False)
+    baseline.evidence.journal_path.unlink()
+    outcome = _finish(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.disposition is RunDisposition.UNWIRED
+    assert outcome.record is None
+
+
+def test_finish_run_checks_the_handle_against_the_baseline_it_reads(
+    project: Path, tmp_path: Path, monkeypatch
+) -> None:
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    outcome = finish_run(
+        project,
+        baseline_path=baseline.evidence.journal_path.parent / "baseline.json",
+        expect_run="2026-07-25-curation-sweep-other",
+        head=_git(project, "rev-parse", "HEAD"),
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC),
+        tokens=1,
+        wall_clock_seconds=1,
+    )
+    assert outcome.disposition is RunDisposition.UNWIRED
+    assert outcome.record is None
+    assert "not '2026-07-25-curation-sweep-other'" in outcome.reason
 
 
 def test_an_allowlisted_edit_finishes_clean(project: Path, baseline_path: Path):
