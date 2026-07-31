@@ -116,12 +116,14 @@ anything.
 
 ### 4.2 Behavior change
 
-Remove `]` from title rejection at every shared task boundary:
+Remove `]` from title rejection at the two shared code sites:
 
-- aggregate-ledger header parsing;
-- per-task frontmatter parsing;
-- task creation and editing;
-- migration parsing.
+- `_parse_task_header`, which covers aggregate-ledger and migration parsing;
+- `_validate_task_title`, which covers split frontmatter plus task creation and
+  editing.
+
+Update `_validate_task_title`'s error text as well as its predicate so it no
+longer claims that titles may not contain `]`.
 
 Newlines remain invalid. Existing malformed-ID, required-field, unknown-field,
 duplicate-ID, destination-collision, and differing-ledger-duplicate refusals
@@ -137,6 +139,8 @@ Tests prove that:
 
 - `F10 [Significant] ...` parses and round-trips unchanged;
 - a title containing `[UNVERIFIED]` parses and round-trips unchanged;
+- a title beginning with `[UNVERIFIED]` round-trips through split-store YAML
+  frontmatter, exercising `yaml.safe_dump`'s quoting of a leading bracket;
 - a migration with those titles in existing done ledgers proceeds;
 - multiline titles remain rejected;
 - the other fail-closed migration checks remain armed.
@@ -148,6 +152,10 @@ The toolkit commit is tested and pushed before any consumer lock points to it.
 Each project migration runs in an isolated worktree created from that project's
 exact local `main`.
 
+`$EVIDENCE_DIR` below denotes a project-specific temporary directory outside
+the worktree. Evidence files are retained through final review and are never
+staged into a consumer repository.
+
 ### 5.1 Baseline
 
 Before mutation, capture:
@@ -156,7 +164,8 @@ Before mutation, capture:
 - every done-ledger task structure and the ledger bytes;
 - the migration dry-run and exit status;
 - validation JSON, stderr, and exit status;
-- `science graph diff --format json`;
+- the complete, unbudgeted graph diff via
+  `science graph diff --format json --output "$EVIDENCE_DIR/local-graph-diff-before.json"`;
 - Git status and relevant ignored-state caveats.
 
 The normalized task snapshot is the parity authority. Rendered bytes are not:
@@ -208,6 +217,13 @@ at the time remain unchanged. Already-split standalone documentation debt, such
 as natural-systems, is reported separately rather than used to expand this
 rollout.
 
+One dated audit is also an active shipped skill reference. Add a dated
+superseded note to the canonical
+`docs/audits/downstream-project-conventions/synthesis.md`, then regenerate
+`skills/generated/science-command-preamble/references/docs/audits/downstream-project-conventions/synthesis.md`.
+The note covers its claims that `tasks/active.md` is the universal lifecycle
+shape so agents do not read the historical observation as current guidance.
+
 Post-acute-infection is a closure target but not a migration target. Its local
 `main` already contains the task-storage split in commit `67361ff`; a later
 local commit removed the resolved acceptance prerequisite. Its live guide and
@@ -237,7 +253,8 @@ The 13 migrated projects and post-acute-infection run:
 ```bash
 uv run --frozen science graph build --local-only
 uv run --frozen science graph validate
-uv run --frozen science graph diff --format json
+uv run --frozen science graph diff --format json \
+  --output "$EVIDENCE_DIR/local-graph-diff-after.json"
 ```
 
 The local graph is committed with the pin, task migration, and live
@@ -286,7 +303,8 @@ the composite artifact:
 
 ```bash
 uv run --frozen science graph validate --path knowledge/composite.trig
-uv run --frozen science graph diff --path knowledge/composite.trig --format json
+uv run --frozen science graph diff --path knowledge/composite.trig --format json \
+  --output "$EVIDENCE_DIR/composite-graph-diff-after.json"
 ```
 
 Composite membership must equal the project's authored `peers:` list before and
@@ -297,7 +315,10 @@ fallback.
 ## 7. Validation contract
 
 Validation is compared within each worktree using complete JSON output and
-explicit exit statuses.
+explicit exit statuses. Every non-empty graph-diff capture uses `--output`; the
+stdout JSON renderer is capped at 40 rows and is not baseline evidence. The
+post-build files are also captured with `--output` and asserted to contain zero
+rows.
 
 The storage split can legitimately activate checks that previously lacked a
 task resolver. Newly reachable short-form or task-reference findings are
@@ -307,7 +328,9 @@ Unrelated finding deltas stop the rollout for investigation.
 Each project verifies:
 
 - task listing works;
-- `science validate --all --strict --format json` produces no traceback;
+- validation with `--all --strict --format json` and an explicit `--output`
+  path produces no traceback; the corresponding baseline also uses
+  `--output`;
 - no storage-fallback warning remains;
 - local and composite graphs validate;
 - graph diff is empty after the applicable build phase;
@@ -321,9 +344,15 @@ to force parity.
 
 ### 8.1 Toolkit prerequisite
 
-One toolkit commit contains the parser change, regression tests, and correction
-to the original storage design. Run focused task tests, Ruff, Pyright, and the
-full default Science suite before pushing it to `origin/main`.
+One toolkit commit contains the parser change, regression tests, correction to
+the original storage design, and the canonical-plus-regenerated audit note. Run
+focused task and generated-asset tests, Ruff, Pyright, and the full default
+Science suite before pushing it to `origin/main`.
+
+At design review, local toolkit `main` was one commit ahead and zero behind
+`origin/main`, so the prerequisite push had a clean ancestry. Reconfirm the
+ahead/behind relation immediately before pushing; nine consumer locks depend on
+the resulting revision being publicly resolvable.
 
 ### 8.2 Project-local commits
 
