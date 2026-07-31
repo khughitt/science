@@ -53,10 +53,18 @@ def test_the_armed_set_is_exactly_the_kinds_whose_slices_have_landed() -> None:
     #   method     -- 2026-07-29, docs/plans/2026-07-29-schema-closure-method-slice-inventory.md
     #   search     -- 2026-07-30, docs/plans/2026-07-30-schema-closure-search-slice-inventory.md
     #   observation -- 2026-07-30, docs/plans/2026-07-30-schema-closure-observation-slice-inventory.md
+    #   finding    -- 2026-07-30, docs/plans/2026-07-30-schema-closure-finding-slice-inventory.md
     #
-    # Remaining tranche kind: finding, last because it alone carries a SOURCE migration.
+    # THE TRANCHE IS COMPLETE. `finding` was last because it alone carries a SOURCE
+    # migration, and it turned out to be the only core kind routed through the structured
+    # source loader as well. No tranche kind remains.
+    #
+    # This does NOT mean schema closure is finished: 47 of the 53 shipped kinds are still
+    # open, and the debt listed under "Debt This Tranche Does Not Close" in the slice
+    # procedure is untouched. Growing this line without the seven-step slice behind it is
+    # the partial release design 4.0 prohibits.
     assert PROJECT_MIXIN_NAMES == frozenset(
-        {"hypothesis", "concept", "method", "search", "observation"}
+        {"hypothesis", "concept", "method", "search", "observation", "finding"}
     )
 
 

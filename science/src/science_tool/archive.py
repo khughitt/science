@@ -301,12 +301,17 @@ archived file, valid only while the file is archived.
 
 It must not survive restoration. `entity_scan` skips ``_archive/``, so an archived record
 is never schema-validated; a restored one is. A closed kind's mixin does not admit this key
-(none of `hypothesis`, `method`, `search` or `observation` declares it), and
+(none of `hypothesis`, `method`, `search`, `observation` or `finding` declares it), and
 ``unevaluatedProperties: false`` then fails the WHOLE project load, not just the record --
 verified end-to-end against armed `search` before this strip existed. Ruled in
 docs/plans/2026-07-30-schema-closure-observation-slice-inventory.md: one authority, and the
 schema agrees with the writer rather than admitting archive-tier bookkeeping into every
 consolidatable kind's versioned schema.
+
+The `finding` slice inherited this rather than re-deciding it, and checked the inheritance:
+`finding` is the third consolidatable closed kind (its statuses include ``archived``), and
+`test_the_strip_is_kind_agnostic_by_construction` pins that `_restore_live_frontmatter`
+takes a path and nothing else, so coverage is structural rather than a list to maintain.
 
 Named explicitly rather than pattern-matched: this is the set a mutator writes, and a
 speculative deny list would strip keys an author legitimately wrote.

@@ -23,6 +23,7 @@ import pytest
 
 from science_tool.archive import (
     ARCHIVE_TIER_FRONTMATTER_KEYS,
+    _restore_live_frontmatter,
     archive_entities,
     derive_archive_path,
     unarchive_entities,
@@ -186,3 +187,52 @@ def test_the_key_set_names_exactly_what_a_mutator_writes() -> None:
         f"apply_consolidation now writes {sorted(written)} to member frontmatter; "
         "re-rule each new key before widening ARCHIVE_TIER_FRONTMATTER_KEYS"
     )
+
+
+# --- the `finding` slice's inheritance claim, pinned rather than reasoned about ---
+
+
+def test_the_strip_is_kind_agnostic_by_construction() -> None:
+    """The `finding` slice (step 1) claimed it inherits this fix. This is that claim.
+
+    `_restore_live_frontmatter` takes a path and nothing else -- no kind argument, no kind
+    branch -- so every consolidatable kind is covered by construction rather than by a list
+    someone has to remember to extend. A guard that LISTS its scope has a hole; this one
+    cannot, and that is asserted here instead of being read off the source once.
+    """
+    signature = inspect.signature(_restore_live_frontmatter)
+    assert list(signature.parameters) == ["path"]
+    source = inspect.getsource(_restore_live_frontmatter)
+    assert "kind" not in source, (
+        "_restore_live_frontmatter now mentions `kind`; if the strip has become "
+        "kind-dependent, every closed kind needs re-checking individually"
+    )
+
+
+def test_a_consolidated_finding_is_stripped_on_restore(tmp_path: Path) -> None:
+    """The same round trip, driven through `finding` -- the kind this slice closes.
+
+    `finding` declares `archived` among its statuses and is therefore consolidatable, so
+    it reaches the same writer that produced the defect. Run at step 3, while `finding` is
+    still dormant: what this shows is that the STRIP fires for this kind. That the
+    unstripped key would fail the whole project load is demonstrated for armed kinds by
+    `test_the_reproduction_fails_without_the_strip` above, and for `finding` itself by the
+    step-6 derived-behaviour probes once arming makes it reachable.
+    """
+    root = _project(tmp_path)
+    create_entity(root, "finding", "A", entity_id="finding:0001-a")
+    create_entity(root, "finding", "B", entity_id="finding:0002-b")
+    scaffold_digest(
+        root,
+        digest_id="synthesis:0001-d",
+        member_ids=["finding:0001-a", "finding:0002-b"],
+        title="Digest",
+    )
+    apply_consolidation(root, "synthesis:0001-d", apply=True, now="T1")
+    path = root / "entities/findings/0001-a.md"
+
+    unarchive_entities(root, ["finding:0001-a"], apply=True, now="T2")
+
+    restored = path.read_text()
+    assert "consolidated_into" not in restored
+    assert "id: finding:0001-a" in restored
