@@ -525,6 +525,15 @@ Each task below supplies exact values for `PROJECT_ROOT`, `PROJECT_ID`, `EXPECTE
 
    Provenance paths may change; task-domain triples may not.
 
+   If the final `cmp` fails, preserve both files and inspect the exact triple
+   delta before doing anything else. When the pre-migration graph diff already
+   reports task-source hashes as stale, create a disposable detached worktree
+   at the project's recorded base commit, synchronize its pre-upgrade lock,
+   rebuild its legacy-layout local graph, and write that projection to
+   `task-graph-before-built.json`. Require that generated projection to be
+   byte-identical to `task-graph-after.json`, and record why the committed
+   baseline was stale. Any other task-domain delta stops the project.
+
 7. **Compare validation and topology.** Capture post-build strict validation to `validate-after.json`, stderr, and exact 0/1 status. Reject `Traceback`, `resolver unavailable`, `predates the storage split`, or `falling back to deny-list only`. Then run:
 
    ```bash
