@@ -93,6 +93,33 @@ The through-line: **four of the six were tests that passed against the defect th
 to catch.** Step 5 of Task 3 and Step 3 of Task 4 exist to make that impossible to repeat by
 accident — do not treat them as optional.
 
+A second round found six more, all likewise reproduced first:
+
+7. **A stale `request.target` survived the signature change** in `_serve_search`'s error branch —
+   a `NameError` on the one path no green test exercises. Nothing structural; everything to do
+   with editing code by hand in a document.
+8. **History bypassed nested deny prefixes through an ancestor.** With deny prefix
+   `private/x.txt`, the target `private` is beneath no prefix and authorizes, and `log` selects
+   recursively. `read` refuses it as a tree and `grep` carries the exclusions, so `log` was the
+   one operation where authorization's answer was not enough. Fixed by carrying the exclusions on
+   `log` as well, with a control proving they suppress only the denied descendant.
+9. **`cat-file -t` shipped unprobed.** Task 1 probed `cat-file blob`; the type check added in
+   round 1 is a different subcommand, and this module's rule is about the invocation that ships.
+   Probed: identical table.
+10. **Pattern validation was both too strict and too loose.** An empty ERE is valid and matches
+    every line — refused on a guess about intent. A lone high surrogate still could not cross
+    argv. Now judged with `os.fsencode`, the same function `subprocess` uses, so
+    surrogateescape-representable patterns are accepted exactly as git accepts them.
+11. **The derived git guard parsed only `serve.py`**, so its own prescribed mutation — add
+    `run_git` to `policy.py` — passed. The file the guard was written about was the one file it
+    could not have been wrong about.
+12. **The §7 policy bullet was claimed closed without its symlink regression.** Now tested:
+    replacing a committed file with a working-tree symlink changes nothing, because the blob read
+    never consults the working tree.
+
+Findings 8 and 11 are the same shape as 1 and 4 — a check whose scope was narrower than the rule
+it enforced. That is the failure mode this plan's own guards are most likely to repeat.
+
 ## Global Constraints
 
 - Work in the `feat/evidence-broker-serving` worktree at `.worktrees/evidence-broker-serving`, on
@@ -157,10 +184,16 @@ so the module's rule holds rather than being asserted.
 - Produces: nothing new. Task 3 relies on `cat-file blob` being safe under `run_git`; this task is
   what makes that true rather than assumed.
 
+**Both `cat-file` invocations are probed, because production runs both.** `read` types the object
+with `cat-file -t` and only then reads it with `cat-file blob` (Task 3), and this module's rule is
+about the exact subcommand that ships, not about a subcommand that resembles it. The probe below
+was run twice, once per spelling, and produced the identical table.
+
 **The probe result, already measured** (git 2.55, scratch repository, under exactly
-`git --no-replace-objects -c <key> -C <root> cat-file blob <commit>:a.txt`, with
-`.gitattributes` carrying `a.txt diff=probe filter=probe` so the driver keys have a reason to
-fire, and a marker-touching `./spawn.sh` as every named program):
+`git --no-replace-objects -c <key> -C <root> cat-file blob <commit>:a.txt` and again under
+`… cat-file -t <commit>:a.txt`, with `.gitattributes` carrying `a.txt diff=probe filter=probe`
+so the driver keys have a reason to fire, and a marker-touching `./spawn.sh` as every named
+program):
 
 | keys | verdict |
 |---|---|
@@ -172,9 +205,9 @@ fire, and a marker-touching `./spawn.sh` as every named program):
 | `log.showSignature`, `gpg.program` | **INERT** |
 | `core.sshCommand`, `core.alternateRefsCommand` | **INERT** |
 
-Seventeen keys, nothing executes and nothing renders differently. `cat-file blob` is a raw object
-read: no smudge filter, no textconv, no eol conversion, and no pager because output is captured.
-**`_HARDENING` therefore gains nothing.** Adding a key here would assert a defense against
+Seventeen keys per spelling, nothing executes and nothing renders differently. `cat-file` is a raw
+object read under both: no smudge filter, no textconv, no eol conversion, and no pager because
+output is captured. **`_HARDENING` therefore gains nothing.** Adding a key here would assert a defense against
 behaviour this command has been shown not to have, which is precisely what the module's rule
 forbids.
 
@@ -228,6 +261,19 @@ def test_cat_file_blob_serves_the_object_not_a_filtered_checkout(tmp_path: Path)
     assert completed.stderr == b""
 
 
+def test_cat_file_type_is_unaffected_by_the_same_configuration(tmp_path: Path):
+    """The other half of `read`. Production runs BOTH spellings, so both are held to the
+    module's rule -- a probe of a subcommand that merely resembles the one that ships is
+    not a probe of the one that ships."""
+    root, commit, _committed = _filtered_repo(tmp_path)
+
+    completed = run_git(root, "cat-file", "-t", f"{commit}:a.txt")
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == b"blob"
+    assert completed.stderr == b""
+
+
 def test_the_filter_fixture_is_live(tmp_path: Path):
     """Negative control for the test above: a checkout DOES mangle, so INERT is a finding."""
     root, _commit, committed = _filtered_repo(tmp_path)
@@ -260,7 +306,8 @@ In the `WHAT WAS PROBED, AND WHAT ACTUALLY EXECUTES` list, extend the probed-sub
 to include `cat-file blob <commit>:<path>`, and add this bullet after the `grep` INERT bullet:
 
 ```
-* `cat-file blob <commit>:<path>` -- every key probed is INERT: `core.pager`, `pager.cat-file`,
+* `cat-file -t <commit>:<path>` and `cat-file blob <commit>:<path>` -- probed separately,
+  identical results. Every key probed is INERT: `core.pager`, `pager.cat-file`,
   `diff.<driver>.textconv`, `diff.<driver>.command`, `diff.external`, `filter.<driver>.clean`
   / `.smudge` / `.process`, `core.fsmonitor`, `core.hooksPath`, `core.quotePath`,
   `core.autocrlf`, `core.eol`, `log.showSignature`, `gpg.program`, `core.sshCommand`,
@@ -543,19 +590,28 @@ def test_a_search_carries_no_path_so_only_its_pathspec_is_judged():
     assert authorize(denied, POLICY).denial is not None
 
 
-def test_a_pattern_containing_NUL_is_refused_not_passed_to_git():
-    """A NUL cannot cross the argv boundary: `subprocess` raises `ValueError`, `run_git`
-    turns that into `GitError`, and an ordinary bad input would HALT the run instead of
-    being refused as retryable. Argv validity is judged here; regex validity is git's."""
-    auth = authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target="a\0b"), POLICY)
+@pytest.mark.parametrize("pattern", ["a\0b", "\ud800"])
+def test_a_pattern_that_cannot_cross_argv_is_refused_not_passed_to_git(pattern: str):
+    """Measured: a NUL raises `ValueError` inside `subprocess` and a lone high surrogate
+    raises `UnicodeEncodeError`, a `ValueError` subclass. `run_git` turns either into
+    `GitError`, halting the run over input §6 calls retryable."""
+    auth = authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target=pattern), POLICY)
     assert auth.denial is not None
     assert auth.denial.reason == "pattern-malformed"
 
 
-def test_an_empty_pattern_is_refused():
-    auth = authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target=""), POLICY)
-    assert auth.denial is not None
-    assert auth.denial.reason == "pattern-malformed"
+def test_an_empty_pattern_is_authorized():
+    """An empty ERE is VALID and matches every line -- measured, exit 0 with every file
+    listed. Refusing it would deny a real query on a guess about the requester's intent,
+    and whether a pattern compiles is git's answer to give."""
+    assert authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target=""), POLICY).denial is None
+
+
+def test_a_surrogateescape_byte_pattern_is_authorized():
+    """`\\udcff` round-trips through `os.fsencode` to a byte and git accepts it. Judging
+    with strict UTF-8 instead would refuse a pattern the instrument can actually run --
+    a check that looks stricter and is simply wrong."""
+    assert authorize(EvidenceRequest(op=EvidenceOp.SEARCH, target="\udcff"), POLICY).denial is None
 
 
 def test_history_is_judged_as_a_path():
@@ -632,6 +688,7 @@ policy, and they can only be tested against each other while both are pure funct
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -705,21 +762,34 @@ def _judge_path(raw: str, policy: SurfacePolicy) -> Authorization:
 
 
 def _judge_pattern(pattern: str) -> Authorization:
-    """Argv validity only. Whether the regex COMPILES is git's answer to give, not this module's.
+    """ARGV validity only, judged by the same function `subprocess` uses.
 
-    A NUL cannot cross the argv boundary: `subprocess` raises `ValueError` and `run_git` turns
-    that into `GitError`, which HALTS the run. That is the wrong disposition for the requester's
-    own bad input, which §6 classifies as retryable, so it is refused here before git is reached.
+    Whether the regex compiles is git's answer to give, and an EMPTY pattern is NOT refused here:
+    an empty ERE is valid and matches every line, which is a legitimate request measured to exit
+    0 with every file listed. Refusing it would deny a real query on a guess about intent.
+
+    What genuinely cannot cross the argv boundary halts the run instead of being refused, which
+    is the wrong disposition for the requester's own input (§6 calls it retryable). Two cases,
+    both measured: a NUL raises `ValueError`, and a lone high surrogate such as `\\ud800` raises
+    `UnicodeEncodeError` -- a `ValueError` subclass, so `run_git` catches it and re-raises
+    `GitError` either way.
+
+    `os.fsencode` is the test rather than `str.encode("utf-8")` because it is exactly what
+    `subprocess` applies on POSIX: it uses `surrogateescape`, so `\\udcff` round-trips to a byte
+    and IS accepted by git. Encoding as strict UTF-8 would refuse that as well -- correct-looking,
+    and wrong, because it would deny a pattern the instrument can actually run.
     """
-    if not pattern:
-        return Authorization(
-            denial=Denial(reason="pattern-malformed", notice="search pattern is empty")
-        )
     if "\0" in pattern:
         return Authorization(
             denial=Denial(
                 reason="pattern-malformed", notice="search pattern contains a NUL character"
             )
+        )
+    try:
+        os.fsencode(pattern)
+    except (UnicodeEncodeError, ValueError) as exc:
+        return Authorization(
+            denial=Denial(reason="pattern-malformed", notice=f"search pattern is not encodable: {exc}")
         )
     return Authorization(denial=None)
 
@@ -786,7 +856,9 @@ For each, restore the prior behaviour, confirm the named test fails, then restor
 | `_denied_by_prefix` → `return path.startswith(prefix)` | `test_a_prefix_denies_on_component_boundaries_only` and the `privateer/x.txt` table row |
 | `_judge_path` returns `Authorization(denial=None)` without `path` | `test_the_authorized_path_is_the_normalized_one` |
 | `literal_pathspec` → `return path` | `test_a_glob_target_is_authorized_but_must_reach_git_literally` |
-| `_judge_pattern` → `return Authorization(denial=None)` | the NUL and empty-pattern tests |
+| `_judge_pattern` → `return Authorization(denial=None)` | both `..._cannot_cross_argv...` rows |
+| `_judge_pattern` uses `pattern.encode("utf-8")` instead of `os.fsencode` | `test_a_surrogateescape_byte_pattern_is_authorized` |
+| `_judge_pattern` refuses `not pattern` | `test_an_empty_pattern_is_authorized` |
 
 Record the observed failures in the commit message.
 
@@ -1052,6 +1124,52 @@ def test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix(tmp_path: Path)
     root, commit = _repo(tmp_path)
     served = serve(root, commit, _search("secret", pathspec="priv*"), CLOSED)
     assert served.outcome is Outcome.MISS_NO_MATCH
+
+
+FILE_DENY = SurfacePolicy(deny_prefixes=("private/x.txt",), notice="withheld")
+
+
+def test_history_of_an_ancestor_does_not_report_a_denied_descendant(tmp_path: Path):
+    """MEASURED: with deny prefix `private/x.txt`, the target `private` is beneath no
+    prefix and authorizes -- `read` refuses it as a tree, but `log` selects paths
+    RECURSIVELY, so `:(top,literal)private` reports every commit touching the denied file.
+
+    Authorization answers "is this path denied". It cannot answer "does this path CONTAIN
+    something denied", so `log` carries the exclusions exactly as `grep` does.
+    """
+    root, commit = _repo(tmp_path)
+    served = serve(
+        root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="private"), FILE_DENY
+    )
+    assert served.outcome is Outcome.MISS_NO_COMMITS
+
+
+def test_the_history_exclusions_do_not_suppress_an_undenied_path(tmp_path: Path):
+    """Control for the test above: the exclusions must withhold the denied descendant and
+    nothing else, or the fix would be indistinguishable from `log` answering nothing."""
+    root, commit = _repo(tmp_path)
+    served = serve(
+        root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), FILE_DENY
+    )
+    assert served.outcome is Outcome.SERVED
+
+
+def test_a_working_tree_symlink_does_not_redirect_or_deny_a_read(tmp_path: Path):
+    """§7's policy bullet. The served surface is a blob read at a pinned commit, which
+    never consults the working tree -- so replacing a committed file with a symlink must
+    change nothing. A `resolve()`-based containment check would have denied this request,
+    and would have bought no security doing so: there is no filesystem lookup to protect.
+    """
+    root, commit = _repo(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not the committed bytes\n", encoding="utf-8")
+    (root / "a.txt").unlink()
+    (root / "a.txt").symlink_to(outside)
+
+    served = serve(root, commit, _read("a.txt"), OPEN)
+
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == b"alpha\nbeta\n"
 
 
 def test_the_normalized_path_is_what_git_reads(tmp_path: Path):
@@ -1356,13 +1474,31 @@ def _serve_search(
             ),
         )
     raise ServeError(
-        f"search for {request.target!r} at {commit} could not be classified: "
+        f"search for {pattern!r} at {commit} could not be classified: "
         f"{stderr.decode('utf-8', 'replace').strip()}"
     )
 
 
-def _serve_history(repo_root: Path, commit: str, target: str) -> Served:
-    completed = run_git(repo_root, *_LOG_ARGV, commit, "--", literal_pathspec(target))
+def _serve_history(
+    repo_root: Path, commit: str, target: str, policy: SurfacePolicy
+) -> Served:
+    """The exclusions ride on `log` too, for a reason `read` does not have.
+
+    A deny prefix may name a FILE, and `log` selects a path RECURSIVELY. With deny prefix
+    `private/x.txt`, the target `private` is beneath no prefix and authorizes -- `read` refuses it
+    as a tree, but `:(top,literal)private` makes `log` report every commit touching
+    `private/x.txt`. Measured on git 2.55. The authorization check answers "is this path denied";
+    it cannot answer "does this path CONTAIN something denied", so the exclusions must answer
+    that here, exactly as they do for `search`.
+    """
+    completed = run_git(
+        repo_root,
+        *_LOG_ARGV,
+        commit,
+        "--",
+        literal_pathspec(target),
+        *exclude_pathspecs(policy),
+    )
     if completed.returncode != 0:
         raise ServeError(
             f"history of {target!r} at {commit} could not be classified: "
@@ -1399,7 +1535,7 @@ def serve(
     if request.op is EvidenceOp.SEARCH:
         return _serve_search(repo_root, resolved, request.target, policy, auth.path)
     assert auth.path is not None  # likewise for HISTORY
-    return _serve_history(repo_root, resolved, auth.path)
+    return _serve_history(repo_root, resolved, auth.path, policy)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1424,6 +1560,8 @@ prior behaviour, confirm the named test fails, then restore:
 | `_serve_history` passes `target` instead of `literal_pathspec(target)` | `test_a_history_glob_cannot_walk_around_a_deny_prefix` serves the denied commit |
 | `_serve_search` inserts `pathspec` instead of `literal_pathspec(pathspec)` | `test_a_search_pathspec_glob_cannot_walk_around_a_deny_prefix` |
 | `serve` passes `request.target` instead of `auth.path` | `test_the_normalized_path_is_what_git_reads` |
+| `_serve_history` drops `*exclude_pathspecs(policy)` | `test_history_of_an_ancestor_does_not_report_a_denied_descendant` |
+| `_serve_read` uses `path.resolve()`-style containment before reading | `test_a_working_tree_symlink_does_not_redirect_or_deny_a_read` |
 | Move `verify_commit` back above the `authorize` branch | `test_a_denied_read_makes_no_git_call_at_all` trips the landmine |
 
 **Do not skip the last row.** Verifying ahead of authorizing is the ordering the first draft of
@@ -1463,9 +1601,11 @@ normalized spelling authorize returned. Without either, 'priv*' walks around the
 deny prefix 'private' -- measured on git 2.55 for both log and grep.
 
 A malformed pattern is refused as retryable rather than raised -- it is the
-requester's own input and carries no repository fact. Every search carries the
-policy exclusions whether or not a pathspec was supplied, because search is the
-one operation that never names a path."
+requester's own input and carries no repository fact. Search AND history carry
+the policy exclusions whether or not a pathspec was supplied: authorization
+answers whether a path is denied, not whether it CONTAINS something denied, and
+log selects recursively, so 'private' reported commits touching the denied
+private/x.txt."
 ```
 
 ---
@@ -1621,31 +1761,43 @@ def test_the_defined_miss_classifier_survives_a_translated_parent(tmp_path: Path
 GIT_TOUCHING = ("verify_commit", "_serve_read", "_serve_search", "_serve_history")
 
 
-def _serve_ast():
+def _package_dir() -> Path:
+    import science_tool.evidence_broker as package
+
     # Located from the module, not from the working directory: a relative path here would
     # make the guard's reach depend on where pytest was invoked from.
-    import science_tool.evidence_broker.serve as serve_module
-
-    return ast.parse(Path(serve_module.__file__).read_text(encoding="utf-8"))
+    return Path(package.__file__).parent
 
 
-def test_every_git_call_in_the_broker_sits_in_a_known_helper():
-    """Derived from the code, not from a list someone maintains -- same spirit as
-    `tests/test_instrument_boundary.py`. A new `run_git` call site added anywhere else
-    fails here rather than quietly acquiring an unaudited path to git."""
-    tree = _serve_ast()
-    callers = {
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
-        and any(
-            isinstance(inner, ast.Call)
-            and isinstance(inner.func, ast.Name)
-            and inner.func.id == "run_git"
-            for inner in ast.walk(node)
-        )
+def _module_asts() -> dict[str, ast.Module]:
+    """EVERY module in the package. A guard that parses one file has already decided where
+    the defect will be, which is the assumption a new module exists to violate."""
+    return {
+        path.name: ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted(_package_dir().glob("*.py"))
     }
-    assert callers == set(GIT_TOUCHING)
+
+
+def test_every_git_call_in_the_package_sits_in_a_known_helper():
+    """Derived from the code, not from a list someone maintains -- same spirit as
+    `tests/test_instrument_boundary.py`. A `run_git` call added to `policy.py`, or to a
+    module that does not exist yet, fails here rather than quietly acquiring an unaudited
+    path to git."""
+    callers: dict[str, set[str]] = {}
+    for name, tree in _module_asts().items():
+        callers[name] = {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and any(
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "run_git"
+                for inner in ast.walk(node)
+            )
+        }
+    assert callers.pop("serve.py") == set(GIT_TOUCHING)
+    assert all(not found for found in callers.values()), f"git reached from: {callers}"
 
 
 def test_authorize_precedes_every_git_call_in_serve():
@@ -1653,13 +1805,16 @@ def test_authorize_precedes_every_git_call_in_serve():
     `authorize` passes when a helper is invoked above it -- which is exactly the defect
     this guard exists to catch, and exactly the shape the first draft shipped.
 
-    Compares source positions: every git-touching call in `serve`'s body must begin after
-    the `authorize` call ends. `ast` gives real line/column offsets, so this is a fact
-    about the code rather than about a set.
+    THIS IS A STRUCTURAL PROXY, NOT A PROOF OF DOMINANCE. Source position is not control
+    flow: a call textually below `authorize` could still run first through a construct this
+    check cannot see. It is cheap and it catches the mistake people actually make -- moving
+    a line. `test_a_denied_read_makes_no_git_call_at_all` is the behavioural guard, and it
+    is the one that would survive a cleverer rearrangement; this one localizes the failure
+    to a line number when it fires.
     """
     serve_fn = next(
         node
-        for node in ast.walk(_serve_ast())
+        for node in ast.walk(_module_asts()["serve.py"])
         if isinstance(node, ast.FunctionDef) and node.name == "serve"
     )
     positions: dict[str, list[tuple[int, int]]] = {}
@@ -1681,9 +1836,7 @@ def test_authorize_precedes_every_git_call_in_serve():
 def test_the_broker_makes_no_direct_subprocess_call():
     """A git call that skips `run_git` is a call the actor can turn into arbitrary
     execution inside the control plane, and no layer of this design would report it."""
-    import science_tool.evidence_broker as package
-
-    for path in Path(package.__file__).parent.glob("*.py"):
+    for path in _package_dir().glob("*.py"):
         assert "subprocess" not in path.read_text(encoding="utf-8"), path
 ```
 
@@ -1721,9 +1874,13 @@ For each, restore the prior behaviour, confirm the named test fails, then restor
 | `--no-decorate` | the `decorate` row |
 | `LC_ALL`/`LANG` from `git.py`'s `_ENVIRONMENT` | the locale replay and the translated-parent rows |
 | Move `verify_commit(repo_root, commit)` above the `authorize` branch in `serve` | `test_authorize_precedes_every_git_call_in_serve` |
-| Add a `run_git` call to `policy.py` | `test_every_git_call_in_the_broker_sits_in_a_known_helper` (and the subprocess guard, if spelled with `subprocess`) |
+| Add a `run_git` call to a function in `policy.py` | `test_every_git_call_in_the_package_sits_in_a_known_helper` |
 
-The ordering row is the one that matters most: the guard it exercises replaced a membership
+**Run the last row against `policy.py` specifically.** An earlier draft parsed only `serve.py`,
+so this exact mutation passed both derived guards — the file the guard was written about was the
+one file it could not have been wrong about. Confirm the failure message names `policy.py`.
+
+The ordering row matters for a different reason: the guard it exercises replaced a membership
 check that passed against the very defect it was written to catch.
 
 The `log.showSignature` row is disarmed in `run_git`'s `_HARDENING`, not in `serve.py` — plan 1
