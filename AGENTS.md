@@ -45,14 +45,32 @@ cd science/model && uv run --frozen pytest
 Default pytest runs exclude the `snapshot` and `real_projects` markers; opt in
 explicitly with `-m snapshot` or `-m real_projects` when you need them.
 
-The full default suite (~12k tests) takes ~10 min on this Dropbox-backed checkout
-— longer than the default 120s command timeout. When you dispatch a subagent to
-verify a change, have it run a scoped selection (the affected test modules plus
-any guards), not the whole suite: a
-foreground full run times out, auto-backgrounds, and a subagent that yields waiting on
-it will not reliably resume. Reserve the full-suite run for the top-level agent, or pass
-an explicit long `timeout`. Never run two suites concurrently in the same worktree — they
-race on shared test-output paths.
+During development, run the smallest test node, module, or package selection
+that exercises the changed behavior. Before handoff, run the affected modules
+plus adjacent integration or contract guards, along with Ruff or pyright when
+the changed code falls under those checks.
+
+Run the full CLI or model suite only when shared pytest configuration or
+fixtures changed; dependencies, packaging, or supported Python behavior
+changed; schemas, serialization, source resolution, task or project graphs,
+validation, or output contracts changed across subsystem boundaries; multiple
+unrelated subsystems changed; scoped results reveal unexpected cross-boundary
+effects; the work prepares a release; or the user explicitly requests it. The
+model suite is relevant when model or schema code changes, or when CLI code
+depends on changed model behavior.
+
+Do not take a full-suite baseline for a localized change. Do not repeat a
+passing full run after a fast-forward integration when the tested commit and its
+base are unchanged.
+
+The full default CLI suite (~12k tests) took 6:42–7:24 in post-optimization
+measurements on this Dropbox-backed checkout—about seven minutes and still
+longer than the default 120s command timeout. All agents use scoped selections
+by default. When a full-suite trigger applies, the top-level agent owns the run
+and passes an explicit long `timeout`; a foreground full run otherwise
+auto-backgrounds, and a subagent that yields waiting on it will not reliably
+resume. Never run two suites concurrently in the same worktree—they race on
+shared test-output paths.
 
 Lint / types (from `science/`):
 
