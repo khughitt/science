@@ -84,6 +84,7 @@ nothing to `_HARDENING`.
 from __future__ import annotations
 
 import os
+import selectors
 import subprocess
 from pathlib import Path
 
@@ -94,6 +95,43 @@ class GitError(ValueError):
     Distinct from a non-zero exit, which each call site decides about for itself: a
     command that ran and refused is an answer, a command that never ran is not.
     """
+
+
+class GitOutputTooLarge(GitError):
+    """A git invocation produced more output than its caller allowed.
+
+    A SUBCLASS OF `GitError`, so the DEFAULT disposition is the safe one. Five call sites already
+    convert `GitError` into a run-level `unwired` -- `autonomy/extract.py:48`,
+    `autonomy/toolkit.py:43`, `boundary/gitio.py:83` and `:166`, and
+    `validate/checks/autonomous_runs.py:75`. An exception outside that hierarchy would escape all
+    five and surface as an unhandled traceback: exit 1, which the documented codes read as
+    `quarantined` rather than `unwired`. Overflow IS a failure to complete the invocation, which
+    is what `GitError` already means.
+
+    Subclassing costs no precision. A call site wanting a different disposition catches
+    `GitOutputTooLarge` specifically, and `serve.py` does exactly that for its stdout case. ORDER
+    MATTERS: an `except GitOutputTooLarge` must precede any `except GitError` in the same `try`.
+
+    `consumed` is how §7 certifies that the ceiling is enforced DURING capture rather than after:
+    a check moved to the end of the loop would report the whole output here.
+    """
+
+    def __init__(self, stream: str, limit: int, consumed: int, args: tuple[str, ...]) -> None:
+        super().__init__(
+            f"git {' '.join(args)} produced more than {limit} bytes on {stream}; refused rather "
+            "than truncated, because a truncated answer is indistinguishable from a short one"
+        )
+        self.stream = stream
+        self.limit = limit
+        self.consumed = consumed
+
+
+#: Diagnostics are never legitimately large, and this one is actor-influenced (§3.2.1).
+MAX_GIT_STDERR_BYTES = 1 << 20
+
+#: `include.path` makes the configuration listing arbitrarily large, and the preflight runs before
+#: every call. Generous enough for any real configuration, bounded because the actor writes it.
+MAX_CONFIG_LIST_BYTES = 1 << 20
 
 
 #: The environment every autonomy git call runs under. `LC_ALL` and `LANG` are pinned
@@ -156,22 +194,129 @@ def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) ->
     return argv
 
 
+_CHUNK = 65536
+
+
+def _capture(
+    process: subprocess.Popen[bytes],
+    *,
+    input: bytes | None,
+    stdout_limit: int | None,
+    stderr_limit: int,
+    args: tuple[str, ...],
+) -> tuple[bytes, bytes]:
+    """Pump stdin and drain both output pipes in ONE loop.
+
+    ALL THREE STREAMS MUST SHARE THE LOOP, and this is not defensive coding -- it is the only
+    shape that terminates. Pipe buffers are finite (~64 KiB each). Writing all of stdin before
+    reading anything deadlocks the moment the child's own output fills its pipe: the child blocks
+    writing stdout, so it stops reading stdin, so the parent blocks writing stdin, forever.
+    MEASURED: `Popen(["cat"])` plus a 4 MiB `stdin.write` never returns. `boundary/sync.py` and
+    `boundary/gitio.py` both pass payloads through `input=`, so this is a live path, not a
+    hypothetical. Draining stdout fully before stderr fails the same way for the same reason.
+
+    SHARING THE LOOP IS NOT SUFFICIENT ON ITS OWN. A selector plus a blocking
+    `BufferedWriter.write` deadlocks identically -- also MEASURED -- because readiness for one byte
+    does not stop `write` from looping until all 64 KiB are out. See the `os.set_blocking` call
+    below: the nonblocking fd is what turns readiness into progress.
+
+    The ceiling is checked as the bytes ARRIVE. A cap tested after the loop has already spent the
+    memory it exists to protect, which is why `GitOutputTooLarge` carries `consumed`.
+    """
+    limits = {"stdout": stdout_limit, "stderr": stderr_limit}
+    buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
+
+    selector = selectors.DefaultSelector()
+    pending = memoryview(input) if input else None
+    if pending is not None:
+        assert process.stdin is not None
+        # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST ONE
+        # byte can be written -- it does not make the write partial-friendly, and
+        # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector loop
+        # with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against `cat` and a
+        # 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a partial count and
+        # the loop makes progress. Do not mix buffered writes with the raw fd: nothing is ever
+        # written through `process.stdin`, so its buffer stays empty and `close()` just closes.
+        os.set_blocking(process.stdin.fileno(), False)
+        selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+    elif process.stdin is not None:
+        process.stdin.close()
+    for name in ("stdout", "stderr"):
+        stream = getattr(process, name)
+        assert stream is not None
+        selector.register(stream, selectors.EVENT_READ, name)
+
+    try:
+        while selector.get_map():
+            for key, _ in selector.select():
+                if key.data == "stdin":
+                    assert pending is not None
+                    try:
+                        written = os.write(key.fd, pending[:_CHUNK])
+                    except BlockingIOError:
+                        # Readiness is advisory; the pipe filled between select and write.
+                        written = 0
+                    except BrokenPipeError:
+                        # The child exited without reading its input. That is an ANSWER (git
+                        # refused early), not a failure to invoke, so it is not an error here.
+                        written = len(pending)
+                    pending = pending[written:]
+                    if not pending:
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()  # type: ignore[union-attr]
+                        pending = None
+                    continue
+
+                name = key.data
+                chunk = key.fileobj.read1(_CHUNK)  # type: ignore[union-attr]
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                buffers[name] += chunk
+                limit = limits[name]
+                if limit is not None and len(buffers[name]) > limit:
+                    process.kill()
+                    raise GitOutputTooLarge(name, limit, len(buffers[name]), args)
+    finally:
+        selector.close()
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+    return bytes(buffers["stdout"]), bytes(buffers["stderr"])
+
+
 def _run(
     repo_root: Path,
     overrides: tuple[str, ...],
     args: tuple[str, ...],
     *,
     input: bytes | None = None,
+    stdout_limit: int | None = None,
+    stderr_limit: int = MAX_GIT_STDERR_BYTES,
 ) -> subprocess.CompletedProcess[bytes]:
+    argv = _argv(repo_root, overrides, args)
     try:
-        return subprocess.run(
-            _argv(repo_root, overrides, args),
-            input=input,
-            capture_output=True,
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env={**os.environ, **_ENVIRONMENT},
         )
-    except (OSError, ValueError) as exc:
+    except (AttributeError, OSError, ValueError) as exc:
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
+
+    stdout, stderr = _capture(
+        process,
+        input=input,
+        stdout_limit=stdout_limit,
+        stderr_limit=stderr_limit,
+        args=args,
+    )
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
@@ -197,7 +342,22 @@ def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
     filter `required` then makes `git status` fail, and the run reads `unwired` rather
     than clean.
     """
-    completed = _run(repo_root, _HARDENING, ("config", "--list", "--name-only", "-z"))
+    try:
+        completed = _run(
+            repo_root,
+            _HARDENING,
+            ("config", "--list", "--name-only", "-z"),
+            stdout_limit=MAX_CONFIG_LIST_BYTES,
+            stderr_limit=MAX_GIT_STDERR_BYTES,
+        )
+    except GitOutputTooLarge as exc:
+        # FAILS THE INVOCATION, and is never journaled. Its size is determined by `.git/config`,
+        # which the actor may edit at any time -- so a journaled refusal would replay differently
+        # once the file changed, and §5.3 would return EXPOSURE_UNREPRODUCIBLE for an honest run.
+        raise GitError(
+            f"the git configuration of {repo_root} is too large to read, so its filter drivers "
+            f"could not be neutralized: {exc}"
+        ) from exc
     if completed.returncode != 0:
         message = completed.stderr.decode("utf-8", "replace").strip()
         raise GitError(
@@ -236,6 +396,7 @@ def run_git(
     repo_root: Path,
     *args: str,
     input: bytes | None = None,
+    stdout_limit: int | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     """Run one hardened git command against `repo_root`.
 
@@ -251,12 +412,24 @@ def run_git(
 
     Bytes, not text: `extract` has to detect non-UTF-8 blobs rather than have them
     silently replaced. `input` is passed to git's stdin for NUL-framed queries.
+
+    `stdout_limit` bounds the captured payload and RAISES `GitOutputTooLarge` rather than
+    truncating. It defaults to `None` -- unbounded -- because `extract` and `boundary/gitio`
+    legitimately capture large diffs and sync payloads through this same function, and a blanket
+    ceiling would regress them for a guarantee this design never made. The four call sites that
+    need a bound pass one, and each chooses its own disposition (design §3.2).
+
+    `stderr` is bounded on EVERY call at `MAX_GIT_STDERR_BYTES`, with no opt-out: it is captured
+    alongside stdout regardless, it is actor-influenced, and no caller has a reason to want an
+    unbounded diagnostic.
     """
     return _run(
         repo_root,
         (*_HARDENING, *_filter_driver_overrides(repo_root)),
         args,
         input=input,
+        stdout_limit=stdout_limit,
+        stderr_limit=MAX_GIT_STDERR_BYTES,
     )
 
 

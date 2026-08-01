@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from science_tool.autonomy.git import history_traversal_error, run_git
+from science_tool.autonomy.git import GitError, GitOutputTooLarge, history_traversal_error, run_git
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -255,7 +256,7 @@ def _commit(repo: Path, name: str, body: str) -> None:
     """Write `body` to `name` and commit it. The commit MESSAGE is the file name, not the body:
     a 4 KiB commit message would work but makes `git log` output unreadable when a test fails."""
     (repo / name).write_text(body, encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), "add", name], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-f", name], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(repo), "commit", "-q", "-m", name],
         check=True,
@@ -273,6 +274,125 @@ def three_commit_repo(tmp_path: Path) -> Path:
     for text in ("one", "two", "three"):
         _commit(repo, "f.txt", text)
     return repo
+
+
+def test_stdout_overflow_refuses_and_does_not_truncate(three_commit_repo: Path) -> None:
+    """Refuse, never truncate. A truncated answer is a wrong answer that looks like an answer."""
+    _commit(three_commit_repo, "big.txt", "x" * 4096)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:big.txt", stdout_limit=64)
+
+    assert caught.value.stream == "stdout"
+    assert caught.value.limit == 64
+    assert 64 < caught.value.consumed <= 64 + (1 << 16)
+
+
+def test_a_payload_at_the_limit_is_served(three_commit_repo: Path) -> None:
+    """The boundary is inclusive; a payload of exactly `stdout_limit` bytes is not an overflow.
+
+    Without this pair, an off-by-one that refused every payload would pass the test above.
+    """
+    body = "y" * 100
+    _commit(three_commit_repo, "exact.txt", body)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    completed = run_git(
+        three_commit_repo, "cat-file", "blob", f"{commit}:exact.txt", stdout_limit=len(body)
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == body.encode()
+
+
+def test_stderr_is_bounded_on_every_call(three_commit_repo: Path, monkeypatch) -> None:
+    """`stderr` is captured alongside stdout on EVERY call and is actor-influenced.
+
+    §3.2.1 records `.git/objects/info/alternates` emitting a warning on ordinary commands, so an
+    unbounded diagnostic is an unbounded allocation on a path the actor reaches without asking.
+    """
+    monkeypatch.setattr("science_tool.autonomy.git.MAX_GIT_STDERR_BYTES", 32)
+    alternates = three_commit_repo / ".git" / "objects" / "info"
+    alternates.mkdir(parents=True, exist_ok=True)
+    (alternates / "alternates").write_text("/" + "n" * 4096 + "\n", encoding="utf-8")
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "-t", "HEAD")
+
+    assert caught.value.stream == "stderr"
+
+
+def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> None:
+    """The regression guard for the shape this task replaces.
+
+    Writing all of stdin before reading anything deadlocks once the child's own output fills its
+    pipe: the child blocks on stdout, stops reading stdin, and the parent blocks on stdin.
+    MEASURED with `cat` and a 4 MiB write -- never returns. `check-ignore --stdin -z --verbose`
+    both consumes a large stdin and emits a large stdout, so it exercises both directions at once.
+
+    THE `.gitignore` IS WHAT MAKES THIS TEST ABLE TO FAIL. With no ignore rule, `check-ignore
+    --verbose` matches nothing and emits ZERO bytes on stdout -- MEASURED, exit 1, 0 bytes -- so
+    the child never blocks, the parent drains stdin freely, and the write-first implementation
+    PASSES. Committing `*` makes every path produce a verbose line (~23 bytes each; 46 bytes for
+    two paths, measured), so 50k paths push well past the pipe buffer in both directions.
+
+    THE ALARM IS LOAD-BEARING. `pytest-timeout` is not a dependency of this package, and a
+    deadlock's failure mode is SILENCE -- without this the regression hangs the suite instead of
+    failing it, which is worse than not testing it at all. SIGALRM is POSIX-only; this suite
+    already runs Linux-only tooling, and a handler that raises propagates through the blocked
+    write (PEP 475 retries on EINTR only when the handler does NOT raise).
+    """
+
+    def _timeout(signum, frame):
+        raise TimeoutError("run_git deadlocked writing stdin while the child wrote stdout")
+
+    _commit(three_commit_repo, ".gitignore", "*\n")
+    # NUL-TERMINATED, not NUL-separated: `-z` framing means a trailing record without its
+    # terminator is incomplete, and git may hold it rather than answer.
+    paths = b"".join(f"dir{n}/file{n}.txt\0".encode() for n in range(50000))
+    previous = signal.signal(signal.SIGALRM, _timeout)
+    signal.alarm(30)
+    try:
+        completed = run_git(
+            three_commit_repo,
+            "check-ignore",
+            "--stdin",
+            "-z",
+            "--verbose",
+            "--no-index",
+            input=paths,
+        )
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+    assert completed.returncode == 0, "every path should match the `*` rule"
+    assert len(completed.stdout) > (1 << 16), (
+        "the child produced less than one pipe buffer of output, so this test could not have "
+        "deadlocked even against the write-first implementation"
+    )
+
+
+def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -> None:
+    """The preflight runs before EVERY `run_git` call and its size is the actor's to choose.
+
+    `include.path` pulls in arbitrary files, so this is unbounded input on the path that executes
+    most often -- and it is spent before the request it precedes is even authorized.
+    """
+    monkeypatch.setattr("science_tool.autonomy.git.MAX_CONFIG_LIST_BYTES", 64)
+    included = three_commit_repo / "extra.config"
+    included.write_text(
+        "".join(f"[filter \"d{n}\"]\n\tclean = cat\n" for n in range(200)), encoding="utf-8"
+    )
+    subprocess.run(
+        ["git", "-C", str(three_commit_repo), "config", "include.path", str(included)],
+        check=True,
+        capture_output=True,
+    )
+
+    with pytest.raises(GitError):
+        run_git(three_commit_repo, "rev-parse", "HEAD")
 
 
 def test_a_planted_shallow_file_does_not_shorten_history(three_commit_repo: Path) -> None:
