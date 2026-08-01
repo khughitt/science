@@ -106,13 +106,19 @@ the formula appears anywhere.
 They live in `dag/entity_frontmatter.py`, the module both writers already share, on the precedent
 that put `PROPOSITION_REASONING_FIELDS` there for the same reason.
 
-**`derive_evidence_line_title` applies `canonical_evidence_type_token` to a raw string
-`evidence_type`.** The create path never sees a raw token — `EvidenceStub` canonicalizes in a
-`mode="before"` validator, so the suffix is already stripped by the time the title is derived. A
-migration reading persisted frontmatter *does* see raw tokens, and would otherwise derive
-`… — empirical_data_evidence` where the create path derived `… — empirical_data`. Applying the same
-canonicalization is what makes "matches the create path exactly" true rather than approximately
-true.
+**When `evidence_type` supplies the title tail, it is resolved as
+`EvidenceType(canonical_evidence_type_token(raw))` — canonicalization *and* membership coercion.**
+The create path never sees a raw token: `EvidenceStub` canonicalizes in a `mode="before"` validator
+and then coerces to `EvidenceType`, so the suffix is stripped and membership enforced before the
+title is derived. A migration reading persisted frontmatter *does* see raw tokens, and would
+otherwise derive `… — empirical_data_evidence` where the create path derived `… — empirical_data`.
+
+Canonicalization alone is not enough. `canonical_evidence_type_token` is documented as "pure
+string→string (does NOT validate membership)" — `garbage_evidence` becomes `garbage`, which is not
+an `EvidenceType` member. Without the coercion the migration would mint a title from a token the
+create path would have rejected. The coercion raising routes the record into the §4.1 unsupported
+path, which is the correct outcome: a record whose evidence type is unknown is not one this command
+can repair.
 
 Its currently-reachable population is zero, and the design says so rather than implying a repair it
 does not perform: 368 of the 432 in-scope evidence lines do carry suffixed tokens (250
@@ -228,11 +234,16 @@ normalization. Stating the normalization is what makes the guard meaningful inst
 For every repaired file: the frontmatter key set is unchanged, the body is byte-identical, and the
 parsed-value diff is a subset of `{title}`.
 
-**Both sides must be read through `parse_markdown_entity_file_preserving_body`** — or equivalently
+**The source file is read with `parse_markdown_entity_file_preserving_body`** — or equivalently
 `open(newline="")` plus `split_frontmatter`. `Path.read_text()` applies universal-newline
 translation, so a body whose line endings the render changed would compare equal and the guard
 would false-green on exactly the corruption it exists to catch. Naming the reader is part of the
 guard, not an implementation detail.
+
+The post-image is **not** read from disk. Preflight plans in memory, so the comparison is against
+the rendered text, reparsed with `split_frontmatter`. That is already exact — newline translation
+is a file-read concern, not a string concern — and it keeps the guard where it belongs: before any
+file is written, not after.
 
 Measured across all 792 with the canonical renderer:
 
@@ -258,6 +269,12 @@ Zero proposition or evidence-line records refused by `validate_persisted_base_sh
    preflight collects *all* refusals before writing — with a single unsupported record, a command
    that aborts on the first refusal it meets passes and the aggregation is never tested. This test
    pins preflight atomicity; a per-file loop passes every other test in this list.
+
+   **The two unsupported fixtures are `title: null` and `title: 0`.** They are the fixtures that
+   discriminate §4.1's `title == ""` from a naïve `if not title`, which would repair both. A
+   record with the `title` key *missing* does not discriminate: §5.2's key-set guard catches it
+   independently, so it would fail for the wrong reason and leave the condition untested. Choosing
+   the fixtures is part of the test, not an implementer's detail.
 4. A base-valid record with an authored title is byte-identical after `--apply`, while an invalid
    neighbour in the same directory is repaired. This pins step 2 of §4.1 — without it, a command
    that canonically re-renders everything in scope passes every other test while rewriting records
