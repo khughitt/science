@@ -1447,7 +1447,7 @@ guard — is what needs fixing; do not weaken the check to accommodate it.
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py -k "nfd_tree or shallow_clone or utf8_nfc_tree or tree_scan" -v
+cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py -k "nfd_tree or non_utf8_path or shallow_clone or utf8_nfc_tree or tree_scan" -v
 ```
 
 Expected: FAIL — the brokered run opens in all cases.
