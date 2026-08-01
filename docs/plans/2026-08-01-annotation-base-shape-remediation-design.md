@@ -8,13 +8,18 @@ This is piece 3 of the schema-first closure program
 (`meta/doc/plans/2026-07-26-schema-first-closure-design.md`): the corpus repair that piece 1
 deliberately did not do. Writer containment stopped the debt growing; it backfilled nothing.
 
-**792 proposition and evidence-line records are refused by `validate_persisted_base_shape`, so
-every contained writer refuses to update them.** 769 carry `title: ''`; 23 carry unquoted YAML
-dates. The two sets are disjoint.
+**792 proposition and evidence-line records are refused by `validate_persisted_base_shape`, so the
+typed contained update paths — workbench compile/apply and annotation synthesis — refuse to update
+them.** 769 carry `title: ''`; 23 carry unquoted YAML dates. The two sets are disjoint.
+
+The refusal is not universal, and the design must not claim it is. Promotion accrual reaches
+`append_entity_source_ref`, which renders through `render_entity_source_refs` and
+`_atomic_replace_text` without `certify_persisted`, so it can still rewrite an invalid record — and
+advances `updated` when it does. Only the paths that certify a typed entity are blocked.
 
 The umbrella design named this cost when it made the rule (§5.4, "Accepted cost, stated plainly")
 and argued for "sequencing piece 3 promptly rather than for weakening the rule." That cost is now
-being paid, concentrated in one project.
+being paid, and 681 of the 792 blocked records — 86% — are in a single project, mm30.
 
 This slice repairs the records. It does not arm the `proposition` or `evidence-line` mixins; the
 umbrella sequences those as separate closure slices after remediation.
@@ -32,7 +37,7 @@ title repaired on disk:   UPDATE SUCCEEDED
 ```
 
 The control matters: it establishes that the empty title is the *whole* reason the record is
-unwritable, not merely one of several.
+unwritable on that path, not merely one of several.
 
 ### 2.2 The population is frozen
 
@@ -79,7 +84,9 @@ Measured residue after repair: zero. No record in scope lacks a repair.
 ### 3.2 Titles are reconstructed by the writer's own derivation
 
 The repair calls the same derivation the create path calls, on values the record already carries.
-A repaired record becomes indistinguishable from one the create path would mint.
+**The repaired title matches what the create path would have minted, exactly.** The record as a
+whole does not: it retains its dumped defaults and, until the next write, differs in date quoting
+(§3.4). Only the title is claimed.
 
 The derivations are refactored to accept only their real inputs, and are shared by both callers:
 
@@ -98,6 +105,20 @@ the formula appears anywhere.
 
 They live in `dag/entity_frontmatter.py`, the module both writers already share, on the precedent
 that put `PROPOSITION_REASONING_FIELDS` there for the same reason.
+
+**`derive_evidence_line_title` applies `canonical_evidence_type_token` to a raw string
+`evidence_type`.** The create path never sees a raw token — `EvidenceStub` canonicalizes in a
+`mode="before"` validator, so the suffix is already stripped by the time the title is derived. A
+migration reading persisted frontmatter *does* see raw tokens, and would otherwise derive
+`… — empirical_data_evidence` where the create path derived `… — empirical_data`. Applying the same
+canonicalization is what makes "matches the create path exactly" true rather than approximately
+true.
+
+Its currently-reachable population is zero, and the design says so rather than implying a repair it
+does not perform: 368 of the 432 in-scope evidence lines do carry suffixed tokens (250
+`empirical_data_evidence`, 118 `literature_evidence`), but **all 432 carry a `source`**, and the
+tail prefers `source`, so no title in this corpus differs either way. The requirement is on the
+derivation's correctness, not on this corpus.
 
 ### 3.3 `updated` is not stamped
 
@@ -159,6 +180,30 @@ unavailable exactly when a project is too broken to load.
 
 Report-first, `--apply` to write, per this repo's convention.
 
+### 4.1 The repair algorithm, exactly
+
+Scope is defined by validation (§3.1); this defines what the command is permitted to *change*. Per
+candidate file, in order:
+
+1. Parse with `parse_markdown_entity_file_preserving_body`.
+2. If `validate_persisted_base_shape` accepts the record → **skip it, byte for byte.** No render,
+   no rewrite. A base-valid record is never touched, so canonical re-rendering never leaks onto
+   records that did not need repair.
+3. Otherwise, if the frontmatter's `title` is **exactly the empty string `""`** → derive the title
+   per §3.2 and set it. This is the only key the command may author.
+4. Render the resulting mapping with `render_frontmatter`, which coerces YAML `date` values to ISO
+   strings (§3.4). This is the whole of the date repair — there is no separate date step.
+5. Re-parse the rendered text and run the §5.2 guards and `validate_persisted_base_shape`.
+6. If anything is still refused, or any guard fails → the record is **unsupported**: record it as a
+   refusal and repair nothing.
+
+**Step 3's condition is exactly `title == ""`, not falsiness.** A missing `title` key, an explicit
+`title: null`, or a malformed non-string title are all *unsupported*, not repairable. Each would
+still satisfy the `{title}` parsed-value allowlist in §5.2 if the command authored over it, so the
+allowlist alone cannot enforce this — the condition has to be stated here and tested directly. The
+command replaces a title the writer failed to persist; it never replaces one an author may have
+intended.
+
 **Preflight atomicity.** The command plans every record and collects *all* refusals before writing
 anything. If any in-scope record has no available repair, it names every such record and writes
 nothing at all. Partial application is refused, not reported.
@@ -183,6 +228,12 @@ normalization. Stating the normalization is what makes the guard meaningful inst
 For every repaired file: the frontmatter key set is unchanged, the body is byte-identical, and the
 parsed-value diff is a subset of `{title}`.
 
+**Both sides must be read through `parse_markdown_entity_file_preserving_body`** — or equivalently
+`open(newline="")` plus `split_frontmatter`. `Path.read_text()` applies universal-newline
+translation, so a body whose line endings the render changed would compare equal and the guard
+would false-green on exactly the corruption it exists to catch. Naming the reader is part of the
+guard, not an implementation detail.
+
 Measured across all 792 with the canonical renderer:
 
 ```
@@ -197,13 +248,21 @@ Zero proposition or evidence-line records refused by `validate_persisted_base_sh
 
 ### 5.4 Durable tests in the toolkit suite
 
-1. A title-only repair produces exactly the derivation's output — **mutation-certified** by
-   breaking the derivation and watching it go red.
+1. A title-only repair produces exactly the derivation's output, **for both kinds** — one
+   proposition case and one evidence-line case, since they are two different derivations and a
+   single-kind test leaves one uncovered. Both **mutation-certified** by breaking the derivation
+   and watching it go red.
 2. A date-only repair, with no title change.
-3. One repairable record plus one unsupported record under `--apply`: **neither** file changes, and
-   the error names both. This is what pins preflight atomicity; a per-file loop passes every other
-   test.
-4. Dry-run writes nothing.
+3. One repairable record plus **two** unsupported records under `--apply`: no file changes at all,
+   and the error names **both** unsupported records. Two, not one, because the ruling is that
+   preflight collects *all* refusals before writing — with a single unsupported record, a command
+   that aborts on the first refusal it meets passes and the aggregation is never tested. This test
+   pins preflight atomicity; a per-file loop passes every other test in this list.
+4. A base-valid record with an authored title is byte-identical after `--apply`, while an invalid
+   neighbour in the same directory is repaired. This pins step 2 of §4.1 — without it, a command
+   that canonically re-renders everything in scope passes every other test while rewriting records
+   it had no business touching.
+5. Dry-run writes nothing.
 
 ### 5.5 What is deliberately not a durable invariant
 
@@ -214,9 +273,10 @@ design. The derivation is a floor for records that never got one, not a canonica
 
 ## 6. Rollout
 
-Five repositories, one commit each: mm30 681, cbioportal 72, evolution 21, protein-landscape 16,
-meta 2 (which lives inside this repository). The toolkit change and the corpus commits are separate
-commits in separate repositories.
+Five project roots, one commit each: mm30 681, cbioportal 72, evolution 21, protein-landscape 16,
+meta 2. Four of those are repositories external to the toolkit; **`meta` is a project root inside
+this repository**, so its corpus commit lands here alongside the toolkit change — as a separate
+commit, but not a separate repository.
 
 Expected diff shape, measured: 719 files at 6 changed lines (title, `created`, `updated`), 21 at 4,
 and 52 spread across 7–12 lines where a long scalar additionally unwraps from PyYAML's 80-column
@@ -244,3 +304,7 @@ derivations; the `migrate-annotation-base-shape` command; the five corpus commit
   deferred format-normalization phase, and it is what makes §3.4's churn temporary.
 - Arming the `proposition` and `evidence-line` mixins. The umbrella sequences those as separate
   atomic closure slices after remediation.
+- Containing the promotion accrual path. `append_entity_source_ref` writes without
+  `certify_persisted` (§1), so it remains an uncontained update path after this slice. Remediation
+  removes the records it could currently corrupt, but not the hole; closing that is a containment
+  change, not a corpus change.
