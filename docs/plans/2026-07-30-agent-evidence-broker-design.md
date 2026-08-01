@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 32)
+**Status:** partially implemented (revision 33)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -211,6 +211,28 @@ Finding (3) is the **second** overshoot in this document to name a mechanism nex
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
 in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
 protection from the error.
+
+Revision 33 fixes the one place the widened tree rule had not reached: **§2.2's clause 1, which is
+where the guarantee is stated rather than merely described.**
+
+Revisions 31 and 32 restated the rule in §3.1, in §5.1's assumption sentence, and in the
+three-directions analysis, and left clause 1 reading "valid UTF-8 and already NFC" — two lines above
+the sentence that draws the entitlement from it: "Clause 1 is what licenses 4b to key its served map
+on the decoded path without re-normalising." That conclusion does not follow from NFC. The guarantee
+and the entitlement it grants disagreed, adjacently, for fourteen revisions, and commit `33bbdaf2`
+had already shipped the stronger property in code. Clause 1 now reads **decodes as UTF-8 and is
+returned unchanged by `normalize_project_path`** — in that order, since the round-trip needs a `str`
+before it can run. The same two-part spelling now appears in §3.1's rule and in the three-directions
+conclusion, so the seam states one predicate on both sides.
+
+**Why this one outlived three revisions of the same correction.** Revisions 31 and 32 fixed every
+sentence that *argued about* the rule and missed the sentence that *is* the rule. §2.2 opens by
+declaring itself authoritative for the seam precisely so this cannot happen — and being the
+authoritative statement is what made it invisible, because the review attention went to the prose
+that reasons and not to the clause it reasons from. **When a rule changes, the numbered contract
+changes first and the discussion second.** That is the sixth instance in this document of a fix
+carrying a defect of its own shape, and the first where the defect was the *scope* of an otherwise
+correct fix rather than its content.
 
 Revision 32 corrects both of revision 31's span mutation fixtures, found while executing the fix wave
 it authorised. Revision 31 wrote a section warning that a timeout row is only as strong as the input
@@ -541,8 +563,9 @@ stated against the normalizer rather than against an encoding, and this analysis
 
 Direction 3 is the one that decides the design. It involves no collision, no deny prefix and no
 search — one such path anywhere in the tree is enough — so no filter on the serving side reaches it.
-**The session therefore refuses at open any pinned tree holding a path that is not valid UTF-8 or not
-already NFC**, verified by one `git ls-tree -r -z --name-only` pass. All three directions become
+**The session therefore refuses at open any pinned tree holding a path that does not decode as UTF-8,
+or that `normalize_project_path` does not return unchanged**, verified by one
+`git ls-tree -r -z --name-only` pass. All three directions become
 unreachable at once, in the one layer that can still refuse, instead of three guards in three layers.
 The serve-time post-filter that revision 17 first proposed came back out: it defended direction 1
 only, and it would have read as coverage.
@@ -845,7 +868,9 @@ may reach backwards**, and each is independently mergeable.
 **The guarantee 4a hands forward, stated as three clauses because 4b is entitled to rely on each and
 on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`:
 
-1. was served from a tree whose every path is valid UTF-8 and already NFC;
+1. was served from a tree whose every path **decodes as UTF-8 and is returned unchanged by
+   `normalize_project_path`** — the two parts in that order, since the second needs a `str` before it
+   can run, and NFC is one of several things it subsumes (§3.1);
 2. was served under a per-request byte ceiling, with overflow refusing rather than truncating; and
 3. was served **entirely from objects the local repository already held**, by a traversal git did not
    silently truncate. A repository that cannot supply an object locally **fails the invocation** —
@@ -869,7 +894,13 @@ than the mechanism delivered — and it then wrote a clause narrower than the ha
 and undershooting the same sentence are one error**: describing the mechanism you happen to be
 looking at instead of the property the consumer needs.
 
-Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising.
+Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising — and
+it licenses that **only in the round-trip spelling above**. Revisions 19–32 wrote it as "valid UTF-8
+and already NFC" while the sentence immediately below drew the no-re-normalisation conclusion from
+it, which does not follow: NFC says nothing about a backslash, and `normalize_project_path` rewrites
+one. A guarantee and the entitlement it grants sat two lines apart, disagreeing, for fourteen
+revisions. The round-trip form is the property the entitlement actually needs, and it is the same
+predicate §3.1 enforces at open — one sentence, one mechanism, stated once on each side of the seam.
 
 It is also what licenses 4b to perform no tree scan of its own (§5.2). A 4b implementer who adds a
 normalisation guard "to be safe" is not adding safety — they are adding a second place for the rule
@@ -969,8 +1000,8 @@ pathspecs byte-exactly. So a policy and a repository can be spelled differently 
   certifying a **false absence claim** — is reachable with no deny prefix and no search at all, so no
   amount of filtering on the serving side closes it.
 
-  **A brokered run refuses to open against a pinned tree containing a path that is not valid UTF-8,
-  not already NFC, or not expressible as a `LocationEvidence.path`**, established by one
+  **A brokered run refuses to open against a pinned tree containing a path that does not decode as
+  UTF-8, or that `normalize_project_path` does not return unchanged**, established by one
   `git ls-tree -r -z --name-only` pass at the pinned commit, in
   `autonomy/lifecycle.py::start_run` — the same place that creates the journal and seals the session,
   and the only one that sees the commit before any request exists (§2.2). UTF-8
