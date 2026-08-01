@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.autonomy.git import run_git
+from science_tool.autonomy.git import history_traversal_error, run_git
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -249,3 +249,122 @@ def test_the_filter_fixture_is_live(tmp_path: Path):
     )
 
     assert (root / "a.txt").read_bytes() != committed
+
+
+def _commit(repo: Path, name: str, body: str) -> None:
+    """Write `body` to `name` and commit it. The commit MESSAGE is the file name, not the body:
+    a 4 KiB commit message would work but makes `git log` output unreadable when a test fails."""
+    (repo / name).write_text(body, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", name], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", name],
+        check=True,
+        capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+    )
+
+
+@pytest.fixture
+def three_commit_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "src"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True, capture_output=True)
+    for text in ("one", "two", "three"):
+        _commit(repo, "f.txt", text)
+    return repo
+
+
+def test_a_planted_shallow_file_does_not_shorten_history(three_commit_repo: Path) -> None:
+    """The actor writes `.git/shallow` AFTER the run opens; a check at open cannot see it.
+
+    Unpinned, this is 2 commits at exit 0 -- a silently shortened answer to a pinned commit.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+    parent = run_git(three_commit_repo, "rev-parse", "HEAD~1").stdout.decode().strip()
+
+    before = run_git(three_commit_repo, "log", "--pretty=format:%H", commit).stdout
+    (three_commit_repo / ".git" / "shallow").write_text(f"{parent}\n", encoding="utf-8")
+    after = run_git(three_commit_repo, "log", "--pretty=format:%H", commit).stdout
+
+    assert after == before
+    assert len(before.decode().split()) == 3
+
+
+def test_a_partial_clone_fails_rather_than_fetching(tmp_path: Path, three_commit_repo: Path) -> None:
+    """A promisor remote is an egress channel, not just a source of non-determinism.
+
+    `uploadpack.allowFilter` MUST be set on the serving side: it defaults to false, and without
+    it the filtered clone comes back COMPLETE and this test passes against the defect.
+    """
+    subprocess.run(
+        ["git", "-C", str(three_commit_repo), "config", "uploadpack.allowFilter", "true"],
+        check=True,
+        capture_output=True,
+    )
+    clone = tmp_path / "partial"
+    subprocess.run(
+        ["git", "clone", "-q", "--filter=tree:0", "--no-checkout",
+         f"file://{three_commit_repo}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+    # PRECONDITION, and it must not be built out of the thing under test: derive the OID from the
+    # SOURCE repository and check absence with our own explicit pin. Unpinned `cat-file -e` in the
+    # clone exits 0 AND fetches the object in, destroying the condition it was establishing.
+    tree = run_git(three_commit_repo, "rev-parse", "HEAD~1^{tree}").stdout.decode().strip()
+    probe = subprocess.run(
+        ["git", "-C", str(clone), "cat-file", "-e", tree],
+        capture_output=True,
+        env={**os.environ, "GIT_NO_LAZY_FETCH": "1"},
+    )
+    assert probe.returncode != 0, "the filter did not take; check uploadpack.allowFilter"
+
+    commit = run_git(clone, "rev-parse", "HEAD").stdout.decode().strip()
+    completed = run_git(clone, "log", "--pretty=format:%H", commit, "--", "f.txt")
+
+    assert completed.returncode != 0
+    assert b"unable to read tree" in completed.stderr
+
+
+def test_a_complete_repository_has_no_history_traversal_error(three_commit_repo: Path) -> None:
+    """The baseline half of the pair below, and the assertion the PROXY cannot satisfy.
+
+    MEASURED, git 2.55: `rev-parse --is-shallow-repository` reads `true` for a COMPLETE repository
+    under `GIT_SHALLOW_FILE=/dev/null`, so swapping this probe for it turns this test red.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_planted_shallow_file_is_not_a_history_traversal_error(three_commit_repo: Path) -> None:
+    """The diagnostic answers to the OBJECTS, not to the actor's file.
+
+    Unpinning the detector so `--is-shallow-repository` could see a genuine boundary would also let
+    it see this one -- an actor could refuse its own run's open by writing a file. Every object is
+    present here, so history is traversable and the plant means nothing.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+    parent = run_git(three_commit_repo, "rev-parse", "HEAD~1").stdout.decode().strip()
+    (three_commit_repo / ".git" / "shallow").write_text(f"{parent}\n", encoding="utf-8")
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_genuine_shallow_clone_is_a_history_traversal_error(
+    tmp_path: Path, three_commit_repo: Path
+) -> None:
+    """Objects genuinely absent: git's own words come back for the operator message."""
+    clone = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{three_commit_repo}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+    commit = run_git(clone, "rev-parse", "HEAD").stdout.decode().strip()
+
+    reason = history_traversal_error(clone, commit)
+
+    assert reason is not None
+    assert "Failed to traverse parents" in reason

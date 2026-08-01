@@ -103,10 +103,36 @@ class GitError(ValueError):
 #: pin fixes git's DIAGNOSTIC text, which the broker's defined-miss classifier reads: under a
 #: translated locale the miss messages would not match and an absent path would halt the run.
 #:
+#: `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH` are here for the reason `-c` hardening is here: the
+#: actor owns the file. `.git/shallow` is an ordinary file in the actor-owned `.git` directory --
+#: MEASURED, git 2.55: one `echo <sha> > .git/shallow` takes `git log <commit>` from 3 commits to
+#: 2, at exit 0 both ways, against an unchanged pinned commit. A check at run open cannot hold
+#: against a file written after the run opens, so the defense is an input git no longer reads.
+#:
+#: A partial clone is the same problem in the worse direction. `--filter=tree:0` does not truncate
+#: and does not fail: it LAZILY FETCHES the missing objects from its promisor remote, mid-request,
+#: at exit 0 -- MEASURED, two `git fetch` subprocesses spawned under the canonical `log` argv. That
+#: remote's URL lives in `.git/config`, so lazy fetch hands the actor an egress channel out of the
+#: control plane and a payload whose content depends on a host it named. `-c` cannot close it: the
+#: neutralization would have to name the remote, and the name is the actor's to choose.
+#:
+#: Under both pins a repository that cannot answer locally EXITS NON-ZERO instead of answering
+#: short or phoning home, which every call site here already treats as a refusal to answer. Both
+#: are no-ops in an ordinary complete clone, which has no boundary file and nothing to fetch.
+#:
+#: They apply to all three broker ops, not to `history` alone: a partial clone withholds blobs as
+#: readily as trees, so `cat-file blob` and `grep` reach a promisor remote by the same mechanism.
+#: Putting them in `_ENVIRONMENT` rather than at one call site is what makes that automatic.
+#:
 #: `TZ` is deliberately NOT pinned: `%aI` carries its own offset, so the rendered log does not
 #: depend on the reader's zone. Pinning it would assert a defense against behaviour the chosen
 #: format has been shown not to have.
-_ENVIRONMENT: dict[str, str] = {"LC_ALL": "C", "LANG": "C"}
+_ENVIRONMENT: dict[str, str] = {
+    "LC_ALL": "C",
+    "LANG": "C",
+    "GIT_SHALLOW_FILE": "/dev/null",
+    "GIT_NO_LAZY_FETCH": "1",
+}
 
 #: The fixed half of the hardening -- keys whose names are known in advance.
 _HARDENING: tuple[str, ...] = (
@@ -231,4 +257,40 @@ def run_git(
         (*_HARDENING, *_filter_driver_overrides(repo_root)),
         args,
         input=input,
+    )
+
+
+def history_traversal_error(repo_root: Path, commit: str) -> str | None:
+    """git's own diagnostic if `commit`'s ancestry cannot be walked from local objects, else None.
+
+    A DIAGNOSTIC, not the guarantee. `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH` above are what make
+    `history` answer completely or fail; this exists so that a repository which cannot answer is an
+    operator error at run open, naming the cause, rather than a `fatal: Failed to traverse parents`
+    in the middle of a run. The two cover disjoint intervals: at `start_run` no actor exists yet, so
+    an absence present then is genuine; anything appearing later is the actor's, and the pins
+    neutralize it.
+
+    IT ASKS THE SERVED PROPERTY, NOT A PROXY FOR IT. `serve._LOG_ARGV` carries no `-n`, so `history`
+    walks to the root -- walking to the root is what to measure. `rev-parse
+    --is-shallow-repository` is the proxy, and the pin blinds it: MEASURED, git 2.55, it reads
+    `true` for a COMPLETE repository under `GIT_SHALLOW_FILE=/dev/null`, because
+    `is_repository_shallow()` sets its flag on a SUCCESSFUL OPEN of the shallow file, before reading
+    a line, and `/dev/null` opens. Under the pins it is constant-`true`.
+
+    MEASURED, git 2.55, under the pins: a complete 6755-commit repository answers in 42 ms; a
+    complete repository with `.git/shallow` PLANTED still answers, because the plant is ignored; a
+    `--depth 1` clone exits 128.
+
+    COVERS MISSING COMMITS ONLY -- do not widen this by assumption. MEASURED: `--filter=tree:0` and
+    `--filter=blob:none` clones both report the full commit count. The tree case is refused at open
+    by the §3.1 tree scan (`ls-tree -r` -> `fatal: not a tree object`); the blob case is not
+    pre-empted at open and fails mid-run at exit 128, which is `GIT_NO_LAZY_FETCH` working. This is
+    not a completeness oracle.
+    """
+    completed = run_git(repo_root, "rev-list", "--count", commit)
+    if completed.returncode == 0:
+        return None
+    return (
+        completed.stderr.decode("utf-8", "replace").strip()
+        or f"git rev-list exited {completed.returncode} without a diagnostic"
     )
