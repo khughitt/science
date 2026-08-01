@@ -12,6 +12,10 @@ Two properties are load-bearing and easy to lose:
 - **`title == ""` exactly, not falsiness.** A missing key, an explicit null, or a non-string
   title are unsupported, not repairable. The parsed-value allowlist cannot enforce this -- all
   three would satisfy it -- so the condition lives here and is tested directly.
+- **Kind comes from the record, not from the directory it sits in.** Base shape never inspects
+  `subject`, so a title derived from the wrong kind's fields still validates; and a stray
+  non-entity file under the kind directory would otherwise be refused, which -- refusal being
+  batch-wide -- makes the command unrunnable for the whole project.
 """
 
 from __future__ import annotations
@@ -30,9 +34,21 @@ from science_tool.dag.entity_frontmatter import (
 )
 from science_tool.entities import parse_markdown_entity_file_preserving_body
 
-ANNOTATION_KIND_DIRS: tuple[str, ...] = ("propositions", "evidence-lines")
+ANNOTATION_KIND_DIRS: dict[str, str] = {"propositions": "proposition", "evidence-lines": "evidence-line"}
 
 _DATE_KEYS: frozenset[str] = frozenset({"created", "updated"})
+
+# The derivation inputs each kind consumes, split by whether `None` is a legitimate value.
+# `derive_evidence_line_title` declares `stance`, `source` and `evidence_type` as `str | None`,
+# so an absent or null one of those is a normal record, not an unrepairable one.
+_REQUIRED_TITLE_INPUTS: dict[str, tuple[str, ...]] = {
+    "proposition": ("subject", "predicate", "object"),
+    "evidence-line": ("target",),
+}
+_OPTIONAL_TITLE_INPUTS: dict[str, tuple[str, ...]] = {
+    "proposition": (),
+    "evidence-line": ("stance", "source", "evidence_type"),
+}
 
 
 class BaseShapeMigrationRefused(Exception):
@@ -81,8 +97,31 @@ def _normalized(mapping: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _derived_title(frontmatter: dict[str, Any], kind_dir: str) -> str:
-    if kind_dir == "propositions":
+def _unsupported_title_input(frontmatter: dict[str, Any], kind: str) -> str | None:
+    """Name the first derivation input this command cannot consume, or `None` if all are fine.
+
+    Checked explicitly rather than by widening the caught exception tuple around the derivation.
+    A non-string input does not reliably raise: `subject: ` (null) derives the literal title
+    `None affects concept:b`, a list derives `['x', 'y'] affects concept:b`, and both then PASS
+    `validate_persisted_base_shape`, which only asks that `title` be a non-empty string. The
+    garbage would be written and the post-condition scan would report success. A non-string
+    `evidence_type` does raise -- `AttributeError` out of `canonical_evidence_type_token` -- but
+    relying on that makes the outcome an accident of which helper happens to raise what.
+    """
+    for key in _REQUIRED_TITLE_INPUTS[kind]:
+        if key not in frontmatter:
+            return f"required field '{key}' is missing"
+        if not isinstance(frontmatter[key], str):
+            return f"field '{key}' is {type(frontmatter[key]).__name__}, not a string"
+    for key in _OPTIONAL_TITLE_INPUTS[kind]:
+        value = frontmatter.get(key)
+        if value is not None and not isinstance(value, str):
+            return f"field '{key}' is {type(value).__name__}, not a string or null"
+    return None
+
+
+def _derived_title(frontmatter: dict[str, Any], kind: str) -> str:
+    if kind == "proposition":
         return derive_proposition_title(
             subject=frontmatter["subject"],
             predicate=frontmatter["predicate"],
@@ -96,9 +135,15 @@ def _derived_title(frontmatter: dict[str, Any], kind_dir: str) -> str:
     )
 
 
-def _plan_one(path: Path, kind_dir: str, validator: EntityValidator) -> PlannedRepair | Refusal | None:
-    """Plan one candidate. `None` means base-valid: skip it byte for byte."""
+def _plan_one(path: Path, kind: str, validator: EntityValidator) -> PlannedRepair | Refusal | None:
+    """Plan one candidate. `None` means out of scope or base-valid: skip it byte for byte."""
     frontmatter, body = parse_markdown_entity_file_preserving_body(path)
+    if frontmatter.get("kind") != kind:
+        # Not a record of this kind, whatever directory it sits in: a README, a stray note, or a
+        # record of another kind. Deriving from the directory would apply the wrong derivation
+        # here, and -- since refusal is batch-wide -- would let one stray file make the command
+        # unrunnable for an entire project.
+        return None
     try:
         validator.validate_persisted_base_shape(frontmatter)
     except EntityValidationError:
@@ -109,9 +154,14 @@ def _plan_one(path: Path, kind_dir: str, validator: EntityValidator) -> PlannedR
     planned = dict(frontmatter)
     title: str | None = None
     if "title" in planned and isinstance(planned["title"], str) and planned["title"] == "":
+        unsupported = _unsupported_title_input(planned, kind)
+        if unsupported is not None:
+            return Refusal(path, f"title cannot be derived: {unsupported}")
         try:
-            title = _derived_title(planned, kind_dir)
-        except (KeyError, ValueError) as exc:
+            title = _derived_title(planned, kind)
+        except ValueError as exc:
+            # An unknown evidence type: `EvidenceType(canonical_evidence_type_token(raw))` refuses
+            # a token the create path would also have rejected (design 3.2).
             return Refusal(path, f"title cannot be derived: {exc}")
         planned["title"] = title
 
@@ -129,7 +179,11 @@ def _plan_one(path: Path, kind_dir: str, validator: EntityValidator) -> PlannedR
     try:
         validator.validate_persisted_base_shape(post_frontmatter)
     except EntityValidationError as exc:
-        return Refusal(path, f"still refused after repair: {exc}")
+        # Not "still refused after repair": the commonest arrival here is a record this command
+        # never had a repair for (a `title: null`, say), and telling an operator a repair was
+        # tried and failed sends them looking for the wrong thing. The validator's own message is
+        # passed through verbatim -- it is what they have to act on.
+        return Refusal(path, f"no repair available; base shape refuses it: {exc}")
 
     return PlannedRepair(path, postimage, title)
 
@@ -140,12 +194,12 @@ def plan_repairs(project_root: Path) -> RepairPlan:
     repairs: list[PlannedRepair] = []
     refusals: list[Refusal] = []
     skipped = 0
-    for kind_dir in ANNOTATION_KIND_DIRS:
+    for kind_dir, kind in ANNOTATION_KIND_DIRS.items():
         directory = project_root / "entities" / kind_dir
         if not directory.is_dir():
             continue
         for path in sorted(directory.glob("*.md")):
-            outcome = _plan_one(path, kind_dir, validator)
+            outcome = _plan_one(path, kind, validator)
             if outcome is None:
                 skipped += 1
             elif isinstance(outcome, Refusal):

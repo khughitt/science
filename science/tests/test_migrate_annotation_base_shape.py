@@ -140,6 +140,127 @@ def test_a_title_that_is_not_the_empty_string_is_unsupported(tmp_path, literal):
     assert len(plan.refusals) == 1
 
 
+def test_an_unrepairable_record_is_not_reported_as_a_failed_repair(tmp_path):
+    """No repair was attempted on a `title: null` record; the message must not claim one was.
+
+    The validator's own text is passed through verbatim -- that is what the operator acts on.
+    """
+    root = _project(tmp_path)
+    _write(root, "propositions", "p.md", EMPTY_TITLE_PROPOSITION.replace("title: ''", "title: null"))
+    reason = plan_repairs(root).refusals[0].reason
+    assert "after repair" not in reason
+    assert reason.startswith("no repair available; base shape refuses it: ")
+    assert "title" in reason
+
+
+def test_a_missing_derivation_input_is_refused_not_repaired(tmp_path):
+    """The 'title cannot be derived' branch: no `subject`, so the triple cannot be reconstructed."""
+    root = _project(tmp_path)
+    frontmatter = EMPTY_TITLE_PROPOSITION.replace("subject: concept:a\n", "")
+    _write(root, "propositions", "p.md", frontmatter)
+    plan = plan_repairs(root)
+    assert plan.repairs == ()
+    assert len(plan.refusals) == 1
+    assert "title cannot be derived" in plan.refusals[0].reason
+    assert "subject" in plan.refusals[0].reason
+
+
+@pytest.mark.parametrize(
+    ("field", "literal", "expected_type"),
+    [
+        ("subject", "", "NoneType"),  # `subject:` with no value parses as null
+        ("subject", "[x, y]", "list"),
+        ("predicate", "3", "int"),
+        ("object", "{a: b}", "dict"),
+    ],
+)
+def test_a_non_string_proposition_derivation_input_is_refused(tmp_path, field, literal, expected_type):
+    """A non-string input mints a garbage title that base shape then HAPPILY accepts.
+
+    `subject:` (null) derives `None affects concept:b`; a list derives
+    `['x', 'y'] affects concept:b`. Base shape only asks that `title` be a non-empty string and
+    never inspects `subject`, so without this guard the garbage is written and the post-condition
+    scan reports success.
+    """
+    root = _project(tmp_path)
+    original = {"subject": "subject: concept:a", "predicate": "predicate: affects", "object": "object: concept:b"}
+    frontmatter = EMPTY_TITLE_PROPOSITION.replace(original[field], f"{field}: {literal}")
+    _write(root, "propositions", "p.md", frontmatter)
+
+    plan = plan_repairs(root)
+
+    assert plan.repairs == ()
+    assert len(plan.refusals) == 1
+    assert plan.refusals[0].reason == f"title cannot be derived: field '{field}' is {expected_type}, not a string"
+
+
+@pytest.mark.parametrize(
+    ("field", "literal", "expected_type"),
+    [("stance", "[a, b]", "list"), ("source", "3", "int"), ("evidence_type", "3", "int")],
+)
+def test_a_non_string_evidence_line_derivation_input_is_refused(tmp_path, field, literal, expected_type):
+    """`evidence_type: 3` raises AttributeError inside the derivation -- a crash, not a refusal."""
+    root = _project(tmp_path)
+    original = {
+        "stance": "stance: supports",
+        "source": "source: paper:Walker2024",
+        "evidence_type": "evidence_type: literature_evidence",
+    }
+    frontmatter = EMPTY_TITLE_EVIDENCE_LINE.replace(original[field], f"{field}: {literal}")
+    if field == "evidence_type":
+        # The tail prefers `source`, so `evidence_type` only reaches the derivation without one.
+        frontmatter = frontmatter.replace("source: paper:Walker2024\n", "")
+    _write(root, "evidence-lines", "e.md", frontmatter)
+
+    plan = plan_repairs(root)
+
+    assert plan.repairs == ()
+    assert len(plan.refusals) == 1
+    assert (
+        plan.refusals[0].reason
+        == f"title cannot be derived: field '{field}' is {expected_type}, not a string or null"
+    )
+
+
+@pytest.mark.parametrize("field", ["stance", "source", "evidence_type"])
+def test_a_null_optional_evidence_line_input_still_repairs(tmp_path, field):
+    """`stance`/`source`/`evidence_type` are `str | None` in the derivation's own signature."""
+    root = _project(tmp_path)
+    frontmatter = "".join(
+        line for line in EMPTY_TITLE_EVIDENCE_LINE.splitlines(keepends=True) if not line.startswith(f"{field}:")
+    )
+    _write(root, "evidence-lines", "e.md", frontmatter)
+    plan = plan_repairs(root)
+    assert plan.refusals == ()
+    assert len(plan.repairs) == 1
+
+
+def test_a_stray_non_entity_file_is_skipped_not_refused(tmp_path):
+    """Refusal is batch-wide, so refusing a README would make the command unrunnable here."""
+    root = _project(tmp_path)
+    (root / "entities/propositions/README.md").write_text("# Propositions\n\nNotes.\n", encoding="utf-8")
+    good = _write(root, "propositions", "p.md", EMPTY_TITLE_PROPOSITION)
+
+    plan = plan_repairs(root)
+
+    assert plan.refusals == ()
+    assert plan.skipped == 1
+    assert [r.path for r in plan.repairs] == [good]
+
+
+def test_a_foreign_kind_in_the_directory_is_skipped_not_mis_derived(tmp_path):
+    """Kind comes from the record. Deriving from the directory applies the wrong formula."""
+    root = _project(tmp_path)
+    frontmatter = EMPTY_TITLE_EVIDENCE_LINE.replace("kind: evidence-line", "kind: interpretation")
+    _write(root, "evidence-lines", "stowaway.md", frontmatter)
+
+    plan = plan_repairs(root)
+
+    assert plan.repairs == ()
+    assert plan.refusals == ()
+    assert plan.skipped == 1
+
+
 def test_apply_refuses_the_whole_batch_and_names_every_refusal(tmp_path):
     root = _project(tmp_path)
     good = _write(root, "propositions", "good.md", EMPTY_TITLE_PROPOSITION)
