@@ -2313,3 +2313,68 @@ def test_entity_index_scrubs_internal_paths_from_nested_frontmatter(tmp_path: Pa
     assert row["aliases"] == ["[private path removed]"]
     assert row["tags"] == ["[private path removed]"]
     assert row["source_refs"] == ["[private path removed]"]
+
+
+SECTION_SEVEN_PROMOTED_KINDS = [
+    ("decision", "Decisions", 110),
+    ("analysis_plan", "Analysis Plans", 120),
+    ("latent", "Latent Constructs", 130),
+    ("paper_synthesis", "Paper Syntheses", 140),
+    ("critique", "Critiques", 150),
+    ("bias_audit", "Bias Audits", 160),
+    ("review", "Reviews", 170),
+]
+
+
+@pytest.mark.parametrize(("entity_type", "label", "order"), SECTION_SEVEN_PROMOTED_KINDS)
+def test_section_seven_kinds_are_visible_explore_vocabulary(entity_type: str, label: str, order: int) -> None:
+    config = _view_config_for_type(entity_type, {})
+
+    assert config["surface"] == "explore"
+    assert config["label"] == label
+    assert config["order"] == order
+    assert not config.get("hidden")
+    assert route_for_view(entity_type, config["surface"]) == (f"/explore/{entity_type.replace('_', '-')}")
+
+
+@pytest.mark.parametrize(("entity_type", "_label", "_order"), SECTION_SEVEN_PROMOTED_KINDS)
+def test_section_seven_kinds_declare_an_explicit_entity_class(entity_type: str, _label: str, _order: int) -> None:
+    # Unmapped non-finding kinds fall back to "source" at labnote_export.py:865.
+    # That fallback is invisible while a kind is hidden and wrong once promoted.
+    assert labnote_export_module.ENTITY_CLASS_BY_TYPE[entity_type] == "epistemic"
+
+
+@pytest.mark.parametrize(("entity_type", "_label", "_order"), SECTION_SEVEN_PROMOTED_KINDS)
+def test_section_seven_kinds_are_not_in_the_fallback_compatibility_group(
+    entity_type: str, _label: str, _order: int
+) -> None:
+    # PROMOTED_FALLBACK_TYPES means "served by the generic fallback before Phase 1"
+    # and pins order 500. These kinds were fallback_hidden, which is the opposite.
+    assert entity_type not in labnote_export_module.PROMOTED_FALLBACK_TYPES
+
+
+def test_section_seven_orders_are_unique_and_sit_between_paper_and_the_fallback_block() -> None:
+    orders = [order for _, _, order in SECTION_SEVEN_PROMOTED_KINDS]
+
+    assert len(set(orders)) == len(orders)
+    assert min(orders) > _view_config_for_type("paper", {})["order"]
+    assert max(orders) < 500
+
+
+def test_promoting_the_section_seven_kinds_empties_the_fallback_inventory(tmp_path: Path) -> None:
+    project_root = _hidden_kind_project(tmp_path, "section-seven")
+    for entity_type, _label, _order in SECTION_SEVEN_PROMOTED_KINDS:
+        _write_public_entity(project_root, entity_type, f"0001-example-{entity_type}")
+    out = tmp_path / "out"
+
+    diagnostics = export_labnote_package(project_root=project_root, out_dir=out)
+
+    views = read_json(out / "views.json")
+    entities = read_json(out / "entities" / "index.json")["entities"]
+    promoted = {entity_type for entity_type, _label, _order in SECTION_SEVEN_PROMOTED_KINDS}
+
+    assert promoted.issubset({view["id"] for view in views["views"]})
+    assert promoted.issubset({record["type"] for record in entities})
+    assert all(record["class"] == "epistemic" for record in entities if record["type"] in promoted)
+    assert [entry for entry in views["hidden_kinds"] if entry["reason"] == "fallback_hidden"] == []
+    assert not [warning for warning in diagnostics["warnings"] if "fallback_hidden" in warning["message"]]

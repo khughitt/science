@@ -109,6 +109,16 @@ ENTITY_CLASS_BY_TYPE = {
     "workflow": "workflow",
     "workflow_run": "workflow",
     "paper": "reference",
+    # §7 promotions. Explicit entries because the fallback in the record builder
+    # silently assigns "source" to any unmapped non-finding kind, which is
+    # invisible while a kind is hidden and wrong once it is promoted.
+    "decision": "epistemic",
+    "analysis_plan": "epistemic",
+    "latent": "epistemic",
+    "paper_synthesis": "epistemic",
+    "critique": "epistemic",
+    "bias_audit": "epistemic",
+    "review": "epistemic",
 }
 
 
@@ -142,6 +152,18 @@ VIEW_VOCABULARY_BY_TYPE: dict[str, dict[str, Any]] = {
         "order": 100,
         "hidden": True,
     },
+    # Settled by the §7 vocabulary decision (2026-07-31). Deliberate entries
+    # rather than PROMOTED_FALLBACK_TYPES: those kinds were served by the
+    # generic fallback before Phase 1 and are pinned at order 500 to preserve
+    # that sort. These were fallback_hidden — never served — so they take
+    # explicit orders between `paper` (100) and the promoted block (500).
+    "decision": {"surface": "explore", "label": "Decisions", "order": 110},
+    "analysis_plan": {"surface": "explore", "label": "Analysis Plans", "order": 120},
+    "latent": {"surface": "explore", "label": "Latent Constructs", "order": 130},
+    "paper_synthesis": {"surface": "explore", "label": "Paper Syntheses", "order": 140},
+    "critique": {"surface": "explore", "label": "Critiques", "order": 150},
+    "bias_audit": {"surface": "explore", "label": "Bias Audits", "order": 160},
+    "review": {"surface": "explore", "label": "Reviews", "order": 170},
     # Kinds the generic fallback served in production before Phase 1. They keep
     # order 500 so their existing secondary sort by ID is unchanged.
     **{entity_type: _promoted_explore_view(entity_type) for entity_type in PROMOTED_FALLBACK_TYPES},
