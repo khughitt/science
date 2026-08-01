@@ -145,6 +145,7 @@ def start_command(
 
     from science_tool.autonomy.baseline import BaselineError
     from science_tool.autonomy.extract import ExtractError
+    from science_tool.autonomy.git import GitError
     from science_tool.autonomy.lifecycle import RepositoryStateError, start_run
     from science_tool.autonomy.toolkit import ToolkitError
     from science_tool.evidence_broker.journal import JournalError
@@ -167,6 +168,7 @@ def start_command(
         RepositoryStateError,
         BaselineError,
         ExtractError,
+        GitError,
         OSError,
         ValidationError,
         JournalError,

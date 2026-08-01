@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from science_model.evidence_broker import Outcome, SurfacePolicy
 
-from science_tool.autonomy.git import GitOutputTooLarge
+from science_tool.autonomy.git import GitError, GitOutputTooLarge
 from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest, authorize
 from science_tool.evidence_broker.serve import ServeError, serve, verify_commit
 import science_tool.evidence_broker.serve as serve_module
@@ -704,6 +704,22 @@ def test_a_stderr_overflow_on_search_is_not_a_denial(tmp_path: Path, monkeypatch
     monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
 
     with pytest.raises(GitOutputTooLarge):
+        serve(root, commit, _search("secret"), OPEN)
+
+
+def test_a_configuration_preflight_failure_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """Mutable hardening setup fails the invocation; it can never enter the replay journal."""
+    root, commit = _repo(tmp_path)
+    real = serve_module.run_git
+
+    def fail_preflight(repo_root, *args, **kwargs):
+        if args[:1] == ("grep",):
+            raise GitError("configuration preflight exceeded its limit")
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(serve_module, "run_git", fail_preflight)
+
+    with pytest.raises(GitError):
         serve(root, commit, _search("secret"), OPEN)
 
 

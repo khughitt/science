@@ -415,9 +415,9 @@ def run_git(
     check turns one into a `Result`. What none of them may differ on is the argv, which
     is why it is built here and nowhere else.
 
-    Raises `GitError` only when git could not be invoked at all -- a missing binary is
-    `unwired`, and a caller that let `FileNotFoundError` escape would exit 1, which the
-    documented codes read as `quarantined`.
+    Raises `GitError` when git could not be started, the invocation could not be hardened,
+    or a bounded capture could not complete. A normal nonzero git exit is still returned
+    to the caller.
 
     Bytes, not text: `extract` has to detect non-UTF-8 blobs rather than have them
     silently replaced. `input` is passed to git's stdin for NUL-framed queries.
