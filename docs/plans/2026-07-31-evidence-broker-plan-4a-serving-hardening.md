@@ -17,7 +17,7 @@ scan at `start_run` refuses to open a run against a tree whose paths cannot be c
 standard library, pytest, real `git` (2.55 on the development machine).
 
 **Design:** [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-at revision 26 — §2.2 (slice contracts), §3.1 (the tree rule), §3.2 (pins, ceiling, payload bound),
+at revision 27 — §2.2 (slice contracts), §3.1 (the tree rule), §3.2 (pins, ceiling, payload bound),
 §3.2.1 (canonical invocation), §7 (mutation roster). Read §2.2 first: it is authoritative for what
 this slice may and may not touch.
 
@@ -680,8 +680,45 @@ def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -
         capture_output=True,
     )
 
+    with pytest.raises(GitError) as caught:
+        run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    # The preflight's output depends on mutable `.git/config`, so its overflow must be translated
+    # to the non-journalable base exception. This exact-type assertion fails if the
+    # `GitOutputTooLarge` subtype leaks to a serving caller.
+    assert type(caught.value) is GitError
+
+
+def test_selector_setup_failure_reaps_the_child_and_closes_its_pipes(
+    three_commit_repo: Path, monkeypatch
+) -> None:
+    """Post-`Popen` setup is inside the same cleanup guarantee as the capture loop.
+
+    Selector construction, nonblocking setup, and registration can fail after the child exists.
+    A raw exception, live child, or open pipe bypasses the `GitError` contract and leaks resources.
+    """
+    spawned: list[subprocess.Popen[bytes]] = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        spawned.append(process)
+        return process
+
+    def fail_selector():
+        raise OSError("selector unavailable")
+
+    monkeypatch.setattr("science_tool.autonomy.git.subprocess.Popen", recording_popen)
+    monkeypatch.setattr("science_tool.autonomy.git.selectors.DefaultSelector", fail_selector)
+
     with pytest.raises(GitError):
         run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    assert len(spawned) == 1
+    process = spawned[0]
+    assert process.poll() is not None
+    assert process.stdout is not None and process.stdout.closed
+    assert process.stderr is not None and process.stderr.closed
 ```
 
 Add `GitError, GitOutputTooLarge` to the module's imports from `science_tool.autonomy.git`, and
@@ -777,27 +814,32 @@ def _capture(
     limits = {"stdout": stdout_limit, "stderr": stderr_limit}
     buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
 
-    selector = selectors.DefaultSelector()
+    selector: selectors.BaseSelector | None = None
     pending = memoryview(input) if input else None
-    if pending is not None:
-        assert process.stdin is not None
-        # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST ONE
-        # byte can be written -- it does not make the write partial-friendly, and
-        # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector loop
-        # with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against `cat` and a
-        # 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a partial count and
-        # the loop makes progress. Do not mix buffered writes with the raw fd: nothing is ever
-        # written through `process.stdin`, so its buffer stays empty and `close()` just closes.
-        os.set_blocking(process.stdin.fileno(), False)
-        selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
-    elif process.stdin is not None:
-        process.stdin.close()
-    for name in ("stdout", "stderr"):
-        stream = getattr(process, name)
-        assert stream is not None
-        selector.register(stream, selectors.EVENT_READ, name)
-
     try:
+        # ALL POST-`Popen` SETUP IS INSIDE THIS CLEANUP GUARANTEE. Selector construction,
+        # nonblocking setup, and registration may fail after the child exists; every such path
+        # still closes the pipes, kills if necessary, and reaps the child below.
+        selector = selectors.DefaultSelector()
+        if pending is not None:
+            assert process.stdin is not None
+            # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST
+            # ONE byte can be written -- it does not make the write partial-friendly, and
+            # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector
+            # loop with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against
+            # `cat` and a 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a
+            # partial count and the loop makes progress. Do not mix buffered writes with the raw
+            # fd: nothing is ever written through `process.stdin`, so its buffer stays empty and
+            # `close()` just closes.
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+        elif process.stdin is not None:
+            process.stdin.close()
+        for name in ("stdout", "stderr"):
+            stream = getattr(process, name)
+            assert stream is not None
+            selector.register(stream, selectors.EVENT_READ, name)
+
         while selector.get_map():
             for key, _ in selector.select():
                 if key.data == "stdin":
@@ -829,7 +871,8 @@ def _capture(
                     process.kill()
                     raise GitOutputTooLarge(name, limit, len(buffers[name]), args)
     finally:
-        selector.close()
+        if selector is not None:
+            selector.close()
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None and not stream.closed:
                 stream.close()
@@ -857,16 +900,19 @@ def _run(
             stderr=subprocess.PIPE,
             env={**os.environ, **_ENVIRONMENT},
         )
-    except (OSError, ValueError) as exc:
+        stdout, stderr = _capture(
+            process,
+            input=input,
+            stdout_limit=stdout_limit,
+            stderr_limit=stderr_limit,
+            args=args,
+        )
+    except GitOutputTooLarge:
+        # Preserve the subtype so call sites may choose the served-stdout disposition.
+        raise
+    except (AttributeError, OSError, ValueError) as exc:
+        # `_capture` has already reaped a successfully spawned child before an error gets here.
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
-
-    stdout, stderr = _capture(
-        process,
-        input=input,
-        stdout_limit=stdout_limit,
-        stderr_limit=stderr_limit,
-        args=args,
-    )
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 ```
 
@@ -1561,6 +1607,8 @@ then `git checkout` the file.
 | Truncate at the ceiling instead of raising | `test_stdout_overflow_refuses_and_does_not_truncate` |
 | Bound stdout only (drop `stderr_limit`) | `test_stderr_is_bounded_on_every_call` |
 | Exempt the `config --list` preflight | `test_the_config_preflight_is_bounded` |
+| Let preflight overflow escape as the `GitOutputTooLarge` subtype | `test_the_config_preflight_is_bounded` — the exact-type assertion must fail |
+| Move selector construction/setup before `_capture`'s cleanup guard | `test_selector_setup_failure_reaps_the_child_and_closes_its_pipes` |
 | Exempt the tree scan from the ceiling | `test_an_oversized_tree_scan_refuses_to_open` |
 | Remove the `cat-file -s` pre-check and refuse after capture | `test_an_oversized_read_refuses_without_reading_the_blob` |
 | Delete `_serve_history`'s bound, leaving `_serve_search`'s | `test_an_oversized_history_refuses` |
