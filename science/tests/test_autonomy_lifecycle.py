@@ -18,6 +18,7 @@ from science_model.evidence_broker import (
 from science_tool.autonomy import lifecycle as lifecycle_module
 from science_tool.autonomy import toolkit as toolkit_module
 from science_tool.autonomy.baseline import BaselineError
+from science_tool.autonomy.git import GitOutputTooLarge
 from science_tool.autonomy.lifecycle import finish_run, start_run
 
 AGENT = "curation-sweep"
@@ -164,8 +165,10 @@ def _add_nfd_path(project: Path) -> None:
     Written through `os.fsdecode` of raw bytes rather than a literal, so the NFD spelling survives
     regardless of what the source file's own encoding normalizes to.
     """
-    directory = project / os.fsdecode(b"cafe\xcc\x81")
-    directory.mkdir()
+    # The invalid component is BELOW a valid top-level directory. Without this shape, dropping
+    # `ls-tree -r` still lists and rejects the top-level entry, so the test certifies no recursion.
+    directory = project / "valid" / os.fsdecode(b"cafe\xcc\x81")
+    directory.mkdir(parents=True)
     (directory / "x.txt").write_text("secret\n", encoding="utf-8")
     _git(project, "add", "-A")
     _git(project, "commit", "-q", "-m", "add an NFD path")
@@ -261,8 +264,53 @@ def test_an_oversized_tree_scan_refuses_to_open(
     And refuses to OPEN rather than journaling a Denial -- at this point there is no run.
     """
     monkeypatch.setattr("science_tool.autonomy.lifecycle.MAX_TREE_SCAN_BYTES", 8)
+    journal_calls: list[object] = []
+
+    def unexpected_create_journal(*args, **kwargs):
+        journal_calls.append((args, kwargs))
+        raise AssertionError("the journal was created before the tree scan refused the run")
+
+    monkeypatch.setattr(
+        "science_tool.autonomy.lifecycle.create_journal", unexpected_create_journal
+    )
 
     with pytest.raises(BaselineError, match="too large to scan"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+    assert journal_calls == []
+
+
+def test_a_tree_scan_stderr_overflow_fails_the_git_invocation(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutable stderr is not evidence that the pinned tree exceeded its stdout ceiling."""
+    real = lifecycle_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_tree_scan_git_failure_refuses_to_open(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nonzero `ls-tree` result is a refusal, never an empty successful scan."""
+    real = lifecycle_module.run_git
+
+    def fail_ls_tree(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            return subprocess.CompletedProcess(args, 128, b"", b"fatal: not a tree object")
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", fail_ls_tree)
+
+    with pytest.raises(BaselineError, match="could not list the tree"):
         _start_brokered(project, tmp_path, monkeypatch)
 
 

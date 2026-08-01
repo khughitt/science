@@ -172,6 +172,8 @@ def _assert_tree_is_citeable(project_root: Path, commit: str) -> None:
             stdout_limit=MAX_TREE_SCAN_BYTES,
         )
     except GitOutputTooLarge as exc:
+        if exc.stream != "stdout":
+            raise
         raise BaselineError(
             f"the tree at {commit} is too large to scan for citeable paths, so a brokered run "
             f"cannot be opened against it: {exc}"
