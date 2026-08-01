@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -479,6 +479,40 @@ def entity_migrate_specs(apply_changes: bool, resume_interrupted: bool, output_f
             click.echo(f"would migrate {len(report['migrated'])} legacy spec(s); flip_ready={report['flip_ready']}")
             if report["manual_retarget_count"]:
                 click.echo(f"manual-retarget ({report['manual_retarget_count']}): see --format json")
+            click.echo("(dry run — nothing written; re-run with --apply)")
+
+    emit(output_format=output_format, payload=report, render_text=_render_text)
+
+
+@entity_group.command("migrate-annotation-base-shape")
+@click.option("--apply", "apply_changes", is_flag=True, help="Write. Without this, plan only.")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+def entity_migrate_annotation_base_shape(apply_changes: bool, output_format: str) -> None:
+    """Repair PROPOSITION and EVIDENCE-LINE records the durable base shape refuses.
+
+    Scope is exactly those two kinds. Other kinds carrying the same unquoted-date defect are
+    deliberately NOT touched; that fix is kind-agnostic and belongs to its own migration.
+
+    Backfills a `title` that is exactly the empty string, deriving it from the record's own
+    fields with the same derivation the create path uses, and re-renders through the canonical
+    frontmatter block, which quotes `created`/`updated`. A base-valid record is skipped byte for
+    byte. `updated` is never stamped. If any in-scope record has no available repair, every one
+    is named and NOTHING is written. Plan-then-`--apply`.
+    """
+    from science_tool.migrate_annotation_base_shape import BaseShapeMigrationRefused, migrate
+    from science_tool.output import emit
+
+    try:
+        report = migrate(Path.cwd(), apply=apply_changes)
+    except BaseShapeMigrationRefused as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    def _render_text() -> None:
+        if apply_changes:
+            click.echo(f"repaired {report['written']} record(s); skipped {report['skipped']}")
+        else:
+            repairs = cast(list[object], report["repairs"])
+            click.echo(f"would repair {len(repairs)} record(s); skipped {report['skipped']}")
             click.echo("(dry run — nothing written; re-run with --apply)")
 
     emit(output_format=output_format, payload=report, render_text=_render_text)

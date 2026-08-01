@@ -463,6 +463,7 @@ DEFERRED.update(
         )
         for path in (
             "entity field-inventory",
+            "entity migrate-annotation-base-shape",
             "entity migrate-hypothesis",
             "entity migrate-specs",
             "entity neighbors",

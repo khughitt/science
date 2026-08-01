@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 from science_model.frontmatter import split_frontmatter
 
+from science_tool.entities_cli import entity_group
 from science_tool.migrate_annotation_base_shape import (
     BaseShapeMigrationRefused,
     apply_plan,
@@ -215,3 +218,69 @@ def test_a_datetime_valued_date_is_unsupported(tmp_path):
     plan = plan_repairs(root)
     assert plan.repairs == ()
     assert len(plan.refusals) == 1
+
+
+def test_dry_run_writes_nothing(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    path = _write(root, "propositions", "p.md", EMPTY_TITLE_PROPOSITION)
+    before = path.read_text(encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(entity_group, ["migrate-annotation-base-shape", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = _json.loads(result.output)
+    assert payload["written"] == 0
+    assert len(payload["repairs"]) == 1
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_apply_repairs_the_invalid_and_leaves_the_valid_byte_identical(tmp_path, monkeypatch):
+    """Pins the base-valid skip: a command that re-renders everything passes every other test."""
+    root = _project(tmp_path)
+    valid = root / "entities/propositions/valid.md"
+    valid.write_text(VALID_PROPOSITION, encoding="utf-8")
+    invalid = _write(root, "propositions", "p.md", EMPTY_TITLE_PROPOSITION)
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(
+        entity_group, ["migrate-annotation-base-shape", "--apply", "--format", "json"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert _json.loads(result.output)["written"] == 1
+    assert valid.read_text(encoding="utf-8") == VALID_PROPOSITION
+    repaired, _ = split_frontmatter(invalid.read_text(encoding="utf-8"))
+    assert repaired["title"] == "concept:a affects concept:b"
+
+
+def test_dry_run_names_refusals_and_exits_nonzero(tmp_path, monkeypatch):
+    """Report-first: a dry run must not print 'would repair' while hiding its blockers."""
+    root = _project(tmp_path)
+    good = _write(root, "propositions", "good.md", EMPTY_TITLE_PROPOSITION)
+    _write(root, "propositions", "bad.md", EMPTY_TITLE_PROPOSITION.replace("title: ''", "title: null"))
+    before = good.read_text(encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(entity_group, ["migrate-annotation-base-shape"])
+
+    assert result.exit_code != 0
+    assert "bad.md" in result.output
+    assert "would repair" not in result.output
+    assert good.read_text(encoding="utf-8") == before
+
+
+def test_apply_with_unsupported_records_exits_nonzero_and_writes_nothing(tmp_path, monkeypatch):
+    root = _project(tmp_path)
+    good = _write(root, "propositions", "good.md", EMPTY_TITLE_PROPOSITION)
+    _write(root, "propositions", "bad1.md", EMPTY_TITLE_PROPOSITION.replace("title: ''", "title: null"))
+    _write(root, "propositions", "bad2.md", EMPTY_TITLE_PROPOSITION.replace("title: ''", "title: 0"))
+    before = good.read_text(encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(entity_group, ["migrate-annotation-base-shape", "--apply"])
+
+    assert result.exit_code != 0
+    assert "bad1.md" in result.output
+    assert "bad2.md" in result.output
+    assert good.read_text(encoding="utf-8") == before
