@@ -101,15 +101,20 @@ this design has had.
 
 Revision 29 is pre-flight for plan 4b: §5 read against the merged tree rather than against itself.
 Three of its assumptions were **confirmed by probe** and are now stated as such; four points it left
-underdetermined are decided; and two of §7's own rows are corrected. None is a defect in the
-production boundary. All four undetermined points are places an implementer would have had to invent
-a rule, and three of them have a permissive default that an invented rule lands on by accident.
+underdetermined are decided; two of §7's own rows are corrected; and design review of this revision
+closed three more, listed at the end. None is a defect in the production boundary. All four
+undetermined points are places an implementer would have had to invent a rule, and three of them have
+a permissive default that an invented rule lands on by accident.
 
-**Confirmed, so 4b may rely on them.** `LocationEvidence.path`, `ExposureEntry.target` and
-`InlineInput.target` are all outputs of the same `normalize_project_path`, which is idempotent — so
-citation keys, served-map keys and git's own NFC tree paths are one namespace and 4b normalises
-nothing. The journal's digest is `sha256(payload)` with no framing, so re-serving alone reproduces
-it. And revision 23's import-cycle probe re-runs true on the merged tree.
+**Confirmed, so 4b may rely on them.** Citation keys and served-map keys land in one namespace, and
+4b normalises nothing — but that rests on **two** facts, not one, because a search's target is a
+regex and is deliberately never normalised (§3.2). `LocationEvidence.path`, a read or history
+`entry.target`, a search's `entry.pathspec` and `InlineInput.target` are all outputs of the same
+idempotent `normalize_project_path`; a **search's map keys are not among them** — they are the paths
+parsed out of the replayed grep payload, which are git's own tree paths and are project-relative and
+NFC by 4a's clause 1. Take away either fact and the namespace splits. The journal's digest is
+`sha256(payload)` with no framing, so re-serving alone reproduces it. And revision 23's
+import-cycle probe re-runs true on the merged tree.
 
 1. **A replay-time git fault has a disposition, and it is not `unwired` by default.** Exactly two
    conditions are decided before any entry is replayed — the repository does not hold
@@ -126,9 +131,9 @@ it. And revision 23's import-cycle probe re-runs true on the merged tree.
    the `LINES` numbers beside it. Read coverage uses the LF rule; inline coverage uses the sealed
    count, because 4b has no payload to recount and may not touch the model. The divergence is
    permissive on CR-bearing files and is recorded rather than buried. §5.1.
-3. **The coverage merge was stated for one pair out of five reachable ones.** "`FULL` supersedes
-   `LINES`" is not a total rule, and a path picks up two contributions several ways. §5.1 now gives
-   the whole table, including which pair is unreachable and why.
+3. **The coverage merge was stated for one pair out of ten.** "`FULL` supersedes `LINES`" is not a
+   total rule. §5.1 now enumerates all ten, including the four self-pairs — nothing bounds a run to
+   one request per path — and the single unreachable pair, with why.
 4. **An inline entry disagreeing with the sealed manifest is `EXPOSURE_UNREPRODUCIBLE`, not absent
    coverage.** `entries` and `exposure.inline` are seeded from one `session.inline`, so they agree by
    construction; a record where they disagree is a record disagreeing with itself, which is what §5.2
@@ -150,6 +155,38 @@ Run against 4b's tree either mutation imports cleanly and the row passes for the
 is exactly what §7's `Slice` column exists to catch, found one slice later than the last time. 4b
 keeps a row it can certify on its own tree: a fresh interpreter importing
 `science_model.correspondence` must not load `science_model.audit` at all.
+
+**Design review of revision 29 closed three more, and two land inside revision 29's own fixes** —
+the pattern this document has now recorded five rounds running.
+
+1. **The merge table was incomplete in the same way the thing it replaced was.** Revision 29 replaced
+   a one-pair rule with a five-row table and called it total; four pairs were missing, and the
+   omission was systematic rather than random — every missing pair was a **self-pair or a pair
+   involving one**, because the table was built by asking how two *different* operations combine.
+   Nothing bounds a run to one request per path. The costly one is `LINES` + `LINES`: two searches
+   expose disjoint line sets of one file, and a rank-based merge discards one of them, refusing a
+   citation to a line the reviewer demonstrably saw. It is also the only row where a union is
+   correct, which makes "just union everything" look like the safe repair — and unioning `FULL`
+   counts takes the maximum, inverting `FULL(min)`. §5.1.
+2. **§5.3's order was unexecutable as written.** The table put `EXPOSURE_UNREACHABLE` before
+   `REPLAY_PROTOCOL_MISMATCH` while the prose said all three `unwired` conditions are decided
+   "before any git call" — but deciding a repository lacks a commit, or will not walk, *is* a git
+   call. Only the first two rows are free. §5.3 now numbers the five steps, names
+   `serve.verify_commit` so 4b does not grow a second commit probe, and keeps the true part of the
+   old claim: a protocol mismatch classifies identically against a healthy repository, an
+   unreachable one, and a path that is not a repository.
+3. **Revision 29's own "one namespace" claim overshot, on the operation it had just finished calling
+   special.** It said every `ExposureEntry.target` is a `normalize_project_path` output; a search's
+   target is a regex and is deliberately never normalised (§3.2), and a search's map keys are not
+   targets at all — they are hit paths parsed from the payload, project-relative and NFC by 4a's
+   clause 1. The namespace rests on two facts, and stating it as one would have licensed a checker to
+   normalise a pattern. The same sentence appeared in §5.2 calling the journalled search target an
+   "`authorize` output", which it is not. Both corrected.
+
+Finding (3) is the **second** overshoot in this document to name a mechanism next to the property
+instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
+in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
+protection from the error.
 
 Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
 
@@ -2068,25 +2105,35 @@ never stored, so putting it in `science_model` beside the sealed types would adv
 it does not have. `Correspondence`, which *is* returned across the boundary, ships in its **own
 dependency-neutral module**, `science_model/correspondence.py`, importing pydantic and nothing else.
 
-**One path can pick up two contributions, and "`FULL` supersedes `LINES`" covers one pair of five.**
+**One path can pick up two contributions, and "`FULL` supersedes `LINES`" covers one pair of ten.**
 Stating only that pair leaves an implementer to invent the rest, and every plausible invention —
-last-write-wins, first-write-wins, union — is more permissive than the table below on at least one
-row. Merging is therefore a single named function over the whole set, so §7's supersession row has
-one line to break:
+last-write-wins, first-write-wins, blanket union — is wrong on at least one row below, usually in the
+permissive direction. Merging is therefore a single named function, **total over the four coverages**
+and enumerated here rather than left as a rank to infer. Nothing bounds a run to one request per
+path: the budget buys requests, not paths, so every self-pair is reachable too.
 
 | Pair | Reachable via | Result |
 |---|---|---|
-| `FULL` + `LINES` | a path read and searched | `FULL` |
 | `FULL` + `FULL` | a path inline-seeded **and** read | `FULL(min)` — the commit is the audited artifact, so a line present only in the working-tree copy is refused |
+| `FULL` + `LINES` | a path read and searched | `FULL` |
+| `FULL` + `PATH_ONLY` | a path read and asked for history | `FULL` |
 | `FULL` + `ABSENT` | a path inline-seeded, absent at the commit | `FULL` — it admits every citation `ABSENT` admits, since a bare path citation corresponds under any coverage |
+| `LINES` + `LINES` | **one path searched twice, for different patterns** | `LINES(union)` — each search showed the reviewer its own hit lines, and both were shown |
 | `LINES` + `PATH_ONLY` | a path searched and asked for history | `LINES` |
-| `ABSENT` + `PATH_ONLY` | a read miss and a history entry | either; they admit exactly the same citations. `ABSENT` is taken, for the clearer `reason` |
+| `PATH_ONLY` + `PATH_ONLY` | history asked twice | `PATH_ONLY` — idempotent |
+| `PATH_ONLY` + `ABSENT` | a history entry and a read miss | `ABSENT`; they admit exactly the same citations, and `ABSENT` carries the clearer `reason` |
+| `ABSENT` + `ABSENT` | an absent path read twice | `ABSENT` — idempotent |
 | `LINES` + `ABSENT` | — | **unreachable**: grep matched the path at commit C, so it exists at C |
 
-`FULL(min)` is the one row where a merge rule is doing real work rather than restating a rank. The
-two counts genuinely describe different bytes — a working-tree file and a committed blob — and the
-reviewer saw both, so neither is a lie. Taking the minimum resolves it towards the artifact an
-auditor can re-derive, and needs no story about which entry came first.
+**Two rows are doing real work; the rest restate a rank, and mistaking which is which is the whole
+risk here.** `FULL(min)` resolves two honest counts of different bytes — a working-tree file and a
+committed blob, both of which the reviewer saw — towards the artifact an auditor can re-derive, and
+needs no story about which entry arrived first. `LINES(union)` is the one place a *union* is correct
+rather than permissive, and it is exactly where a rank-based implementation silently discards
+evidence: two searches expose disjoint line sets of one file, and replacing instead of uniting
+refuses a citation to a line the reviewer demonstrably saw. A blanket union would then look like the
+safe generalisation — and it is not, because unioning `FULL` counts takes the maximum, which is the
+`FULL(min)` row inverted.
 
 Revisions 17–22 put it in `evidence_broker.py` beside `Outcome`, which reads well and does not load:
 `evidence_broker.py` imports `audit.subjects`, and `science_model/audit/__init__.py` eagerly imports
@@ -2150,18 +2197,26 @@ narrowing direction; this covers the other one.
 
 **Re-serving reconstructs the request from the entry, and adds no normalisation.** An
 `ExposureEntry` becomes `EvidenceRequest(op, target=entry.target, pathspec=entry.pathspec)` handed to
-`serve` with `exposure.commit` and `exposure.surface_policy`. Those fields already hold the
-*authorized* spelling — `session.py` journals `served.target` and `served.pathspec`, which are
-`authorize`'s outputs — and `normalize_project_path` is idempotent, so passing them back through
-`authorize` returns them unchanged. A checker that "helpfully" pre-normalised, or that reached for a
-raw requester spelling the journal never stored, would be authorizing one path and comparing another.
+`serve` with `exposure.commit` and `exposure.surface_policy`. `session.py` journals `served.target`
+and `served.pathspec`, and what those hold **differs by operation**: for `read` and `history` the
+target is `auth.path`, already normalised; for `search` it is the raw pattern, which goes through
+`_judge_pattern` and no normaliser at all, while the *pathspec* beside it is the normalised one.
+Either way re-serving is stable — `normalize_project_path` is idempotent and `_judge_pattern` is a
+pure function of the string — so passing the journalled values back through `authorize` returns them
+unchanged. A checker that "helpfully" pre-normalised, or that reached for a raw requester spelling
+the journal never stored, would be authorizing one path and comparing another; a checker that
+normalised a *search* target would be rewriting a regex.
 
 **A replay-time git fault is `unwired` in exactly two cases, decided before any entry is replayed.**
-The repository does not hold `exposure.commit`, and `history_traversal_error(repo, exposure.commit)`
-is non-`None`. Both are properties of the *environment*, decidable once and cheaply, and both yield
-`EXPOSURE_UNREACHABLE`. Everything after that point — a `ServeError` on unclassifiable stderr, a
-`GitError` — **propagates**, which is §6's standing rule for the same failure at serving time
-("anything else from git raises") applied to the same code on the other side of the seam.
+The repository does not hold `exposure.commit` — asked through the **existing**
+`serve.verify_commit`, not a second probe — and `history_traversal_error(repo, exposure.commit)` is
+non-`None`. Both are properties of the *environment*, decidable once and cheaply, and both yield
+`EXPOSURE_UNREACHABLE`; §5.3 fixes their position in the executable order. Everything after that
+point — a `ServeError` on unclassifiable stderr, a `GitError` — **propagates**, which is §6's
+standing rule for the same failure at serving time ("anything else from git raises") applied to the
+same code on the other side of the seam. So the checker holds exactly one `except ServeError`, around
+`verify_commit`, and a second one anywhere is the wrapping this section rejects arriving by
+increment.
 
 The alternative is to wrap the whole replay and read every fault as `unwired`. It is attractive
 because `check_correspondence` is called from a write path, and because §5.3's own prose says a
@@ -2239,16 +2294,35 @@ exists to close. §5.4 governs.
 | Situation | Status / code | Stored? | Counts as support? |
 |---|---|---|---|
 | No exposure log | `unwired` / `NO_EXPOSURE` | yes | **no** |
-| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
 | Exposure sealed under a different replay protocol | `unwired` / `REPLAY_PROTOCOL_MISMATCH` | yes | **no** |
+| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
 | Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
 | Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
 | Replay ran; everything corresponded | `verified` | yes | yes |
 
-**The rows are ordered, and the order is load-bearing.** The three `unwired` conditions are decided
-first, before any git call — a protocol mismatch in particular short-circuits, since re-serving under
-a protocol whose meaning has changed produces bytes that answer no question. Then **replay integrity
-is checked in full, and any entry that fails to reproduce short-circuits to
+**The rows are ordered, and the order is load-bearing — so it is written as executable steps rather
+than as a claim about git calls.** Revisions 1–29 said "the three `unwired` conditions are decided
+first, before any git call", which cannot be true of all three: deciding that a repository lacks
+`exposure.commit`, or that its history will not walk, *is* a git call. Only the first two rows are
+free. The order is:
+
+1. `exposure is None` → `NO_EXPOSURE`.
+2. `exposure.replay_protocol != REPLAY_PROTOCOL_VERSION` → `REPLAY_PROTOCOL_MISMATCH`. **Before any
+   git call**, and that is the part of the old claim worth keeping: re-serving under a protocol whose
+   meaning has changed produces bytes that answer no question, so spending git on it is spending it
+   on nothing. A mismatched exposure therefore classifies identically against a healthy repository,
+   an unreachable one, and a path that is not a repository at all.
+3. `serve.verify_commit(repo, exposure.commit)` raises → `EXPOSURE_UNREACHABLE`. **The existing
+   helper, not a second commit probe** — it already resolves through hardened `run_git`, and a
+   checker that reached for a bare `rev-parse` would be the two-spellings-of-one-mechanism failure
+   §2.2 names three times. This is the one narrowly scoped `except ServeError` in the checker;
+   §5.2's propagate rule governs every call after it.
+4. `history_traversal_error(repo, exposure.commit)` is non-`None` → `EXPOSURE_UNREACHABLE`. Second
+   because it is the more expensive walk and because a commit the repository does not hold has no
+   ancestry to fail on.
+5. Replay integrity, then citations, as below.
+
+Then **replay integrity is checked in full, and any entry that fails to reproduce short-circuits to
 `EXPOSURE_UNREPRODUCIBLE`; citations are never evaluated.** A served map built from entries that did
 not reproduce is not a map of anything, so reporting `CITATION_UNSERVED` off it would name a symptom
 as the cause and point an operator at the reviewer instead of at the record. Only against a fully
@@ -2445,8 +2519,11 @@ downgrade is a lie about what was checked.
   coverage; a policy narrowed between serving and replay does not silently re-serve denied hits; the
   vacuous `verified`. Plus, from revision 29: a file whose only line break is a CR reads
   `line_count = 1` from a `read`, not 2; a path both inline-seeded and read takes the **smaller**
-  count; and a repository missing `exposure.commit` yields `unwired` while a `ServeError` raised
-  after both environment checks pass **propagates** rather than becoming a verdict.
+  count; a path searched twice for different patterns admits citations to **both** hit sets; a
+  mismatched `replay_protocol` classifies the same against a healthy repository and against a
+  directory that is not a repository at all; and a repository missing `exposure.commit` yields
+  `unwired` while a `ServeError` raised after both environment checks pass **propagates** rather
+  than becoming a verdict.
 - **`append_review`** — a human review is stored with no control-plane directory existing at all; the
   same for `deterministic`; an agent review whose run record carries **no exposure** yields
   `unwired`, not a crash. Plus attestation (revision 18): a submission cannot express a
@@ -2483,6 +2560,9 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4b | Have `science_model/correspondence.py` import anything from `science_model.audit` | a **subprocess** importing `science_model.correspondence` finds `science_model.audit` absent from `sys.modules` |
 | 4b | Compute `line_count` with `splitlines()` | a file whose only line break is a CR reads `line_count = 1` |
 | 4b | Merge two `Full` contributions by taking the larger, or by last-write-wins | a path inline-seeded at `n+1` lines and read at `n` refuses a citation to line `n+1` |
+| 4b | Merge two `Lines` contributions by replacing rather than uniting | one path searched twice for different patterns admits a citation to a line matched **only by the first** search |
+| 4b | Check the protocol after resolving the commit | a v1 exposure against a repository that is not a git repository at all yields `REPLAY_PROTOCOL_MISMATCH`, not `EXPOSURE_UNREACHABLE` |
+| 4b | Probe the commit with a bare `rev-parse --verify` instead of `serve.verify_commit` | an exposure whose `commit` is the 40-hex OID of a **tree or blob** present in the repository yields `unwired` / `EXPOSURE_UNREACHABLE` |
 | 4b | Wrap replay and return `unwired` on any git fault | a `ServeError` raised after both environment checks pass propagates out of `check_correspondence` |
 | 4b | Treat an inline entry missing from `exposure.inline` as merely uncovered | a tampered inline `target` yields `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
@@ -2529,6 +2609,15 @@ where it was last needed. What 4b *can* prove is the structural fact it is actua
 from a fresh interpreter's `sys.modules`, which is a predicate over what got loaded rather than a
 roster of imports someone maintains — and which the `_Base` mutation breaks immediately, on 4b's own
 tree, without waiting for 4c to close the loop.
+
+**The `verify_commit` row needs a non-commit object, or it certifies nothing.** Against an exposure
+whose commit is merely *absent*, a bare `rev-parse --verify` and `verify_commit` agree — both fail,
+both give `EXPOSURE_UNREACHABLE` — so the obvious fixture leaves the mutation green. What
+`verify_commit` adds is `^{commit}` (and `--end-of-options`): it requires the object to be a
+**commit**, where the bare form accepts any object name. `EvidenceExposure.commit` is pattern-bound
+to 40 hex, which a tree or blob OID satisfies, so that is a constructible record — and under the
+mutation it resolves, replay proceeds against a non-commit, and the checker raises instead of
+classifying. Which line does the mutation break first: with an absent commit, none.
 
 **A row that must not be added: pre-normalising the replayed request target.** `normalize_project_path`
 is idempotent and the journal stores its output, so a checker that normalises again and one that does
