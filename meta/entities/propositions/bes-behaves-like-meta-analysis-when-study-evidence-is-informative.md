@@ -9,8 +9,8 @@ id: proposition:bes-behaves-like-meta-analysis-when-study-evidence-is-informativ
 kind: proposition
 title: BES behaves like meta-analysis when study evidence is informative
 status: active
-created: &id001 2026-07-03
-updated: *id001
+created: "2026-07-03"
+updated: "2026-07-03"
 source_refs:
 - annotation:entities/papers/VanWonderen2024.source#bes-similar-meta-analysis
 - paper:VanWonderen2024

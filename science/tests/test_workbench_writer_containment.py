@@ -616,7 +616,7 @@ def test_the_COMPILE_path_is_validated_and_writes_nothing(tmp_path, monkeypatch)
     from science_tool.dag.entity_frontmatter import PersistedShapeError
 
     (tmp_path / "science.yaml").write_text("name: t\n", encoding="utf-8")
-    monkeypatch.setattr(wb, "_proposition_title", lambda row: "")
+    monkeypatch.setattr(wb, "derive_proposition_title", lambda **kwargs: "")
     workbench = wb.WorkbenchFile.model_validate(
         {"patch": "p", "rows": [{"subject": "concept:a", "predicate": "affects",
                                  "object": "concept:b", "patch": "p", "polarity": "unsigned"}]}

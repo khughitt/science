@@ -40,6 +40,8 @@ from science_model.reasoning import (
     canonical_evidence_type_token,
 )
 
+from science_tool.dag.entity_frontmatter import derive_evidence_line_title, derive_proposition_title
+
 # ---------------------------------------------------------------------------
 # Layout models (Task 5e) — cosmetic / non-epistemic state
 # ---------------------------------------------------------------------------
@@ -250,33 +252,6 @@ def _resolve_row_discusses(row: WorkbenchRow, focal_hypothesis: str | None) -> l
     return None
 
 
-def _collapse(text: str) -> str:
-    """Collapse all runs of whitespace to single spaces. Titles are durable authored source."""
-    return " ".join(text.split())
-
-
-def _proposition_title(row: WorkbenchRow) -> str:
-    """THE derived proposition title (design §5.2). Deterministic, not good prose.
-
-    Mechanical on purpose: it must be stable and reconstructible from the row. An author may
-    replace it afterwards, and the update path will preserve the replacement because `title` is
-    not in the per-kind workbench key set.
-    """
-    return _collapse(f"{row.subject} {row.predicate} {row.object}")
-
-
-def _evidence_line_title(stub: EvidenceStub, *, target_id: str) -> str:
-    """THE derived evidence-line title (design §5.2).
-
-    `target_id` is computed by the caller and always present, so the head alone is non-empty.
-    `stance` defaults to SUPPORTS at lift, matching the entity field's own default.
-    """
-    stance = stub.stance or "supports"
-    head = f"{stance} {target_id}"
-    tail = stub.source or (stub.evidence_type.value if stub.evidence_type else None)
-    return _collapse(f"{head} — {tail}" if tail else head)
-
-
 def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
     """Build a ``PropositionEntity`` from a row, minting a deterministic id if id-less.
 
@@ -293,7 +268,9 @@ def _proposition_for_row(row: WorkbenchRow) -> PropositionEntity:
         polarity = Polarity.NOT_APPLICABLE
     return PropositionEntity(
         id=entity_id,
-        title=_proposition_title(row),
+        title=derive_proposition_title(
+            subject=row.subject, predicate=row.predicate, object=row.object
+        ),
         subject=row.subject,
         object=row.object,
         predicate=predicate,
@@ -324,7 +301,12 @@ def _evidence_line_for_stub(stub: EvidenceStub, *, target_id: str, index: int) -
         id=line_id,
         kind="evidence-line",
         type=EntityType.EVIDENCE_LINE,
-        title=_evidence_line_title(stub, target_id=target_id),
+        title=derive_evidence_line_title(
+            stance=stub.stance,
+            target_id=target_id,
+            source=stub.source,
+            evidence_type=stub.evidence_type,
+        ),
         # These are REQUIRED by the model and must keep being supplied. They are not persisted --
         # Task 3's owned-key allowlist is what keeps them out of the file. Deleting them here
         # raises `Field required` for all six.

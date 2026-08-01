@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 122,
-    "deferred": 102,
+    "deferred": 103,
 }
 
 
