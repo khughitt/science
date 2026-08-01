@@ -18,8 +18,14 @@ and the shared ancestry diagnostic.
 collections, pytest, real git through the existing hardened `run_git`/`serve` path.
 
 **Design:** [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-at revision 30 through `ec428c8a` (the direct leaf-execution guard correction) — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
+at revision 32 through `7cc8b8db` — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
 (replay), §5.3 (classification order), and §7 (mutation pairs).
+
+**Implementation status:** The original four tasks landed through `d1340e64`; revision 32's
+final-review repairs landed at `c7429300`. The tree citeability repair landed first as the Plan 4a
+follow-up `33bbdaf2`, modifying `autonomy/lifecycle.py` and its test without widening 4b's cell.
+The 4b wave forward-scans LF-bearing hit paths, enforces inline multiset and line-count integrity,
+bounds span checks, and groups search hits before constructing coverage.
 
 ## Global Constraints
 
@@ -29,6 +35,8 @@ at revision 30 through `ec428c8a` (the direct leaf-execution guard correction) �
   `science/model/src/science_model/correspondence.py`,
   `science/src/science_tool/evidence_broker/hits.py`, and
   `science/src/science_tool/evidence_broker/correspondence.py`.
+- The preceding Plan 4a follow-up `33bbdaf2` modifies `autonomy/lifecycle.py` and its test; those
+  prerequisite files are not part of Plan 4b's production inventory.
 - **Do not modify any stored-record model.** In particular, do not touch
   `science_model/audit/record.py`; `Review.evidence`, `Review.correspondence`, `ReviewAttestation`,
   `ReviewSubmission`, `append_review`, eligibility, and validate registration are plan 4c.
@@ -36,9 +44,9 @@ at revision 30 through `ec428c8a` (the direct leaf-execution guard correction) �
   `verify_commit`; a second serving implementation would check itself rather than the broker.
 - `check_correspondence` has no production caller in this slice. Tests call it directly with
   constructible `Sequence[Evidence]` and `EvidenceExposure | None` values.
-- Replay adds no NFC scan and no path normalization. Authored and journalled paths are already
-  normalized; search-hit paths inherit plan 4a's UTF-8/NFC tree guarantee. A search target is a regex
-  and must never be normalized.
+- Replay adds no tree scan and no path normalization. Authored and journalled paths are already
+  normalized; search-hit paths inherit the Plan 4a follow-up's normalizer-identity tree guarantee.
+  A search target is a regex and must never be normalized.
 - Error order is exact: no exposure; protocol mismatch; `serve.verify_commit`; ancestry diagnostic;
   replay integrity; citations. The first two checks are decided before any git call; protocol
   mismatch must not consult the repository.
@@ -1383,8 +1391,9 @@ git commit -m "test(evidence-broker): certify checker guards"
 
 Review the cumulative diff against these questions before declaring plan 4b implemented:
 
-1. Does `git diff --name-only d5bf01e2...HEAD` show only the three new production files, their three
-   test files, this plan, and any explicit design-status update?
+1. Does `git diff --name-only d5bf01e2...HEAD` show Plan 4b's three production files, their three
+   test files, this plan and the design-status update, plus only the prerequisite
+   `autonomy/lifecycle.py` and lifecycle-test pair from Plan 4a follow-up `33bbdaf2`?
 2. Can a fresh interpreter execute `science_model/correspondence.py` with `runpy.run_path` without
    loading `science_model.audit`?
 3. Does `check_correspondence` accept `Sequence[Evidence]`, not `Review`, and
