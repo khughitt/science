@@ -269,25 +269,32 @@ cd science && uv run --frozen pytest \
 
 Expected: all pass. These are the suites that assert on minted titles, so a changed derivation surfaces here.
 
-- [ ] **Step 7: Mutation-certify both derivations**
+- [ ] **Step 7: Lint, type-check, and commit**
 
-For each mutation, apply it, run `pytest tests/test_annotation_title_derivations.py -q`, confirm RED, then revert with `git checkout -- src/science_tool/dag/entity_frontmatter.py`.
-
-1. In `derive_proposition_title`, swap the order to `f"{subject} {object} {predicate}"`. Expect `test_proposition_title_is_the_collapsed_triple` to fail.
-2. In `derive_evidence_line_title`, drop the coercion — `tail = canonical_evidence_type_token(evidence_type)`. Expect `test_evidence_line_title_refuses_a_token_that_is_not_a_member` to fail.
-3. In `derive_evidence_line_title`, prefer the evidence type over the source. Expect `test_evidence_line_title_prefers_source_for_the_tail` to fail.
-
-Report any mutation that does **not** go red. Do not adjust the mutation to match the observation.
-
-- [ ] **Step 8: Lint, type-check, and commit**
+Commit **before** mutating. Mutation testing reverts with `git checkout`, and an uncommitted implementation is reverted along with the mutation — you would be restoring the file to its pre-task state and testing nothing.
 
 ```bash
 cd science && uv run ruff check && uv run pyright
+cd .. && git rev-parse --abbrev-ref HEAD    # expect: proposition-corpus-remediation
 git add science/src/science_tool/dag/entity_frontmatter.py \
         science/src/science_tool/dag/workbench.py \
         science/tests/test_annotation_title_derivations.py
 git commit -m "refactor(annotation): share scalar title derivations between writer and migration"
 ```
+
+- [ ] **Step 8: Mutation-certify both derivations**
+
+For each mutation: apply it, run `cd science && uv run --frozen pytest tests/test_annotation_title_derivations.py -q`, confirm RED, then restore the committed implementation with `git checkout HEAD -- science/src/science_tool/dag/entity_frontmatter.py` (run from the worktree root).
+
+`HEAD`, not `--`: the bare form restores the index, which after Step 7 is the same thing — but only because the commit happened. Using `HEAD` says what is being restored and keeps working if the file is staged for some other reason.
+
+1. In `derive_proposition_title`, swap the order to `f"{subject} {object} {predicate}"`. Expect `test_proposition_title_is_the_collapsed_triple` to fail.
+2. In `derive_evidence_line_title`, drop the coercion — `tail = canonical_evidence_type_token(evidence_type)`. Expect `test_evidence_line_title_refuses_a_token_that_is_not_a_member` to fail.
+3. In `derive_evidence_line_title`, prefer the evidence type over the source. Expect `test_evidence_line_title_prefers_source_for_the_tail` to fail.
+
+After the last restore, confirm the tree is clean: `git status --porcelain` should print nothing.
+
+Report any mutation that does **not** go red. Do not adjust the mutation to match the observation.
 
 ---
 
@@ -506,10 +513,15 @@ def test_apply_preserves_crlf_body_bytes(tmp_path):
     """Pins the preserving-body reader: Path.read_text would silently rewrite line endings."""
     root = _project(tmp_path)
     path = root / "entities/propositions/crlf.md"
-    text = f"---\n{EMPTY_TITLE_PROPOSITION}---\n# b\n\n## Summary\ntext\n".replace("\n", "\r\n")
+    body = "# b\r\n\r\n## Summary\r\ntext\r\n"
+    text = f"---\n{EMPTY_TITLE_PROPOSITION}---\n".replace("\n", "\r\n") + body
     path.write_bytes(text.encode("utf-8"))
+
     apply_plan(plan_repairs(root))
-    assert b"\r\n" in path.read_bytes()
+
+    # The exact original body bytes, not merely "some CRLF survived" -- a partial
+    # rewrite would leave CRLF elsewhere in the file and pass a weaker assertion.
+    assert path.read_bytes().endswith(body.encode("utf-8"))
 
 
 def test_dates_are_force_quoted_by_the_canonical_renderer(tmp_path):
@@ -520,7 +532,19 @@ def test_dates_are_force_quoted_by_the_canonical_renderer(tmp_path):
     lines = path.read_text(encoding="utf-8").splitlines()
     assert 'created: "2026-06-01"' in lines
     assert 'updated: "2026-06-01"' in lines
+
+
+def test_a_datetime_valued_date_is_unsupported(tmp_path):
+    """The measured defect is a bare date; a datetime's time component would be discarded."""
+    root = _project(tmp_path)
+    frontmatter = UNQUOTED_DATES_PROPOSITION.replace("created: 2026-06-01", "created: 2026-06-01 10:30:00")
+    _write(root, "propositions", "dt.md", frontmatter)
+    plan = plan_repairs(root)
+    assert plan.repairs == ()
+    assert len(plan.refusals) == 1
 ```
+
+**These are verified.** The module source and this test file were run together against the real package before this plan was committed: 13 passed. If any fails during implementation, the implementation has diverged from the code in Step 3 — re-read it rather than adjusting the test.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -561,14 +585,13 @@ from typing import Any
 from science_model.entity_schema import EntityValidationError, EntityValidator
 from science_model.frontmatter import render_frontmatter, split_frontmatter
 
+from science_model.frontmatter import atomic_write_text
+
 from science_tool.dag.entity_frontmatter import (
     derive_evidence_line_title,
     derive_proposition_title,
 )
-from science_tool.entities import (
-    _atomic_replace_text,
-    parse_markdown_entity_file_preserving_body,
-)
+from science_tool.entities import parse_markdown_entity_file_preserving_body
 
 ANNOTATION_KIND_DIRS: tuple[str, ...] = ("propositions", "evidence-lines")
 
@@ -605,12 +628,16 @@ def _normalized(mapping: dict[str, Any]) -> dict[str, Any]:
     Raw YAML changes those values' TYPE across the render -- `datetime.date` in, `str` out --
     so without this the date-only repairs would read as semantic changes and the guard would
     reject its own correct output.
+
+    `datetime` is deliberately NOT normalized. The measured corpus defect is a bare
+    `datetime.date`; a `datetime` carries a time component that the canonical renderer would
+    discard, and normalizing it here would declare that discard semantics-free. Leaving it
+    alone makes the guard REFUSE such a record instead, which is the correct outcome for a
+    value this migration was never measured against.
     """
     out: dict[str, Any] = {}
     for key, value in mapping.items():
-        if key in _DATE_KEYS and isinstance(value, datetime):
-            out[key] = value.date().isoformat()
-        elif key in _DATE_KEYS and isinstance(value, date):
+        if key in _DATE_KEYS and isinstance(value, date) and not isinstance(value, datetime):
             out[key] = value.isoformat()
         else:
             out[key] = value
@@ -693,31 +720,40 @@ def plan_repairs(project_root: Path) -> RepairPlan:
     return RepairPlan(tuple(repairs), tuple(refusals), skipped)
 
 
+def _refusal_message(refusals: tuple[Refusal, ...]) -> str:
+    listed = "\n".join(f"  {r.path}: {r.reason}" for r in refusals)
+    return (
+        f"{len(refusals)} in-scope record(s) have no available repair; "
+        f"nothing was written:\n{listed}"
+    )
+
+
 def apply_plan(plan: RepairPlan) -> int:
     """Write every planned post-image, or none of them."""
     if plan.refusals:
-        listed = "\n".join(f"  {r.path}: {r.reason}" for r in plan.refusals)
-        raise BaseShapeMigrationRefused(
-            f"{len(plan.refusals)} in-scope record(s) have no available repair; "
-            f"nothing was written:\n{listed}"
-        )
+        raise BaseShapeMigrationRefused(_refusal_message(plan.refusals))
     for repair in plan.repairs:
-        _atomic_replace_text(repair.path, repair.postimage)
+        atomic_write_text(repair.path, repair.postimage)
     return len(plan.repairs)
 
 
 def migrate(project_root: Path, *, apply: bool) -> dict[str, object]:
-    """Plan, optionally apply, and report."""
+    """Plan, optionally apply, and report.
+
+    Refusals raise whether or not `apply` was requested. A dry run exists to tell the caller
+    what the apply WOULD do, and what it would do is refuse -- reporting "would repair N" while
+    silently omitting the records that block the run is the opposite of report-first.
+    """
     plan = plan_repairs(project_root)
+    if plan.refusals:
+        raise BaseShapeMigrationRefused(_refusal_message(plan.refusals))
     written = apply_plan(plan) if apply else 0
+    # No `refusals` key: this line is unreachable unless the plan had none, so reporting an
+    # always-empty list would imply the command can succeed while refusing something.
     return {
         "applied": apply,
         "repairs": [
             {"path": str(r.path.relative_to(project_root)), "title": r.title} for r in plan.repairs
-        ],
-        "refusals": [
-            {"path": str(r.path.relative_to(project_root)), "reason": r.reason}
-            for r in plan.refusals
         ],
         "skipped": plan.skipped,
         "written": written,
@@ -730,11 +766,23 @@ def migrate(project_root: Path, *, apply: bool) -> dict[str, object]:
 cd science && uv run --frozen pytest tests/test_migrate_annotation_base_shape.py -q
 ```
 
-Expected: 12 passed (11 functions, the `title` parametrize contributing 2 cases).
+Expected: **13 passed** (12 functions, the `title` parametrize contributing 2 cases). This exact count was observed against the real package while writing this plan.
 
-- [ ] **Step 5: Mutation-certify the two properties that are easy to lose**
+- [ ] **Step 5: Lint, type-check, and commit**
 
-Apply, run `pytest tests/test_migrate_annotation_base_shape.py -q`, confirm RED, revert with `git checkout -- src/science_tool/migrate_annotation_base_shape.py`.
+Commit **before** mutating, for the reason given in Task 1 Step 7.
+
+```bash
+cd science && uv run ruff check && uv run pyright
+cd .. && git rev-parse --abbrev-ref HEAD    # expect: proposition-corpus-remediation
+git add science/src/science_tool/migrate_annotation_base_shape.py \
+        science/tests/test_migrate_annotation_base_shape.py
+git commit -m "feat(annotation): plan base-shape repairs with preflight atomicity"
+```
+
+- [ ] **Step 6: Mutation-certify the properties that are easy to lose**
+
+For each: apply it, run `cd science && uv run --frozen pytest tests/test_migrate_annotation_base_shape.py -q`, confirm RED, then restore with `git checkout HEAD -- science/src/science_tool/migrate_annotation_base_shape.py` from the worktree root.
 
 1. **Falsiness instead of equality.** Change the `_plan_one` condition to `if not planned.get("title"):`. Expect both `test_a_title_that_is_not_the_empty_string_is_unsupported` cases to fail.
 2. **Per-file application.** Change `apply_plan` to write each repair before checking `plan.refusals`. Expect `test_apply_refuses_the_whole_batch_and_names_every_refusal` to fail on the `good.md` byte comparison.
@@ -742,17 +790,11 @@ Apply, run `pytest tests/test_migrate_annotation_base_shape.py -q`, confirm RED,
 4. **Drop the date normalization.** Make `_normalized` the identity function. Expect `test_a_date_only_repair_changes_no_parsed_value` to fail — the guard now rejects its own correct output as an out-of-allowlist change.
 5. **Stamp `updated`.** Add `planned["updated"] = date.today().isoformat()` after the title branch in `_plan_one`. Expect `test_the_repair_does_not_stamp_updated` to fail.
 6. **Read with `Path.read_text`.** Replace the `parse_markdown_entity_file_preserving_body` call with `split_frontmatter(path.read_text(encoding="utf-8"))`. Expect `test_apply_preserves_crlf_body_bytes` to fail.
+7. **Normalize `datetime` too.** Add a `datetime` branch to `_normalized` returning `value.date().isoformat()`. Expect `test_a_datetime_valued_date_is_unsupported` to fail — that mutation declares a discarded time component semantics-free.
 
-Report any mutation that does not go red.
+After the last restore, confirm `git status --porcelain` prints nothing.
 
-- [ ] **Step 6: Lint, type-check, and commit**
-
-```bash
-cd science && uv run ruff check && uv run pyright
-git add science/src/science_tool/migrate_annotation_base_shape.py \
-        science/tests/test_migrate_annotation_base_shape.py
-git commit -m "feat(annotation): plan base-shape repairs with preflight atomicity"
-```
+Report any mutation whose observed result differs from the expectation above. Do not adjust the mutation to match the observation.
 
 ---
 
@@ -812,6 +854,22 @@ def test_apply_repairs_the_invalid_and_leaves_the_valid_byte_identical(tmp_path,
     assert valid.read_text(encoding="utf-8") == VALID_PROPOSITION
     repaired, _ = split_frontmatter(invalid.read_text(encoding="utf-8"))
     assert repaired["title"] == "concept:a affects concept:b"
+
+
+def test_dry_run_names_refusals_and_exits_nonzero(tmp_path, monkeypatch):
+    """Report-first: a dry run must not print 'would repair' while hiding its blockers."""
+    root = _project(tmp_path)
+    good = _write(root, "propositions", "good.md", EMPTY_TITLE_PROPOSITION)
+    _write(root, "propositions", "bad.md", EMPTY_TITLE_PROPOSITION.replace("title: ''", "title: null"))
+    before = good.read_text(encoding="utf-8")
+    monkeypatch.chdir(root)
+
+    result = CliRunner().invoke(entity_group, ["migrate-annotation-base-shape"])
+
+    assert result.exit_code != 0
+    assert "bad.md" in result.output
+    assert "would repair" not in result.output
+    assert good.read_text(encoding="utf-8") == before
 
 
 def test_apply_with_unsupported_records_exits_nonzero_and_writes_nothing(tmp_path, monkeypatch):
@@ -878,15 +936,40 @@ def entity_migrate_annotation_base_shape(apply_changes: bool, output_format: str
     emit(output_format=output_format, payload=report, render_text=_render_text)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Classify the command in the output-budget registry**
 
-```bash
-cd science && uv run --frozen pytest tests/test_migrate_annotation_base_shape.py -q
+`test_every_leaf_command_is_classified` turns the full suite red the moment a leaf command exists with no classification, and `EXPECTED_CLASSIFICATION_COUNTS` pins the totals — so this is not optional cleanup, it is part of making Task 4 Step 1 green. The command's JSON payload grows one `repairs` entry per repaired record, so it is **deferred**, not exempt.
+
+In `science/src/science_tool/budget/registry.py`, add the path to the existing `entity …` tuple — the block whose reason already reads *"one output member per entity, field, relation, warning, migration action, or body element"*, which covers this command without a new entry:
+
+```python
+        for path in (
+            "entity field-inventory",
+            "entity migrate-annotation-base-shape",
+            "entity migrate-hypothesis",
+            "entity migrate-specs",
 ```
 
-Expected: 15 passed (12 from Task 2 plus these 3).
+In `science/tests/test_budget_boundary.py`, bump the deferred total from 102 to 103:
 
-- [ ] **Step 5: Verify the help text states the kind boundary**
+```python
+EXPECTED_CLASSIFICATION_COUNTS = {
+    "budgeted": 69,
+    "exempt": 122,
+    "deferred": 103,
+}
+```
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+```bash
+cd science && uv run --frozen pytest \
+  tests/test_migrate_annotation_base_shape.py tests/test_budget_boundary.py -q
+```
+
+Expected: 17 from `test_migrate_annotation_base_shape.py` (13 from Task 2 plus these 4), and `test_budget_boundary.py` green. If the deferred count is off by more than one, a command was added or removed elsewhere on this branch — reconcile it rather than editing the number until it passes.
+
+- [ ] **Step 6: Verify the help text states the kind boundary**
 
 ```bash
 cd science && uv run --frozen science entity migrate-annotation-base-shape --help
@@ -894,11 +977,15 @@ cd science && uv run --frozen science entity migrate-annotation-base-shape --hel
 
 Expected: the output names PROPOSITION and EVIDENCE-LINE and says other kinds are not touched. The design requires a reader not have to infer the boundary.
 
-- [ ] **Step 6: Lint, type-check, and commit**
+- [ ] **Step 7: Lint, type-check, and commit**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
-git add science/src/science_tool/entities_cli.py science/tests/test_migrate_annotation_base_shape.py
+cd .. && git rev-parse --abbrev-ref HEAD    # expect: proposition-corpus-remediation
+git add science/src/science_tool/entities_cli.py \
+        science/src/science_tool/budget/registry.py \
+        science/tests/test_budget_boundary.py \
+        science/tests/test_migrate_annotation_base_shape.py
 git commit -m "feat(annotation): add entity migrate-annotation-base-shape"
 ```
 
@@ -963,24 +1050,29 @@ Expected: `681 mm30`, `72 cbioportal`, `21 evolution`, `16 protein-landscape`, `
 
 - [ ] **Step 4: Dry-run every project root**
 
-The external repositories pin an older toolkit revision in their own `uv.lock`, so they cannot see this branch's command. Run the worktree's toolkit against them by setting `--project` and letting the command read `Path.cwd()`:
+The external repositories pin an older toolkit revision in their own `uv.lock`, so they cannot see this branch's command. Run the worktree's toolkit against them by setting `--project` and letting the command read `Path.cwd()`.
+
+**Every block from here on is self-contained and starts at the worktree root.** Each recomputes `WT` — execution runs each block in a fresh shell, so a variable set in an earlier block is not in scope, and `$(cd .. && pwd)` would resolve to `.worktrees/` rather than the repo.
 
 ```bash
-WT=$(cd .. && pwd)/science
+WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
 for p in ~/d/cancer/cancer-types/multiple-myeloma \
          ~/d/cancer/data-sources/cbioportal \
          ~/d/cancer/mechanisms/evolution \
-         ~/d/protein-landscape; do
+         ~/d/protein-landscape \
+         "$(git rev-parse --show-toplevel)/meta"; do
   echo "=== $p"
   (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape)
 done
 ```
 
-Expected: each reports `would repair N record(s)` matching Step 3, with no refusals and nothing written.
+Expected: `would repair` counts of 681, 72, 21, 16, 2 — matching Step 3 — with nothing written. A dry run now exits non-zero and names any unsupported record, so a non-zero exit here means **stop**: there is an in-scope record the command cannot repair, and the design's measured residue of zero no longer holds.
 
 - [ ] **Step 5: Apply and commit, one project root at a time**
 
-Do these one at a time, not in a loop — each needs its branch confirmed before it is committed. These repositories are Dropbox-synced and their checked-out branch drifts without this session's knowledge.
+Do these one at a time, not in a loop — each needs its state confirmed before it is committed. These repositories are Dropbox-synced and both their checked-out branch and their working tree drift without this session's knowledge.
+
+**Measured expectation, taken while writing this plan:** all four external repositories are on `main` with a clean working tree. The gate below enforces exactly that, and it is what makes the `git add` safe — on a clean tree, everything under those two directories afterwards is this command's output and nothing else.
 
 Run this block four times, substituting each path in turn:
 
@@ -990,23 +1082,36 @@ Run this block four times, substituting each path in turn:
 - `~/d/protein-landscape` (16)
 
 ```bash
-cd ~/d/cancer/cancer-types/multiple-myeloma          # <- the path for this round
-git rev-parse --abbrev-ref HEAD                      # STOP and report if this is not the expected branch
+WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
+TARGET=~/d/cancer/cancer-types/multiple-myeloma  # <- the path for this round
+cd "$TARGET"
+
+# Gate. Do NOT proceed past a failure here -- report it instead.
+test "$(git rev-parse --abbrev-ref HEAD)" = "main" || { echo "REFUSED: not on main"; exit 1; }
+test -z "$(git status --porcelain)" || { echo "REFUSED: working tree is dirty"; exit 1; }
+
 uv run --frozen --project "$WT" science entity migrate-annotation-base-shape --apply
 git add entities/propositions entities/evidence-lines
 git commit -m "fix(entities): backfill derived titles and quote persisted dates"
 ```
 
-Do not push any of these repositories. `~/d/health/*` and the pan-disease project have no GitHub remote at all, and none of the four here is pushed as part of this plan.
+If a repository is not on `main`, or is dirty, **stop and report it** rather than committing around it. A dirty tree means someone else's uncommitted work is in the same directories, and `git add` cannot tell it apart from the migration's output.
+
+Do not push any of these repositories.
 
 - [ ] **Step 6: Apply to `meta/` inside this worktree**
 
 `meta` is a project root inside this repository, so its repair is a separate commit on this branch, not a separate repository:
 
 ```bash
-cd meta && uv run --frozen --project ../science science entity migrate-annotation-base-shape --apply
-cd .. && git add meta/entities && git commit -m "fix(meta): backfill derived titles and quote persisted dates"
+WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
+(cd meta && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape --apply)
+git status --porcelain meta/entities              # expect: only the 2 repaired records
+git add meta/entities
+git commit -m "fix(meta): backfill derived titles and quote persisted dates"
 ```
+
+No branch gate here: this is the worktree's own branch, already confirmed in Tasks 1-3.
 
 - [ ] **Step 7: Verify the post-condition**
 
@@ -1017,20 +1122,36 @@ Expected: `0` for every root. This is §5.3, and it is the only durable claim th
 - [ ] **Step 8: Verify idempotence on the real corpus**
 
 ```bash
+WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
 for p in ~/d/cancer/cancer-types/multiple-myeloma ~/d/protein-landscape; do
-  (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape --apply && git status --porcelain | head)
+  echo "=== $p"
+  (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape --apply \
+     && git status --porcelain)
 done
 ```
 
-Expected: `repaired 0 record(s)` and empty `git status` output — a second apply is a no-op.
+Expected: `repaired 0 record(s); skipped N` and empty `git status` output for each — a second apply is a no-op.
 
-- [ ] **Step 9: Report the diff shape**
+- [ ] **Step 9: Verify the diff distribution across all five commits**
+
+`--stat` abbreviates and cannot show a per-file distribution; `--numstat` gives exact added/deleted counts per file, which is what the design's measured shape is stated in.
 
 ```bash
-cd ~/d/cancer/cancer-types/multiple-myeloma && git show --stat HEAD | tail -3
+WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
+for p in ~/d/cancer/cancer-types/multiple-myeloma \
+         ~/d/cancer/data-sources/cbioportal \
+         ~/d/cancer/mechanisms/evolution \
+         ~/d/protein-landscape \
+         "$(git rev-parse --show-toplevel)"; do
+  git -C "$p" show --numstat --format= HEAD
+done | awk 'NF==3 {print $1+$2}' | sort -n | uniq -c
 ```
 
-Expected shape across the whole rollout, measured during design: 719 files at 6 changed lines, 21 at 4, and 52 spread across 7–12 where a long scalar additionally unwraps to `width=10_000`. Report any file whose diff is materially larger — §5.2 asserts the parsed values are unchanged, so a large diff means reflow, but it should be confirmed rather than assumed.
+Expected distribution over 792 files, measured during design: **719 files at 6 changed lines, 21 at 4, and 52 spread across 7–12** (2 at 7, 29 at 8, 13 at 9, 8 at 12), where a long scalar additionally unwraps from PyYAML's 80-column default to the canonical `width=10_000`.
+
+Report any bucket that differs, and any file above 12. §5.2 asserts the parsed values are unchanged, so an outsized diff should be reflow — but confirm it rather than assuming, by reading one such file's diff.
+
+Note the last path is the toolkit worktree itself, whose `HEAD` at this point is the `meta` corpus commit from Step 6. If Step 6 was not the most recent commit on this branch, name its SHA explicitly instead of `HEAD`.
 
 ---
 
