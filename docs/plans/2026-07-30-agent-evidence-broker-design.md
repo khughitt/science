@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 31)
+**Status:** partially implemented (revision 32)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -15,7 +15,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | four tasks implemented through `d1340e64`; revision 31's fix wave pending |
-| Plan 4a follow-up | §3.1's tree rule widened to LF and backslash — see revision 31 | not implemented; **precedes** 4b's fix wave |
+| Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
 | Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
@@ -211,6 +211,27 @@ Finding (3) is the **second** overshoot in this document to name a mechanism nex
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
 in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
 protection from the error.
+
+Revision 32 corrects both of revision 31's span mutation fixtures, found while executing the fix wave
+it authorised. Revision 31 wrote a section warning that a timeout row is only as strong as the input
+that keeps the mutant running, and then supplied two inputs that do not.
+
+1. **The `FULL` row's mutation short-circuits after four iterations.** `Full(3)` against a span of 1
+   to `10**18` makes the iterating form return `False` at line **4** — the predicate is false almost
+   immediately, so nothing runs long and the row certified nothing. The count must sit just *below*
+   the span's end, so every line but the last satisfies it: `Full(10**18 - 1)`.
+2. **The `LINES` row's mutation cannot hang at all, so the row is deleted.** A span is contiguous and
+   `numbers` holds at most n elements, so among any n+1 consecutive lines at least one is absent and
+   the iteration short-circuits within `len(numbers) + 1` steps regardless of the span's declared
+   length. The pre-check is a same-verdict optimisation and now sits beside the quadratic
+   accumulation in §7's "must not be added" list.
+
+The two share one cause: revision 31 saw two loops over a span and gave them the same treatment
+without asking **what bounds each loop**. `FULL` compares against a count, so an authored `end_line`
+sets the iteration length directly; `LINES` compares against a set, whose size is fixed by the
+payload cap. Only the first is authored-unbounded. This is the fourth time in this document that a
+fix has carried a defect of its own shape into the next round — and the first where the *warning
+paragraph* and the defective fixture were written in the same revision.
 
 Revision 31 closes the five defects found by plan 4b's final cumulative review of implemented code.
 None is a fail-open in 4b — but one is a fail-open in **4a**, which 4b's own assumption sentence had
@@ -2306,10 +2327,20 @@ upper bound, so `Span(start_line=1, end_line=10**18)` is constructible and evalu
 `range(...)` inside `all(...)` does not return. It is reachable from authored review content on a
 write path, and it hangs rather than raising — the one failure mode in this section that no timeout
 or error message describes. Under `FULL`, compare `end_line <= line_count` directly: every line in
-`[start, end]` is at most `end`, so the O(1) form is not an optimisation but the same predicate. Under
-`LINES`, refuse immediately when `end_line - start_line + 1 > len(numbers)` — a span longer than the
-hit set cannot be contained in it — which bounds the remaining work by the number of matched lines,
-and therefore by the payload cap.
+`[start, end]` is at most `end`, so the O(1) form is not an optimisation but the same predicate.
+
+**`LINES` needs no such repair, and revision 32 corrects revision 31 for thinking it did.** A span is
+*contiguous*, and `numbers` holds at most n elements, so among the first n+1 lines of any span at
+least one is absent — the iteration short-circuits within `len(numbers) + 1` steps whatever the
+span's declared length, and n is bounded by the payload cap. The obvious guard
+(`end_line - start_line + 1 > len(numbers)` refuses immediately) is therefore a same-verdict
+optimisation, not a termination guarantee. Keep it for the constant factor; do not describe it as
+what makes `LINES` safe, and do not write a mutation row for it — see §7.
+
+Only the unbounded comparison against a *count* can run away, because there the predicate is true for
+every line until the last one. That asymmetry is the whole finding: `FULL` iterates until the span
+exceeds the file, `LINES` iterates until the span leaves the hit set, and only the first of those can
+be made arbitrarily long by an authored value.
 
 A span cites every line it covers — **every line, not its endpoints**, and the difference is only
 visible on a span whose *interior* is unserved. A span of lines 2–4 against hits `{2, 4}` does not
@@ -2734,8 +2765,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4b | Merge two `Lines` contributions by replacing rather than uniting | one path searched twice for different patterns admits a citation to a line matched **only by the first** search |
 | 4a follow-up | Check UTF-8 and NFC instead of `normalize_project_path(p) == p` | a brokered run opens against a tree holding `a\b.txt` |
 | 4b | Split the payload on LF, or on `LF + <commit>:` | a search hit on a file named `a<LF>b.txt` parses to that path and line, under **both** spellings |
-| 4b | Evaluate a `FULL` span by iterating its lines | a citation spanning lines 1 to 10**18 against `Full(3)` is refused **within the test timeout** |
-| 4b | Evaluate a `LINES` span without the length pre-check | the same span against `Lines({1, 2})` is refused within the timeout |
+| 4b | Evaluate a `FULL` span by iterating its lines | a citation spanning lines 1 to `10**18` against **`Full(10**18 - 1)`** is refused **within the test timeout** |
 | 4b | Compare inline entries to the manifest with a dict keyed on `(target, sha256)` | a manifest item with **no** corresponding entry yields `EXPOSURE_UNREPRODUCIBLE`; and two entries against one manifest item do too |
 | 4b | Accept a manifest with one `(target, sha256)` at two `lines` values | that exposure is refused rather than classified |
 | 4b | Check the protocol after resolving the commit | a v1 exposure against a repository that is not a git repository at all yields `REPLAY_PROTOCOL_MISMATCH`, not `EXPOSURE_UNREACHABLE` |
@@ -2806,26 +2836,42 @@ to 40 hex, which a tree or blob OID satisfies, so that is a constructible record
 mutation it resolves, replay proceeds against a non-commit, and the checker raises instead of
 classifying. Which line does the mutation break first: with an absent commit, none.
 
-**The two span rows are timeout rows, and a timeout row has one honest form.** The defect they guard
-is non-termination, so the mutation does not produce a wrong answer to compare against — it produces
-no answer. Assert the refusal under a bounded timeout and choose a span whose length makes iteration
+**The span row is a timeout row, and a timeout row has one honest form.** The defect it guards is
+non-termination, so the mutation does not produce a wrong answer to compare against — it produces no
+answer. Assert the refusal under a bounded timeout and choose a span whose length makes iteration
 impossible rather than merely slow (`10**18`, not `10**6`, which a fast machine would grind through
-and pass). Do not write these as timing comparisons between the two implementations; that is a
+and pass). Do not write it as a timing comparison between the two implementations; that is a
 benchmark, and it goes flaky on shared runners. The failing observation is "did not return", not
 "returned late".
+
+**Its coverage value must not let the mutation short-circuit, which revision 31's did.** The row
+first read `Full(3)`, and `all(line <= 3 for line in range(1, 10**18 + 1))` returns `False` at line
+**4** — four iterations, well inside any timeout, so the mutation passed and the row certified
+nothing. The count has to sit just below the span's end so that every line but the last satisfies the
+predicate: `Full(10**18 - 1)` against a span of 1 to `10**18` refuses instantly under the O(1) form
+and cannot return under iteration. A timeout row is only as strong as the input that keeps the
+mutant running — *which line does the mutation break first?* With `Full(3)`, the fourth.
 
 **The LF row must assert both wrong spellings, because the obvious repair is also wrong.** Splitting
 on `LF + <commit>:` passes a naive fixture and fails on a filename containing that sequence — and the
 commit is knowable to whoever names the file. The row is discharged only if the same test refuses
 both the plain LF split and the prefixed one, which the forward scan satisfies by construction.
 
-**Two rows that must not be added: the quadratic accumulation, and the widened tree assumption.**
-Grouping hits by path before constructing coverage computes the *same* verdict as merging one at a
-time, so no mutation of it changes an answer — only a timing, and §7 does not certify timings. It is
-a §5.1 requirement with no row, deliberately. Likewise §5.1's assumption sentence about what the
-namespace rests on is prose describing a guarantee enforced in §3.1; the 4a follow-up row above is
-where that property is certified, and a second row asserting the prose would test nothing. Both are
-recorded here so their absence reads as a decision rather than an oversight.
+**Three rows that must not be added: the quadratic accumulation, the `LINES` span pre-check, and the
+widened tree assumption.** Grouping hits by path before constructing coverage computes the *same*
+verdict as merging one at a time, so no mutation of it changes an answer — only a timing, and §7 does
+not certify timings. The `LINES` pre-check joined that list at revision 32: a contiguous span leaves
+a set of n elements within n+1 steps, so removing the guard changes the constant factor and nothing
+else. Likewise §5.1's assumption sentence about what the namespace rests on is prose describing a
+guarantee enforced in §3.1; the 4a follow-up row above is where that property is certified, and a
+second row asserting the prose would test nothing. All three are recorded here so their absence reads
+as a decision rather than an oversight.
+
+**Note what separates these from the `FULL` span row, since all four look alike.** An optimisation
+whose removal leaves the answer and the termination unchanged gets no row. An optimisation whose
+removal leaves the answer unchanged but the termination *unbounded* is not an optimisation, and gets
+one. Revision 31 put `FULL` and `LINES` on the same side of that line by pattern-matching on their
+shapes instead of asking what bounds each loop.
 
 **A row that must not be added: pre-normalising the replayed request target.** `normalize_project_path`
 is idempotent and the journal stores its output, so a checker that normalises again and one that does
