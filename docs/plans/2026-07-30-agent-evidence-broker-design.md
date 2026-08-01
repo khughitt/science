@@ -102,7 +102,7 @@ this design has had.
 Revision 29 is pre-flight for plan 4b: §5 read against the merged tree rather than against itself.
 Three of its assumptions were **confirmed by probe** and are now stated as such; four points it left
 underdetermined are decided; two of §7's own rows are corrected; and design review of this revision
-closed three more, listed at the end. None is a defect in the production boundary. All four
+closed four more, listed at the end. None is a defect in the production boundary. All four
 undetermined points are places an implementer would have had to invent a rule, and three of them have
 a permissive default that an invented rule lands on by accident.
 
@@ -156,8 +156,9 @@ is exactly what §7's `Slice` column exists to catch, found one slice later than
 keeps a row it can certify on its own tree: a fresh interpreter importing
 `science_model.correspondence` must not load `science_model.audit` at all.
 
-**Design review of revision 29 closed three more, and two land inside revision 29's own fixes** —
-the pattern this document has now recorded five rounds running.
+**Design review of revision 29 closed four more, two of them inside revision 29's own fixes** —
+the pattern this document has now recorded five rounds running. The fourth is older than all of
+them.
 
 1. **The merge table was incomplete in the same way the thing it replaced was.** Revision 29 replaced
    a one-pair rule with a five-row table and called it total; four pairs were missing, and the
@@ -182,6 +183,13 @@ the pattern this document has now recorded five rounds running.
    clause 1. The namespace rests on two facts, and stating it as one would have licensed a checker to
    normalise a pattern. The same sentence appeared in §5.2 calling the journalled search target an
    "`authorize` output", which it is not. Both corrected.
+4. **A §7 row that has been vacuous since revision 1.** "Make a span cite only its endpoints /
+   a ten-line span against a one-line hit is refused" — endpoint-checking refuses that too, since
+   line 10 is not among `{1}`. The mutation stayed green for twenty-nine revisions, and §5.1's prose
+   supplied the same example, so an implementer taking the fixture from either would have certified
+   nothing. Separating it needs both endpoints served and the middle not: lines 2–4 against `{2, 4}`.
+   Found by self-review of the *plan*, not of this document, which is where a row's fixture first
+   has to be written down concretely.
 
 Finding (3) is the **second** overshoot in this document to name a mechanism next to the property
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
@@ -2157,8 +2165,11 @@ A `LocationEvidence` corresponds iff:
 - under `PATH_ONLY` or `ABSENT`, no line or span is cited at all; **and**
 - `pointer` is absent under every coverage except `FULL`.
 
-A span cites every line it covers, so a ten-line span against a one-line grep hit does not correspond.
-That is strict on purpose: a reviewer wanting to cite a span should read the file. The line-count check
+A span cites every line it covers — **every line, not its endpoints**, and the difference is only
+visible on a span whose *interior* is unserved. A span of lines 2–4 against hits `{2, 4}` does not
+correspond, because line 3 was never shown; the obvious illustration, a ten-line span against a
+one-line hit, is refused by endpoint-checking too and so demonstrates nothing. That is strict on
+purpose: a reviewer wanting to cite a span should read the file. The line-count check
 under `FULL` is free once the bytes are replayed, and it closes fabricated line numbers into files the
 reviewer genuinely opened — a case revision 1 did not consider at all.
 
@@ -2581,7 +2592,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4b | Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
 | 4b | Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
 | 4b | Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
-| 4b | Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
+| 4b | Make a span cite only its endpoints | a span of lines **2–4** against hits `{2, 4}` is refused |
 | 4b | Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
 | 4b | Drop the traversal check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
 | 4b | Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
@@ -2609,6 +2620,14 @@ where it was last needed. What 4b *can* prove is the structural fact it is actua
 from a fresh interpreter's `sys.modules`, which is a predicate over what got loaded rather than a
 roster of imports someone maintains — and which the `_Base` mutation breaks immediately, on 4b's own
 tree, without waiting for 4c to close the loop.
+
+**The span row needs an unserved *interior*, and revisions 1–29 specified one that cannot fail.** A
+ten-line span against a one-line hit is refused by endpoint-checking as readily as by the real rule —
+line 10 is not in `{1}` — so the mutation stayed green and the row certified nothing for
+twenty-nine revisions. Only a span whose endpoints are both served and whose middle is not
+separates them: lines 2–4 against `{2, 4}`. This is the `Full`-supersedes-`Lines` caution in a second
+costume — a fixture that satisfies the assertion for a reason unrelated to the guard — and the same
+question finds it: which line does the mutation break first? With the ten-line span, none.
 
 **The `verify_commit` row needs a non-commit object, or it certifies nothing.** Against an exposure
 whose commit is merely *absent*, a bare `rev-parse --verify` and `verify_commit` agree — both fail,
