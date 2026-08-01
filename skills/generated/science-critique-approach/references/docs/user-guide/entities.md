@@ -176,6 +176,43 @@ alias, optional cleanup), **identity_preserved** (inert prose/key mentions),
 and the scan was complete. A singleton-home `spec` file is **reported, never
 auto-relocated** — reconciling it is a project judgment.
 
+### Repairing Annotation Base Shape (`science entity migrate-annotation-base-shape`)
+
+Older proposition and evidence-line records can carry a `title` the writer never
+persisted (exactly the empty string `''`) or unquoted YAML dates in `created`/`updated`.
+Both make `validate_persisted_base_shape` refuse the record, which in turn blocks the
+typed update paths — workbench compile/apply and annotation synthesis — from ever
+updating it. `science entity migrate-annotation-base-shape` repairs those records in
+place.
+
+**Scope is exactly `proposition` and `evidence-line`.** Other kinds carrying the same
+unquoted-date defect are deliberately untouched; that fix is kind-agnostic and belongs
+to its own migration. Kind is read from each record's own `kind:` field, so a stray
+`README.md` or a foreign-kind file under `entities/propositions/` is skipped, not
+repaired.
+
+Plan first (writes nothing), then apply:
+
+```bash
+science entity migrate-annotation-base-shape                 # dry run: what it would repair
+science entity migrate-annotation-base-shape --format json   # the machine-readable report
+science entity migrate-annotation-base-shape --apply         # repair and report
+```
+
+**What it repairs.** An empty `title` is backfilled from the record's own fields using
+the same derivation the create path uses — `subject predicate object` for a proposition,
+`stance target — source` for an evidence line. Re-rendering through the canonical
+frontmatter block quotes the dates. `title` is the only key the command authors, a
+base-valid record is skipped byte for byte, and `updated` is never stamped: the repair
+restores what should already have been persisted, so it asserts no new content change.
+
+**It refuses the whole batch, including on a dry run.** Every record is planned and
+every refusal collected before anything is written. If any in-scope record has no
+available repair — a `title: null`, a non-string `subject`, an unknown `evidence_type`,
+a `datetime`-valued date — the command names every such record and writes **nothing at
+all**, and exits non-zero whether or not `--apply` was passed. A dry run that reported
+"would repair N" while hiding its blockers would be the opposite of report-first.
+
 ### CLI Path And Identity Policy
 
 The source entity CLI creates only kinds that have a built-in Markdown path
