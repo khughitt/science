@@ -18,7 +18,7 @@ and the shared ancestry diagnostic.
 collections, pytest, real git through the existing hardened `run_git`/`serve` path.
 
 **Design:** [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-at revision 29 through `f3757576` — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
+at revision 29 through `3093e05d` — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
 (replay), §5.3 (classification order), and §7 (mutation pairs).
 
 ## Global Constraints
@@ -293,7 +293,7 @@ def test_parse_hits_uses_lf_not_splitlines() -> None:
         b"missing-nuls\n",
         f"{'b' * 40}:a.txt\0".encode() + b"1\0hit\n",
         f"{COMMIT}:a.txt\0zero\0hit\n".encode(),
-        f"{COMMIT}:a.txt\00\0hit\n".encode(),
+        f"{COMMIT}:a.txt".encode() + b"\x000\x00hit\n",
     ],
 )
 def test_parse_hits_refuses_noncanonical_records(payload: bytes) -> None:
@@ -903,6 +903,7 @@ def test_read_line_count_is_lf_only(tmp_path: Path) -> None:
 
 
 def _inline(commit: str, *, target: str = "prompt.md", digest: str = "e" * 64):
+    # Overrides alter only the entry; the fixed manifest makes each disagreement deliberate.
     manifest = InlineInput(target="prompt.md", sha256="e" * 64, lines=2)
     entry = ExposureEntry(
         op="inline",
@@ -1279,7 +1280,8 @@ git commit -m "feat(evidence-broker): replay and check correspondence"
 
 **Interfaces:**
 - Consumes: Tasks 1–4 complete.
-- Produces: mutation evidence that every §7 plan-4b guard turns red for the defect it names.
+- Produces: mutation evidence that every §7 plan-4b guard and the plan's additional parser/replay
+  guards turn red for the defect they name.
 
 Run one mutation at a time, run only its named test, and restore production immediately. Stop and
 repair the test if any mutation stays green; a green mutation is not certification.
@@ -1303,6 +1305,8 @@ line that distinguishes the mutation; an absent OID would make both implementati
 | Mutation | Test that must fail |
 |---|---|
 | Split each hit on every NUL | `test_parse_hits_accepts_the_real_canonical_git_payload` |
+| Split parser records with `splitlines()` | `test_parse_hits_uses_lf_not_splitlines` |
+| Remove the one-based line-number guard | `test_parse_hits_refuses_noncanonical_records` (`b"\x000\x00hit\n"`) |
 | Compute line count with `splitlines()` | `test_line_count_uses_lf_only` (`b"a\rb\n"`) |
 | Drop the trailing-bytes clause | `test_line_count_uses_lf_only` (`b"a"` or `b"a\nb"`) |
 | Merge `Full` with maximum/last-write-wins | `test_merge_coverage_is_total_over_reachable_pairs` (`Full(8), Full(5)`) |
@@ -1394,12 +1398,14 @@ Review the cumulative diff against these questions before declaring plan 4b impl
 and its import row → Task 1. Canonical hit parsing → Task 2. §5.1's line count, ten-pair merge, and
 citation predicate → Task 3. §5.2 replay, inline agreement, local cache, propagation, and no
 normalization → Task 4. §5.3's six verdict rows and exact order → Task 4. Every §7 plan-4b mutation
-row → Task 5.
+row, plus the parser's LF-record and one-based-line guards → Task 5.
 
 **Out of scope deliberately.** Plan 4c owns every `Review`/case-store change, `append_review`, agent
 attestation, eligibility, and validate notice. The existing permissive `InlineInput.lines` count on
 CR-bearing files remains the design's recorded follow-up; 4b uses the sealed value and does not edit
-plan 4a's lifecycle/model surface.
+plan 4a's lifecycle/model surface. Plan 4c also owes §7's end-to-end refusal guard through
+`append_review`; Task 4's refused-read test certifies only the checker layer and does not discharge
+that production-path obligation.
 
 **No speculative API.** Coverage stays local, the package exports stay unchanged, parser errors use
 `ValueError`, and the checker has no wrapper/facade or production registration before a caller exists.
