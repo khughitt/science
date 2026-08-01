@@ -9,8 +9,8 @@ id: proposition:bes-does-not-rescue-underpowered-studies-by-pooling-data
 kind: proposition
 title: BES does not rescue underpowered studies by pooling data
 status: active
-created: &id001 2026-07-03
-updated: *id001
+created: "2026-07-03"
+updated: "2026-07-03"
 source_refs:
 - annotation:entities/papers/VanWonderen2024.source#bes-not-pooling-underpowered
 - annotation:entities/papers/Volker2023.source#bes-not-data-pooling
