@@ -19,7 +19,6 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from science_model.audit.subjects import (
     SubjectError,
     normalize_project_path,
-    normalize_utf8_nfc,
 )
 from science_model.autonomous_runs import (
     RUN_ID_PREFIX,
@@ -148,18 +147,17 @@ def _capture(project_root: Path):
 def _assert_tree_is_citeable(project_root: Path, commit: str) -> None:
     """Refuse a pinned tree holding a path no citation could name.
 
-    `normalize_project_path` maps a path to NFC; git stores path bytes verbatim and matches
-    pathspecs byte-exactly. So a policy and a repository can be spelled differently and both be
-    right, and the disagreement runs in three directions -- a deny prefix that leaks under
-    `search`, an honest citation refused, and a `read` answering MISS_ABSENT for a path that
-    exists under another spelling. The third CERTIFIES A FALSE ABSENCE CLAIM, needs no deny prefix
-    and no search at all, and is therefore unreachable by any filter on the serving side.
+    `normalize_project_path` rewrites some path spellings; git stores path bytes verbatim and
+    matches pathspecs byte-exactly. The disagreement runs in three directions -- a deny prefix
+    that leaks under `search`, an honest citation refused, and a `read` answering MISS_ABSENT for
+    a path that exists under another spelling. The third CERTIFIES A FALSE ABSENCE CLAIM, needs no
+    deny prefix and no search at all, and is therefore unreachable by any serving-side filter.
 
     One check, one layer, once per run: the tree is immutable at the pinned commit, so replay
     inherits the guarantee rather than repeating the scan. `serve` is unchanged.
 
-    UTF-8 travels with NFC here because a path that does not decode cannot be spelled as a
-    `LocationEvidence.path` either -- it can never be cited honestly, so it is the same rule.
+    UTF-8 is checked separately because a path that does not decode cannot be spelled as a
+    `LocationEvidence.path` at all.
     """
     try:
         completed = run_git(
@@ -193,12 +191,20 @@ def _assert_tree_is_citeable(project_root: Path, commit: str) -> None:
                 f"the tree at {commit} holds a path that is not valid UTF-8 ({raw!r}), which no "
                 "citation can name, so a brokered run cannot be opened against it"
             ) from exc
-        if normalize_utf8_nfc(path) != path:
+        try:
+            normalized = normalize_project_path(path)
+        except SubjectError as exc:
             raise BaselineError(
-                f"the tree at {commit} holds the path {path!r}, which is not in NFC. Citations "
-                "normalize to NFC and git matches pathspecs byte-exactly, so this path would be "
-                "served by `search` while `read` reported it absent -- certifying a false absence "
-                "claim. Rename it before brokering a run against this repository."
+                f"the tree at {commit} holds the path {path!r}, which cannot be spelled as a "
+                f"citation ({exc}). A normalized `read` could report it absent and certify a "
+                "false absence claim. Rename it before brokering a run against this repository."
+            ) from exc
+        if normalized != path:
+            raise BaselineError(
+                f"the tree at {commit} holds the path {path!r}, which cannot be spelled unchanged "
+                f"as a citation because its NFC/POSIX spelling is {normalized!r}. A normalized "
+                "`read` could report it absent and certify a false absence claim. Rename it before "
+                "brokering a run against this repository."
             )
 
 
