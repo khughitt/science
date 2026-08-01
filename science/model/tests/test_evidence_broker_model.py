@@ -197,3 +197,33 @@ def test_surface_commits_have_the_fixed_width_the_journal_assumes() -> None:
             surface_policy=POLICY,
             instrument=INSTRUMENT,
         )
+
+
+def test_replay_protocol_version_is_two() -> None:
+    """Pinned as a VALUE, not just a symbol.
+
+    Every reference in the toolkit imports the name, so a drifting number would break nothing
+    and be noticed by no one. Serving changed in plan 4a -- bounds, two environment pins -- and
+    §5.2 makes that a bump. Changing this constant means deciding that prior exposures no longer
+    replay; that decision belongs in a diff someone reviews.
+    """
+    from science_model.evidence_broker import REPLAY_PROTOCOL_VERSION
+
+    assert REPLAY_PROTOCOL_VERSION == 2
+
+
+def test_served_bounds_are_derived_from_the_budget() -> None:
+    """The per-run ceiling is the per-request one times the budget, not an independent number.
+
+    Plan 3 derived MAX_JOURNAL_BYTES from model bounds so a run could not write a journal it
+    could not read back. The same argument applies to `served/`: a run whose disk ceiling was
+    chosen separately could accept a request it cannot store.
+    """
+    from science_model.evidence_broker import (
+        MAX_BUDGET,
+        MAX_RUN_SERVED_BYTES,
+        MAX_SERVED_BYTES,
+    )
+
+    assert MAX_SERVED_BYTES == 1 << 20
+    assert MAX_RUN_SERVED_BYTES == MAX_BUDGET * MAX_SERVED_BYTES

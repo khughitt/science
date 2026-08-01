@@ -70,7 +70,13 @@ class SurfacePolicy(BaseModel):
 
 #: Bumped only when serving or parsing changes: defined misses, canonical argv, or hit parsing.
 #: It is not the toolkit revision; a signal that fires on every release is ignored.
-REPLAY_PROTOCOL_VERSION = 1
+#:
+#: 2 (plan 4a): serving is now bounded per request, and the child environment pins
+#: `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH`. Both change what an identical request returns
+#: -- an oversized payload refuses where it used to be served, and a partial clone fails where
+#: it used to be silently completed from its promisor remote -- so a v1 exposure replayed under
+#: v2 rules is not comparable, which is what this number exists to say.
+REPLAY_PROTOCOL_VERSION = 2
 
 #: Character bounds make the journal's byte ceiling derivable before it is read. Pydantic counts
 #: characters, not bytes; journal encoding accounts separately for the worst-case byte expansion.
@@ -78,6 +84,17 @@ MAX_TARGET_CHARS = 4096
 MAX_BUDGET = 100
 MAX_INLINE_INPUTS = 100
 MAX_INLINE_LINES = (1 << 63) - 1
+
+#: DERIVED FROM WHAT A REVIEWER COULD HAVE CONSUMED, not chosen for roundness. A payload no agent
+#: can read is not evidence of exposure, and at roughly four bytes per token a mebibyte already
+#: exceeds the context of the reviewers this program contemplates. Serving more would inflate
+#: §5.1 coverage over material nobody saw.
+MAX_SERVED_BYTES = 1 << 20
+
+#: The disk one run can occupy: `run_git` holds a payload whole in memory, the session writes it
+#: to `served/`, and replay reads it again, so the per-request bound is spent at least twice per
+#: request and `MAX_BUDGET` times per run.
+MAX_RUN_SERVED_BYTES = MAX_BUDGET * MAX_SERVED_BYTES
 
 COMMIT_PATTERN = r"^[0-9a-f]{40}$"
 ENTRY_COMMIT_PATTERN = r"^(?:[0-9a-f]{40})?$"
