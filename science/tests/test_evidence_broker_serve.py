@@ -686,8 +686,8 @@ def test_an_oversized_history_refuses(tmp_path: Path, monkeypatch):
     assert served.denial.reason == "payload-too-large"
 
 
-def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkeypatch):
-    """The disposition split, in one test.
+def test_a_stderr_overflow_on_search_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """The search disposition split, exercised at the guard that could journal it.
 
     `stderr` is determined by mutable repository and runtime state. Journaled, it would replay
     differently once the environment changed and §5.3 would return EXPOSURE_UNREPRODUCIBLE --
@@ -697,11 +697,27 @@ def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkey
     real = serve_module.run_git
 
     def boom(repo_root, *args, **kwargs):
-        if args[:2] == ("cat-file", "blob"):
+        if args[:1] == ("grep",):
             raise GitOutputTooLarge("stderr", 32, 33, args)
         return real(repo_root, *args, **kwargs)
 
     monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
 
     with pytest.raises(GitOutputTooLarge):
-        serve(root, commit, _read("a.txt"), OPEN)
+        serve(root, commit, _search("secret"), OPEN)
+
+
+def test_a_stderr_overflow_on_history_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """History has its own conversion guard, so search cannot certify it."""
+    root, commit = _repo(tmp_path)
+    real = serve_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:1] == ("log",):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), OPEN)
