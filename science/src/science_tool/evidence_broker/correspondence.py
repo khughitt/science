@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
-from science_model.audit import LocationEvidence
+from science_model.audit import Evidence, LocationEvidence
+from science_model.correspondence import Correspondence
+from science_model.evidence_broker import (
+    REPLAY_PROTOCOL_VERSION,
+    EvidenceExposure,
+    ExposureEntry,
+    InlineInput,
+    Outcome,
+)
+
+from science_tool.autonomy.git import history_traversal_error
+from science_tool.evidence_broker.hits import parse_hits
+from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+from science_tool.evidence_broker.serve import ServeError, Served, serve, verify_commit
 
 
 @dataclass(frozen=True)
@@ -80,3 +96,99 @@ def _corresponds(citation: LocationEvidence, coverage: Coverage) -> bool:
     if isinstance(coverage, Lines):
         return all(line in coverage.numbers for line in cited)
     return not cited and citation.pointer is None
+
+
+def _request(entry: ExposureEntry) -> EvidenceRequest:
+    return EvidenceRequest(EvidenceOp(entry.op), target=entry.target, pathspec=entry.pathspec)
+
+
+def _build_served_map(
+    replayed: list[tuple[ExposureEntry, Served | InlineInput]], commit: str
+) -> dict[str, Coverage]:
+    served_map: dict[str, Coverage] = {}
+    for entry, answer in replayed:
+        if isinstance(answer, InlineInput):
+            _add_coverage(served_map, answer.target, Full(answer.lines))
+        elif answer.outcome is Outcome.REFUSED:
+            continue
+        elif entry.op == "read":
+            if answer.outcome is Outcome.SERVED:
+                _add_coverage(served_map, answer.target, Full(_line_count(answer.payload)))
+            elif answer.outcome is Outcome.MISS_ABSENT:
+                _add_coverage(served_map, answer.target, Absent())
+        elif entry.op == "search" and answer.outcome is Outcome.SERVED:
+            for path, line in parse_hits(answer.payload, commit):
+                _add_coverage(served_map, path, Lines(frozenset({line})))
+        elif entry.op == "history" and answer.outcome is Outcome.SERVED:
+            _add_coverage(served_map, answer.target, PathOnly())
+    return served_map
+
+
+def check_correspondence(
+    evidence: Sequence[Evidence], exposure: EvidenceExposure | None, *, repo: Path
+) -> Correspondence:
+    if exposure is None:
+        return Correspondence(
+            status="unwired", code="NO_EXPOSURE", reason="run record carries no evidence exposure"
+        )
+    if exposure.replay_protocol != REPLAY_PROTOCOL_VERSION:
+        return Correspondence(
+            status="unwired",
+            code="REPLAY_PROTOCOL_MISMATCH",
+            reason=(
+                f"exposure protocol {exposure.replay_protocol} differs from "
+                f"checker protocol {REPLAY_PROTOCOL_VERSION}"
+            ),
+        )
+    try:
+        verify_commit(repo, exposure.commit)
+    except ServeError as exc:
+        return Correspondence(status="unwired", code="EXPOSURE_UNREACHABLE", reason=str(exc))
+    traversal_error = history_traversal_error(repo, exposure.commit)
+    if traversal_error is not None:
+        return Correspondence(
+            status="unwired", code="EXPOSURE_UNREACHABLE", reason=traversal_error
+        )
+
+    inline = {(item.target, item.sha256): item for item in exposure.inline}
+    cache: dict[EvidenceRequest, Served] = {}
+    replayed: list[tuple[ExposureEntry, Served | InlineInput]] = []
+    for entry in exposure.entries:
+        if entry.op == "inline":
+            item = inline.get((entry.target, entry.sha256))
+            if item is None:
+                return Correspondence(
+                    status="violated",
+                    code="EXPOSURE_UNREPRODUCIBLE",
+                    reason=f"inline entry {entry.target!r} disagrees with the sealed manifest",
+                )
+            replayed.append((entry, item))
+            continue
+
+        request = _request(entry)
+        answer = cache.get(request)
+        if answer is None:
+            answer = serve(repo, exposure.commit, request, exposure.surface_policy)
+            cache[request] = answer
+        if hashlib.sha256(answer.payload).hexdigest() != entry.sha256 or answer.outcome is not entry.outcome:
+            return Correspondence(
+                status="violated",
+                code="EXPOSURE_UNREPRODUCIBLE",
+                reason=f"{entry.op} entry {entry.target!r} did not replay identically",
+            )
+        replayed.append((entry, answer))
+
+    served_map = _build_served_map(replayed, exposure.commit)
+    locations = [item for item in evidence if isinstance(item, LocationEvidence)]
+    for citation in locations:
+        coverage = served_map.get(citation.path)
+        if coverage is None or not _corresponds(citation, coverage):
+            return Correspondence(
+                status="violated",
+                code="CITATION_UNSERVED",
+                reason=f"citation to {citation.path!r} was not covered by the replayed exposure",
+            )
+    return Correspondence(
+        status="verified",
+        reason=None if locations else "review carries no path-bearing citations",
+    )
