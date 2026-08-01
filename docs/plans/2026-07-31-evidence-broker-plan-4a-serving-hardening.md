@@ -1147,7 +1147,7 @@ def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkey
 
     def boom(repo_root, *args, **kwargs):
         if args[:2] == ("cat-file", "blob"):
-            raise GitOutputTooLarge("stderr", 32, args)
+            raise GitOutputTooLarge("stderr", 32, 33, args)
         return real(repo_root, *args, **kwargs)
 
     monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
