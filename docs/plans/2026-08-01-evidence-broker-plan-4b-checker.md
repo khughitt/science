@@ -18,7 +18,7 @@ and the shared ancestry diagnostic.
 collections, pytest, real git through the existing hardened `run_git`/`serve` path.
 
 **Design:** [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-at revision 29 through `3093e05d` — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
+at revision 30 through `ec428c8a` (the direct leaf-execution guard correction) — §2.2 (authoritative slice contract), §5.1 (coverage), §5.2
 (replay), §5.3 (classification order), and §7 (mutation pairs).
 
 ## Global Constraints
@@ -60,7 +60,7 @@ at revision 29 through `3093e05d` — §2.2 (authoritative slice contract), §5.
 | File | Change | Responsibility after this slice |
 |---|---|---|
 | `science/model/src/science_model/correspondence.py` | create | The durable `Correspondence` result only. Imports pydantic and standard library; imports no `science_model` module. |
-| `science/model/tests/test_correspondence.py` | create | Result invariants and the fresh-interpreter audit-import guard. |
+| `science/model/tests/test_correspondence.py` | create | Result invariants and the fresh-interpreter direct-leaf audit-import guard. |
 | `science/src/science_tool/evidence_broker/hits.py` | create | Pure parser for canonical grep payloads; no git, policy, exposure, or review dependency. |
 | `science/tests/test_evidence_broker_hits.py` | create | Synthetic edge cases plus one real-git format contract. |
 | `science/src/science_tool/evidence_broker/correspondence.py` | create | Local coverage types, total merge, citation matching, replay, and `check_correspondence`. |
@@ -131,6 +131,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -157,13 +158,17 @@ def test_correspondence_is_frozen_and_forbids_extras() -> None:
         Correspondence(status="verified", correspondence=True)
 
 
-def test_importing_correspondence_does_not_load_audit() -> None:
+def test_running_correspondence_leaf_does_not_load_audit() -> None:
+    leaf = Path(__file__).parents[1] / "src" / "science_model" / "correspondence.py"
     script = """
+import runpy
 import sys
-import science_model.correspondence
+runpy.run_path(sys.argv[1])
 assert "science_model.audit" not in sys.modules
 """
-    completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    completed = subprocess.run(
+        [sys.executable, "-c", script, str(leaf)], capture_output=True, text=True
+    )
     assert completed.returncode == 0, completed.stderr
 ```
 
@@ -228,10 +233,12 @@ Temporarily add `from science_model.audit.subjects import _Base` to
 `science_model/correspondence.py` without using it, then run:
 
 ```bash
-uv run --frozen pytest tests/test_correspondence.py::test_importing_correspondence_does_not_load_audit -q
+uv run --frozen pytest tests/test_correspondence.py::test_running_correspondence_leaf_does_not_load_audit -q
 ```
 
-Expected: FAIL because `science_model.audit` appears in the fresh interpreter's `sys.modules`.
+Expected: FAIL because `science_model.audit` appears in the fresh interpreter's `sys.modules` after
+the direct leaf execution. This guard deliberately does not import the eager `science_model` package;
+that package already imports audit before a leaf submodule can execute.
 Restore the leaf import before continuing. Do not test either full cycle yet; both require 4c's future
 `audit.record -> Correspondence` edge and are therefore 4c mutation rows.
 
@@ -1290,7 +1297,7 @@ repair the test if any mutation stays green; a green mutation is not certificati
 
 | Mutation | Test that must fail |
 |---|---|
-| Import anything from `science_model.audit` in the leaf model | `test_importing_correspondence_does_not_load_audit` |
+| Import anything from `science_model.audit` in the leaf model | `test_running_correspondence_leaf_does_not_load_audit` |
 | Remove the protocol comparison | `test_protocol_mismatch_precedes_every_git_call` |
 | Move protocol comparison after `verify_commit` | `test_protocol_mismatch_precedes_every_git_call` |
 | Replace `verify_commit` with bare `rev-parse --verify` | `test_verify_commit_rejects_a_present_noncommit_oid` |
@@ -1378,8 +1385,8 @@ Review the cumulative diff against these questions before declaring plan 4b impl
 
 1. Does `git diff --name-only d5bf01e2...HEAD` show only the three new production files, their three
    test files, this plan, and any explicit design-status update?
-2. Can `science_model.correspondence` import in a fresh interpreter without loading
-   `science_model.audit`?
+2. Can a fresh interpreter execute `science_model/correspondence.py` with `runpy.run_path` without
+   loading `science_model.audit`?
 3. Does `check_correspondence` accept `Sequence[Evidence]`, not `Review`, and
    `EvidenceExposure | None`, not a live session?
 4. Is protocol mismatch returned before any git call?
