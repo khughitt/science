@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 28)
+**Status:** partially implemented (revision 29)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,8 +13,8 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **implemented** at revision 28 through `6a951c59` |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 26, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 29, not implemented |
 | Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
@@ -98,6 +98,58 @@ this design has had.
    initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
    executing anything at all. It must spawn a fresh interpreter on
    `import science_model.evidence_broker`.
+
+Revision 29 is pre-flight for plan 4b: §5 read against the merged tree rather than against itself.
+Three of its assumptions were **confirmed by probe** and are now stated as such; four points it left
+underdetermined are decided; and two of §7's own rows are corrected. None is a defect in the
+production boundary. All four undetermined points are places an implementer would have had to invent
+a rule, and three of them have a permissive default that an invented rule lands on by accident.
+
+**Confirmed, so 4b may rely on them.** `LocationEvidence.path`, `ExposureEntry.target` and
+`InlineInput.target` are all outputs of the same `normalize_project_path`, which is idempotent — so
+citation keys, served-map keys and git's own NFC tree paths are one namespace and 4b normalises
+nothing. The journal's digest is `sha256(payload)` with no framing, so re-serving alone reproduces
+it. And revision 23's import-cycle probe re-runs true on the merged tree.
+
+1. **A replay-time git fault has a disposition, and it is not `unwired` by default.** Exactly two
+   conditions are decided before any entry is replayed — the repository does not hold
+   `exposure.commit`, and `history_traversal_error` is non-`None` — and those two own
+   `EXPOSURE_UNREACHABLE`. Anything else from git propagates, per §6's standing rule for the same
+   failure at serving time. The alternative reading, wrapping the whole replay and calling every
+   fault `unwired`, is the shape of revision 4's own bug: a project rename silently turned every
+   review `unwired`, and this design treated that as a fail-open to close, not as graceful
+   degradation. §5.2.
+2. **`line_count` is LF-based, and `InlineInput.lines` is not.** MEASURED:
+   `b"a\rb\n".splitlines()` is 2 because `bytes.splitlines()` splits on CR as well, and the sealed
+   manifest is built that way. `git grep -n` numbers by LF, and §5.1 makes `FULL` supersede `LINES`
+   on a path that was both read and searched — so a non-LF `FULL` count is not commensurable with
+   the `LINES` numbers beside it. Read coverage uses the LF rule; inline coverage uses the sealed
+   count, because 4b has no payload to recount and may not touch the model. The divergence is
+   permissive on CR-bearing files and is recorded rather than buried. §5.1.
+3. **The coverage merge was stated for one pair out of five reachable ones.** "`FULL` supersedes
+   `LINES`" is not a total rule, and a path picks up two contributions several ways. §5.1 now gives
+   the whole table, including which pair is unreachable and why.
+4. **An inline entry disagreeing with the sealed manifest is `EXPOSURE_UNREPRODUCIBLE`, not absent
+   coverage.** `entries` and `exposure.inline` are seeded from one `session.inline`, so they agree by
+   construction; a record where they disagree is a record disagreeing with itself, which is what §5.2
+   exists to catch. §7 said "absent from the **baseline** manifest does not correspond" — stale
+   wording from before revision 5 moved replay off the baseline, and weaker than the fact. Under the
+   weaker reading, editing an inline entry's target is a free way to make a fabricated citation land
+   nowhere at no cost.
+
+**And one constraint that reads as tidy-able and is not.** §4.2 spells `Correspondence` as
+`Correspondence(_Base)`, but `_Base` lives in `audit/subjects.py`, and importing anything from
+`science_model.audit` runs `audit/__init__.py`, which eagerly imports `audit.record` — the module
+that will import `Correspondence` back. So `science_model/correspondence.py` inherits nothing from
+`audit` and repeats its own two-line model config. Revision 23's mutation row covers importing
+`Correspondence` *from* `evidence_broker.py`; this is the other edge of the same cycle.
+
+**Both edges turn out to be 4c rows, not 4b's.** The cycle does not exist until
+`audit/record.py` imports `Correspondence`, which is 4c's change — 4b touches no stored-record model.
+Run against 4b's tree either mutation imports cleanly and the row passes for the wrong reason, which
+is exactly what §7's `Slice` column exists to catch, found one slice later than the last time. 4b
+keeps a row it can certify on its own tree: a fresh interpreter importing
+`science_model.correspondence` must not load `science_model.audit` at all.
 
 Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
 
@@ -1914,6 +1966,18 @@ picture. That isolation is worth a module because revisions 1–9 stated the for
 and nothing caught it. `evidence_broker/correspondence.py` holds the served map and the check.
 `serve.py` is untouched by this slice; §3.1's NFC rule lands in the session's open path.
 
+**`science_model/correspondence.py` inherits nothing, and that is the point.** §4.2 spells the type
+as `Correspondence(_Base)`, but `_Base` lives in `audit/subjects.py`, and importing *anything* from
+`science_model.audit` runs `audit/__init__.py`, which eagerly imports `audit.record` — the module
+that imports `Correspondence` back. So the leaf repeats its own
+`ConfigDict(extra="forbid", frozen=True)` rather than sharing one. Factoring that back out is not a
+cleanup; it is the cycle, entered from the edge revision 23's mutation row does not cover.
+
+**A naming adjacency, so a reader does not conflate two things.** `validate/findings.py` already
+defines `CorrespondenceQualifiers` — a spec-1 findings artifact pairing a task with an evidence
+signature, unrelated to this section and never imported alongside it. They share a word and nothing
+else; the new module says so in its docstring.
+
 ### 5.1 The served set — coverage, not paths
 
 Revision 1 built a set of paths. That certified a whole file from a single grep hit: a match on line 1
@@ -1983,11 +2047,46 @@ is the number of LF-terminated lines plus one if any bytes follow the final LF; 
 `ABSENT` is the strongest claim the table can express — it is what certifies "this file does not
 exist at this commit" — which is why §3.1's NFC rule has to hold for it to mean anything at all.
 
+**LF, and only LF — which puts read coverage and inline coverage on different counts.** The obvious
+spelling of `line_count` is `len(payload.splitlines())`, and it is wrong: MEASURED,
+`b"a\rb\n".splitlines()` is 2, because `bytes.splitlines()` splits on CR as well. `git grep -n`
+numbers by LF, and `FULL` supersedes `LINES` on a path that was both read and searched, so a `FULL`
+count in any other numbering is not commensurable with the `LINES` numbers sitting beside it in the
+same map — a matched line number could exceed the line count of the same file.
+
+`InlineInput.lines` is already computed the wrong way (`lifecycle.py`, at manifest time), and 4b
+cannot recompute it: `exposure.inline` seals `target`, `sha256` and `lines`, and no payload. So
+inline `FULL` carries the sealed count and read `FULL` carries the LF count, and on a CR-bearing file
+the inline one is larger. The error is **permissive** — it admits a citation to a line the LF rule
+says is not there — and it is stated here rather than silently inherited. Correcting it means
+changing a sealed model, which is 4a's cell and not the checker's (§2.2); it is a follow-up, and the
+one place where fixing the divergence and shipping 4b are separable.
+
 **`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
 `Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
 never stored, so putting it in `science_model` beside the sealed types would advertise a durability
 it does not have. `Correspondence`, which *is* returned across the boundary, ships in its **own
 dependency-neutral module**, `science_model/correspondence.py`, importing pydantic and nothing else.
+
+**One path can pick up two contributions, and "`FULL` supersedes `LINES`" covers one pair of five.**
+Stating only that pair leaves an implementer to invent the rest, and every plausible invention —
+last-write-wins, first-write-wins, union — is more permissive than the table below on at least one
+row. Merging is therefore a single named function over the whole set, so §7's supersession row has
+one line to break:
+
+| Pair | Reachable via | Result |
+|---|---|---|
+| `FULL` + `LINES` | a path read and searched | `FULL` |
+| `FULL` + `FULL` | a path inline-seeded **and** read | `FULL(min)` — the commit is the audited artifact, so a line present only in the working-tree copy is refused |
+| `FULL` + `ABSENT` | a path inline-seeded, absent at the commit | `FULL` — it admits every citation `ABSENT` admits, since a bare path citation corresponds under any coverage |
+| `LINES` + `PATH_ONLY` | a path searched and asked for history | `LINES` |
+| `ABSENT` + `PATH_ONLY` | a read miss and a history entry | either; they admit exactly the same citations. `ABSENT` is taken, for the clearer `reason` |
+| `LINES` + `ABSENT` | — | **unreachable**: grep matched the path at commit C, so it exists at C |
+
+`FULL(min)` is the one row where a merge rule is doing real work rather than restating a rank. The
+two counts genuinely describe different bytes — a working-tree file and a committed blob — and the
+reviewer saw both, so neither is a lie. Taking the minimum resolves it towards the artifact an
+auditor can re-derive, and needs no story about which entry came first.
 
 Revisions 17–22 put it in `evidence_broker.py` beside `Outcome`, which reads well and does not load:
 `evidence_broker.py` imports `audit.subjects`, and `science_model/audit/__init__.py` eagerly imports
@@ -2049,10 +2148,46 @@ request refused when the reviewer worked must be refused again, and an entry tha
 where the record says `refused` is `EXPOSURE_UNREPRODUCIBLE`. §5.1's over-exclusion case covers the
 narrowing direction; this covers the other one.
 
+**Re-serving reconstructs the request from the entry, and adds no normalisation.** An
+`ExposureEntry` becomes `EvidenceRequest(op, target=entry.target, pathspec=entry.pathspec)` handed to
+`serve` with `exposure.commit` and `exposure.surface_policy`. Those fields already hold the
+*authorized* spelling — `session.py` journals `served.target` and `served.pathspec`, which are
+`authorize`'s outputs — and `normalize_project_path` is idempotent, so passing them back through
+`authorize` returns them unchanged. A checker that "helpfully" pre-normalised, or that reached for a
+raw requester spelling the journal never stored, would be authorizing one path and comparing another.
+
+**A replay-time git fault is `unwired` in exactly two cases, decided before any entry is replayed.**
+The repository does not hold `exposure.commit`, and `history_traversal_error(repo, exposure.commit)`
+is non-`None`. Both are properties of the *environment*, decidable once and cheaply, and both yield
+`EXPOSURE_UNREACHABLE`. Everything after that point — a `ServeError` on unclassifiable stderr, a
+`GitError` — **propagates**, which is §6's standing rule for the same failure at serving time
+("anything else from git raises") applied to the same code on the other side of the seam.
+
+The alternative is to wrap the whole replay and read every fault as `unwired`. It is attractive
+because `check_correspondence` is called from a write path, and because §5.3's own prose says a
+journal that cannot be reached could not be checked. It is nevertheless the shape of the bug revision
+4 closed: a project rename turned every review in a run silently `unwired`, which under §4.2.1 zeroes
+their support, and this design treated that as a fail-open rather than as graceful degradation. A
+systematic breakage that reports "could not check" for everything, with an info-severity validate
+notice as its only signal, is that failure again with a wider blast radius. The known cost is
+concrete and accepted: appending a review against a `--filter=blob:none` clone raises rather than
+storing `unwired`, since §2.2 records that the blob case is not pre-empted at open either.
+
+What no fault may ever produce is `violated`. That is the invariant both readings preserve and the
+one a third reading — catching exceptions and calling them mismatches — would break.
+
 Inline entries are not in the tree and cannot be re-served; they are checked against
 **`exposure.inline`** — the sealed copy of the manifest, not the baseline's. The baseline is where the
 manifest is *declared* (§4.3) and the exposure is where it is *sealed* (§4.1); replay reads the sealed
 copy, and reaches for no control-plane file at all.
+
+**A disagreement there is `EXPOSURE_UNREPRODUCIBLE`, not missing coverage.** `entries` and
+`exposure.inline` are seeded from one `session.inline` — `create_journal` writes the manifest into
+the journal and `finish_run` seals the same tuple — so they agree by construction, and an entry whose
+target is absent from the manifest, or whose `sha256` differs from it, is a record disagreeing with
+itself. Treating it as merely uncovered would make editing an inline entry's target a free way to
+land a fabricated citation nowhere: no coverage, no cost, and the review still reaches the citation
+check with everything else intact.
 
 **No cross-exposure memoisation.** Revisions 1–17 memoised on `(commit, op, target, pathspec)` within
 an ingestion run, on the reasoning that reviews of sibling documents read many of the same files. That
@@ -2118,6 +2253,11 @@ is checked in full, and any entry that fails to reproduce short-circuits to
 not reproduce is not a map of anything, so reporting `CITATION_UNSERVED` off it would name a symptom
 as the cause and point an operator at the reviewer instead of at the record. Only against a fully
 reproduced exposure are citations checked.
+
+**The table is exhaustive over verdicts, not over outcomes.** A git fault outside the two
+environment checks of §5.2 produces no row at all — it raises, and `check_correspondence` returns
+nothing. That is deliberate: adding a seventh row for it would be choosing the wrapping behaviour
+§5.2 rejects, one table over.
 
 The checker reproduces the distinction it exists to enforce: *could not check* is not *checked and
 found false*. A journal that fails to reproduce at a pinned commit under a canonical invocation is not
@@ -2300,8 +2440,13 @@ downgrade is a lie about what was checked.
   file's length does not correspond; a `history` entry does not validate a line citation **nor a
   pointer**; a pointer under `LINES` does not correspond; a read miss validates a path-only citation
   and refuses a lined one; **a search miss and an empty history contribute no coverage at all**; an
-  inline target absent from the baseline manifest does not correspond; a policy narrowed between
-  serving and replay does not silently re-serve denied hits; the vacuous `verified`.
+  inline entry whose target is absent from **`exposure.inline`**, and one whose `sha256` disagrees
+  with it, each yield `violated` / `EXPOSURE_UNREPRODUCIBLE` rather than merely contributing no
+  coverage; a policy narrowed between serving and replay does not silently re-serve denied hits; the
+  vacuous `verified`. Plus, from revision 29: a file whose only line break is a CR reads
+  `line_count = 1` from a `read`, not 2; a path both inline-seeded and read takes the **smaller**
+  count; and a repository missing `exposure.commit` yields `unwired` while a `ServeError` raised
+  after both environment checks pass **propagates** rather than becoming a verdict.
 - **`append_review`** — a human review is stored with no control-plane directory existing at all; the
   same for `deterministic`; an agent review whose run record carries **no exposure** yields
   `unwired`, not a crash. Plus attestation (revision 18): a submission cannot express a
@@ -2333,7 +2478,13 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Diagnose with `rev-parse --is-shallow-repository` through hardened `run_git` | a **complete** repository reports no traversal error |
 | 4a | Diagnose with `rev-parse --is-shallow-repository` under a detector-specific environment omitting `GIT_SHALLOW_FILE` | a complete repository with `.git/shallow` **planted** reports no traversal error |
 | 4a | Journal a shallow-`history` refusal instead of refusing at open | a brokered run against a shallow clone opens instead of refusing before session creation |
-| 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
+| 4c | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
+| 4c | Have `science_model/correspondence.py` import `_Base` from `audit.subjects` | a **subprocess** running `python -c "import science_model.correspondence"` exits non-zero |
+| 4b | Have `science_model/correspondence.py` import anything from `science_model.audit` | a **subprocess** importing `science_model.correspondence` finds `science_model.audit` absent from `sys.modules` |
+| 4b | Compute `line_count` with `splitlines()` | a file whose only line break is a CR reads `line_count = 1` |
+| 4b | Merge two `Full` contributions by taking the larger, or by last-write-wins | a path inline-seeded at `n+1` lines and read at `n` refuses a citation to line `n+1` |
+| 4b | Wrap replay and return `unwired` on any git fault | a `ServeError` raised after both environment checks pass propagates out of `check_correspondence` |
+| 4b | Treat an inline entry missing from `exposure.inline` as merely uncovered | a tampered inline `target` yields `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
 | 4a | Bound stdout only | an oversized `stderr` refuses |
@@ -2368,6 +2519,23 @@ interpreter** entering `science_model.evidence_broker`, which reaches `audit/__i
 into a partially initialised `audit.record`. Spawn it; do not trust the ambient module cache. This is
 the general form: *a cycle test that shares a process with its own test runner tests the runner's
 import order.*
+
+**Revision 29 moves both cycle rows to 4c, and gives 4b the row it can actually certify.** The cycle
+does not exist until `audit/record.py` imports `Correspondence`, and that import is 4c's — 4b changes
+no stored-record model at all (§2.2). Run against 4b's tree, either mutation imports cleanly and the
+row passes for the wrong reason, which is the `Slice` column's whole purpose one slice over from
+where it was last needed. What 4b *can* prove is the structural fact it is actually responsible for:
+`science_model/correspondence.py` reaches `science_model.audit` by no path. Asserted as an absence
+from a fresh interpreter's `sys.modules`, which is a predicate over what got loaded rather than a
+roster of imports someone maintains — and which the `_Base` mutation breaks immediately, on 4b's own
+tree, without waiting for 4c to close the loop.
+
+**A row that must not be added: pre-normalising the replayed request target.** `normalize_project_path`
+is idempotent and the journal stores its output, so a checker that normalises again and one that does
+not are observationally identical, in both fixtures. There is no test that turns red, so the rule
+belongs in §5.2's prose and nowhere here. Revision 27 established the discipline on the
+`GIT_SHALLOW_FILE` pair for the same reason: a roster row whose mutation cannot fail certifies
+nothing and reads as though it does.
 
 **The lazy-fetch row has three ways to go wrong, and the third is the interesting one.**
 
