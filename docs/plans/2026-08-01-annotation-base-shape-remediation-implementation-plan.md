@@ -812,16 +812,31 @@ Implements §4. Thin wrapper: Click options, exception translation, `emit`. All 
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science/tests/test_migrate_annotation_base_shape.py`:
+First, extend the **existing import block** at the top of `science/tests/test_migrate_annotation_base_shape.py` — do not put these above the new tests. Ruff's default rule set includes `E4`, so a module-level import after a function definition is `E402 Module level import not at top of file` and Step 7's `ruff check` fails.
+
+The block becomes:
 
 ```python
-import json as _json
+from __future__ import annotations
 
+import json as _json
+from pathlib import Path
+
+import pytest
 from click.testing import CliRunner
+from science_model.frontmatter import split_frontmatter
 
 from science_tool.entities_cli import entity_group
+from science_tool.migrate_annotation_base_shape import (
+    BaseShapeMigrationRefused,
+    apply_plan,
+    plan_repairs,
+)
+```
 
+Then append **only the test functions** to the end of the file:
 
+```python
 def test_dry_run_writes_nothing(tmp_path, monkeypatch):
     root = _project(tmp_path)
     path = _write(root, "propositions", "p.md", EMPTY_TITLE_PROPOSITION)
@@ -1062,11 +1077,13 @@ for p in ~/d/cancer/cancer-types/multiple-myeloma \
          ~/d/protein-landscape \
          "$(git rev-parse --show-toplevel)/meta"; do
   echo "=== $p"
-  (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape)
+  (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape) || exit 1
 done
 ```
 
 Expected: `would repair` counts of 681, 72, 21, 16, 2 — matching Step 3 — with nothing written. A dry run now exits non-zero and names any unsupported record, so a non-zero exit here means **stop**: there is an in-scope record the command cannot repair, and the design's measured residue of zero no longer holds.
+
+The `|| exit 1` is load-bearing. A `for` loop reports only its **last** iteration's status, so without it a refusal in mm30 — the first and largest root — would be masked by a clean run in `meta` and the rollout would proceed as though everything passed.
 
 - [ ] **Step 5: Apply and commit, one project root at a time**
 
@@ -1126,11 +1143,11 @@ WT="$(git rev-parse --show-toplevel)/science"    # from the worktree root
 for p in ~/d/cancer/cancer-types/multiple-myeloma ~/d/protein-landscape; do
   echo "=== $p"
   (cd "$p" && uv run --frozen --project "$WT" science entity migrate-annotation-base-shape --apply \
-     && git status --porcelain)
+     && git status --porcelain) || exit 1
 done
 ```
 
-Expected: `repaired 0 record(s); skipped N` and empty `git status` output for each — a second apply is a no-op.
+Expected: `repaired 0 record(s); skipped N` and empty `git status` output for each — a second apply is a no-op. `|| exit 1` for the same reason as Step 4: the loop would otherwise report only the last root's status.
 
 - [ ] **Step 9: Verify the diff distribution across all five commits**
 
