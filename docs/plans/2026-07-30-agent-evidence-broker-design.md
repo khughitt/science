@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 29)
+**Status:** partially implemented (revision 30)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -14,7 +14,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 29, not implemented |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 30, not implemented |
 | Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
@@ -153,8 +153,9 @@ that will import `Correspondence` back. So `science_model/correspondence.py` inh
 `audit/record.py` imports `Correspondence`, which is 4c's change — 4b touches no stored-record model.
 Run against 4b's tree either mutation imports cleanly and the row passes for the wrong reason, which
 is exactly what §7's `Slice` column exists to catch, found one slice later than the last time. 4b
-keeps a row it can certify on its own tree: a fresh interpreter importing
-`science_model.correspondence` must not load `science_model.audit` at all.
+keeps a row it can certify on its own tree: a fresh interpreter executes
+`science_model/correspondence.py` with `runpy.run_path`, and that leaf execution must not load
+`science_model.audit` at all.
 
 **Design review of revision 29 closed five more, two of them inside revision 29's own fixes** —
 the pattern this document has now recorded five rounds running. The fourth is older than all of
@@ -201,6 +202,16 @@ Finding (3) is the **second** overshoot in this document to name a mechanism nex
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
 in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
 protection from the error.
+
+Revision 30 corrects 4b's leaf-import guard. A normal `import science_model.correspondence` always
+executes the existing eager `science_model/__init__.py`; its current chain already loads
+`science_model.audit` before the leaf executes. The old `sys.modules` predicate therefore measured
+package initialisation, not the leaf's dependencies, and could not certify the boundary it named.
+4b instead starts a fresh interpreter, executes the leaf file directly with
+`runpy.run_path(sys.argv[1])`, and asserts that `science_model.audit` remains absent. Temporarily
+importing `_Base` or anything else from `science_model.audit` in that file makes this guard fail.
+The real package-cycle rows remain 4c: their `audit.record -> Correspondence` edge does not exist in
+4b's tree, and this correction changes no production boundary.
 
 Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
 
@@ -2579,7 +2590,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Journal a shallow-`history` refusal instead of refusing at open | a brokered run against a shallow clone opens instead of refusing before session creation |
 | 4c | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
 | 4c | Have `science_model/correspondence.py` import `_Base` from `audit.subjects` | a **subprocess** running `python -c "import science_model.correspondence"` exits non-zero |
-| 4b | Have `science_model/correspondence.py` import anything from `science_model.audit` | a **subprocess** importing `science_model.correspondence` finds `science_model.audit` absent from `sys.modules` |
+| 4b | Have `science_model/correspondence.py` import anything from `science_model.audit` | a **subprocess** executing the leaf with `runpy.run_path` finds `science_model.audit` absent from `sys.modules` |
 | 4b | Compute `line_count` with `splitlines()` | a file whose only line break is a CR reads `line_count = 1` |
 | 4b | Merge two `Full` contributions by taking the larger, or by last-write-wins | a path inline-seeded at `n+1` lines and read at `n` refuses a citation to line `n+1` |
 | 4b | Merge two `Lines` contributions by replacing rather than uniting | one path searched twice for different patterns admits a citation to a line matched **only by the first** search |
@@ -2622,15 +2633,17 @@ into a partially initialised `audit.record`. Spawn it; do not trust the ambient 
 the general form: *a cycle test that shares a process with its own test runner tests the runner's
 import order.*
 
-**Revision 29 moves both cycle rows to 4c, and gives 4b the row it can actually certify.** The cycle
+**Revisions 29–30 move both cycle rows to 4c, and give 4b the row it can actually certify.** The cycle
 does not exist until `audit/record.py` imports `Correspondence`, and that import is 4c's — 4b changes
 no stored-record model at all (§2.2). Run against 4b's tree, either mutation imports cleanly and the
 row passes for the wrong reason, which is the `Slice` column's whole purpose one slice over from
 where it was last needed. What 4b *can* prove is the structural fact it is actually responsible for:
-`science_model/correspondence.py` reaches `science_model.audit` by no path. Asserted as an absence
-from a fresh interpreter's `sys.modules`, which is a predicate over what got loaded rather than a
-roster of imports someone maintains — and which the `_Base` mutation breaks immediately, on 4b's own
-tree, without waiting for 4c to close the loop.
+`science_model/correspondence.py` reaches `science_model.audit` by no path. A normal package import
+cannot establish that fact because eager `science_model/__init__.py` loads audit first. Instead, a
+fresh interpreter executes the leaf directly with `runpy.run_path(sys.argv[1])` and asserts audit is
+absent from `sys.modules`. This is still a predicate over what the leaf loads rather than a roster of
+imports someone maintains, and the `_Base` mutation breaks it immediately on 4b's own tree, without
+waiting for 4c to close the loop.
 
 **The span row needs an unserved *interior*, and revisions 1–29 specified one that cannot fail.** A
 ten-line span against a one-line hit is refused by endpoint-checking as readily as by the real rule —
