@@ -548,6 +548,12 @@ def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> Non
     MEASURED with `cat` and a 4 MiB write -- never returns. `check-ignore --stdin -z --verbose`
     both consumes a large stdin and emits a large stdout, so it exercises both directions at once.
 
+    THE `.gitignore` IS WHAT MAKES THIS TEST ABLE TO FAIL. With no ignore rule, `check-ignore
+    --verbose` matches nothing and emits ZERO bytes on stdout -- MEASURED, exit 1, 0 bytes -- so
+    the child never blocks, the parent drains stdin freely, and the write-first implementation
+    PASSES. Committing `*` makes every path produce a verbose line (~23 bytes each; 46 bytes for
+    two paths, measured), so 50k paths push well past the pipe buffer in both directions.
+
     THE ALARM IS LOAD-BEARING. `pytest-timeout` is not a dependency of this package, and a
     deadlock's failure mode is SILENCE -- without this the regression hangs the suite instead of
     failing it, which is worse than not testing it at all. SIGALRM is POSIX-only; this suite
@@ -557,7 +563,10 @@ def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> Non
     def _timeout(signum, frame):
         raise TimeoutError("run_git deadlocked writing stdin while the child wrote stdout")
 
-    paths = b"\0".join(f"dir{n}/file{n}.txt".encode() for n in range(50000))
+    _commit(three_commit_repo, ".gitignore", "*\n")
+    # NUL-TERMINATED, not NUL-separated: `-z` framing means a trailing record without its
+    # terminator is incomplete, and git may hold it rather than answer.
+    paths = b"".join(f"dir{n}/file{n}.txt\0".encode() for n in range(50000))
     previous = signal.signal(signal.SIGALRM, _timeout)
     signal.alarm(30)
     try:
@@ -569,7 +578,11 @@ def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> Non
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
 
-    assert completed.returncode in (0, 1)  # 1 == nothing ignored, which is an answer
+    assert completed.returncode == 0, "every path should match the `*` rule"
+    assert len(completed.stdout) > (1 << 16), (
+        "the child produced less than one pipe buffer of output, so this test could not have "
+        "deadlocked even against the write-first implementation"
+    )
 
 
 def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -> None:
@@ -675,6 +688,11 @@ def _capture(
     `boundary/gitio.py` both pass payloads through `input=`, so this is a live path, not a
     hypothetical. Draining stdout fully before stderr fails the same way for the same reason.
 
+    SHARING THE LOOP IS NOT SUFFICIENT ON ITS OWN. A selector plus a blocking
+    `BufferedWriter.write` deadlocks identically -- also MEASURED -- because readiness for one byte
+    does not stop `write` from looping until all 64 KiB are out. See the `os.set_blocking` call
+    below: the nonblocking fd is what turns readiness into progress.
+
     The ceiling is checked as the bytes ARRIVE. A cap tested after the loop has already spent the
     memory it exists to protect, which is why `GitOutputTooLarge` carries `consumed`.
     """
@@ -685,6 +703,14 @@ def _capture(
     pending = memoryview(input) if input else None
     if pending is not None:
         assert process.stdin is not None
+        # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST ONE
+        # byte can be written -- it does not make the write partial-friendly, and
+        # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector loop
+        # with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against `cat` and a
+        # 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a partial count and
+        # the loop makes progress. Do not mix buffered writes with the raw fd: nothing is ever
+        # written through `process.stdin`, so its buffer stays empty and `close()` just closes.
+        os.set_blocking(process.stdin.fileno(), False)
         selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
     elif process.stdin is not None:
         process.stdin.close()
@@ -699,15 +725,15 @@ def _capture(
                 if key.data == "stdin":
                     assert pending is not None
                     try:
-                        written = key.fileobj.write(pending[:_CHUNK])  # type: ignore[union-attr]
+                        written = os.write(key.fd, pending[:_CHUNK])
+                    except BlockingIOError:
+                        # Readiness is advisory; the pipe filled between select and write.
+                        written = 0
                     except BrokenPipeError:
                         # The child exited without reading its input. That is an ANSWER (git
                         # refused early), not a failure to invoke, so it is not an error here.
-                        written = None
-                    if written is None:
-                        pending = None
-                    else:
-                        pending = pending[written:]
+                        written = len(pending)
+                    pending = pending[written:]
                     if not pending:
                         selector.unregister(key.fileobj)
                         key.fileobj.close()  # type: ignore[union-attr]
@@ -770,7 +796,7 @@ def _run(
 EOF, which re-serialises the very interleaving the selector exists to avoid. `read1` returns what
 one underlying read produced.
 
-Add `import selectors` to the module's imports.
+Add `import selectors` to the module's imports (`os` and `subprocess` are already there).
 
 Then bound the preflight in `_filter_driver_overrides` — replace its first line:
 
@@ -1456,6 +1482,7 @@ then `git checkout` the file.
 | Journal a `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_a_served_op_is_not_a_denial` |
 | Make `GitOutputTooLarge` inherit `RuntimeError` again | `test_an_overflow_reaches_an_existing_git_error_handler` (Step 2) |
 | Write all of stdin before draining the pipes | `test_a_large_stdin_payload_does_not_deadlock` |
+| Keep the selector loop but drop `os.set_blocking` and write via `process.stdin.write` | `test_a_large_stdin_payload_does_not_deadlock` — **run this one; a shared loop alone does not fix the deadlock, and it is the mutation most likely to be "simplified" back in** |
 | Delete the NFC branch of the tree check | `test_a_brokered_run_refuses_to_open_against_an_nfd_tree` |
 | Delete the UTF-8 branch of the tree check | `test_a_brokered_run_refuses_to_open_against_a_non_utf8_path` |
 | Make the tree check refuse every tree | `test_a_valid_utf8_nfc_tree_opens` |
