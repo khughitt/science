@@ -289,6 +289,42 @@ def test_stdout_overflow_refuses_and_does_not_truncate(three_commit_repo: Path) 
     assert 64 < caught.value.consumed <= 64 + (1 << 16)
 
 
+def test_an_overflow_reaches_an_existing_git_error_handler(three_commit_repo: Path) -> None:
+    """Five call sites convert `GitError` into `unwired`. An overflow must land in that net.
+
+    Asserted through the HIERARCHY rather than by importing a caller: the claim is that any of
+    the five keeps working, and `except GitError` is exactly what all five spell.
+    """
+    _commit(three_commit_repo, "big.txt", "x" * 4096)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert issubclass(GitOutputTooLarge, GitError)
+    with pytest.raises(GitError):
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:big.txt", stdout_limit=64)
+
+
+def test_the_ceiling_is_checked_during_capture_not_after(three_commit_repo: Path) -> None:
+    """A cap tested after the loop has already spent the memory it exists to protect.
+
+    ASSERTED ON `consumed`, not on the exception type: both dispositions raise
+    `GitOutputTooLarge`, so `pytest.raises` alone cannot separate them. Enforced during capture,
+    the buffer holds at most the limit plus the one chunk that crossed it; enforced afterwards, it
+    holds the entire 1 MiB blob. A comment claiming the call "returns promptly" measures nothing.
+    """
+    payload = "z" * (1 << 20)
+    _commit(three_commit_repo, "huge.txt", payload)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:huge.txt", stdout_limit=1024)
+
+    assert caught.value.consumed <= 1024 + 65536, (
+        f"buffered {caught.value.consumed} bytes before refusing a 1024-byte ceiling; "
+        "the check ran after capture, not during it"
+    )
+    assert caught.value.consumed < len(payload)
+
+
 def test_a_payload_at_the_limit_is_served(three_commit_repo: Path) -> None:
     """The boundary is inclusive; a payload of exactly `stdout_limit` bytes is not an overflow.
 
