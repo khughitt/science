@@ -31,6 +31,7 @@ from science_model.entities import EvidenceLineEntity
 from science_model.entity_schema import EntityValidationError, EntityValidator
 from science_model.frontmatter import split_frontmatter
 from science_model.propositions import PropositionEntity
+from science_model.reasoning import EvidenceType, canonical_evidence_type_token
 
 from science_tool.entities import render_entity_text
 
@@ -76,6 +77,58 @@ EVIDENCE_LINE_OWNED_KEYS: frozenset[str] = frozenset(
 # create-time default; on update the author's value wins, which is why it is absent from both
 # per-kind sets above. `status` is likewise seeded once and then owned by the author.
 CREATE_ONLY_KEYS: frozenset[str] = frozenset(("title", "status"))
+
+
+def _collapse(text: str) -> str:
+    """Collapse all runs of whitespace to single spaces. Titles are durable authored source."""
+    return " ".join(text.split())
+
+
+def derive_proposition_title(*, subject: str, predicate: str, object: str) -> str:
+    """THE derived proposition title. Deterministic, not good prose.
+
+    Mechanical on purpose: it must be stable and reconstructible from the record's own fields,
+    which is what lets the base-shape migration reproduce exactly what the create path minted.
+    An author may replace it afterwards, and the update path preserves the replacement because
+    `title` is in `CREATE_ONLY_KEYS`.
+
+    Takes scalars, not a `WorkbenchRow`: `WorkbenchRow.patch` is required under
+    `extra="forbid"`, so a row-taking signature would force a migration to fabricate patch
+    membership it has no business inventing.
+    """
+    return _collapse(f"{subject} {predicate} {object}")
+
+
+def derive_evidence_line_title(
+    *,
+    stance: str | None,
+    target_id: str,
+    source: str | None,
+    evidence_type: EvidenceType | str | None,
+) -> str:
+    """THE derived evidence-line title.
+
+    `target_id` is supplied by the caller and always present, so the head alone is non-empty.
+    `stance` defaults to `supports`, matching the entity field's own default. The tail prefers
+    `source` and falls back to the evidence type.
+
+    A raw string `evidence_type` is canonicalized AND coerced to `EvidenceType`. The create path
+    only ever sees a coerced member -- `EvidenceStub` strips the `_evidence` suffix in a
+    `mode="before"` validator and pydantic then enforces membership -- but a migration reading
+    persisted frontmatter sees raw tokens. `canonical_evidence_type_token` is documented as
+    "pure string->string (does NOT validate membership)", so without the coercion this would
+    mint a title from a token the create path rejects.
+    """
+    head = f"{stance or 'supports'} {target_id}"
+    if source:
+        tail: str | None = source
+    elif evidence_type is None:
+        tail = None
+    elif isinstance(evidence_type, EvidenceType):
+        tail = evidence_type.value
+    else:
+        tail = EvidenceType(canonical_evidence_type_token(evidence_type)).value
+    return _collapse(f"{head} — {tail}" if tail else head)
 
 
 @dataclass(frozen=True)
