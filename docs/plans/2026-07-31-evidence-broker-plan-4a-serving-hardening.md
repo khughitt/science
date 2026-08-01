@@ -50,12 +50,12 @@ this slice may and may not touch.
 | File | Change | Responsibility after this slice |
 |---|---|---|
 | `science/model/src/science_model/evidence_broker.py` | modify | Adds `MAX_SERVED_BYTES`, `MAX_RUN_SERVED_BYTES`; `REPLAY_PROTOCOL_VERSION = 2`. Bounds live beside the ones plan 3 added, so the journal's and the payload's ceilings are derivable from one place. |
-| `science/src/science_tool/autonomy/git.py` | modify | Gains two `_ENVIRONMENT` pins, `is_shallow()`, and the bounded-capture ceiling with `GitOutputTooLarge`. Remains the single place autonomy's git argv and environment are built. |
+| `science/src/science_tool/autonomy/git.py` | modify | Gains two `_ENVIRONMENT` pins, `history_traversal_error()`, and the bounded-capture ceiling with `GitOutputTooLarge`. Remains the single place autonomy's git argv and environment are built. |
 | `science/src/science_tool/evidence_broker/serve.py` | modify | Passes `stdout_limit=MAX_SERVED_BYTES` on the three served ops, pre-checks `read` with `cat-file -s`, and converts a **stdout** overflow into a journaled `Denial` while letting a **stderr** overflow propagate. |
-| `science/src/science_tool/autonomy/lifecycle.py` | modify | `start_run` refuses to open a brokered run against a non-NFC/non-UTF-8 tree, or a shallow repository. |
-| `science/tests/test_autonomy_git_canonical.py` | modify | Real-git probes: the two pins, `is_shallow`, the ceiling. |
+| `science/src/science_tool/autonomy/lifecycle.py` | modify | `start_run` refuses to open a brokered run against a non-NFC/non-UTF-8 tree, or a repository that cannot walk the pinned commit's ancestry locally. |
+| `science/tests/test_autonomy_git_canonical.py` | modify | Real-git probes: the two pins, `history_traversal_error`, the ceiling. |
 | `science/tests/test_evidence_broker_serve.py` | modify | The payload bound and its disposition split. |
-| `science/tests/test_autonomy_lifecycle.py` | modify | The tree scan and shallow refusal at open. |
+| `science/tests/test_autonomy_lifecycle.py` | modify | The tree scan and the untraversable-history refusal at open. |
 | `science/model/tests/test_evidence_broker_model.py` | modify | The bounds and the protocol value. |
 
 **Task order is dependency order.** Task 1 defines constants Tasks 3–5 import. Task 3's ceiling is a
@@ -80,7 +80,7 @@ class GitOutputTooLarge(GitError):     # a GitError SUBCLASS -- see Task 3
     stream: str    # "stdout" or "stderr"
     limit: int
     consumed: int  # bytes buffered when it raised; how §7 proves the check runs during capture
-def is_shallow(repo_root: Path) -> bool: ...
+def history_traversal_error(repo_root: Path, commit: str) -> str | None: ...  # git's own text, or None
 def run_git(
     repo_root: Path, *args: str, input: bytes | None = None, stdout_limit: int | None = None
 ) -> subprocess.CompletedProcess[bytes]: ...
@@ -212,16 +212,19 @@ git commit -m "feat(evidence-broker): bound served payloads and bump the replay 
 
 ---
 
-### Task 2: Pin the git environment and add `is_shallow`
+### Task 2: Pin the git environment and add `history_traversal_error`
 
 **Files:**
-- Modify: `science/src/science_tool/autonomy/git.py:99-116` (`_ENVIRONMENT`), and append `is_shallow`
+- Modify: `science/src/science_tool/autonomy/git.py:99-116` (`_ENVIRONMENT`), and append
+  `history_traversal_error`
 - Test: `science/tests/test_autonomy_git_canonical.py`
 
 **Interfaces:**
 - Consumes: `run_git`, `_ENVIRONMENT` (both already present).
-- Produces: `is_shallow(repo_root: Path) -> bool` — used by Task 5 at `start_run`, and by plan 4b at
-  replay. This is the one function; do not write a second spelling of the check anywhere.
+- Produces: `history_traversal_error(repo_root: Path, commit: str) -> str | None` — git's own
+  diagnostic when `commit`'s ancestry cannot be walked from local objects, `None` when it can. Used
+  by Task 5 at `start_run`, and by plan 4b at replay. This is the one function; do not write a second
+  spelling of the check anywhere.
 
 **Context — why pins and not checks.** `.git/shallow` is an ordinary file in the actor-owned `.git`
 directory. **Measured, git 2.55:** in a three-commit repository, `git log <commit>` returned 3
@@ -235,11 +238,42 @@ subprocesses spawned, full answer returned). That remote's URL lives in `.git/co
 is an egress channel out of the control plane. `-c` cannot close it: the neutralization would have to
 name the remote, and the remote's name is the actor's to pick.
 
-`is_shallow` survives as a **diagnostic**, not the guarantee — it turns a genuinely shallow clone
-into an operator error at open with a sentence naming the cause, instead of a
-`fatal: Failed to traverse parents` in the middle of a run. **Measured: `rev-parse
---is-shallow-repository` does NOT honour `GIT_SHALLOW_FILE`** — it reads `true` under the pin — so
-the detector keeps working through hardened `run_git` with no special case.
+A **diagnostic** survives beside the pins — not the guarantee, but the thing that turns a repository
+which cannot answer into an operator error at open, with a sentence naming the cause, instead of a
+`fatal: Failed to traverse parents` in the middle of a run. It must ask the **served property**, not a
+proxy for it.
+
+**`rev-parse --is-shallow-repository` is the proxy, and the pin blinds it.** MEASURED, git 2.55:
+
+| repository | default | under `GIT_SHALLOW_FILE=/dev/null` |
+|---|---|---|
+| complete | `false` | **`true`** |
+| genuine `--depth 1` | `true` | `true` |
+
+`is_repository_shallow()` sets its flag on a *successful open* of the shallow file, before reading a
+line — `/dev/null` opens, so the predicate is constant-`true` under the pin and distinguishes
+nothing. Running it *without* the pin would work at open (no actor exists yet) but re-admits an
+actor-owned file into a defense, which is the shape this design has rejected four times.
+
+The property is: **can git walk the pinned commit's ancestry from local objects?** `_LOG_ARGV`
+carries no `-n`, so `history` walks to the root; walking to the root is therefore exactly what to
+measure. MEASURED, git 2.55, under the pins:
+
+| repository | `rev-list --count <commit>` |
+|---|---|
+| complete, 6755 commits | `6755`, exit 0, **42 ms** |
+| complete with `.git/shallow` **planted** | full count — the plant is ignored |
+| genuine `--depth 1` | **exit 128**, `fatal: Failed to traverse parents` |
+
+The planted row is the one the proxy could never have: unpinned `--is-shallow-repository` answers
+`true` to the actor's file, and this probe answers to the objects.
+
+**What it does not reach — stated so nobody widens it by assumption.** MEASURED under the pins, a
+`--filter=tree:0` and a `--filter=blob:none` clone both report the full commit count: their *commits*
+are all present. The tree case is already refused at open by Task 5's §3.1 tree scan
+(`ls-tree -r` → `fatal: not a tree object`, measured), for free. The blob case is not pre-empted at
+open and fails loudly mid-run at exit 128 — which is `GIT_NO_LAZY_FETCH` working as designed. The
+diagnostic covers **missing commits**; it is not a completeness oracle.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -326,30 +360,62 @@ def test_a_partial_clone_fails_rather_than_fetching(tmp_path: Path, three_commit
     assert b"unable to read tree" in completed.stderr
 
 
-def test_is_shallow_reports_a_genuine_shallow_clone(tmp_path: Path, three_commit_repo: Path) -> None:
-    """And keeps working through hardened `run_git`: `--is-shallow-repository` ignores the pin."""
+def test_a_complete_repository_has_no_history_traversal_error(three_commit_repo: Path) -> None:
+    """The baseline half of the pair below, and the assertion the PROXY cannot satisfy.
+
+    MEASURED, git 2.55: `rev-parse --is-shallow-repository` reads `true` for a COMPLETE repository
+    under `GIT_SHALLOW_FILE=/dev/null`, so swapping this probe for it turns this test red.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_planted_shallow_file_is_not_a_history_traversal_error(three_commit_repo: Path) -> None:
+    """The diagnostic answers to the OBJECTS, not to the actor's file.
+
+    Unpinning the detector so `--is-shallow-repository` could see a genuine boundary would also let
+    it see this one -- an actor could refuse its own run's open by writing a file. Every object is
+    present here, so history is traversable and the plant means nothing.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+    parent = run_git(three_commit_repo, "rev-parse", "HEAD~1").stdout.decode().strip()
+    (three_commit_repo / ".git" / "shallow").write_text(f"{parent}\n", encoding="utf-8")
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_genuine_shallow_clone_is_a_history_traversal_error(
+    tmp_path: Path, three_commit_repo: Path
+) -> None:
+    """Objects genuinely absent: git's own words come back for the operator message."""
     clone = tmp_path / "shallow"
     subprocess.run(
         ["git", "clone", "-q", "--depth", "1", f"file://{three_commit_repo}", str(clone)],
         check=True,
         capture_output=True,
     )
+    commit = run_git(clone, "rev-parse", "HEAD").stdout.decode().strip()
 
-    assert is_shallow(clone) is True
-    assert is_shallow(three_commit_repo) is False
+    reason = history_traversal_error(clone, commit)
+
+    assert reason is not None
+    assert "Failed to traverse parents" in reason
 ```
 
-Add `import os`, `import subprocess`, and `from science_tool.autonomy.git import is_shallow, run_git`
-to the module's imports if they are not already there.
+Add `import os`, `import subprocess`, and
+`from science_tool.autonomy.git import history_traversal_error, run_git` to the module's imports if
+they are not already there.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_autonomy_git_canonical.py -k "planted_shallow or partial_clone or is_shallow" -v
+cd science && uv run --frozen pytest tests/test_autonomy_git_canonical.py -k "shallow or partial_clone or traversal" -v
 ```
 
-Expected: FAIL — `ImportError: cannot import name 'is_shallow'` for the third, and the first two fail
-on the assertions (3 vs 2 commits; a successful `log` instead of a non-zero exit).
+Expected: FAIL — `ImportError: cannot import name 'history_traversal_error'` collects the module to
+an error, so fix the import first by adding the function as a stub if you want to watch the other two
+fail on their assertions (3 vs 2 commits; a successful `log` instead of a non-zero exit).
 
 - [ ] **Step 3: Add the pins and the detector**
 
@@ -395,31 +461,43 @@ _ENVIRONMENT: dict[str, str] = {
 }
 ```
 
-Then append `is_shallow` at the end of the module:
+Then append `history_traversal_error` at the end of the module:
 
 ```python
-def is_shallow(repo_root: Path) -> bool:
-    """Whether `repo_root` holds a shallow boundary.
+def history_traversal_error(repo_root: Path, commit: str) -> str | None:
+    """git's own diagnostic if `commit`'s ancestry cannot be walked from local objects, else None.
 
-    A DIAGNOSTIC, not the guarantee. `GIT_SHALLOW_FILE` above is what makes history answer
-    completely or fail; this exists so that a genuinely shallow clone is reported as an operator
-    error at run open, with a sentence naming the cause, rather than as a
-    `fatal: Failed to traverse parents` in the middle of a run.
+    A DIAGNOSTIC, not the guarantee. `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH` above are what make
+    `history` answer completely or fail; this exists so that a repository which cannot answer is an
+    operator error at run open, naming the cause, rather than a `fatal: Failed to traverse parents`
+    in the middle of a run. The two cover disjoint intervals: at `start_run` no actor exists yet, so
+    an absence present then is genuine; anything appearing later is the actor's, and the pins
+    neutralize it.
 
-    The two cover disjoint intervals and neither depends on the other: at `start_run` no actor
-    exists yet, so a boundary present then is genuine; a boundary appearing later is the actor's,
-    and the pin neutralizes it.
+    IT ASKS THE SERVED PROPERTY, NOT A PROXY FOR IT. `serve._LOG_ARGV` carries no `-n`, so `history`
+    walks to the root -- walking to the root is what to measure. `rev-parse
+    --is-shallow-repository` is the proxy, and the pin blinds it: MEASURED, git 2.55, it reads
+    `true` for a COMPLETE repository under `GIT_SHALLOW_FILE=/dev/null`, because
+    `is_repository_shallow()` sets its flag on a SUCCESSFUL OPEN of the shallow file, before reading
+    a line, and `/dev/null` opens. Under the pins it is constant-`true`.
 
-    MEASURED: `--is-shallow-repository` does NOT honour `GIT_SHALLOW_FILE` -- it reads `true`
-    under the pin -- so this keeps working through hardened `run_git` with no special case.
+    MEASURED, git 2.55, under the pins: a complete 6755-commit repository answers in 42 ms; a
+    complete repository with `.git/shallow` PLANTED still answers, because the plant is ignored; a
+    `--depth 1` clone exits 128.
+
+    COVERS MISSING COMMITS ONLY -- do not widen this by assumption. MEASURED: `--filter=tree:0` and
+    `--filter=blob:none` clones both report the full commit count. The tree case is refused at open
+    by the §3.1 tree scan (`ls-tree -r` -> `fatal: not a tree object`); the blob case is not
+    pre-empted at open and fails mid-run at exit 128, which is `GIT_NO_LAZY_FETCH` working. This is
+    not a completeness oracle.
     """
-    completed = run_git(repo_root, "rev-parse", "--is-shallow-repository")
-    if completed.returncode != 0:
-        raise GitError(
-            f"could not determine whether {repo_root} is a shallow repository: "
-            f"{completed.stderr.decode('utf-8', 'replace').strip()}"
-        )
-    return completed.stdout.decode("utf-8", "replace").strip() == "true"
+    completed = run_git(repo_root, "rev-list", "--count", commit)
+    if completed.returncode == 0:
+        return None
+    return (
+        completed.stderr.decode("utf-8", "replace").strip()
+        or f"git rev-list exited {completed.returncode} without a diagnostic"
+    )
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1147,7 +1225,7 @@ git commit -m "feat(evidence-broker): bound served payloads and refuse oversized
 - Test: `science/tests/test_autonomy_lifecycle.py`
 
 **Interfaces:**
-- Consumes: `is_shallow` (Task 2); `GitOutputTooLarge`, `run_git(..., stdout_limit=...)` (Task 3);
+- Consumes: `history_traversal_error` (Task 2); `GitOutputTooLarge`, `run_git(..., stdout_limit=...)` (Task 3);
   `normalize_utf8_nfc` (already used by `SurfacePolicy`'s validator in
   `science_model/evidence_broker.py`); `BaselineError` (already raised by `start_run`).
 - Produces: nothing consumed by 4b or 4c. This is the last piece of 4a's forward guarantee.
@@ -1259,9 +1337,11 @@ def test_a_valid_utf8_nfc_tree_opens_a_brokered_run(
 def test_a_brokered_run_refuses_to_open_against_a_shallow_clone(
     project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A DIAGNOSTIC: the pin is what makes history correct, this names the cause at open.
+    """A DIAGNOSTIC: the pins are what make history correct, this names the cause at open.
 
-    Without it the operator meets `fatal: Failed to traverse parents` mid-run instead.
+    Without it the operator meets `fatal: Failed to traverse parents` mid-run instead. The match is
+    on the durable half of the message -- the property, not the usual cause -- because a repository
+    can fail to walk its own history for reasons other than `--depth`.
     """
     # A second commit, so `--depth 1` actually truncates something.
     (project / "later.txt").write_text("later\n", encoding="utf-8")
@@ -1274,7 +1354,7 @@ def test_a_brokered_run_refuses_to_open_against_a_shallow_clone(
         capture_output=True,
     )
 
-    with pytest.raises(BaselineError, match="shallow"):
+    with pytest.raises(BaselineError, match="from local objects"):
         _start_brokered(clone, tmp_path, monkeypatch)
 ```
 
@@ -1298,7 +1378,7 @@ def test_an_oversized_tree_scan_refuses_to_open(
 ```
 
 **Note on the shallow test:** a `--depth 1` clone of a project fixture carries the committed
-`knowledge/graph.trig`, so `_capture` finds a belief basis and the run reaches the shallow check
+`knowledge/graph.trig`, so `_capture` finds a belief basis and the run reaches the traversal check
 rather than failing earlier for an unrelated reason. If it does fail earlier, the fixture — not the
 guard — is what needs fixing; do not weaken the check to accommodate it.
 
@@ -1383,18 +1463,21 @@ Then, in `start_run`, inside the `if evidence is not None:` block and **before**
     if evidence is not None:
         # BEFORE the journal and the session: this is the only place that sees the pinned commit
         # while no actor exists yet, and a run that opens and never serves must be covered too.
-        if is_shallow(project_root):
+        unwalkable = history_traversal_error(project_root, base_commit)
+        if unwalkable is not None:
             raise BaselineError(
-                f"{project_root} is a shallow repository, so `history` cannot be served completely "
-                "and a brokered run cannot be opened against it; clone with full history"
+                f"{project_root} cannot walk the ancestry of {base_commit} from local objects, so "
+                f"`history` cannot be served completely and a brokered run cannot be opened against "
+                f"it (git said: {unwalkable}). A shallow clone is the usual cause -- clone with "
+                f"full history."
             )
         _assert_tree_is_citeable(project_root, base_commit)
         directory = run_dir(project_root, run_id)
         ...
 ```
 
-Add the imports: `is_shallow`, `GitOutputTooLarge` and `run_git` from `science_tool.autonomy.git`,
-and `from science_model.audit.subjects import normalize_utf8_nfc`.
+Add the imports: `history_traversal_error`, `GitOutputTooLarge` and `run_git` from
+`science_tool.autonomy.git`, and `from science_model.audit.subjects import normalize_utf8_nfc`.
 
 **That import is allowed.** The constraint on this slice is *"changes no stored-record model"*, not
 *"never mentions `audit/`"* — `normalize_utf8_nfc` is a pure function and `SurfacePolicy`'s own
@@ -1471,7 +1554,9 @@ then `git checkout` the file.
 |---|---|
 | Drop `GIT_SHALLOW_FILE` from `_ENVIRONMENT` | `test_a_planted_shallow_file_does_not_shorten_history` |
 | Drop `GIT_NO_LAZY_FETCH` from `_ENVIRONMENT` | `test_a_partial_clone_fails_rather_than_fetching` |
-| Drop the shallow check at open | `test_a_brokered_run_refuses_to_open_against_a_shallow_clone` |
+| Drop the traversal check at open | `test_a_brokered_run_refuses_to_open_against_a_shallow_clone` |
+| Diagnose with `rev-parse --is-shallow-repository` through hardened `run_git` | `test_a_complete_repository_has_no_history_traversal_error` |
+| Diagnose with `rev-parse --is-shallow-repository` under a detector-specific environment that omits `GIT_SHALLOW_FILE` | `test_a_planted_shallow_file_is_not_a_history_traversal_error` |
 | Check the payload cap after `_capture` returns instead of during | `test_stdout_overflow_refuses_and_does_not_truncate` (see Step 2 — this one needs care) |
 | Truncate at the ceiling instead of raising | `test_stdout_overflow_refuses_and_does_not_truncate` |
 | Bound stdout only (drop `stderr_limit`) | `test_stderr_is_bounded_on_every_call` |
@@ -1488,6 +1573,16 @@ then `git checkout` the file.
 | Make the tree check refuse every tree | `test_a_valid_utf8_nfc_tree_opens` |
 | Apply the tree check to non-brokered runs | `test_a_non_brokered_run_opens_against_an_nfd_tree` |
 | Revert `REPLAY_PROTOCOL_VERSION` to 1 | `test_replay_protocol_version_is_two` |
+
+**The two `--is-shallow-repository` rows are a pair and neither is redundant.** They stand for the
+two ways this diagnostic was nearly written. Through hardened `run_git` the proxy is constant-`true`,
+so it refuses to open *every* brokered run — caught by the complete-repository row. Given its own
+environment with the pin omitted, it works for genuinely shallow clones but also answers `true` to a
+planted `.git/shallow`, letting an actor refuse its own run's open by writing a file — caught only by
+the planted row. Note what neither row is: dropping `GIT_SHALLOW_FILE` does **not** change
+`history_traversal_error`'s answer in either fixture (measured — unpinned, a planted graft makes
+`rev-list --count` return 2 at exit 0, still no error), so do not add a row claiming it does. The pin
+is certified by `test_a_planted_shallow_file_does_not_shorten_history`, which is about *serving*.
 
 - [ ] **Step 2: Close the two rows that cannot be certified by outcome alone**
 
@@ -1582,8 +1677,9 @@ suites concurrently in one worktree**; they race on shared test-output paths.
 §3.2.1's environment row → Task 2. The `REPLAY_PROTOCOL_VERSION` bump → Task 1. §7's 4a rows → Task 6.
 
 **Out of scope, deliberately.** `evidence_broker/hits.py`, `correspondence.py`, `Correspondence`,
-`ReviewAttestation`, `append_review`, and every §5 outcome belong to 4b and 4c. The `is_shallow`
-call at *replay* is 4b's; this slice ships the function and calls it only at open.
+`ReviewAttestation`, `append_review`, and every §5 outcome belong to 4b and 4c. The
+`history_traversal_error` call at *replay* is 4b's; this slice ships the function and calls it only
+at open.
 
 **Known residual.** `autonomy/baseline.py` still resolves `baseline.json` by pathname rather than
 through an anchored descriptor (design §3.5, carried from plan 3's revision 15). It is untouched here
