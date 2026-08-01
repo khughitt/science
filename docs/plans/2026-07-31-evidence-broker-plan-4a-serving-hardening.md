@@ -1309,8 +1309,10 @@ UTF-8 travels with NFC in the same check because a path that does not decode can
 built. It is only for brokered runs (`evidence is not None`): a non-brokered run serves nothing and
 has no citations to keep honest.
 
-**A tree-scan overflow refuses to open the session** (fourth row of §3.2's table) — it does not become
-a `Denial`, because there is no run yet to journal one against.
+**A tree-scan stdout overflow refuses to open the session** (fourth row of §3.2's table) — it does
+not become a `Denial`, because there is no run yet to journal one against. A stderr overflow retains
+the failed-git-invocation disposition: it is mutable runtime output, not evidence that the pinned
+tree itself exceeded the scan ceiling.
 
 The cost, stated rather than buried: a genuinely NFD-authored repository cannot be brokered until it
 renames. That is narrower than it sounds — git on macOS sets `core.precomposeunicode=true` by
@@ -1331,8 +1333,10 @@ def _add_nfd_path(project: Path) -> None:
     Written through `os.fsdecode` of raw bytes rather than a literal, so the NFD spelling survives
     regardless of what the source file's own encoding normalizes to.
     """
-    directory = project / os.fsdecode(b"cafe\xcc\x81")
-    directory.mkdir()
+    # The invalid component is BELOW a valid top-level directory. Without this shape, dropping
+    # `ls-tree -r` still lists and rejects the top-level entry, so the test certifies no recursion.
+    directory = project / "valid" / os.fsdecode(b"cafe\xcc\x81")
+    directory.mkdir(parents=True)
     (directory / "x.txt").write_text("secret\n", encoding="utf-8")
     _git(project, "add", "-A")
     _git(project, "commit", "-q", "-m", "add an NFD path")
@@ -1434,10 +1438,57 @@ def test_an_oversized_tree_scan_refuses_to_open(
     And refuses to OPEN rather than journaling a Denial -- at this point there is no run.
     """
     monkeypatch.setattr("science_tool.autonomy.lifecycle.MAX_TREE_SCAN_BYTES", 8)
+    journal_calls: list[object] = []
+
+    def unexpected_create_journal(*args, **kwargs):
+        journal_calls.append((args, kwargs))
+        raise AssertionError("the journal was created before the tree scan refused the run")
+
+    monkeypatch.setattr(
+        "science_tool.autonomy.lifecycle.create_journal", unexpected_create_journal
+    )
 
     with pytest.raises(BaselineError, match="too large to scan"):
         _start_brokered(project, tmp_path, monkeypatch)
+
+    assert journal_calls == []
+
+
+def test_a_tree_scan_stderr_overflow_fails_the_git_invocation(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutable stderr is not evidence that the pinned tree exceeded its stdout ceiling."""
+    real = lifecycle_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_tree_scan_git_failure_refuses_to_open(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nonzero `ls-tree` result is a refusal, never an empty successful scan."""
+    real = lifecycle_module.run_git
+
+    def fail_ls_tree(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            return subprocess.CompletedProcess(args, 128, b"", b"fatal: not a tree object")
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", fail_ls_tree)
+
+    with pytest.raises(BaselineError, match="could not list the tree"):
+        _start_brokered(project, tmp_path, monkeypatch)
 ```
+
+Add `GitOutputTooLarge` from `science_tool.autonomy.git` to the test module's imports.
 
 **Note on the shallow test:** a `--depth 1` clone of a project fixture carries the committed
 `knowledge/graph.trig`, so `_capture` finds a belief basis and the run reaches the traversal check
@@ -1490,6 +1541,8 @@ def _assert_tree_is_citeable(project_root: Path, commit: str) -> None:
             stdout_limit=MAX_TREE_SCAN_BYTES,
         )
     except GitOutputTooLarge as exc:
+        if exc.stream != "stdout":
+            raise
         raise BaselineError(
             f"the tree at {commit} is too large to scan for citeable paths, so a brokered run "
             f"cannot be opened against it: {exc}"
@@ -1626,6 +1679,10 @@ then `git checkout` the file.
 | Let preflight overflow escape as the `GitOutputTooLarge` subtype | `test_the_config_preflight_is_bounded` — the exact-type assertion must fail |
 | Move selector construction/setup before `_capture`'s cleanup guard | `test_selector_setup_failure_reaps_the_child_and_closes_its_pipes` |
 | Exempt the tree scan from the ceiling | `test_an_oversized_tree_scan_refuses_to_open` |
+| Move the tree scan below journal creation | `test_an_oversized_tree_scan_refuses_to_open` — the journal spy must fail |
+| Convert tree-scan stderr overflow into a tree-size refusal | `test_a_tree_scan_stderr_overflow_fails_the_git_invocation` |
+| Treat a nonzero `ls-tree` result as an empty successful scan | `test_a_tree_scan_git_failure_refuses_to_open` |
+| Drop `-r` from the tree scan | `test_a_brokered_run_refuses_to_open_against_an_nfd_tree` — its invalid component is nested below a valid directory |
 | Remove the `cat-file -s` pre-check and refuse after capture | `test_an_oversized_read_refuses_without_reading_the_blob` |
 | Delete `_serve_history`'s bound, leaving `_serve_search`'s | `test_an_oversized_history_refuses` |
 | Journal a search `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_search_is_not_a_denial` |
@@ -1635,7 +1692,7 @@ then `git checkout` the file.
 | Keep the selector loop but drop `os.set_blocking` and write via `process.stdin.write` | `test_a_large_stdin_payload_does_not_deadlock` — **run this one; a shared loop alone does not fix the deadlock, and it is the mutation most likely to be "simplified" back in** |
 | Delete the NFC branch of the tree check | `test_a_brokered_run_refuses_to_open_against_an_nfd_tree` |
 | Delete the UTF-8 branch of the tree check | `test_a_brokered_run_refuses_to_open_against_a_non_utf8_path` |
-| Make the tree check refuse every tree | `test_a_valid_utf8_nfc_tree_opens` |
+| Make the tree check refuse every tree | `test_a_valid_utf8_nfc_tree_opens_a_brokered_run` |
 | Apply the tree check to non-brokered runs | `test_a_non_brokered_run_opens_against_an_nfd_tree` |
 | Revert `REPLAY_PROTOCOL_VERSION` to 1 | `test_replay_protocol_version_is_two` |
 
