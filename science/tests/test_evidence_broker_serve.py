@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 from science_model.evidence_broker import Outcome, SurfacePolicy
 
+from science_tool.autonomy.git import GitOutputTooLarge
 from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest, authorize
 from science_tool.evidence_broker.serve import ServeError, serve, verify_commit
+import science_tool.evidence_broker.serve as serve_module
 
 OPEN = SurfacePolicy(notice="withheld")
 CLOSED = SurfacePolicy(deny_prefixes=("private", "notes/a[b].md"), notice="withheld")
@@ -27,6 +29,7 @@ def _repo(tmp_path: Path) -> tuple[Path, str]:
     ):
         subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
     (root / "a.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+    (root / "big.txt").write_text("x" * 4096, encoding="utf-8")
     (root / "empty.txt").write_text("", encoding="utf-8")
     (root / "private" / "x.txt").write_text("secret\n", encoding="utf-8")
     (root / "privateer" / "p.txt").write_text("secret\n", encoding="utf-8")
@@ -603,3 +606,102 @@ def test_search_exclusion_matches_the_table(tmp_path: Path, path: str, denied: b
         assert not beneath, f"`read` denies {path!r}; `search` served {sorted(beneath)}"
     else:
         assert path in reported, f"`read` allows {path!r}; `search` withheld it"
+
+
+def test_an_oversized_read_refuses_without_reading_the_blob(tmp_path: Path, monkeypatch):
+    """Pre-checked with `cat-file -s`, so the bytes are never allocated.
+
+    The spy is the point: a `read` that refuses AFTER capturing has already spent the memory the
+    bound exists to protect, and a test asserting only the outcome cannot tell the two apart.
+    """
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", 16)
+    blob_reads: list[tuple[str, ...]] = []
+    real = serve_module.run_git
+
+    def spy(repo_root, *args, **kwargs):
+        if args[:2] == ("cat-file", "blob"):
+            blob_reads.append(args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", spy)
+
+    served = serve(root, commit, _read("big.txt"), OPEN)
+
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "payload-too-large"
+    assert blob_reads == [], "the blob was read despite the size pre-check"
+
+
+def test_a_read_at_the_limit_is_still_served(tmp_path: Path, monkeypatch):
+    """The boundary is inclusive. Without this, refusing everything would pass the test above."""
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", len(b"alpha\nbeta\n"))
+
+    served = serve(root, commit, _read("a.txt"), OPEN)
+
+    assert served.outcome is Outcome.SERVED
+    assert served.payload == b"alpha\nbeta\n"
+
+
+def test_an_oversized_search_refuses(tmp_path: Path, monkeypatch):
+    """`search` output size is unknown in advance, so it is bounded DURING capture."""
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", 16)
+
+    served = serve(root, commit, _search("secret"), OPEN)
+
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "payload-too-large"
+
+
+def test_an_oversized_refusal_is_identical_on_a_second_serve(tmp_path: Path, monkeypatch):
+    """Deterministic given the commit -- which is the whole reason it MAY be journaled."""
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", 16)
+
+    first = serve(root, commit, _search("secret"), OPEN)
+    second = serve(root, commit, _search("secret"), OPEN)
+
+    assert first == second
+
+
+def test_an_oversized_history_refuses(tmp_path: Path, monkeypatch):
+    """`history` has its OWN try/except in `_serve_history`, so it needs its own row.
+
+    Count the rules, not the functions: `search` and `history` are two call sites bounded by two
+    separate guards. A test that covers only `search` leaves `_serve_history`'s guard deletable
+    with the roster still green.
+    """
+    root, commit = _repo(tmp_path)
+    monkeypatch.setattr("science_tool.evidence_broker.serve.MAX_SERVED_BYTES", 8)
+
+    # No `_history` helper exists in this module; history requests are built inline, as at line 185.
+    served = serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), OPEN)
+
+    assert served.outcome is Outcome.REFUSED
+    assert served.denial is not None
+    assert served.denial.reason == "payload-too-large"
+
+
+def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """The disposition split, in one test.
+
+    `stderr` is determined by mutable repository and runtime state. Journaled, it would replay
+    differently once the environment changed and §5.3 would return EXPOSURE_UNREPRODUCIBLE --
+    refusing an honest review for a file the actor edited afterwards.
+    """
+    root, commit = _repo(tmp_path)
+    real = serve_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:2] == ("cat-file", "blob"):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        serve(root, commit, _read("a.txt"), OPEN)

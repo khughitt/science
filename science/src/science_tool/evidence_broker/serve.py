@@ -20,9 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from science_model.evidence_broker import Outcome, SurfacePolicy
+from science_model.evidence_broker import MAX_SERVED_BYTES, Outcome, SurfacePolicy
 
-from science_tool.autonomy.git import run_git
+from science_tool.autonomy.git import GitOutputTooLarge, run_git
 from science_tool.evidence_broker.policy import (
     Denial,
     EvidenceOp,
@@ -160,6 +160,28 @@ def _miss(outcome: Outcome, target: str, pathspec: str | None = None) -> Served:
     )
 
 
+def _too_large(target: str, pathspec: str | None = None) -> Served:
+    """A refusal, not an error, and DETERMINISTIC GIVEN THE COMMIT.
+
+    That determinism is what licenses journaling it: the same request against the same commit
+    refuses identically at replay, so §5.2's comparison stays sound. Under §5.1 it contributes no
+    coverage, exactly like a policy denial.
+
+    The notice names no size and no path. A blinded requester learning "this file is larger than
+    1 MiB" has learned the file exists, which is what the policy's uniform notice withholds.
+    """
+    return Served(
+        outcome=Outcome.REFUSED,
+        payload=b"",
+        target=target,
+        denial=Denial(
+            reason="payload-too-large",
+            notice="the requested material exceeds the per-request serving limit",
+        ),
+        pathspec=pathspec,
+    )
+
+
 def verify_commit(repo_root: Path, commit: str) -> str:
     """Resolve `commit` to a full object name, or raise `ServeError`.
 
@@ -206,6 +228,16 @@ def _serve_read(repo_root: Path, commit: str, target: str) -> Served:
         raise ServeError(
             f"read of {target!r} at {commit} names a {kind.decode('ascii', 'replace')}, not a file"
         )
+    # PRE-CHECKED, NOT TRUNCATED. `-s` yields the blob size from the object header without
+    # reading its content, so an oversized read never allocates the bytes it is about to refuse.
+    sized = run_git(repo_root, "cat-file", "-s", f"{commit}:{target}")
+    if sized.returncode != 0:
+        raise ServeError(
+            f"read of {target!r} at {commit} typed as a blob and then could not be sized: "
+            f"{sized.stderr.decode('utf-8', 'replace').strip()}"
+        )
+    if int(sized.stdout.decode("ascii").strip()) > MAX_SERVED_BYTES:
+        return _too_large(target)
     completed = run_git(repo_root, "cat-file", "blob", f"{commit}:{target}")
     if completed.returncode != 0:
         raise ServeError(
@@ -226,7 +258,23 @@ def _serve_search(
     pathspecs = [*exclude_pathspecs(policy)]
     if pathspec is not None:
         pathspecs.insert(0, literal_pathspec(pathspec))
-    completed = run_git(repo_root, *_GREP_ARGV, "-e", pattern, commit, "--", *pathspecs)
+    try:
+        completed = run_git(
+            repo_root,
+            *_GREP_ARGV,
+            "-e",
+            pattern,
+            commit,
+            "--",
+            *pathspecs,
+            stdout_limit=MAX_SERVED_BYTES,
+        )
+    except GitOutputTooLarge as exc:
+        # STDOUT ONLY. A `stderr` overflow is determined by mutable repository and runtime state,
+        # so it must fail the invocation rather than enter the journal (design §3.2).
+        if exc.stream != "stdout":
+            raise
+        return _too_large(pattern, pathspec)
     if completed.returncode == 0:
         return Served(
             outcome=Outcome.SERVED,
@@ -275,14 +323,22 @@ def _serve_history(
     it cannot answer "does this path CONTAIN something denied", so the exclusions must answer
     that here, exactly as they do for `search`.
     """
-    completed = run_git(
-        repo_root,
-        *_LOG_ARGV,
-        commit,
-        "--",
-        literal_pathspec(target),
-        *exclude_pathspecs(policy),
-    )
+    try:
+        completed = run_git(
+            repo_root,
+            *_LOG_ARGV,
+            commit,
+            "--",
+            literal_pathspec(target),
+            *exclude_pathspecs(policy),
+            stdout_limit=MAX_SERVED_BYTES,
+        )
+    except GitOutputTooLarge as exc:
+        # STDOUT ONLY. A `stderr` overflow is determined by mutable repository and runtime state,
+        # so it must fail the invocation rather than enter the journal (design §3.2).
+        if exc.stream != "stdout":
+            raise
+        return _too_large(target)
     if completed.returncode != 0:
         raise ServeError(
             f"history of {target!r} at {commit} could not be classified: "
