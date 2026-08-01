@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 27)
+**Status:** partially implemented (revision 28)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,7 +13,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 27, **Task 1 landed** at `f0caf914` |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | designed at revision 28; **Tasks 1–6 landed** through `08870696`; final public-command boundary task pending |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 26, not implemented |
 | Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
@@ -98,6 +98,23 @@ this design has had.
    initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
    executing anything at all. It must spawn a fresh interpreter on
    `import science_model.evidence_broker`.
+
+Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
+
+**The new run-open failures reached one layer farther than the slice contract recorded.**
+`start_run` now calls hardened git for ancestry and tree checks before a session exists. An oversized
+configuration preflight or stderr therefore raises `GitError`, but `autonomy start` caught only the
+older lifecycle/extraction exceptions. The command documented `0 opened, 2 could not open` and instead
+let these normal refusal paths escape as exit 1 — the same quarantined-looking boundary the
+`GitOutputTooLarge(GitError)` hierarchy was chosen to avoid. Plan 4a therefore also owns the minimal
+`autonomy/cli.py` catch and a test against the **base** `GitError`, so catching only the overflow
+subtype cannot pass.
+
+The same review found two closure claims wider than their executable rows. The shallow-history row
+named 4b's future replay verdict even though its 4a guard is the earlier fact that no brokered run
+opens; the row now asserts that open-time boundary directly. And the combined stderr/preflight row
+was only tested on served stderr. It is split: serving must propagate a base `GitError` produced by
+the mutable configuration preflight, independently of the stdout/stderr subtype split.
 
 Revision 27 closes one defect, found in pre-flight for plan 4a's Task 2, and it is the fourth time
 running that a fix carried a defect of its own shape into the next round.
@@ -611,7 +628,7 @@ may reach backwards**, and each is independently mergeable.
 | **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
 | **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that it may classify an exposure itself — outcome, coverage and protocol are 4b's, and 4c calls `check_correspondence` for all three |
 | **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_correspondence.py` |
-| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
+| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
 | **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py` |
 | **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
 
@@ -2315,7 +2332,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Drop the traversal check at open | a brokered run against a genuinely shallow clone opens |
 | 4a | Diagnose with `rev-parse --is-shallow-repository` through hardened `run_git` | a **complete** repository reports no traversal error |
 | 4a | Diagnose with `rev-parse --is-shallow-repository` under a detector-specific environment omitting `GIT_SHALLOW_FILE` | a complete repository with `.git/shallow` **planted** reports no traversal error |
-| 4a | Journal a shallow-`history` refusal instead of refusing at open | an exposure sealed in a shallow clone and replayed in a complete one is not `EXPOSURE_UNREPRODUCIBLE` |
+| 4a | Journal a shallow-`history` refusal instead of refusing at open | a brokered run against a shallow clone opens instead of refusing before session creation |
 | 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
@@ -2323,8 +2340,10 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Exempt the `config --list` preflight | a repository whose `include.path` yields an oversized listing refuses |
 | 4a | Exempt the tree scan | an oversized `ls-tree` refuses instead of declaring the tree NFC |
 | 4a | Truncate instead of refusing at the ceiling | an over-ceiling config listing does not silently under-blank filter drivers |
-| 4a | Journal a `stderr` or preflight overflow as a `Denial` | an entry served before `.git/config` grew still replays, rather than becoming `EXPOSURE_UNREPRODUCIBLE` |
+| 4a | Journal a served `stderr` overflow as a `Denial` | search and history propagate the overflow instead of returning `payload-too-large` |
+| 4a | Turn a configuration-preflight `GitError` into a `Denial` | a served operation propagates the base invocation failure instead of returning a refusal |
 | 4a | Make a tree-scan overflow a `Denial` instead of refusing to open | an oversized tree opens no session |
+| 4a | Omit `GitError` from the `autonomy start` boundary | a hardened-git open failure exits 1 instead of the documented exit 2 |
 | 4b | Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
 | 4b | Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
 | 4b | `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |

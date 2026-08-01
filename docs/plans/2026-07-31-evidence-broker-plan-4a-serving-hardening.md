@@ -12,12 +12,13 @@ declares them. Two git environment pins remove actor-controlled inputs (`.git/sh
 remotes) rather than checking for them; one output ceiling in `run_git` bounds every capture the
 broker makes, with the *disposition* of an overflow chosen by each of the four call sites; and one
 scan at `start_run` refuses to open a run against a tree whose paths cannot be cited honestly.
+The public `autonomy start` boundary maps every resulting `GitError` to its documented exit 2.
 
 **Tech Stack:** Python 3.12+, pydantic v2 (`science-model`), `subprocess`/`selectors` from the
 standard library, pytest, real `git` (2.55 on the development machine).
 
 **Design:** [`2026-07-30-agent-evidence-broker-design.md`](2026-07-30-agent-evidence-broker-design.md)
-at revision 27 — §2.2 (slice contracts), §3.1 (the tree rule), §3.2 (pins, ceiling, payload bound),
+at revision 28 — §2.2 (slice contracts), §3.1 (the tree rule), §3.2 (pins, ceiling, payload bound),
 §3.2.1 (canonical invocation), §7 (mutation roster). Read §2.2 first: it is authoritative for what
 this slice may and may not touch.
 
@@ -53,15 +54,20 @@ this slice may and may not touch.
 | `science/src/science_tool/autonomy/git.py` | modify | Gains two `_ENVIRONMENT` pins, `history_traversal_error()`, and the bounded-capture ceiling with `GitOutputTooLarge`. Remains the single place autonomy's git argv and environment are built. |
 | `science/src/science_tool/evidence_broker/serve.py` | modify | Passes `stdout_limit=MAX_SERVED_BYTES` on the three served ops, pre-checks `read` with `cat-file -s`, and converts a **stdout** overflow into a journaled `Denial` while letting a **stderr** overflow propagate. |
 | `science/src/science_tool/autonomy/lifecycle.py` | modify | `start_run` refuses to open a brokered run against a non-NFC/non-UTF-8 tree, or a repository that cannot walk the pinned commit's ancestry locally. |
+| `science/src/science_tool/autonomy/cli.py` | modify | `autonomy start` maps hardened-git open failures to its documented exit 2 instead of leaking an exception as exit 1. |
 | `science/tests/test_autonomy_git_canonical.py` | modify | Real-git probes: the two pins, `history_traversal_error`, the ceiling. |
 | `science/tests/test_evidence_broker_serve.py` | modify | The payload bound and its disposition split. |
 | `science/tests/test_autonomy_lifecycle.py` | modify | The tree scan and the untraversable-history refusal at open. |
+| `science/tests/test_autonomy_lifecycle_cli.py` | modify | The public exit-code boundary for a base `GitError`. |
 | `science/model/tests/test_evidence_broker_model.py` | modify | The bounds and the protocol value. |
 
 **Task order is dependency order.** Task 1 defines constants Tasks 3–5 import. Task 3's ceiling is a
 prerequisite for Task 4's disposition split. Task 2 is independent of Task 3 and could be done in
 either order; it is first because it is the smallest and establishes the real-git fixture style the
 later tasks reuse.
+Task 7 is last because it closes the public caller and current explanations after Tasks 2–5 create
+the new failure paths; it also certifies the preflight disposition that Task 6's initial roster
+combined with served stderr.
 
 ---
 
@@ -1773,6 +1779,134 @@ git commit -m "test(evidence-broker): certify plan 4a's guards by mutation"
 
 ---
 
+## Task 7: Close the public start boundary and current explanations
+
+**Files:**
+- Modify: `science/src/science_tool/autonomy/cli.py` (`start_command` exception boundary)
+- Modify: `science/src/science_tool/autonomy/git.py` (`run_git` exception documentation only)
+- Modify: `science/tests/test_autonomy_lifecycle_cli.py`
+- Modify: `science/tests/test_evidence_broker_serve.py`
+- Modify: `science/model/tests/test_evidence_broker_model.py` (NFC control explanation only)
+
+**Context.** Tasks 2 and 5 made hardened git part of brokered run open. A configuration preflight
+overflow raises the base `GitError`; a tree-scan stderr overflow raises its `GitOutputTooLarge`
+subtype. `start_command` documents `0 opened, 2 could not open`, but without the base class in its
+boundary tuple either path escapes Click as exit 1 with an unhandled exception. Catch the base: it
+is both the smaller spelling and the only one that covers present and future hardened-invocation
+failures without a roster.
+
+This task also separates the design roster's preflight disposition from served stderr. `run_git`
+may fail before the requested command because mutable `.git/config` is too large to inspect; no
+serving call may turn that base `GitError` into a journalable denial.
+
+- [ ] **Step 1: Add the two boundary tests**
+
+Add to `science/tests/test_autonomy_lifecycle_cli.py`:
+
+```python
+def test_start_exits_two_when_hardened_git_cannot_complete(
+    project: Path,
+    baseline_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A base `GitError` is a normal could-not-open result, not an unhandled exit 1.
+
+    The BASE class is load-bearing: configuration preflight overflow is translated to `GitError`,
+    while stderr overflow is its `GitOutputTooLarge` subtype. Catching only the subtype leaves the
+    mutable-config path outside the public command contract.
+    """
+    def fail_start(*args, **kwargs):
+        raise GitError("configuration preflight exceeded its limit")
+
+    monkeypatch.setattr(lifecycle_module, "start_run", fail_start)
+
+    result = _start(project, baseline_path)
+
+    assert result.exit_code == 2
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.output
+    assert "could not start" in result.output
+    assert "configuration preflight exceeded its limit" in result.output
+```
+
+Add `from science_tool.autonomy import lifecycle as lifecycle_module` and
+`from science_tool.autonomy.git import GitError` to that test module.
+
+Add to `science/tests/test_evidence_broker_serve.py`:
+
+```python
+def test_a_configuration_preflight_failure_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """Mutable hardening setup fails the invocation; it can never enter the replay journal."""
+    root, commit = _repo(tmp_path)
+    real = serve_module.run_git
+
+    def fail_preflight(repo_root, *args, **kwargs):
+        if args[:1] == ("grep",):
+            raise GitError("configuration preflight exceeded its limit")
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(serve_module, "run_git", fail_preflight)
+
+    with pytest.raises(GitError):
+        serve(root, commit, _search("secret"), OPEN)
+```
+
+Add `GitError` beside `GitOutputTooLarge` in that module's import.
+
+- [ ] **Step 2: Prove the public boundary is red**
+
+```bash
+cd science && uv run --frozen pytest \
+  tests/test_autonomy_lifecycle_cli.py::test_start_exits_two_when_hardened_git_cannot_complete \
+  tests/test_evidence_broker_serve.py::test_a_configuration_preflight_failure_is_not_a_denial -v
+```
+
+Expected: the lifecycle CLI test fails with exit 1 and an unhandled `GitError`; the serving test
+already passes and becomes the mutation guard for the preflight disposition.
+
+- [ ] **Step 3: Close the command boundary**
+
+In `start_command`, import `GitError` from `science_tool.autonomy.git` and add it to the existing
+exception tuple. Do not catch `Exception`, and do not name `GitOutputTooLarge` separately.
+
+Update `run_git`'s docstring from “only when git could not be invoked at all” to the contract it now
+implements: `GitError` means git could not be started, the invocation could not be hardened, or a
+bounded capture could not complete; a normal nonzero git exit is still returned to the caller.
+
+Update `test_an_nfc_prefix_carrying_the_same_characters_is_accepted`'s final paragraph: the
+repository-side residual is no longer parked. Plan 4a refuses a brokered run at open unless every
+tree path is valid UTF-8 and already NFC; this model test remains only the accepted-spelling control.
+
+- [ ] **Step 4: Run the focused green checks**
+
+```bash
+cd science && uv run --frozen pytest tests/test_autonomy_lifecycle_cli.py tests/test_evidence_broker_serve.py -q
+cd science/model && uv run --frozen pytest tests/test_evidence_broker_model.py -q
+cd science && uv run --frozen ruff check src/science_tool/autonomy/cli.py src/science_tool/autonomy/git.py tests/test_autonomy_lifecycle_cli.py tests/test_evidence_broker_serve.py
+cd science && uv run --frozen pyright
+```
+
+- [ ] **Step 5: Run the two new mutation pairs**
+
+| Mutation | Test that must fail |
+|---|---|
+| Remove `GitError` from `start_command`'s exception tuple | `test_start_exits_two_when_hardened_git_cannot_complete` — exit becomes 1 |
+| Convert a base serving `GitError` into `_too_large(...)` | `test_a_configuration_preflight_failure_is_not_a_denial` — no exception propagates |
+
+Restore each file immediately after its focused test turns red. Stop if either test remains green.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add science/src/science_tool/autonomy/cli.py \
+  science/src/science_tool/autonomy/git.py \
+  science/tests/test_autonomy_lifecycle_cli.py \
+  science/tests/test_evidence_broker_serve.py \
+  science/model/tests/test_evidence_broker_model.py
+git commit -m "fix(autonomy): map hardened git start failures to exit 2"
+```
+
+---
+
 ## Final verification
 
 Both suites, because this slice changed shared process plumbing (`run_git`) and a model constant that
@@ -1796,7 +1930,10 @@ suites concurrently in one worktree**; they race on shared test-output paths.
 
 **Spec coverage.** §3.1's tree rule → Task 5. §3.2's pins → Task 2; the payload bound → Task 4; the
 `run_git` ceiling and its four dispositions → Task 3 (mechanism) plus Tasks 4 and 5 (dispositions).
-§3.2.1's environment row → Task 2. The `REPLAY_PROTOCOL_VERSION` bump → Task 1. §7's 4a rows → Task 6.
+§3.2.1's environment row → Task 2. The `REPLAY_PROTOCOL_VERSION` bump → Task 1. §7's 4a rows →
+Task 6, plus Task 7's public-command and base-preflight disposition pairs. The shallow-history row
+is certified in 4a by refusing the run before session creation; its former replay-verdict spelling
+belonged to 4b and was replaced at design revision 28.
 
 **Out of scope, deliberately.** `evidence_broker/hits.py`, `correspondence.py`, `Correspondence`,
 `ReviewAttestation`, `append_review`, and every §5 outcome belong to 4b and 4c. The
