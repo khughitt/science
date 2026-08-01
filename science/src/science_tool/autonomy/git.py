@@ -226,27 +226,32 @@ def _capture(
     limits = {"stdout": stdout_limit, "stderr": stderr_limit}
     buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
 
-    selector = selectors.DefaultSelector()
+    selector: selectors.BaseSelector | None = None
     pending = memoryview(input) if input else None
-    if pending is not None:
-        assert process.stdin is not None
-        # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST ONE
-        # byte can be written -- it does not make the write partial-friendly, and
-        # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector loop
-        # with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against `cat` and a
-        # 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a partial count and
-        # the loop makes progress. Do not mix buffered writes with the raw fd: nothing is ever
-        # written through `process.stdin`, so its buffer stays empty and `close()` just closes.
-        os.set_blocking(process.stdin.fileno(), False)
-        selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
-    elif process.stdin is not None:
-        process.stdin.close()
-    for name in ("stdout", "stderr"):
-        stream = getattr(process, name)
-        assert stream is not None
-        selector.register(stream, selectors.EVENT_READ, name)
-
     try:
+        # ALL POST-`Popen` SETUP IS INSIDE THIS CLEANUP GUARANTEE. Selector construction,
+        # nonblocking setup, and registration may fail after the child exists; every such path
+        # still closes the pipes, kills if necessary, and reaps the child below.
+        selector = selectors.DefaultSelector()
+        if pending is not None:
+            assert process.stdin is not None
+            # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST
+            # ONE byte can be written -- it does not make the write partial-friendly, and
+            # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector
+            # loop with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against
+            # `cat` and a 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a
+            # partial count and the loop makes progress. Do not mix buffered writes with the raw
+            # fd: nothing is ever written through `process.stdin`, so its buffer stays empty and
+            # `close()` just closes.
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+        elif process.stdin is not None:
+            process.stdin.close()
+        for name in ("stdout", "stderr"):
+            stream = getattr(process, name)
+            assert stream is not None
+            selector.register(stream, selectors.EVENT_READ, name)
+
         while selector.get_map():
             for key, _ in selector.select():
                 if key.data == "stdin":
@@ -278,7 +283,8 @@ def _capture(
                     process.kill()
                     raise GitOutputTooLarge(name, limit, len(buffers[name]), args)
     finally:
-        selector.close()
+        if selector is not None:
+            selector.close()
         for stream in (process.stdin, process.stdout, process.stderr):
             if stream is not None and not stream.closed:
                 stream.close()
@@ -306,16 +312,19 @@ def _run(
             stderr=subprocess.PIPE,
             env={**os.environ, **_ENVIRONMENT},
         )
+        stdout, stderr = _capture(
+            process,
+            input=input,
+            stdout_limit=stdout_limit,
+            stderr_limit=stderr_limit,
+            args=args,
+        )
+    except GitOutputTooLarge:
+        # Preserve the subtype so call sites may choose the served-stdout disposition.
+        raise
     except (AttributeError, OSError, ValueError) as exc:
+        # `_capture` has already reaped a successfully spawned child before an error gets here.
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
-
-    stdout, stderr = _capture(
-        process,
-        input=input,
-        stdout_limit=stdout_limit,
-        stderr_limit=stderr_limit,
-        args=args,
-    )
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 

@@ -391,8 +391,45 @@ def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -
         capture_output=True,
     )
 
+    with pytest.raises(GitError) as caught:
+        run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    # The preflight's output depends on mutable `.git/config`, so its overflow must be translated
+    # to the non-journalable base exception. This exact-type assertion fails if the
+    # `GitOutputTooLarge` subtype leaks to a serving caller.
+    assert type(caught.value) is GitError
+
+
+def test_selector_setup_failure_reaps_the_child_and_closes_its_pipes(
+    three_commit_repo: Path, monkeypatch
+) -> None:
+    """Post-`Popen` setup is inside the same cleanup guarantee as the capture loop.
+
+    Selector construction, nonblocking setup, and registration can fail after the child exists.
+    A raw exception, live child, or open pipe bypasses the `GitError` contract and leaks resources.
+    """
+    spawned: list[subprocess.Popen[bytes]] = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        spawned.append(process)
+        return process
+
+    def fail_selector():
+        raise OSError("selector unavailable")
+
+    monkeypatch.setattr("science_tool.autonomy.git.subprocess.Popen", recording_popen)
+    monkeypatch.setattr("science_tool.autonomy.git.selectors.DefaultSelector", fail_selector)
+
     with pytest.raises(GitError):
         run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    assert len(spawned) == 1
+    process = spawned[0]
+    assert process.poll() is not None
+    assert process.stdout is not None and process.stdout.closed
+    assert process.stderr is not None and process.stderr.closed
 
 
 def test_a_planted_shallow_file_does_not_shorten_history(three_commit_repo: Path) -> None:
