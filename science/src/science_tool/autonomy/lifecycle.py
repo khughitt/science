@@ -16,7 +16,11 @@ from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
-from science_model.audit.subjects import SubjectError, normalize_project_path
+from science_model.audit.subjects import (
+    SubjectError,
+    normalize_project_path,
+    normalize_utf8_nfc,
+)
 from science_model.autonomous_runs import (
     RUN_ID_PREFIX,
     AutonomousRunRecord,
@@ -41,6 +45,7 @@ from science_tool.autonomy.baseline import (
 )
 from science_tool.autonomy.control_plane import run_dir, run_slug
 from science_tool.autonomy.extract import ExtractError, _git, extract_change_set
+from science_tool.autonomy.git import GitOutputTooLarge, history_traversal_error, run_git
 from science_tool.autonomy.marks import MarkIssue, verify_marks
 from science_tool.autonomy.path_gate import Denial, GateInputError, evaluate
 from science_tool.autonomy.record_writer import (
@@ -71,6 +76,11 @@ from science_tool.evidence_broker.journal import (
     open_journal,
     read_journal,
 )
+
+#: `ls-tree -r` over a whole tree is proportional to the REPOSITORY, not to any request, and it
+#: runs before a session is allowed to open. Overflow refuses the session: a truncated scan would
+#: silently declare an unscanned tree NFC, which is a fail-open dressed as robustness.
+MAX_TREE_SCAN_BYTES = 64 << 20
 
 
 class RepositoryStateError(ValueError):
@@ -135,6 +145,63 @@ def _capture(project_root: Path):
     )
 
 
+def _assert_tree_is_citeable(project_root: Path, commit: str) -> None:
+    """Refuse a pinned tree holding a path no citation could name.
+
+    `normalize_project_path` maps a path to NFC; git stores path bytes verbatim and matches
+    pathspecs byte-exactly. So a policy and a repository can be spelled differently and both be
+    right, and the disagreement runs in three directions -- a deny prefix that leaks under
+    `search`, an honest citation refused, and a `read` answering MISS_ABSENT for a path that
+    exists under another spelling. The third CERTIFIES A FALSE ABSENCE CLAIM, needs no deny prefix
+    and no search at all, and is therefore unreachable by any filter on the serving side.
+
+    One check, one layer, once per run: the tree is immutable at the pinned commit, so replay
+    inherits the guarantee rather than repeating the scan. `serve` is unchanged.
+
+    UTF-8 travels with NFC here because a path that does not decode cannot be spelled as a
+    `LocationEvidence.path` either -- it can never be cited honestly, so it is the same rule.
+    """
+    try:
+        completed = run_git(
+            project_root,
+            "ls-tree",
+            "-r",
+            "-z",
+            "--name-only",
+            commit,
+            stdout_limit=MAX_TREE_SCAN_BYTES,
+        )
+    except GitOutputTooLarge as exc:
+        if exc.stream != "stdout":
+            raise
+        raise BaselineError(
+            f"the tree at {commit} is too large to scan for citeable paths, so a brokered run "
+            f"cannot be opened against it: {exc}"
+        ) from exc
+    if completed.returncode != 0:
+        raise BaselineError(
+            f"could not list the tree at {commit}: "
+            f"{completed.stderr.decode('utf-8', 'replace').strip()}"
+        )
+    for raw in completed.stdout.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            path = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise BaselineError(
+                f"the tree at {commit} holds a path that is not valid UTF-8 ({raw!r}), which no "
+                "citation can name, so a brokered run cannot be opened against it"
+            ) from exc
+        if normalize_utf8_nfc(path) != path:
+            raise BaselineError(
+                f"the tree at {commit} holds the path {path!r}, which is not in NFC. Citations "
+                "normalize to NFC and git matches pathspecs byte-exactly, so this path would be "
+                "served by `search` while `read` reported it absent -- certifying a false absence "
+                "claim. Rename it before brokering a run against this repository."
+            )
+
+
 def start_run(
     project_root: Path,
     *,
@@ -172,6 +239,17 @@ def start_run(
 
     session: EvidenceSession | None = None
     if evidence is not None:
+        # BEFORE the journal and the session: this is the only place that sees the pinned commit
+        # while no actor exists yet, and a run that opens and never serves must be covered too.
+        unwalkable = history_traversal_error(project_root, base_commit)
+        if unwalkable is not None:
+            raise BaselineError(
+                f"{project_root} cannot walk the ancestry of {base_commit} from local objects, so "
+                "`history` cannot be served completely and a brokered run cannot be opened against "
+                f"it (git said: {unwalkable}). A shallow clone is the usual cause -- clone with "
+                "full history."
+            )
+        _assert_tree_is_citeable(project_root, base_commit)
         directory = run_dir(project_root, run_id)
         baseline_out = directory / "baseline.json"
         session = EvidenceSession(

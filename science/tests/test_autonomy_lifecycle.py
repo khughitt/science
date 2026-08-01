@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from science_model.evidence_broker import (
 from science_tool.autonomy import lifecycle as lifecycle_module
 from science_tool.autonomy import toolkit as toolkit_module
 from science_tool.autonomy.baseline import BaselineError
+from science_tool.autonomy.git import GitOutputTooLarge
 from science_tool.autonomy.lifecycle import finish_run, start_run
 
 AGENT = "curation-sweep"
@@ -155,6 +157,161 @@ def _spec(*, inline_paths: tuple[Path, ...] = ()) -> EvidenceSessionSpec:
         instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
         inline_paths=inline_paths,
     )
+
+
+def _add_nfd_path(project: Path) -> None:
+    """A directory whose name is NFD (`cafe` + COMBINING ACUTE), committed.
+
+    Written through `os.fsdecode` of raw bytes rather than a literal, so the NFD spelling survives
+    regardless of what the source file's own encoding normalizes to.
+    """
+    # The invalid component is BELOW a valid top-level directory. Without this shape, dropping
+    # `ls-tree -r` still lists and rejects the top-level entry, so the test certifies no recursion.
+    directory = project / "valid" / os.fsdecode(b"cafe\xcc\x81")
+    directory.mkdir(parents=True)
+    (directory / "x.txt").write_text("secret\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "add an NFD path")
+
+
+def test_a_brokered_run_refuses_to_open_against_an_nfd_tree(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The decisive direction needs no deny prefix and no search.
+
+    A `read` of the NFC spelling returns MISS_ABSENT for a path that IS at the commit under an NFD
+    spelling -- a certified false absence claim, which §5.1 calls frequently the decisive finding.
+    """
+    _add_nfd_path(project)
+
+    with pytest.raises(BaselineError, match="NFC"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_brokered_run_refuses_to_open_against_a_non_utf8_path(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A SEPARATE BRANCH from the NFD case, and therefore a separate row.
+
+    `_assert_tree_is_citeable` enforces two rules -- decodes as UTF-8, and is already NFC. One
+    test covering only NFD leaves the decode branch deletable with the roster green. Count the
+    rules, not the functions.
+
+    The filename is written as raw bytes: `0xff` is valid in a POSIX filename and in a git tree,
+    and invalid as UTF-8, which is exactly the gap `LocationEvidence.path` cannot express.
+    """
+    (project / os.fsdecode(b"bad\xff.txt")).write_bytes(b"content\n")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "add a non-UTF-8 path")
+
+    with pytest.raises(BaselineError, match="UTF-8"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_non_brokered_run_opens_against_an_nfd_tree(
+    project: Path, baseline_path: Path
+) -> None:
+    """The rule is about CITATIONS, not about trees.
+
+    A run that serves nothing has nothing to cite, so refusing it would be a cost with no
+    corresponding guarantee.
+    """
+    _add_nfd_path(project)
+
+    baseline = _start(project, baseline_path)
+
+    assert baseline.evidence is None
+
+
+def test_a_valid_utf8_nfc_tree_opens_a_brokered_run(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The negative case, so the scan cannot pass by refusing every tree."""
+    baseline = _start_brokered(project, tmp_path, monkeypatch)
+
+    assert baseline.evidence is not None
+
+
+def test_a_brokered_run_refuses_to_open_against_a_shallow_clone(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A DIAGNOSTIC: the pins are what make history correct, this names the cause at open.
+
+    Without it the operator meets `fatal: Failed to traverse parents` mid-run instead. The match is
+    on the durable half of the message -- the property, not the usual cause -- because a repository
+    can fail to walk its own history for reasons other than `--depth`.
+    """
+    # A second commit, so `--depth 1` actually truncates something.
+    (project / "later.txt").write_text("later\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "later")
+    clone = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{project}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+
+    with pytest.raises(BaselineError, match="from local objects"):
+        _start_brokered(clone, tmp_path, monkeypatch)
+
+
+def test_an_oversized_tree_scan_refuses_to_open(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuses rather than truncating: a truncated scan silently declares an unscanned tree NFC.
+
+    And refuses to OPEN rather than journaling a Denial -- at this point there is no run.
+    """
+    monkeypatch.setattr("science_tool.autonomy.lifecycle.MAX_TREE_SCAN_BYTES", 8)
+    journal_calls: list[object] = []
+
+    def unexpected_create_journal(*args, **kwargs):
+        journal_calls.append((args, kwargs))
+        raise AssertionError("the journal was created before the tree scan refused the run")
+
+    monkeypatch.setattr(
+        "science_tool.autonomy.lifecycle.create_journal", unexpected_create_journal
+    )
+
+    with pytest.raises(BaselineError, match="too large to scan"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+    assert journal_calls == []
+
+
+def test_a_tree_scan_stderr_overflow_fails_the_git_invocation(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutable stderr is not evidence that the pinned tree exceeded its stdout ceiling."""
+    real = lifecycle_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
+def test_a_tree_scan_git_failure_refuses_to_open(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nonzero `ls-tree` result is a refusal, never an empty successful scan."""
+    real = lifecycle_module.run_git
+
+    def fail_ls_tree(repo_root, *args, **kwargs):
+        if args[:2] == ("ls-tree", "-r"):
+            return subprocess.CompletedProcess(args, 128, b"", b"fatal: not a tree object")
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle_module, "run_git", fail_ls_tree)
+
+    with pytest.raises(BaselineError, match="could not list the tree"):
+        _start_brokered(project, tmp_path, monkeypatch)
 
 
 def test_broker_spec_and_baseline_out_are_mutually_exclusive(

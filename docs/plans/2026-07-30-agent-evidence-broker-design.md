@@ -1,18 +1,21 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 16)
+**Status:** partially implemented (revision 28)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
-**Implementation status.** This design ships as **four** plans, not the three its section grouping
-suggests; the boundary was drawn by tracing module dependencies rather than section headings.
+**Implementation status.** This design ships as **five** plans, not the three its section grouping
+suggests; the boundary was drawn by tracing module dependencies rather than section headings. The
+fourth split in two at revision 17, on the seam between producing a `Correspondence` and storing one.
 
 | Plan | Owns | State |
 |---|---|---|
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4 | correspondence — §5 entire, §4.2, §4.2.1 | not designed |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **implemented** at revision 28 through `6a951c59` |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 26, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -49,6 +52,302 @@ invented: the non-literal spelling does not leak denied material, it over-exclud
 never denied, which breaks the agreement between `read` and `search` in the opposite direction. Both
 are instances of the second pattern below — a claim that outran its mechanism — and the second is its
 sharpest form yet, since the recommendation it argued for was correct all along.
+
+Revision 23 closes four defects in §2.2 itself, two of them in the contract's own load-bearing rows.
+
+1. **`Correspondence`'s home did not import.** `evidence_broker.py` imports `audit.subjects`, and
+   `audit/__init__.py` eagerly imports `audit.record`, so `import science_model.evidence_broker`
+   already loads `audit.record` — probed, not reasoned. Having `audit.record` import `Correspondence`
+   back would close a cycle through a partially initialised module. It moves to
+   `science_model/correspondence.py`, a leaf importing pydantic and nothing else, which is the only
+   placement under which neither package depends on the other.
+2. **The forward guarantee was false in the direction 4b would rely on.** Revision 22 promised "no
+   `history` entry originating in a shallow repository", but revision 18 journaled shallow-history
+   refusals, so such entries existed. Replaying one in a *complete* clone re-serves real history and
+   yields `EXPOSURE_UNREPRODUCIBLE` — the reciprocal of the case revision 18 set out to fix, created
+   by revision 18's own fix, and left unstated for five revisions. Shallowness now refuses at
+   `start_run` beside the tree scan: a journaled refusal was never deterministic given the pinned
+   commit, which revision 21's own rule already said disqualifies it from the journal.
+3. **`is_shallow` was declared shared without a module** — which is how one mechanism becomes two
+   functions. `autonomy/git.py::is_shallow`.
+4. **4c's row named a directory.** A new `validate` check is two files: the module and its
+   registration in `validate/checks/__init__.py`. Both are named.
+
+**The first and fourth are the same mistake as "must not touch `audit/*`", which revision 23 also
+replaces.** A contract stated as a *path* fails exactly as a guard stated as a *roster* does: the ban
+on `audit/*` would have forced `Correspondence` into the cycle, because the rule it stood for —
+**4b changes no stored-record model** — was never the rule that got written down.
+
+Revision 24 closes three, all inside revision 23's own fixes, and the first is the sharpest defect
+this design has had.
+
+1. **The shallow refusal was a check on mutable state, and check-then-use is the shape this design
+   has rejected three times.** `.git/shallow` is an ordinary file in the actor-owned `.git`
+   directory: an actor writes it *after* the run opens and `git log` answers short at exit 0 —
+   **measured, one `echo`, 3 commits become 2** against an unchanged pinned commit. Revision 23
+   placed the guarantee at open and left the window wide. The fix is not an earlier check or a
+   tighter one: `GIT_SHALLOW_FILE=/dev/null` in `_ENVIRONMENT` makes the file unreadable to git, and
+   a genuinely shallow repository then **fails at exit 128 rather than answering short**. The
+   open-time check survives as a diagnostic. Same doctrine as `-c` over `.git/config`, one directory
+   over.
+2. **The forward guarantee said "complete clone", which is not observable.** `is_shallow() == False`
+   is a statement about one file; the pin converts truncation into failure. Neither certifies
+   completeness. §2.2 now states three clauses, the third of them about *truncation*, not
+   *completeness*. Third attempt at that sentence — see the note there.
+3. **The import-cycle mutation probed the direction that works.** `import science_model.audit.record`
+   initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
+   executing anything at all. It must spawn a fresh interpreter on
+   `import science_model.evidence_broker`.
+
+Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
+
+**The new run-open failures reached one layer farther than the slice contract recorded.**
+`start_run` now calls hardened git for ancestry and tree checks before a session exists. An oversized
+configuration preflight or stderr therefore raises `GitError`, but `autonomy start` caught only the
+older lifecycle/extraction exceptions. The command documented `0 opened, 2 could not open` and instead
+let these normal refusal paths escape as exit 1 — the same quarantined-looking boundary the
+`GitOutputTooLarge(GitError)` hierarchy was chosen to avoid. Plan 4a therefore also owns the minimal
+`autonomy/cli.py` catch and a test against the **base** `GitError`, so catching only the overflow
+subtype cannot pass.
+
+The same review found two closure claims wider than their executable rows. The shallow-history row
+named 4b's future replay verdict even though its 4a guard is the earlier fact that no brokered run
+opens; the row now asserts that open-time boundary directly. And the combined stderr/preflight row
+was only tested on served stderr. It is split: serving must propagate a base `GitError` produced by
+the mutable configuration preflight, independently of the stdout/stderr subtype split.
+
+Revision 27 closes one defect, found in pre-flight for plan 4a's Task 2, and it is the fourth time
+running that a fix carried a defect of its own shape into the next round.
+
+**The shallow diagnostic was a proxy, and revision 24's pin blinded the proxy.**
+`rev-parse --is-shallow-repository` reports whether a shallow *file* could be opened, not whether
+history can be walked. MEASURED, git 2.55: `is_repository_shallow()` sets its flag on a **successful
+open**, before reading a line, so `/dev/null` opens and a **complete** repository reads `true` under
+`GIT_SHALLOW_FILE=/dev/null`. Under the pin the predicate is constant-`true` and would refuse every
+brokered run. Revisions 24–26 recorded the measurement ("does not honour the pin") and attached the
+opposite conclusion to it — the detector does not keep working, it stops distinguishing.
+
+The natural repair is a detector-specific invocation that omits the pin. It works, and it re-admits
+an actor-owned file into a defense — the shape this design has now rejected four times. The repair
+taken instead asks the **served property**: `_LOG_ARGV` carries no `-n`, so `history` walks to the
+root, and `rev-list --count <commit>` under the pins measures exactly that. MEASURED: a complete
+6755-commit repository answers in 42 ms; a complete repository with `.git/shallow` **planted** still
+answers, because the plant is ignored; a `--depth 1` clone exits 128. `is_shallow` becomes
+`autonomy/git.py::history_traversal_error(repo, commit) -> str | None`, returning git's own
+diagnostic.
+
+**Its reach is bounded and stated, because the guarantee sentence three revisions above was widened
+by assumption twice.** MEASURED under the pins, `--filter=tree:0` and `--filter=blob:none` clones
+both report the full commit count — their commits are all present. The tree case is already refused
+at open by the §3.1 tree scan (`ls-tree -r` → `fatal: not a tree object`, measured), for free; the
+blob case is not pre-empted at open and fails loudly mid-run at exit 128, which is
+`GIT_NO_LAZY_FETCH` working as designed. The diagnostic covers **missing commits**. It is not a
+completeness oracle, and §3.2's guarantee never rested on it.
+
+Revision 26 closes two, both in revision 25's own fix and neither in the production boundary.
+
+1. **The lazy-fetch fixture's precondition was built from the pin it mutates.** Asking "is this tree
+   absent?" is itself a lazy-fetch trigger: measured, unpinned `cat-file -e <tree>` exits 0 **and
+   spawns a fetch**, as does `rev-parse 'HEAD~1^{tree}'` inside the partial clone. Deleting the
+   production pin therefore breaks the row's *setup* — and populates the clone while doing it — so
+   the mutation never reaches serving. The OID comes from the source repository and the check carries
+   its own explicit `GIT_NO_LAZY_FETCH=1`. §7 now states the general question: **which line does the
+   mutation break first?**
+2. **§3.2.1's canonical-invocation table still listed only `LC_ALL` and `LANG`**, contradicting §3.2.
+   Both pins are named there, and named for **all three ops** — a partial clone withholds blobs as
+   readily as trees, so `cat-file blob` and `grep` reach a promisor remote by the same mechanism that
+   motivated the pin under `history`.
+
+Revision 25 closes one defect, in revision 24's fix, plus a stale status line.
+
+1. **The shallow pin closed one of two ways a repository declines to hold its own history, and the
+   other one reaches the network.** A `--filter=tree:0` partial clone does not truncate and does not
+   fail — it **lazily fetches** the missing objects from its promisor remote, mid-request, at exit 0.
+   Measured against the canonical `_LOG_ARGV`: **two `git fetch` subprocesses spawned**, full answer
+   returned, nothing in the output disclosing it. `GIT_NO_LAZY_FETCH=1` joins `GIT_SHALLOW_FILE` in
+   `_ENVIRONMENT`; the same probe then fails locally at exit 128 having spawned nothing. Clause 3 of
+   the forward guarantee is restated from *ancestors* to *objects the local repository already held*,
+   and §7 gains the row plus the two ways its fixture goes vacuously green.
+
+**This one is worse than a determinism defect and the design should say so.** The promisor remote's
+URL lives in `.git/config`, the actor-owned file this entire module exists to defend against. Lazy
+fetch therefore hands the actor an **egress channel out of the control plane** — it can point the
+supervisor at a host of its choosing and make it emit a request — and a served payload whose content
+depends on what that host returns. `-c` cannot close it, because the neutralization would have to
+name the remote and the remote's name is the actor's to pick: a roster, again, where the environment
+variable is the predicate.
+
+**Revision 23's first defect and revision 24's first defect are one lesson, one axis apart.** Both
+took a property that is *true at a moment* for a property that is *fixed*: a commit pin fixes
+content but not repository completeness (revision 18); an open-time scan fixes what was true at open
+but not what is true at request N. `.git/config` was already known to be actor-owned and mutable —
+the whole of `autonomy/git.py` exists to say so — and `.git/shallow` sits beside it. **When a defense
+reads an actor-owned file, the question is never "when do we check it" but "how do we stop git from
+reading it."**
+
+Revision 22 adds **§2.2, the slice contracts** — what each of 4a/4b/4c may assume, may not assume,
+creates, modifies, must not touch, and owns in §5.3. It exists because revisions 19, 20 and 21 found
+their defects in the *seam* rather than in the design: a slice handed an outcome it could not
+structurally reach (twice), a type with two homes, a checker depending on a field a later slice adds.
+Boundaries that live only in a header table get re-derived by each reader, and this one had already
+been re-derived wrongly three times.
+
+Writing it down immediately found a fourth, of the same kind and this time about a module rather than
+a type: **there is no `open_run`.** Revisions 17–21 said the tree scan happens at "session open",
+which reads as `evidence_broker/session.py`; that class is constructed *per request* from an
+already-sealed model. A brokered run is opened by `autonomy/lifecycle.py::start_run`, the only place
+that sees a pinned commit before any request exists. Scanning in `session.py` would have rescanned on
+every request and still missed a run that opens and never serves. §3.1 and §2.2 now name the
+function.
+
+§2.2 also pins the three mechanisms 4a must ship *for* 4b — `history_traversal_error`, the `run_git`
+ceiling, the byte bounds — so they are consumed rather than written twice with two spellings, and states the one
+asymmetric edge in the seam: 4b **imports** `serve.py` and **must not modify** it, because replay's
+determinism is the canonical invocation itself, and a checker that reimplemented serving would be
+comparing its own output to the broker's.
+
+Revision 21 closes four defects in revision 20, two of them in revision 20's own fixes.
+
+1. **The `run_git` ceiling gave one disposition to four different conditions** (§3.2). Revision 20
+   wrote "each fails the same way", which journals an overflow of `stderr` or the `config --list`
+   preflight — both governed by mutable repository state, not by the pinned commit. An entry served
+   before `.git/config` grew would refuse at replay, fail to match, and return
+   `EXPOSURE_UNREPRODUCIBLE`: **an honest review refused because the actor edited a file afterwards.**
+   That is the defect revision 20 had just removed from `history`, rebuilt one paragraph later in the
+   fix for something else. Disposition now follows determinism: served stdout is a journaled
+   `Denial`; `stderr` and the preflight fail the invocation; the tree scan refuses to open the
+   session.
+2. **`check_correspondence` could not produce its own first outcome** (§5). The signature required an
+   `EvidenceExposure` while §5.3's first row is `NO_EXPOSURE`. `EvidenceExposure | None` — the same
+   defect as revision 20's lens precondition, one slice over, and the second time a slice was handed
+   an outcome it structurally could not reach.
+3. **`Correspondence` had two homes and the checker module had two names** (§2). §2 placed it in
+   `audit/record.py`, revision 20 claimed 4b touches no audit-record model, and §2's tree said
+   `correspond.py` against §5's `correspondence.py`. It ships in `evidence_broker.py` beside
+   `Outcome`, which moved there for the same reason: it is the broker's verdict vocabulary, and
+   `audit/record.py` imports it. 4c must know this before it can store the type.
+4. **A roster row certified nothing** (§7). With 4a guaranteeing an NFC tree, keying the served map on
+   "raw path bytes" is either identical after decoding or a bytes-vs-str type error, so the row
+   measured neither normalization nor coverage. Deleted; 4a's tree tests own normalization. A vacuous
+   parametrization inside the roster written to prevent vacuous parametrizations is worth recording
+   plainly.
+
+**§5.3's three columns are set in two slices**, now stated: 4b owns the classification, while
+"Stored?" and "Counts as support?" are `append_review` and `confirmation_count`, both 4c.
+
+Revision 20 comes from review of revision 19 and closes four defects, three blocking. Three of them
+are **failures of the split itself** — not of the design that was split — which is the lesson worth
+carrying: dividing a plan creates new claims about what each side may assume, and those claims
+inherit none of the review the undivided design received.
+
+1. **The checker depended on a field its own consumer's slice would add** (§5). `check_correspondence`
+   took a `review`, but the merged `Review` has no `evidence`; that field arrives with 4c. Fixed by
+   taking `Sequence[Evidence]` — which is also the honest signature, since the checker reads nothing
+   else off a review — leaving 4b touching no audit-record model at all.
+2. **The agent cross-checks were stated as one rule with one precondition** (§4.2). `agent` and
+   `model` live on the run record; the instrument lives on the *exposure*, which the `NO_EXPOSURE`
+   path is defined by not having. The boundary demanded an instrument in the one case defined by its
+   absence. The lens check is now conditional, and costs nothing where it is dropped because an
+   unbrokered review is `unwired` and earns no support.
+3. **Revision 18 wrote a classification rule the checker cannot implement** (§3.2). Calling
+   git-version drift `unwired` requires observing a cause no sealed term records; only shallowness is
+   checkable. Every completed replay mismatch is `violated`, and the residual is stated instead.
+4. **The payload ceiling covered the requests an actor asks for and not the captures the broker
+   performs itself** (§3.2) — `stderr` on every call, the `config --list` preflight that runs before
+   every call, and the new full-tree scan.
+
+The fourth is the same shape as revision 18's third and worth naming as a pattern: **a bound placed
+on the quantity that prompted the question rather than on the mechanism that holds it.** The journal
+was bounded and the payload was not; then the payload was bounded and every other capture was not.
+The mechanism here is `run_git`, and the bound belongs there.
+
+Revision 19 splits plan 4 in three rather than two, on a seam revision 18's own findings exposed.
+Three of its five defects — the NFC tree rule, the shallow refusal, the payload bound — are not
+preparation for correspondence at all. They are **wrong answers the shipped broker gives today**: a
+path reported absent that exists under another spelling, a history whose result depends on clone
+depth, an allocation with no ceiling. Bundling them into the checker's plan would hold repairs to
+merged code behind the design of a component that does not exist yet.
+
+Two further reasons the seam is real rather than tidy. The payload ceiling belongs to `run_git`,
+which `extract`, `toolkit_is_clean` and a validate check also use — blast radius outside the broker
+entirely, and not something to review inside a plan headlined "correspondence". And bumping
+`REPLAY_PROTOCOL_VERSION` in the slice that changes serving lets the checker be written against a
+stable protocol instead of bumping the very thing it is learning to parse.
+
+So: **4a serving hardening, 4b the checker, 4c the boundary.** The shallow rule divides along that
+line without being forced to — refusal at serving is 4a, `unwired` classification at replay is 4b,
+which is where replay lives regardless. **Revision 17's and 18's log entries below use "4a" for the
+checker and "4b" for the boundary; from revision 19 those mean 4b and 4c.** The entries are left as
+written because a revision log is a record of what was decided when, not a document to be
+back-edited.
+
+Revision 18 comes from review of revision 17 and closes five defects, three of which would have
+voided plan 4 outright. They are worth reading as a set, because four of the five are one shape: **a
+claim about determinism or trust that held for the case the author had in mind and for no other.**
+
+1. **Identity was asserted by the reviewer** (§4.2, §5.4). `reviewer_kind` sat on `ReviewSubmission`
+   while §5.4 branched on it, so an agent could label itself `human` and skip §5 entirely — the whole
+   spec bypassed by one string — and could vary `reviewer_ref` or `lens` to mint several `review_id`s
+   from one run. §0's boundary 2 had already stated the rule ("recompute actor-supplied provenance at
+   the boundary rather than accepting it"); §5.4 had simply never applied it to the field that
+   decides whether the rest of the design runs. Identity moves to a `ReviewAttestation` and, for
+   agents, is cross-checked against the run record and the sealed instrument.
+2. **A pinned commit does not make `history` deterministic** (§3.2). It fixes ancestry only if the
+   repository *has* the ancestry. Reproduced here: identical commit, identical canonical argv, two
+   commits from a full clone and one from a `--depth 1` clone, both at exit 0. Replay in a different
+   clone would have called honest evidence `EXPOSURE_UNREPRODUCIBLE` and refused the review.
+3. **Served payloads were unbounded** (§3.2). Plan 3 derived a bound for the journal and left the
+   payload — the far larger quantity, held in memory by `run_git`, written to `served/`, and read
+   again at replay — with none at all.
+4. **Replay memoisation keyed on `(commit, op, target, pathspec)`** (§5.2), omitting the sealed
+   surface policy that changes both authorization and the exclusion pathspecs. Removed rather than
+   re-keyed: nothing here has been measured.
+5. **§5.2 and §5.4 contradicted each other about the baseline** (§5.2, §7), and §7's test list
+   encoded the wrong one. §5.4 governs.
+
+The fourth pattern below — a named component guaranteeing the opposite of what was wanted — has a
+sibling here worth naming on its own: **a guarantee inherited from the wrong axis.** The commit pin
+was treated as making every operation reproducible, when it fixes *content* and says nothing about
+*repository completeness*; and the journal's bound was treated as bounding the record, when it bounds
+one of the two files a run writes.
+
+Revision 17 designs the correspondence slice and, in doing so, closes the NFD residual §3.1 parked
+for plan 3 and plan 3 did not take. It is the first revision where a *parked* residual, rather than a
+review finding, turned out to be load-bearing for the section that came after it.
+
+Revision 11 recorded the residual as one failure — `search` serving past a deny prefix — because it
+read §3.1 against §3.2. Read against §5.1 instead, the same root cause has **three** directions, and
+only the first was ever written down:
+
+1. *Leak.* `:(top,literal,exclude)café` in NFC excludes no NFD tree entry, so `search` serves what the
+   policy denies.
+2. *False refusal.* `LocationEvidence.path` is forced to NFC, so an honest citation into an NFD path
+   can never match a served map keyed on the tree's own bytes. §5.3 classifies that as
+   `CITATION_UNSERVED`, which **refuses the review**. The checker built to catch fabrication would
+   have rejected honest work instead.
+3. *False absence.* A `read` of the NFC spelling against an NFD tree entry returns `MISS_ABSENT`,
+   which §5.1 defines as "the path is not at the commit, and that was served as the answer" and makes
+   citable. An agent could claim a file does not exist, be wrong, and be certified `verified`.
+
+Direction 3 is the one that decides the design. It involves no collision, no deny prefix and no
+search — one NFD path anywhere in the tree is enough — so no filter on the serving side reaches it.
+**The session therefore refuses at open any pinned tree holding a path that is not valid UTF-8 or not
+already NFC**, verified by one `git ls-tree -r -z --name-only` pass. All three directions become
+unreachable at once, in the one layer that can still refuse, instead of three guards in three layers.
+The serve-time post-filter that revision 17 first proposed came back out: it defended direction 1
+only, and it would have read as coverage.
+
+Two properties are worth stating because they are what make one check sufficient. The pinned commit's
+tree is immutable, so a session that opened without a violation can never develop one and **replay
+inherits the guarantee without re-checking it**. And a colliding pair — `café` and `café` both
+present, which is what makes an NFC-keyed served map unsound — is subsumed, since at least one member
+of any such pair is non-NFC.
+
+`REPLAY_PROTOCOL_VERSION` goes to 2 even though no serving byte changes. §5.2's rule bumps on a
+change to serving or parsing; here the *guarantee* changed, since a v1 exposure may come from an NFD
+tree and a v2 one may not. Measured at design time: no control-plane directory exists on this machine
+and no stored record anywhere carries an exposure, so the bump invalidates nothing, and a stale v1
+control plane reads as `unwired` / `REPLAY_PROTOCOL_MISMATCH` rather than being silently trusted.
 
 Revision 16 comes from a sixth review round and closes three gaps in revision 15's fixes. The
 "derived" journal bound counted one `\\uXXXX` escape per Python character, but a non-BMP character
@@ -164,7 +463,7 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4 undesigned** |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4a/4b designed at revision 17** |
 | Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
@@ -264,14 +563,17 @@ science/src/science_tool/evidence_broker/     # NEW
     serve.py      three git ops at a pinned commit; defined-miss vs raise
     journal.py    append-only per-run log, outside the project tree
     session.py    budget-enforcing session over policy + serve + journal
-    correspond.py the join, the replay, the coverage-aware outcome
+    hits.py       `git grep -n -z` record parsing; pure bytes -> (path, line)
+    correspondence.py  the join, the replay, the coverage-aware outcome
     cli.py        `science evidence serve`   # the only actor-facing command; §3.4.1, §3.5
 
 science/model/src/science_model/
+    correspondence.py    # NEW (plan 4b) — Correspondence ONLY; imports pydantic and nothing else
     evidence_broker.py   SurfacePolicy (shipped, plan 2); + Outcome, ExposureEntry,
                          InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure
     autonomous_runs.py   + AutonomousRunRecord.evidence
-    audit/record.py      + Uncertainty, Correspondence, ReviewSubmission; two Review fields;
+    audit/record.py      + Uncertainty, ReviewAttestation, ReviewSubmission; two Review fields
+                           (one importing Correspondence from science_model/correspondence.py);
                            confirmation_count() gains a correspondence term
 
 science/src/science_tool/
@@ -308,6 +610,106 @@ that does not exist.
 production writer of a `Review`, it takes the store lock the way `ingest_report` does, and it is where
 correspondence is computed. §5.4 specifies it.
 
+### 2.2 Slice contracts for plan 4
+
+**This section is authoritative for the seam.** Where a revision-log entry above describes a slice
+boundary — revision 19 on where the shallow rule falls, revisions 17–22 on where `Correspondence`
+lives — the log records what was decided then and §2.2 records what holds now. A log entry is not
+back-edited; it is superseded.
+
+Plan 4 ships as three slices (header table). Revisions 19–21 each found defects **in the seam rather
+than in the design** — a slice handed an outcome it could not reach, a type with two homes, a
+dependency on a field a later slice adds — so the boundaries are stated here explicitly rather than
+inferred from which section a paragraph sits in. Dependency runs strictly `4a → 4b → 4c`; **no slice
+may reach backwards**, and each is independently mergeable.
+
+| | **4a — serving hardening** | **4b — the checker** | **4c — the boundary** |
+|---|---|---|---|
+| **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
+| **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that it may classify an exposure itself — outcome, coverage and protocol are 4b's, and 4c calls `check_correspondence` for all three |
+| **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_correspondence.py` |
+| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
+| **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py` |
+| **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
+
+**The guarantee 4a hands forward, stated as three clauses because 4b is entitled to rely on each and
+on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`:
+
+1. was served from a tree whose every path is valid UTF-8 and already NFC;
+2. was served under a per-request byte ceiling, with overflow refusing rather than truncating; and
+3. was served **entirely from objects the local repository already held**, by a traversal git did not
+   silently truncate. A repository that cannot supply an object locally **fails the invocation** —
+   it neither answers short nor goes to the network to fill the gap (§3.2).
+
+Clause 3 is deliberately not "was served from a complete clone." Revisions 22 and 23 both claimed
+more than the mechanism delivers: `is_shallow() == False` (revision 26's spelling, replaced at
+revision 27) is a statement about one file — and under the pin it was not even that — while the
+pins convert missing data into failure. Neither certifies that every object is present, and a
+damaged repository remains possible. What 4b may rely on is *what is not among the outcomes*: a
+truncated answer, and a payload assembled from a remote. A repository broken some other way surfaces
+as a non-zero exit and reads `unwired`, which 4b already handles.
+
+**Ask what a guarantee is *about*, not what it is near.** This clause has now been wrong three ways,
+each a different overshoot or undershoot: revision 22 said "no `history` entry originating in a
+shallow repository" (false — revision 18 journaled such refusals); revision 23 said "complete clone"
+(unobservable); revision 24 said "unable to supply an **ancestor**", which named the shallow case and
+missed the partial-clone case sitting next to it, where the missing object is a *tree* and git
+fetches it rather than failing. Revision 24's own correction of revision 23 was for claiming more
+than the mechanism delivered — and it then wrote a clause narrower than the hazard. **Overshooting
+and undershooting the same sentence are one error**: describing the mechanism you happen to be
+looking at instead of the property the consumer needs.
+
+Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising.
+
+It is also what licenses 4b to perform no tree scan of its own (§5.2). A 4b implementer who adds a
+normalisation guard "to be safe" is not adding safety — they are adding a second place for the rule
+to be stated and a second place for it to drift.
+
+**"Session open" is `start_run`, not `Session`.** There is no `open_run`: a brokered run is opened by
+`autonomy/lifecycle.py::start_run`, which is where the journal is created and the `EvidenceSession`
+is sealed into the baseline, and it is the only place that sees a pinned commit before any request
+exists. `evidence_broker/session.py` constructs a `Session` per request from the already-sealed
+model and is therefore **not** where a once-per-run tree scan belongs — putting it there would rescan
+on every request and still not cover the run that opens and never serves. 4a is expected to leave
+`session.py` unchanged.
+
+**4b replays by calling `serve.py`, and modifies nothing there.** Replay's determinism *is* the
+canonical invocation (§3.2.1); a checker that reimplemented serving would be comparing its own output
+to the broker's, which is not a check of anything. So 4b depends on 4a's module without owning it —
+the one place in this seam where "may not modify" and "must import" both apply.
+
+**Three shared mechanisms belong to 4a, so that 4b consumes rather than reinvents them.** Each is
+needed on both sides of the seam, and each would otherwise be written twice with two spellings:
+
+- **`autonomy/git.py::history_traversal_error(repo, commit) -> str | None`** — 4a refuses to open a
+  run, 4b classifies a replay environment. Revision 22 declared it shared without naming a module,
+  which is how one mechanism becomes two functions; revision 27 renamed it when the predicate it
+  wrapped turned out to be a proxy the pin blinds.
+- **`GIT_SHALLOW_FILE=/dev/null` and `GIT_NO_LAZY_FETCH=1` in `_ENVIRONMENT`** (§3.2). 4b inherits
+  them by calling `serve.py`, and inherits them *silently* — which is the point: replay is
+  deterministic, and stays off the network, because the environment is pinned, not because 4b
+  remembered to check anything.
+- The `run_git` output ceiling, including its refuse-not-truncate discipline.
+- `MAX_SERVED_BYTES` and `MAX_RUN_SERVED_BYTES`, in `science_model/evidence_broker.py` with the
+  other bounds.
+
+**"Must not touch `audit/*`" was a proxy, and revision 23 replaces it with the claim it stood for.**
+What must hold is that **4b changes no stored-record model**, so 4c inherits an unmodified `Review`.
+Spelling that as a directory ban broke the moment `Correspondence` needed a home that is neither
+`evidence_broker.py` (a cycle) nor `audit/record.py` (a banned file) — the ban would have forced the
+cycle. A contract stated as a path is the same defect as a guard stated as a roster.
+
+**What 4b imports from `audit/` and does not modify.** `Evidence` and `LocationEvidence` are merged
+and unchanged by this plan; 4b reads them. The distinction matters because "must not touch
+`science_model/audit/*`" would otherwise read as "must not import", which would make the checker
+unable to accept a citation at all.
+
+**Why 4b is mergeable with no production caller.** `check_correspondence` has none until 4c wires it
+into `append_review`. That is the cost of the split and it is accepted deliberately: the alternative
+is 4b landing alongside a boundary whose model changes it does not need, which is the coupling
+revision 20 removed. It is fully testable in isolation — an exposure and a citation list are both
+constructible without a `Review`.
+
 ## 3. The broker
 
 ### 3.1 Policy
@@ -337,16 +739,30 @@ pathspecs byte-exactly. So a policy and a repository can be spelled differently 
   meant the author's spelling never reached git and the policy they wrote was not the policy they
   got. `SurfacePolicy` now **refuses** a prefix whose NFC form differs from what was written, so the
   caller learns the policy cannot express what they meant. Failing early beats a silent weakening.
-- *Repository side, OPEN and deliberately parked.* Against a tree holding an NFD path
-  (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling the model accepts — denies under
-  `read` and **still serves under `search`**, because `:(top,literal,exclude)café` in NFC matches no
-  NFD tree entry. Measured on git 2.55. Closing it honestly means `serve` inspecting the tree's own
-  path bytes, which is a traversal the serving surface has no place for; the natural home is the
-  session layer of plan 3, which already walks served paths.
+- *Repository side, CLOSED at revision 17 by refusing the tree rather than filtering the results.*
+  Against a tree holding an NFD path (`cafe\xcc\x81/x.txt`), the NFC prefix — now the only spelling
+  the model accepts — denies under `read` and **still serves under `search`**, because
+  `:(top,literal,exclude)café` in NFC matches no NFD tree entry. Measured on git 2.55.
 
-Recorded rather than hidden: a non-ASCII, NFD-authored repository (macOS-authored trees routinely
-are) can be searched past a policy that `read` honours. Any consumer relying on `deny_prefixes` as a
-confidentiality boundary needs this closed first.
+  Revisions 11–16 parked this as that one leak and nominated `serve` inspecting the tree's own path
+  bytes as the fix. Both were wrong. The leak is one of three directions (header, revision 17), and
+  the decisive one — a `read` returning `MISS_ABSENT` for a path that exists under another spelling,
+  certifying a **false absence claim** — is reachable with no deny prefix and no search at all, so no
+  amount of filtering on the serving side closes it.
+
+  **A brokered run refuses to open against a pinned tree containing a path that is not valid UTF-8 or
+  not already NFC**, established by one `git ls-tree -r -z --name-only` pass at the pinned commit, in
+  `autonomy/lifecycle.py::start_run` — the same place that creates the journal and seals the session,
+  and the only one that sees the commit before any request exists (§2.2). UTF-8
+  travels with NFC in the same check because a path that does not decode cannot be spelled as a
+  `LocationEvidence.path` either, so it can never be cited honestly and refusing it is the same rule
+  in the same place. `serve` is unchanged: with the tree guaranteed NFC, git's own pathspec matching
+  is byte-exact against the only spelling the model can produce.
+
+The cost, stated rather than buried: a genuinely NFD-authored repository cannot be brokered until it
+renames. That is narrower than it sounds — git on macOS sets `core.precomposeunicode=true` by
+default, so macOS-authored *trees* are usually already NFC even where the working filesystem is not,
+and revisions 11–16 overstated the exposure by treating filesystem behaviour as tree content.
 
 The dual-spelling check stays where it belongs — on paths that really are filesystem paths and really
 are opened: the baseline, the journal, the control-plane root, and the `served/` directory of §3.5.
@@ -399,6 +815,195 @@ only once the revision is known good.
 not in '<commit>'` when it is present there. Both mean the same thing about the pinned tree, both exit
 128, and a classifier that recognises only one turns an ordinary absent path into a halted run for
 exactly the paths the actor happens to have created.
+
+**A pinned commit makes `read` and `search` deterministic; it does NOT make `history`
+deterministic** (revision 18). `git log` walks ancestry, and ancestry depends on what the repository
+*has*, not only on the commit named. Measured on this checkout: one repository, two commits touching
+a file; against the identical canonical argv and the identical commit, the full repository returned
+**two** commits and a `--depth 1` clone returned **one** — *both at exit 0*. Nothing in the output
+says which happened. An exposure sealed against a full clone and replayed in a shallow one would
+therefore reproduce different bytes and be classified `EXPOSURE_UNREPRODUCIBLE`, which §5.3
+**refuses** — the checker rejecting honest work, the exact failure mode §5.2 invokes to explain why
+replay is bound to a protocol version at all.
+
+`--no-replace-objects` is already pinned in `_HARDENING`, so grafts and replace refs are closed;
+completeness is what remains.
+
+**A check at open cannot deliver this, and revision 23 asserted that it could.** Shallowness is not a
+property of the pinned commit and not a property fixed at open: it lives in `.git/shallow`, an
+ordinary file in the actor-owned `.git` directory. Writing it takes no fetch. **Measured, git 2.55**,
+one repository, three commits, one pinned commit: `git log` returned **3**; after a single
+`echo <sha> > .git/shallow`, the identical argv against the identical commit returned **2** — *both
+at exit 0*. This is `.git/config`'s vector with a different filename, and the module docstring in
+`autonomy/git.py` already states the doctrine that answers it: the actor owns the file, so the
+defense is an input git no longer reads, not a check racing the write.
+
+**Two pins, not one — and the second closes a channel, not just a variance.** `.git/shallow` is one
+way a repository declines to hold its own history; a **partial clone** is the other, and it fails in a
+worse direction. A `--filter=tree:0` clone does not refuse the traversal: it **goes and gets the
+missing objects from the promisor remote**, mid-request, at exit 0. Measured, git 2.55, against the
+canonical `_LOG_ARGV`: **two `git fetch` subprocesses spawned**, three commits returned, nothing in
+the output saying the network was touched. (The fixture must set `uploadpack.allowFilter=true` on the
+serving side — it defaults to false, and without it the filter is silently ignored and the clone
+comes back complete, which is the first way this test goes vacuously green.)
+
+That is not merely non-deterministic. It makes a served payload depend on what a **remote** holds and
+whether it is reachable, and the promisor remote's URL lives in `.git/config` — actor-owned, the
+premise this whole module is built on. A supervisor that lazily fetches is a supervisor the actor can
+point at a host of its choosing and cause to emit a request. Neutralizing on the remote *name* via
+`-c` would be a roster (the name is the actor's to choose); the environment variable is the
+predicate.
+
+- **`GIT_SHALLOW_FILE=/dev/null` and `GIT_NO_LAZY_FETCH=1` join `LC_ALL` and `LANG` in
+  `_ENVIRONMENT`.** They stand to `.git/shallow` and to promisor configuration exactly as `-c` stands
+  to `.git/config`: they outrank the repository-local state and cannot be un-set from inside the
+  worktree. Under `GIT_NO_LAZY_FETCH=1` the same partial-clone probe **fails locally at exit 128**,
+  `fatal: unable to read tree`, having spawned nothing. Measured across the cases that matter:
+
+  | repository | default | under the pins |
+  |---|---|---|
+  | `.git/shallow` planted, objects present | 2 of 3, **exit 0** | 3 of 3, exit 0 |
+  | genuine `--depth 1`, objects absent | 1 of 3, **exit 0** | **exit 128**, `fatal: Failed to traverse parents` |
+  | `--filter=tree:0`, objects fetchable | 3 of 3, **exit 0, 2 `git fetch` spawned** | **exit 128**, `fatal: unable to read tree` |
+
+  Every row moves the right way. A planted boundary is ignored, and a repository that cannot supply
+  an object locally **stops answering and starts failing**, which is this design's standing
+  preference: `run_git` returns non-zero, no defined-miss message matches, the run halts `unwired`.
+  No new disposition rule is needed — §3.2's table already routes it. Both pins are no-ops in an
+  ordinary complete clone, which has no boundary file and nothing to fetch. `GIT_NO_LAZY_FETCH`
+  covers `read` and `search` as well as `history`, since a partial clone withholds blobs from
+  `cat-file blob` and `grep` by exactly the same mechanism — putting it in `_ENVIRONMENT` rather than
+  at one call site is what makes that automatic.
+
+- **A brokered run still refuses to open against a repository that cannot walk the pinned commit's
+  ancestry**, decided by `autonomy/git.py::history_traversal_error` (`git rev-list --count <commit>`),
+  in `start_run` beside the §3.1 tree scan — but it is a **diagnostic, not the guarantee**. It reports
+  such a repository as an operator error at open, carrying git's own sentence, rather than as a
+  `Failed to traverse parents` in the middle of a run. The two mechanisms cover disjoint intervals
+  and neither depends on the other: at `start_run` no actor exists yet (§3.4.2's temporal argument),
+  so an absence present then is genuine; anything appearing later is the actor's and the pin
+  neutralizes it.
+
+  **It asks the served property, not a proxy for it, and revision 27 is why.** `_LOG_ARGV` carries no
+  `-n`, so `history` walks to the root — walking to the root is what to measure.
+  `rev-parse --is-shallow-repository` asks instead whether a shallow *file* could be opened, and
+  MEASURED, git 2.55, a **complete** repository reads `true` under `GIT_SHALLOW_FILE=/dev/null`:
+  `is_repository_shallow()` sets its flag on a successful open, before reading a line, and
+  `/dev/null` opens. Under the pin that predicate is constant-`true`. Giving the proxy its own
+  unpinned environment would work and would re-admit an actor-owned file into a defense — an actor
+  could refuse its own run's open by writing `.git/shallow`. MEASURED under the pins:
+
+  | repository | `rev-list --count <commit>` |
+  |---|---|
+  | complete, 6755 commits | full count, exit 0, **42 ms** |
+  | complete with `.git/shallow` **planted** | full count — the plant is ignored |
+  | genuine `--depth 1` | **exit 128**, `fatal: Failed to traverse parents` |
+
+  **Its reach is bounded, and saying so is the point.** MEASURED under the pins, `--filter=tree:0` and
+  `--filter=blob:none` clones both report the full commit count; their *commits* are present. The tree
+  case is already refused at open by the §3.1 tree scan (`ls-tree -r` → `fatal: not a tree object`),
+  for free. The blob case is not pre-empted at open and fails mid-run at exit 128 — the pin working as
+  designed. This diagnostic covers **missing commits**; the guarantee in §2.2 clause 3 rests on the
+  pins, not on it.
+
+  Revision 18 made this a per-request refusal that spent a round and was journaled; revision 23 moved
+  it to open, because a journaled refusal is **not deterministic given the pinned commit** — it is
+  determined by what the clone happens to hold. Replaying that honest exposure in a *complete* clone
+  re-serves real history, the outcome no longer matches, and §5.3 returns `EXPOSURE_UNREPRODUCIBLE`:
+  the reciprocal of the case revision 18 set out to fix, created by its own fix. That reasoning
+  stands; what revision 23 got wrong was believing one open-time check *finished* the job.
+- **At replay, a shallow repository is `unwired` / `EXPOSURE_UNREACHABLE`, never `violated`.** The
+  environment could not answer the question; it did not answer it wrongly. Reaching for `violated`
+  here would be the could-not-check / checked-and-found-false confusion §5.3 exists to prevent, and
+  it would refuse reviews for the property of the machine replaying them.
+
+  The pin narrows what this rule has to catch but does not retire it. Under `GIT_SHALLOW_FILE` a
+  shallow replay host fails at exit 128, which reaches `unwired` through §5.3's "replay cannot run"
+  row anyway — so the two agree, and 4b's explicit `history_traversal_error` check earns its place by
+  naming the cause rather than by changing the verdict. That is worth keeping: `EXPOSURE_UNREACHABLE` on a
+  history exposure is the one `unwired` an operator can actually fix, and "clone was shallow" is
+  repairable advice where "git exited 128" is not.
+
+**This reasoning does NOT extend to a git version or runtime whose output differs, and revision 18
+wrote that it did** (corrected at revision 20). Untraversable history is checkable:
+`history_traversal_error` answers before replay, so the cause is known and `unwired` is a conclusion
+the checker can reach.
+A git-version difference is not — the checker sees only that bytes disagree, exactly what a forged
+record produces, and there is no sealed runtime term to distinguish them. A rule that classifies by a
+cause the classifier cannot observe is unimplementable, and an implementer forced to guess would
+reach for the fail-open: treat mismatches as environmental and stop refusing anything.
+
+So **every completed replay mismatch is `violated`** (§5.3), without exception. Sealing a git version
+into the exposure to recover the distinction was rejected for the reason §5.2 already gives against
+comparing `toolkit_revision`: it would zero the support of every prior run on every git upgrade, and
+a signal that fires on every upgrade is one people learn to ignore.
+
+The residual is real and is stated rather than defended away: if git ever changes the output of one
+of the three pinned invocations, honest historical exposures become `EXPOSURE_UNREPRODUCIBLE`. What
+makes that acceptable is that it is *loud and caught upstream* — `tests/test_evidence_broker_
+canonical.py` exercises these invocations against real git, so such a change surfaces as a suite
+failure rather than as silently refused reviews, and the response is a deliberate re-probe under
+§3.2.1 and a `REPLAY_PROTOCOL_VERSION` bump. That is the mechanism §5.2 designed for precisely this
+event; it is a decision someone makes, not a classification the checker invents.
+
+**Served payloads are bounded, and the bound is enforced before the bytes are held** (revision 18).
+`run_git` captures a child's entire stdout in memory and the session then writes it to `served/`,
+where replay reads it again — so a single large blob or a broad pattern is an unbounded allocation
+repeated at least twice, and `MAX_BUDGET` requests amplify it. Plan 3 bounded the *journal* and left
+the *payload* unbounded, which is the same omission in a different quantity.
+
+- `MAX_SERVED_BYTES` is per request, and is derived from what a reviewer could actually have
+  consumed rather than chosen for roundness: a payload no agent can read is not evidence of exposure,
+  and at roughly four bytes per token a mebibyte already exceeds the context of the reviewers this
+  program contemplates. `MAX_RUN_SERVED_BYTES = MAX_BUDGET * MAX_SERVED_BYTES` follows, and is the
+  disk a single run can occupy.
+- **`read` is pre-checked, not truncated:** `cat-file -s <commit>:<path>` yields the blob size before
+  any content is read, so an oversized read never allocates.
+- **`search` and `history` must be bounded during capture**, since their output size is unknown in
+  advance. `run_git` gains an explicit output ceiling; exceeding it terminates the child and refuses.
+  A cap that only checks after `communicate()` returns has already spent the memory it exists to
+  protect.
+- **The ceiling belongs to `run_git`, not to the served operations** (revision 20). Revision 18
+  bounded the three requests an actor asks for and left unbounded every capture the broker performs
+  on its own behalf — which is the larger surface, and the one an actor reaches without asking:
+  - **`stderr`, on every call.** It is captured with `capture_output=True` alongside stdout, it is
+    actor-influenced (§3.2.1 records `alternates` emitting a warning on ordinary commands), and
+    §3.2's own classifier reads it. An unbounded diagnostic is an unbounded allocation.
+  - **The `config --list --name-only -z` preflight**, which `_filter_driver_overrides` runs before
+    *every* `run_git` call. Its size is the actor's to choose — `include.path` pulls in arbitrary
+    files — so it is unbounded input on the path that executes most often, and it is spent before
+    the request it precedes is even authorized.
+  - **The §3.1 tree scan.** `ls-tree -r -z --name-only` over a whole tree is proportional to the
+    repository, not to any request, and it too runs before a session is allowed to open.
+
+  **They share the ceiling and must NOT share the disposition** (revision 21). Revision 20 said
+  "each fails the same way", which put environment-dependent overflow into the journal and thereby
+  rebuilt the defect revision 20 had just removed from `history`. What a refusal may be recorded as
+  depends on whether the condition is **fixed by the pinned commit**:
+
+  | Overflow | Determined by | Disposition |
+  |---|---|---|
+  | served stdout (`read`, `search`, `history`) | the pinned commit | a journaled `Denial` — replays identically |
+  | `stderr`, on any call | mutable repository and runtime state | **fail the git invocation**; never journaled |
+  | the `config --list` preflight | `.git/config`, which the actor may edit at any time | **fail the git invocation**; never journaled |
+  | the §3.1 tree scan | the pinned commit, but runs before a run exists | **refuse to open the session** |
+
+  Journaling an environment-dependent refusal is a fail-open with a delay: an entry served before
+  `.git/config` grew would refuse at replay, the bytes would not match, and §5.3 would return
+  `EXPOSURE_UNREPRODUCIBLE` — **refusing an honest review for a file the actor edited afterwards.**
+  Failing the invocation instead reaches §6 as `unwired`, which is what a condition the environment
+  controls is supposed to produce.
+
+  In all four rows, exceeding the ceiling **refuses rather than truncates**. A truncated config
+  listing silently under-blanks filter drivers, and a truncated tree scan silently declares an
+  unscanned tree NFC; both are fail-opens dressed as robustness.
+- The refusal is a `Denial` with its own reason, distinct from a policy denial, and it is
+  **deterministic given the commit** — the same request refuses identically at replay, which is what
+  keeps §5.2 sound. Under §5.1 it contributes no coverage, like every other refusal.
+
+This is a change to what serving *does*, which is what §5.2's rule bumps `REPLAY_PROTOCOL_VERSION`
+for; revision 17 bumped it on a weaker argument about guarantees, and revision 18 makes the bump
+squarely the rule as written.
 
 **Defined misses are answers.** An absent path, a pattern with no matches, and a path with no commits
 are each served with an explicit marker, and each is distinguishable from its degenerate neighbour:
@@ -500,7 +1105,14 @@ scope was the set of channels someone thought to probe. `log.follow` was missed 
 changes served history whenever exactly one pathspec is given, which is any policy with no deny
 prefixes.
 | `cat-file blob <commit>:<path>` | nothing further — a blob read; a new subcommand to `git.py`, so probed under §3.2.1's rule before it ships |
-| all three | `LC_ALL=C`, `LANG=C` in the child environment |
+| all three | `LC_ALL=C`, `LANG=C`, `GIT_SHALLOW_FILE=/dev/null`, `GIT_NO_LAZY_FETCH=1` in the child environment |
+
+The last two are pinned for **all three** ops, not for `history` alone. §3.2 argues them from history
+because that is where a shallow boundary bites, but a partial clone withholds *blobs* as readily as
+trees — so `cat-file blob` and `grep` reach a promisor remote by the identical mechanism. A pin
+scoped to the op that motivated it would be this design's recurring defect in environment-variable
+form: **the guarantee stated on the axis where it was discovered rather than the axis where it
+holds.**
 
 **What was probed, and what actually executes.** Against git 2.55.0 in a scratch
 repository, under exactly the argv the broker builds:
@@ -878,7 +1490,7 @@ may live — but the honest statement is that the anchoring rule is enforced for
 `served/` and not for the baseline. Recorded here rather than implied away; closing it is a change to
 plan 1's shipped `autonomy/baseline.py` and belongs to whichever slice next touches that module.
 
-Plan 4's replay and correspondence work inherits this: anything that later reads the journal or
+Plan 4b's replay and correspondence work inherits this: anything that later reads the journal or
 `served/` reads it the same way.
 
 **The served file is written before the journal line, not after.** The journal is the record of what
@@ -1024,14 +1636,19 @@ class Correspondence(_Base):
     code: str | None = None      # required when unwired
     reason: str | None = None
 
-class ReviewSubmission(_Base):
-    """What a producer offers. Carries NO correspondence field — not a field a
-    producer may leave blank, a field it cannot express."""
+class ReviewAttestation(_Base):
+    """Who is reviewing, asserted by the caller that KNOWS — never by the reviewer.
+    The exact counterpart of `IngestionProvenance` at `ingest_report`."""
     reviewer_kind: ReviewerKind
     reviewer_ref: ...
     lens: ...
     model: ...
     run_ref: ...
+
+class ReviewSubmission(_Base):
+    """What a producer offers: its FINDINGS, and nothing about its own identity.
+    Carries no correspondence field and no identity field — not fields a producer
+    may leave blank, fields it cannot express."""
     outcome: ...
     note: ...
     evidence: tuple[Evidence, ...] = ()
@@ -1049,8 +1666,54 @@ constrain a value's shape but can never establish its provenance. Making the sub
 incapable of carrying a correspondence is stronger than checking that it did not: there is no check to
 forget. `AuditReport` versus `AuditFindingRecord` is the same split, for the same reason.
 
+**Revision 18 applies that same argument to identity, which revisions 1–17 left the producer to
+assert.** `reviewer_kind` sat on `ReviewSubmission` while §5.4 branched on it, so an agent could
+label itself `human` or `deterministic`, skip correspondence entirely, and count as full support —
+the whole of §5 bypassed by one string. The submission could also vary `reviewer_ref` or `lens` to
+mint several distinct `review_id`s from a single run, turning one reviewer into a quorum, because
+`review_id` hashes exactly those fields.
+
+The fix is not to validate the claim but to remove the producer's ability to make it. Identity moves
+to `ReviewAttestation`, supplied by the caller that actually knows — the same trust boundary
+`IngestionProvenance` already establishes for `ingest_report`, and the thing the previously
+unexplained `actor` parameter was gesturing at. §0's boundary 2 already required this of both
+writers: "both recompute actor-supplied provenance at the boundary rather than accepting it." §5.4
+simply had not applied its own rule to the field that selects whether §5 runs at all.
+
+**And for an agent, the attestation is itself cross-checked against sealed state**, because a
+trusted caller can still be wrong:
+
+- `reviewer_ref` must equal the run record's `agent`, and `model` its `model`. Both are sealed
+  fields on `AutonomousRunRecord` and neither is derivable from the submission.
+- `lens` must equal `exposure.instrument.ref` **when the run record carries an exposure**. The
+  instrument is what defined the judgement procedure and is sealed at §4.1; a review claiming a lens
+  the run was not opened under is describing a different run.
+
+Mismatch is an `IngestError`, not a weaker correspondence: this is not "could not check", it is a
+record disagreeing with the run it names.
+
+**The two cross-checks have different preconditions, and revision 19 stated them as one**
+(revision 20). `agent` and `model` are fields of `AutonomousRunRecord` itself, so those comparisons
+hold for every agent review. The instrument is a field of the *exposure*, which an unbrokered run
+does not have — and §5.3 requires exactly that case to be stored as `unwired` / `NO_EXPOSURE`. As
+written, the boundary demanded an instrument in the one situation defined by its absence.
+
+Making the lens check conditional gives up nothing that was being protected. `lens` is attested, so a
+producer cannot vary it in the first place; the check defends against a mistaken trusted caller. And
+a review with no exposure is `unwired`, which §4.2.1 excludes from `confirmation_count` — so a wrong
+lens on an unbrokered review cannot buy support, and cannot mint a countable second `review_id`
+either. The check is dropped exactly where its subject does not exist and its absence costs nothing.
+
 `Correspondence` mirrors `InstrumentResult`'s invariant — `unwired` requires a machine-readable code
 — so both ways this toolkit says "could not run" have one shape.
+
+**Revision 17 strengthens that to: `code` is required whenever `status != "verified"`.** Revisions
+1–16 required it only under `unwired`, which was coherent while `violated` was refused at
+`append_review` and never stored. It stops being coherent once §5's checker (plan 4b) ships ahead of
+that boundary (plan 4c): `check_correspondence` returns a `violated` result to a caller, and without
+this the §5.3 codes `EXPOSURE_UNREPRODUCIBLE` and `CITATION_UNSERVED` would be unrepresentable on the
+value that carries them — recoverable only as prose in an error message. `verified` remains the one
+status with nothing to explain.
 
 `evidence` is bounded by the existing `MAX_EVIDENCE_ENTRIES`.
 
@@ -1215,10 +1878,41 @@ and under `--broker-spec` it is derived from `control_plane.run_dir()` rather th
 ## 5. Correspondence
 
 ```python
-def check_correspondence(review, exposure, *, repo) -> Correspondence
+def check_correspondence(
+    evidence: Sequence[Evidence], exposure: EvidenceExposure | None, *, repo: Path
+) -> Correspondence
 ```
 
+**`| None` is what lets 4b own the whole of §5.3** (revision 21). Its first row is
+`unwired` / `NO_EXPOSURE`, and a signature requiring an exposure cannot produce the outcome defined by
+there not being one — the same defect as revision 20's lens precondition, one slice over. The absent
+case is a classification, so it belongs with the classifier; the alternative has `append_review`
+constructing `Correspondence` values on one path and delegating on another, which is two producers
+of one verdict.
+
+**4b owns §5.3's *classification* column and nothing else.** "Stored?" is `append_review`'s behaviour
+and "Counts as support?" is `confirmation_count`'s — both 4c. The table reads as one rule per row
+because the three answers move together, but they are set in two different slices, and a 4b
+implementer who reads the storage column as a requirement will build a boundary 4c then has to
+unbuild.
+
 The live session is gone from the signature: everything replay needs is sealed into `exposure`.
+
+**It takes citations, not a `Review`** (revision 20). Revisions 1–19 passed a `review`, which made
+the checker depend on a field the merged `Review` does not have — `evidence` arrives with §4.2's
+changes, and those belong to plan 4c. A checker that cannot be written until its consumer's model
+lands is a slice boundary that does not hold. Taking `Sequence[Evidence]` removes the dependency
+outright rather than resequencing to work around it: plan 4b then touches **no audit-record model at
+all**, and §5.4 passes `submission.evidence` at the boundary. It is also the honest signature — the
+checker never reads a reviewer's identity, outcome, or note, and a parameter it does not use is a
+coupling it should not have.
+
+**Modules (plan 4b).** `evidence_broker/hits.py` parses `git grep -n -z` output into hits and runs no
+git of its own — pure bytes in, `(path, line)` out — so the NUL-record contract of §5.1 can be
+certified against real `git grep` output without an exposure, a repository or a review in the
+picture. That isolation is worth a module because revisions 1–9 stated the format wrongly in prose
+and nothing caught it. `evidence_broker/correspondence.py` holds the served map and the check.
+`serve.py` is untouched by this slice; §3.1's NFC rule lands in the session's open path.
 
 ### 5.1 The served set — coverage, not paths
 
@@ -1265,10 +1959,49 @@ matched lines are recoverable from the served bytes — **NUL-separated, not col
 Revisions 1–9 said `<commit>:<path>:<line>:` here while §3.2.1's own table pinned `-z`, which
 changes the separator. A parser written to the colon spelling recovers no line numbers at all, so
 every search-derived citation would be `CITATION_UNSERVED` and §5.3 would refuse an honest review.
-The NUL form is what ships and what plan 3 must parse; a path is unambiguous under it, which is why
-`-z` is pinned in the first place — which is a second reason replay is not optional, since
-the journal stores only a hash of them. Where a path is both read and searched, `FULL` supersedes
-`LINES`.
+The NUL form is what ships and what **plan 4b** parses — plan 3 was named here through revision 16
+and shipped without touching it; a path is unambiguous under it, which is why `-z` is pinned in the
+first place — which is a second reason replay is not optional, since the journal stores only a hash
+of them. Where a path is both read and searched, `FULL` supersedes `LINES`.
+
+**The pinned argv makes the record format tighter than "NUL-separated", in two ways a plausible
+parser gets wrong.** `_GREP_ARGV` pins `-a` and `--no-column`, so every record is exactly
+`<commit>:<path>` NUL `<line>` NUL `<matched content>` LF, and there is no `Binary file … matches`
+variant to special-case — `-a` means even a binary file yields ordinary numbered hits.
+
+- **Split each record on NUL with `maxsplit=2`; never split the whole payload on NUL.** Because `-a`
+  serves binary content as text, matched content can itself contain NUL bytes. `maxsplit=2` makes
+  them inert; a whole-payload split silently invents fields from them.
+- **Remove the `<commit>:` prefix by exact string removal, not by splitting on `:`.** The commit is
+  known to the parser, and a path may legitimately contain a colon.
+
+Records are LF-delimited, and matched content cannot contain LF because a matched line ends at one.
+
+**Two definitions this section left implicit, which is where off-by-one defects live.** `line_count`
+is the number of LF-terminated lines plus one if any bytes follow the final LF; an empty payload is
+`line_count = 0`, so every line citation into an empty file fails rather than passing by vacuity. And
+`ABSENT` is the strongest claim the table can express — it is what certifies "this file does not
+exist at this commit" — which is why §3.1's NFC rule has to hold for it to mean anything at all.
+
+**`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
+`Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
+never stored, so putting it in `science_model` beside the sealed types would advertise a durability
+it does not have. `Correspondence`, which *is* returned across the boundary, ships in its **own
+dependency-neutral module**, `science_model/correspondence.py`, importing pydantic and nothing else.
+
+Revisions 17–22 put it in `evidence_broker.py` beside `Outcome`, which reads well and does not load:
+`evidence_broker.py` imports `audit.subjects`, and `science_model/audit/__init__.py` eagerly imports
+`audit.record`, so `import science_model.evidence_broker` already pulls in `audit.record` — verified
+by probe. Having `audit.record` import `Correspondence` back from `evidence_broker` would close that
+into a cycle through a partially initialised module. A leaf module both sides import is not a
+compromise between the two homes; it is the only placement under which neither package depends on
+the other.
+
+**The cited set.** `line` and `span` are already mutually exclusive on `LocationEvidence`, so a
+citation cites `{line}`, or every line from `span.start_line` to `span.end_line` inclusive, with
+columns ignored. A `LocationEvidence` bearing no `line`, `span` or `pointer` is a bare path citation
+and corresponds under any coverage present in the map, `ABSENT` included — "this file is not here" is
+a path-only claim and is exactly the finding §5.1 ends by protecting.
 
 A `LocationEvidence` corresponds iff:
 
@@ -1321,8 +2054,23 @@ Inline entries are not in the tree and cannot be re-served; they are checked aga
 manifest is *declared* (§4.3) and the exposure is where it is *sealed* (§4.1); replay reads the sealed
 copy, and reaches for no control-plane file at all.
 
-Memoised on `(commit, op, target, pathspec)` within an ingestion run; reviews of sibling documents
-read many of the same files.
+**No cross-exposure memoisation.** Revisions 1–17 memoised on `(commit, op, target, pathspec)` within
+an ingestion run, on the reasoning that reviews of sibling documents read many of the same files. That
+key is unsound: the surface policy is sealed per exposure (§4.1) and it changes both authorization and
+the exclusion pathspecs handed to `grep` and `log`, so one ingestion run spanning two runs with
+different deny policies would serve a cached payload from the wrong policy and classify an honest
+exposure as `EXPOSURE_UNREPRODUCIBLE`.
+
+Adding the policy to the key would be sound, but nothing here has been measured — replay is bounded by
+`MAX_BUDGET` requests per exposure, and a cache introduced ahead of a measurement is a correctness
+risk bought with a guess. Memoisation is therefore **within a single exposure only**, where the sealed
+policy is by construction one value. If cross-exposure replay is ever shown to be the bottleneck, the
+key includes the policy identity, and that is a change made against a number.
+
+**Replay performs no NFC check of its own.** §3.1's rule is enforced at session open against the
+pinned commit, and a commit's tree is immutable, so an exposure that exists at all was sealed against
+a tree that satisfied it. Re-checking here would be a second guard for a property already
+established — and a second place to get it wrong.
 
 **Replay is bound to a `REPLAY_PROTOCOL_VERSION`, not to `toolkit_revision`.** Reproducing a hash
 depends on the serving implementation — the defined-miss markers, the canonical argv of §3.2.1, the
@@ -1341,9 +2089,15 @@ checked-and-found-false, consistent with every other row of §5.3. Ordinary rele
 a real change to what serving means invalidates exactly the runs it should, loudly, with a code that
 says why.
 
-The exposure checked is the one belonging to `review.run_ref`, resolved by `append_review` from that
-run's record and baseline. A review checked against some other run's exposure is checked against
-nothing.
+The exposure checked is the one belonging to the attested `run_ref`, resolved by `append_review` from
+that **run's record — and from nothing else**. A review checked against some other run's exposure is
+checked against nothing.
+
+Revisions 5–17 said "that run's record and baseline" here while §5.4 said "the run record and nothing
+else. No baseline, no control-plane lookup, no session." Both could not be true, and the baseline
+spelling is the wrong one: §4.1 seals every replay input into the exposure precisely so this boundary
+needs no control-plane file, and re-admitting one would reintroduce the project-rename failure §4.1
+exists to close. §5.4 governs.
 
 ### 5.3 Outcomes
 
@@ -1355,6 +2109,15 @@ nothing.
 | Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
 | Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
 | Replay ran; everything corresponded | `verified` | yes | yes |
+
+**The rows are ordered, and the order is load-bearing.** The three `unwired` conditions are decided
+first, before any git call — a protocol mismatch in particular short-circuits, since re-serving under
+a protocol whose meaning has changed produces bytes that answer no question. Then **replay integrity
+is checked in full, and any entry that fails to reproduce short-circuits to
+`EXPOSURE_UNREPRODUCIBLE`; citations are never evaluated.** A served map built from entries that did
+not reproduce is not a map of anything, so reporting `CITATION_UNSERVED` off it would name a symptom
+as the cause and point an operator at the reviewer instead of at the record. Only against a fully
+reproduced exposure are citations checked.
 
 The checker reproduces the distinction it exists to enforce: *could not check* is not *checked and
 found false*. A journal that fails to reproduce at a pinned commit under a canonical invocation is not
@@ -1369,10 +2132,17 @@ two would be the empty/unwired confusion one level up.
 ### 5.4 The append boundary
 
 ```python
-def append_review(project_root, finding_id, submission: ReviewSubmission, *, actor) -> Review
+def append_review(
+    project_root, finding_id, submission: ReviewSubmission,
+    *, attestation: ReviewAttestation, actor: str,
+) -> Review
 ```
 
-- **Branches on `reviewer_kind`.** Only an agent submission resolves a run record and runs
+`actor` is the writer of the record — the same nonblank, NUL-free string `ingest_report` demands —
+and is not a reviewer identity. `attestation` is the reviewer identity, and is the *only* source of
+one: revisions 1–17 conflated the two into a single unexplained parameter.
+
+- **Branches on the ATTESTED `reviewer_kind`, never a submitted one.** Only an agent review resolves a run record and runs
   `check_correspondence`. Human and deterministic submissions get `correspondence=None` and are stored.
   Revision 3 resolved a baseline for every submission, which would have made the boundary unusable for
   the two reviewer kinds §4.2.1 says are unaffected: a human review's `run_ref` need not name an
@@ -1532,8 +2302,13 @@ downgrade is a lie about what was checked.
   and refuses a lined one; **a search miss and an empty history contribute no coverage at all**; an
   inline target absent from the baseline manifest does not correspond; a policy narrowed between
   serving and replay does not silently re-serve denied hits; the vacuous `verified`.
-- **`append_review`** — a human submission is stored without a baseline existing at all; the same for
-  `deterministic`; an agent submission whose run has no baseline yields `unwired`, not a crash.
+- **`append_review`** — a human review is stored with no control-plane directory existing at all; the
+  same for `deterministic`; an agent review whose run record carries **no exposure** yields
+  `unwired`, not a crash. Plus attestation (revision 18): a submission cannot express a
+  `reviewer_kind` at all, so the `human`-labelled-agent bypass is unconstructible; an attested agent
+  whose `reviewer_ref` or `model` disagrees with the run record is an `IngestError`; the same for a
+  `lens` that is not `exposure.instrument.ref`; and two submissions under one run cannot mint two
+  `review_id`s, because every field the id hashes is attested rather than supplied.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
@@ -1543,6 +2318,114 @@ downgrade is a lie about what was checked.
 closed downstream survived a green suite until it was negative-tested, and four of the six defects in
 revision 1 of this document were guards that looked right on the page. A guard nobody has watched fail
 is a guard nobody has tested.
+
+**Plan 4's roster is written as pairs — the mutation beside the test it must turn red — because
+across plans 2 and 3 the recurring finding was a mutation that left its test green and therefore
+certified nothing.** The `Slice` column is not decoration: a mutation is only meaningful against a
+tree where the guard it breaks exists, so a 4b row run during 4a is green for the wrong reason.
+
+| Slice | Mutation | Test that must fail |
+|---|---|---|
+| 4a | Delete the NFC/UTF-8 tree check at open | a session against an NFD tree opens |
+| 4a | Drop `GIT_SHALLOW_FILE` from `_ENVIRONMENT` | `history` served after `.git/shallow` is written mid-run does not match the same request served before it |
+| 4a | Drop `GIT_NO_LAZY_FETCH` from `_ENVIRONMENT` | a request against a `--filter=tree:0` clone whose promisor remote **still holds the objects** fails, rather than serving them |
+| 4a | Drop the traversal check at open | a brokered run against a genuinely shallow clone opens |
+| 4a | Diagnose with `rev-parse --is-shallow-repository` through hardened `run_git` | a **complete** repository reports no traversal error |
+| 4a | Diagnose with `rev-parse --is-shallow-repository` under a detector-specific environment omitting `GIT_SHALLOW_FILE` | a complete repository with `.git/shallow` **planted** reports no traversal error |
+| 4a | Journal a shallow-`history` refusal instead of refusing at open | a brokered run against a shallow clone opens instead of refusing before session creation |
+| 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
+| 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
+| 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
+| 4a | Bound stdout only | an oversized `stderr` refuses |
+| 4a | Exempt the `config --list` preflight | a repository whose `include.path` yields an oversized listing refuses |
+| 4a | Exempt the tree scan | an oversized `ls-tree` refuses instead of declaring the tree NFC |
+| 4a | Truncate instead of refusing at the ceiling | an over-ceiling config listing does not silently under-blank filter drivers |
+| 4a | Journal a served `stderr` overflow as a `Denial` | search and history propagate the overflow instead of returning `payload-too-large` |
+| 4a | Turn a configuration-preflight `GitError` into a `Denial` | a served operation propagates the base invocation failure instead of returning a refusal |
+| 4a | Make a tree-scan overflow a `Denial` instead of refusing to open | an oversized tree opens no session |
+| 4a | Omit `GitError` from the `autonomy start` boundary | a hardened-git open failure exits 1 instead of the documented exit 2 |
+| 4b | Let `REFUSED` contribute `Full(0)` | a citation to a policy-denied path is refused |
+| 4b | Drop `Full` superseding `Lines` | a path both read and searched admits a line outside the hits |
+| 4b | `split(b"\0")` without `maxsplit=2` | a binary hit whose matched content holds a NUL parses |
+| 4b | Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
+| 4b | Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
+| 4b | Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
+| 4b | Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
+| 4b | Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
+| 4b | Drop the traversal check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
+| 4b | Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
+| 4c | Re-add `reviewer_kind` to `ReviewSubmission` and branch on it | constructing a submission carrying `reviewer_kind` raises |
+| 4c | Skip the agent cross-check against the run record | an attested agent whose `model` disagrees with its run record is stored |
+| 4c | Skip the lens cross-check | an attested `lens` that is not `exposure.instrument.ref` is stored |
+| 4c | Apply the lens cross-check unconditionally | an agent review whose run has **no** exposure stores as `unwired`, not `IngestError` |
+
+**The import-cycle row must run in a subprocess, and the direction is not symmetric.** Written as an
+in-process `import science_model.audit.record`, the assertion probes the *safe* direction: it
+initialises `audit` first, after which importing `evidence_broker` succeeds — and under pytest it is
+worse than useless, because collection has almost certainly imported one of the two already and
+`sys.modules` returns a hit without executing anything. The failing direction is a **fresh
+interpreter** entering `science_model.evidence_broker`, which reaches `audit/__init__` and loops back
+into a partially initialised `audit.record`. Spawn it; do not trust the ambient module cache. This is
+the general form: *a cycle test that shares a process with its own test runner tests the runner's
+import order.*
+
+**The lazy-fetch row has three ways to go wrong, and the third is the interesting one.**
+
+1. `uploadpack.allowFilter` defaults to **false**: a `--filter=tree:0` clone from a serving
+   repository without it comes back *complete*, so the mutation has nothing to expose and the test
+   passes against the defect. Set it on the serving side, and assert the filter actually took before
+   serving anything.
+2. The promisor remote must still hold the objects and be reachable — point it at a `file://` path
+   that exists. With the remote gone, both the pinned and unpinned runs fail, and the pair proves
+   nothing. The row tests *whether git goes and gets it*, not whether the request errors.
+3. **The precondition in (1) must not be built out of the thing being mutated.** Every obvious way to
+   ask "is this tree absent?" is itself a lazy-fetch trigger. Measured, git 2.55, fresh
+   `--filter=tree:0` clone: unpinned `git cat-file -e <tree>` **exits 0 and spawns a fetch**, and
+   unpinned `git rev-parse 'HEAD~1^{tree}'` inside the clone spawns one too. So a fixture that
+   derives the OID in the partial clone, or checks absence through `run_git`, does not merely
+   misreport under the mutation — **it fetches the object in and destroys the condition it was
+   establishing.** The mutation then fails during setup, and a row that dies in setup certifies
+   nothing about serving, which is the whole point of the pair.
+
+   Derive the tree OID from the **source** repository, and run the absence check with a *test-owned,
+   explicit* `GIT_NO_LAZY_FETCH=1` rather than through `run_git` or the ambient environment. The
+   precondition must hold on a tree where the production pin has been deleted; if it borrows that
+   pin, it is not a precondition.
+
+**This is the FIFO/`ENXIO` lesson in a new costume** (§7's standing rule, and the reason the
+maximal-mutation probe exists): a parametrization that measures the environment rather than the
+guard. There the kernel refused the open before `S_ISREG` was ever consulted; here git satisfies the
+precondition by fetching before serving is ever reached. **Ask of every fixture: which line does the
+mutation break first?** If the answer is a setup line, the row is not testing what its name says.
+
+**The two `.git/shallow` rows are not redundant, and the first is the one that carries the
+guarantee.** Dropping the env pin leaves the open-time check green — the run opens against a clean
+repository, exactly as intended — and the defect appears only once an actor writes `.git/shallow`
+after opening. A fixture that checks shallowness at open and never mutates it certifies neither row.
+Write the mutation as: serve one `history` request, write `.git/shallow`, serve the identical
+request, compare.
+
+**The two `--is-shallow-repository` rows are also a pair, and they stand for the two ways revision 27
+nearly wrote the diagnostic.** Through hardened `run_git` the proxy is constant-`true` and refuses
+every brokered run — caught by the complete-repository row alone. Given its own environment with the
+pin omitted it works for genuine shallow clones but also answers `true` to a planted `.git/shallow`,
+letting an actor refuse its own run's open — caught by the planted row alone. Note what neither row
+is: dropping `GIT_SHALLOW_FILE` does **not** change `history_traversal_error`'s answer in either
+fixture (measured — unpinned, a planted graft makes `rev-list --count` stop early at exit 0, so there
+is still no error), so no row may claim it does.
+
+**The first 4c row is a different kind of pair and must not be graded like the others.** Identity is
+prevented structurally, not checked, so on the fixed tree there is no behaviour to negative-test —
+the `human`-labelled-agent bypass cannot be expressed. The test is therefore that *constructing* the
+bad submission fails, and the mutation is re-opening the field. A reviewer looking for a
+behavioural test here will not find one, and should not read its absence as a gap: it is what §4.2
+means by "not a field a producer may leave blank, a field it cannot express."
+
+**The `Full`-supersedes-`Lines` row is the one to distrust**, and its fixture is specified here rather
+than left to an implementer: it needs a single exposure in which one path is **both read and
+searched**. Against a fixture where every path is read or searched but never both, the mutation stays
+green and the row certifies nothing — the precise shape of the vacuous parametrizations found in
+plan 2.
 
 ## 8. Consequences
 

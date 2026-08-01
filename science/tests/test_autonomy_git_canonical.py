@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from science_tool.autonomy.git import run_git
+from science_tool.autonomy.git import GitError, GitOutputTooLarge, history_traversal_error, run_git
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -249,3 +250,314 @@ def test_the_filter_fixture_is_live(tmp_path: Path):
     )
 
     assert (root / "a.txt").read_bytes() != committed
+
+
+def _commit(repo: Path, name: str, body: str) -> None:
+    """Write `body` to `name` and commit it. The commit MESSAGE is the file name, not the body:
+    a 4 KiB commit message would work but makes `git log` output unreadable when a test fails."""
+    (repo / name).write_text(body, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", name], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", name],
+        check=True,
+        capture_output=True,
+        env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"},
+    )
+
+
+@pytest.fixture
+def three_commit_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "src"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True, capture_output=True)
+    for text in ("one", "two", "three"):
+        _commit(repo, "f.txt", text)
+    return repo
+
+
+def test_stdout_overflow_refuses_and_does_not_truncate(three_commit_repo: Path) -> None:
+    """Refuse, never truncate. A truncated answer is a wrong answer that looks like an answer."""
+    _commit(three_commit_repo, "big.txt", "x" * 4096)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:big.txt", stdout_limit=64)
+
+    assert caught.value.stream == "stdout"
+    assert caught.value.limit == 64
+    assert 64 < caught.value.consumed <= 64 + (1 << 16)
+
+
+def test_an_overflow_reaches_an_existing_git_error_handler(three_commit_repo: Path) -> None:
+    """Five call sites convert `GitError` into `unwired`. An overflow must land in that net.
+
+    Asserted through the HIERARCHY rather than by importing a caller: the claim is that any of
+    the five keeps working, and `except GitError` is exactly what all five spell.
+    """
+    _commit(three_commit_repo, "big.txt", "x" * 4096)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert issubclass(GitOutputTooLarge, GitError)
+    with pytest.raises(GitError):
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:big.txt", stdout_limit=64)
+
+
+def test_the_ceiling_is_checked_during_capture_not_after(three_commit_repo: Path) -> None:
+    """A cap tested after the loop has already spent the memory it exists to protect.
+
+    ASSERTED ON `consumed`, not on the exception type: both dispositions raise
+    `GitOutputTooLarge`, so `pytest.raises` alone cannot separate them. Enforced during capture,
+    the buffer holds at most the limit plus the one chunk that crossed it; enforced afterwards, it
+    holds the entire 1 MiB blob. A comment claiming the call "returns promptly" measures nothing.
+    """
+    payload = "z" * (1 << 20)
+    _commit(three_commit_repo, "huge.txt", payload)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "blob", f"{commit}:huge.txt", stdout_limit=1024)
+
+    assert caught.value.consumed <= 1024 + 65536, (
+        f"buffered {caught.value.consumed} bytes before refusing a 1024-byte ceiling; "
+        "the check ran after capture, not during it"
+    )
+    assert caught.value.consumed < len(payload)
+
+
+def test_a_payload_at_the_limit_is_served(three_commit_repo: Path) -> None:
+    """The boundary is inclusive; a payload of exactly `stdout_limit` bytes is not an overflow.
+
+    Without this pair, an off-by-one that refused every payload would pass the test above.
+    """
+    body = "y" * 100
+    _commit(three_commit_repo, "exact.txt", body)
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    completed = run_git(
+        three_commit_repo, "cat-file", "blob", f"{commit}:exact.txt", stdout_limit=len(body)
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == body.encode()
+
+
+def test_stderr_is_bounded_on_every_call(three_commit_repo: Path, monkeypatch) -> None:
+    """`stderr` is captured alongside stdout on EVERY call and is actor-influenced.
+
+    §3.2.1 records `.git/objects/info/alternates` emitting a warning on ordinary commands, so an
+    unbounded diagnostic is an unbounded allocation on a path the actor reaches without asking.
+    """
+    monkeypatch.setattr("science_tool.autonomy.git.MAX_GIT_STDERR_BYTES", 32)
+    alternates = three_commit_repo / ".git" / "objects" / "info"
+    alternates.mkdir(parents=True, exist_ok=True)
+    (alternates / "alternates").write_text("/" + "n" * 4096 + "\n", encoding="utf-8")
+
+    with pytest.raises(GitOutputTooLarge) as caught:
+        run_git(three_commit_repo, "cat-file", "-t", "HEAD")
+
+    assert caught.value.stream == "stderr"
+
+
+def test_a_large_stdin_payload_does_not_deadlock(three_commit_repo: Path) -> None:
+    """The regression guard for the shape this task replaces.
+
+    Writing all of stdin before reading anything deadlocks once the child's own output fills its
+    pipe: the child blocks on stdout, stops reading stdin, and the parent blocks on stdin.
+    MEASURED with `cat` and a 4 MiB write -- never returns. `check-ignore --stdin -z --verbose`
+    both consumes a large stdin and emits a large stdout, so it exercises both directions at once.
+
+    THE `.gitignore` IS WHAT MAKES THIS TEST ABLE TO FAIL. With no ignore rule, `check-ignore
+    --verbose` matches nothing and emits ZERO bytes on stdout -- MEASURED, exit 1, 0 bytes -- so
+    the child never blocks, the parent drains stdin freely, and the write-first implementation
+    PASSES. Committing `*` makes every path produce a verbose line (~23 bytes each; 46 bytes for
+    two paths, measured), so 50k paths push well past the pipe buffer in both directions.
+
+    THE ALARM IS LOAD-BEARING. `pytest-timeout` is not a dependency of this package, and a
+    deadlock's failure mode is SILENCE -- without this the regression hangs the suite instead of
+    failing it, which is worse than not testing it at all. SIGALRM is POSIX-only; this suite
+    already runs Linux-only tooling, and a handler that raises propagates through the blocked
+    write (PEP 475 retries on EINTR only when the handler does NOT raise).
+    """
+
+    def _timeout(signum, frame):
+        raise TimeoutError("run_git deadlocked writing stdin while the child wrote stdout")
+
+    _commit(three_commit_repo, ".gitignore", "*\n")
+    # NUL-TERMINATED, not NUL-separated: `-z` framing means a trailing record without its
+    # terminator is incomplete, and git may hold it rather than answer.
+    paths = b"".join(f"dir{n}/file{n}.txt\0".encode() for n in range(50000))
+    previous = signal.signal(signal.SIGALRM, _timeout)
+    signal.alarm(30)
+    try:
+        completed = run_git(
+            three_commit_repo,
+            "check-ignore",
+            "--stdin",
+            "-z",
+            "--verbose",
+            "--no-index",
+            input=paths,
+        )
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+    assert completed.returncode == 0, "every path should match the `*` rule"
+    assert len(completed.stdout) > (1 << 16), (
+        "the child produced less than one pipe buffer of output, so this test could not have "
+        "deadlocked even against the write-first implementation"
+    )
+
+
+def test_the_config_preflight_is_bounded(three_commit_repo: Path, monkeypatch) -> None:
+    """The preflight runs before EVERY `run_git` call and its size is the actor's to choose.
+
+    `include.path` pulls in arbitrary files, so this is unbounded input on the path that executes
+    most often -- and it is spent before the request it precedes is even authorized.
+    """
+    monkeypatch.setattr("science_tool.autonomy.git.MAX_CONFIG_LIST_BYTES", 64)
+    included = three_commit_repo / "extra.config"
+    included.write_text(
+        "".join(f"[filter \"d{n}\"]\n\tclean = cat\n" for n in range(200)), encoding="utf-8"
+    )
+    subprocess.run(
+        ["git", "-C", str(three_commit_repo), "config", "include.path", str(included)],
+        check=True,
+        capture_output=True,
+    )
+
+    with pytest.raises(GitError) as caught:
+        run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    # The preflight's output depends on mutable `.git/config`, so its overflow must be translated
+    # to the non-journalable base exception. This exact-type assertion fails if the
+    # `GitOutputTooLarge` subtype leaks to a serving caller.
+    assert type(caught.value) is GitError
+
+
+def test_selector_setup_failure_reaps_the_child_and_closes_its_pipes(
+    three_commit_repo: Path, monkeypatch
+) -> None:
+    """Post-`Popen` setup is inside the same cleanup guarantee as the capture loop.
+
+    Selector construction, nonblocking setup, and registration can fail after the child exists.
+    A raw exception, live child, or open pipe bypasses the `GitError` contract and leaks resources.
+    """
+    spawned: list[subprocess.Popen[bytes]] = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        spawned.append(process)
+        return process
+
+    def fail_selector():
+        raise OSError("selector unavailable")
+
+    monkeypatch.setattr("science_tool.autonomy.git.subprocess.Popen", recording_popen)
+    monkeypatch.setattr("science_tool.autonomy.git.selectors.DefaultSelector", fail_selector)
+
+    with pytest.raises(GitError):
+        run_git(three_commit_repo, "rev-parse", "HEAD")
+
+    assert len(spawned) == 1
+    process = spawned[0]
+    assert process.poll() is not None
+    assert process.stdout is not None and process.stdout.closed
+    assert process.stderr is not None and process.stderr.closed
+
+
+def test_a_planted_shallow_file_does_not_shorten_history(three_commit_repo: Path) -> None:
+    """The actor writes `.git/shallow` AFTER the run opens; a check at open cannot see it.
+
+    Unpinned, this is 2 commits at exit 0 -- a silently shortened answer to a pinned commit.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+    parent = run_git(three_commit_repo, "rev-parse", "HEAD~1").stdout.decode().strip()
+
+    before = run_git(three_commit_repo, "log", "--pretty=format:%H", commit).stdout
+    (three_commit_repo / ".git" / "shallow").write_text(f"{parent}\n", encoding="utf-8")
+    after = run_git(three_commit_repo, "log", "--pretty=format:%H", commit).stdout
+
+    assert after == before
+    assert len(before.decode().split()) == 3
+
+
+def test_a_partial_clone_fails_rather_than_fetching(tmp_path: Path, three_commit_repo: Path) -> None:
+    """A promisor remote is an egress channel, not just a source of non-determinism.
+
+    `uploadpack.allowFilter` MUST be set on the serving side: it defaults to false, and without
+    it the filtered clone comes back COMPLETE and this test passes against the defect.
+    """
+    subprocess.run(
+        ["git", "-C", str(three_commit_repo), "config", "uploadpack.allowFilter", "true"],
+        check=True,
+        capture_output=True,
+    )
+    clone = tmp_path / "partial"
+    subprocess.run(
+        ["git", "clone", "-q", "--filter=tree:0", "--no-checkout",
+         f"file://{three_commit_repo}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+    # PRECONDITION, and it must not be built out of the thing under test: derive the OID from the
+    # SOURCE repository and check absence with our own explicit pin. Unpinned `cat-file -e` in the
+    # clone exits 0 AND fetches the object in, destroying the condition it was establishing.
+    tree = run_git(three_commit_repo, "rev-parse", "HEAD~1^{tree}").stdout.decode().strip()
+    probe = subprocess.run(
+        ["git", "-C", str(clone), "cat-file", "-e", tree],
+        capture_output=True,
+        env={**os.environ, "GIT_NO_LAZY_FETCH": "1"},
+    )
+    assert probe.returncode != 0, "the filter did not take; check uploadpack.allowFilter"
+
+    commit = run_git(clone, "rev-parse", "HEAD").stdout.decode().strip()
+    completed = run_git(clone, "log", "--pretty=format:%H", commit, "--", "f.txt")
+
+    assert completed.returncode != 0
+    assert b"unable to read tree" in completed.stderr
+
+
+def test_a_complete_repository_has_no_history_traversal_error(three_commit_repo: Path) -> None:
+    """The baseline half of the pair below, and the assertion the PROXY cannot satisfy.
+
+    MEASURED, git 2.55: `rev-parse --is-shallow-repository` reads `true` for a COMPLETE repository
+    under `GIT_SHALLOW_FILE=/dev/null`, so swapping this probe for it turns this test red.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_planted_shallow_file_is_not_a_history_traversal_error(three_commit_repo: Path) -> None:
+    """The diagnostic answers to the OBJECTS, not to the actor's file.
+
+    Unpinning the detector so `--is-shallow-repository` could see a genuine boundary would also let
+    it see this one -- an actor could refuse its own run's open by writing a file. Every object is
+    present here, so history is traversable and the plant means nothing.
+    """
+    commit = run_git(three_commit_repo, "rev-parse", "HEAD").stdout.decode().strip()
+    parent = run_git(three_commit_repo, "rev-parse", "HEAD~1").stdout.decode().strip()
+    (three_commit_repo / ".git" / "shallow").write_text(f"{parent}\n", encoding="utf-8")
+
+    assert history_traversal_error(three_commit_repo, commit) is None
+
+
+def test_a_genuine_shallow_clone_is_a_history_traversal_error(
+    tmp_path: Path, three_commit_repo: Path
+) -> None:
+    """Objects genuinely absent: git's own words come back for the operator message."""
+    clone = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{three_commit_repo}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+    commit = run_git(clone, "rev-parse", "HEAD").stdout.decode().strip()
+
+    reason = history_traversal_error(clone, commit)
+
+    assert reason is not None
+    assert "Failed to traverse parents" in reason

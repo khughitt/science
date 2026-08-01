@@ -12,6 +12,8 @@ from science_model.evidence_broker import (
     SurfacePolicy,
 )
 
+from science_tool.autonomy import lifecycle as lifecycle_module
+from science_tool.autonomy.git import GitError
 from science_tool.cli import main
 
 AGENT = "curation-sweep"
@@ -202,6 +204,30 @@ def test_start_exits_two_when_the_project_root_is_not_a_repository(tmp_path: Pat
     assert result.exit_code == 2
     assert result.exception is None or isinstance(result.exception, SystemExit), result.output
     assert "could not start" in result.output
+
+
+def test_start_exits_two_when_hardened_git_cannot_complete(
+    project: Path,
+    baseline_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A base `GitError` is a normal could-not-open result, not an unhandled exit 1.
+
+    The BASE class is load-bearing: configuration preflight overflow is translated to `GitError`,
+    while stderr overflow is its `GitOutputTooLarge` subtype. Catching only the subtype leaves the
+    mutable-config path outside the public command contract.
+    """
+    def fail_start(*args, **kwargs):
+        raise GitError("configuration preflight exceeded its limit")
+
+    monkeypatch.setattr(lifecycle_module, "start_run", fail_start)
+
+    result = _start(project, baseline_path)
+
+    assert result.exit_code == 2
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.output
+    assert "could not start" in result.output
+    assert "configuration preflight exceeded its limit" in result.output
 
 
 def test_finish_exits_zero_on_a_clean_run(project: Path, baseline_path: Path, feedback_dir: Path):

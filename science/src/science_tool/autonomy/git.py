@@ -84,6 +84,7 @@ nothing to `_HARDENING`.
 from __future__ import annotations
 
 import os
+import selectors
 import subprocess
 from pathlib import Path
 
@@ -96,6 +97,43 @@ class GitError(ValueError):
     """
 
 
+class GitOutputTooLarge(GitError):
+    """A git invocation produced more output than its caller allowed.
+
+    A SUBCLASS OF `GitError`, so the DEFAULT disposition is the safe one. Five call sites already
+    convert `GitError` into a run-level `unwired` -- `autonomy/extract.py:48`,
+    `autonomy/toolkit.py:43`, `boundary/gitio.py:83` and `:166`, and
+    `validate/checks/autonomous_runs.py:75`. An exception outside that hierarchy would escape all
+    five and surface as an unhandled traceback: exit 1, which the documented codes read as
+    `quarantined` rather than `unwired`. Overflow IS a failure to complete the invocation, which
+    is what `GitError` already means.
+
+    Subclassing costs no precision. A call site wanting a different disposition catches
+    `GitOutputTooLarge` specifically, and `serve.py` does exactly that for its stdout case. ORDER
+    MATTERS: an `except GitOutputTooLarge` must precede any `except GitError` in the same `try`.
+
+    `consumed` is how §7 certifies that the ceiling is enforced DURING capture rather than after:
+    a check moved to the end of the loop would report the whole output here.
+    """
+
+    def __init__(self, stream: str, limit: int, consumed: int, args: tuple[str, ...]) -> None:
+        super().__init__(
+            f"git {' '.join(args)} produced more than {limit} bytes on {stream}; refused rather "
+            "than truncated, because a truncated answer is indistinguishable from a short one"
+        )
+        self.stream = stream
+        self.limit = limit
+        self.consumed = consumed
+
+
+#: Diagnostics are never legitimately large, and this one is actor-influenced (§3.2.1).
+MAX_GIT_STDERR_BYTES = 1 << 20
+
+#: `include.path` makes the configuration listing arbitrarily large, and the preflight runs before
+#: every call. Generous enough for any real configuration, bounded because the actor writes it.
+MAX_CONFIG_LIST_BYTES = 1 << 20
+
+
 #: The environment every autonomy git call runs under. `LC_ALL` and `LANG` are pinned
 #: because argv is not the whole invocation: a POSIX class such as `[[:alpha:]]` matches a
 #: different character set under `C` than under a UTF-8 locale, so two honest replays of one
@@ -103,10 +141,36 @@ class GitError(ValueError):
 #: pin fixes git's DIAGNOSTIC text, which the broker's defined-miss classifier reads: under a
 #: translated locale the miss messages would not match and an absent path would halt the run.
 #:
+#: `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH` are here for the reason `-c` hardening is here: the
+#: actor owns the file. `.git/shallow` is an ordinary file in the actor-owned `.git` directory --
+#: MEASURED, git 2.55: one `echo <sha> > .git/shallow` takes `git log <commit>` from 3 commits to
+#: 2, at exit 0 both ways, against an unchanged pinned commit. A check at run open cannot hold
+#: against a file written after the run opens, so the defense is an input git no longer reads.
+#:
+#: A partial clone is the same problem in the worse direction. `--filter=tree:0` does not truncate
+#: and does not fail: it LAZILY FETCHES the missing objects from its promisor remote, mid-request,
+#: at exit 0 -- MEASURED, two `git fetch` subprocesses spawned under the canonical `log` argv. That
+#: remote's URL lives in `.git/config`, so lazy fetch hands the actor an egress channel out of the
+#: control plane and a payload whose content depends on a host it named. `-c` cannot close it: the
+#: neutralization would have to name the remote, and the name is the actor's to choose.
+#:
+#: Under both pins a repository that cannot answer locally EXITS NON-ZERO instead of answering
+#: short or phoning home, which every call site here already treats as a refusal to answer. Both
+#: are no-ops in an ordinary complete clone, which has no boundary file and nothing to fetch.
+#:
+#: They apply to all three broker ops, not to `history` alone: a partial clone withholds blobs as
+#: readily as trees, so `cat-file blob` and `grep` reach a promisor remote by the same mechanism.
+#: Putting them in `_ENVIRONMENT` rather than at one call site is what makes that automatic.
+#:
 #: `TZ` is deliberately NOT pinned: `%aI` carries its own offset, so the rendered log does not
 #: depend on the reader's zone. Pinning it would assert a defense against behaviour the chosen
 #: format has been shown not to have.
-_ENVIRONMENT: dict[str, str] = {"LC_ALL": "C", "LANG": "C"}
+_ENVIRONMENT: dict[str, str] = {
+    "LC_ALL": "C",
+    "LANG": "C",
+    "GIT_SHALLOW_FILE": "/dev/null",
+    "GIT_NO_LAZY_FETCH": "1",
+}
 
 #: The fixed half of the hardening -- keys whose names are known in advance.
 _HARDENING: tuple[str, ...] = (
@@ -130,22 +194,138 @@ def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) ->
     return argv
 
 
+_CHUNK = 65536
+
+
+def _capture(
+    process: subprocess.Popen[bytes],
+    *,
+    input: bytes | None,
+    stdout_limit: int | None,
+    stderr_limit: int,
+    args: tuple[str, ...],
+) -> tuple[bytes, bytes]:
+    """Pump stdin and drain both output pipes in ONE loop.
+
+    ALL THREE STREAMS MUST SHARE THE LOOP, and this is not defensive coding -- it is the only
+    shape that terminates. Pipe buffers are finite (~64 KiB each). Writing all of stdin before
+    reading anything deadlocks the moment the child's own output fills its pipe: the child blocks
+    writing stdout, so it stops reading stdin, so the parent blocks writing stdin, forever.
+    MEASURED: `Popen(["cat"])` plus a 4 MiB `stdin.write` never returns. `boundary/sync.py` and
+    `boundary/gitio.py` both pass payloads through `input=`, so this is a live path, not a
+    hypothetical. Draining stdout fully before stderr fails the same way for the same reason.
+
+    SHARING THE LOOP IS NOT SUFFICIENT ON ITS OWN. A selector plus a blocking
+    `BufferedWriter.write` deadlocks identically -- also MEASURED -- because readiness for one byte
+    does not stop `write` from looping until all 64 KiB are out. See the `os.set_blocking` call
+    below: the nonblocking fd is what turns readiness into progress.
+
+    The ceiling is checked as the bytes ARRIVE. A cap tested after the loop has already spent the
+    memory it exists to protect, which is why `GitOutputTooLarge` carries `consumed`.
+    """
+    limits = {"stdout": stdout_limit, "stderr": stderr_limit}
+    buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
+
+    selector: selectors.BaseSelector | None = None
+    pending = memoryview(input) if input else None
+    try:
+        # ALL POST-`Popen` SETUP IS INSIDE THIS CLEANUP GUARANTEE. Selector construction,
+        # nonblocking setup, and registration may fail after the child exists; every such path
+        # still closes the pipes, kills if necessary, and reaps the child below.
+        selector = selectors.DefaultSelector()
+        if pending is not None:
+            assert process.stdin is not None
+            # NONBLOCKING, AND WRITTEN WITH `os.write`. `EVENT_WRITE` promises only that AT LEAST
+            # ONE byte can be written -- it does not make the write partial-friendly, and
+            # `BufferedWriter.write(n)` loops until all n bytes are out. MEASURED: the selector
+            # loop with `stdin.write(pending[:65536])` on a blocking fd still deadlocks against
+            # `cat` and a 4 MiB payload. `os.set_blocking(fd, False)` plus `os.write` returns a
+            # partial count and the loop makes progress. Do not mix buffered writes with the raw
+            # fd: nothing is ever written through `process.stdin`, so its buffer stays empty and
+            # `close()` just closes.
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+        elif process.stdin is not None:
+            process.stdin.close()
+        for name in ("stdout", "stderr"):
+            stream = getattr(process, name)
+            assert stream is not None
+            selector.register(stream, selectors.EVENT_READ, name)
+
+        while selector.get_map():
+            for key, _ in selector.select():
+                if key.data == "stdin":
+                    assert pending is not None
+                    try:
+                        written = os.write(key.fd, pending[:_CHUNK])
+                    except BlockingIOError:
+                        # Readiness is advisory; the pipe filled between select and write.
+                        written = 0
+                    except BrokenPipeError:
+                        # The child exited without reading its input. That is an ANSWER (git
+                        # refused early), not a failure to invoke, so it is not an error here.
+                        written = len(pending)
+                    pending = pending[written:]
+                    if not pending:
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()  # type: ignore[union-attr]
+                        pending = None
+                    continue
+
+                name = key.data
+                chunk = key.fileobj.read1(_CHUNK)  # type: ignore[union-attr]
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                buffers[name] += chunk
+                limit = limits[name]
+                if limit is not None and len(buffers[name]) > limit:
+                    process.kill()
+                    raise GitOutputTooLarge(name, limit, len(buffers[name]), args)
+    finally:
+        if selector is not None:
+            selector.close()
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+    return bytes(buffers["stdout"]), bytes(buffers["stderr"])
+
+
 def _run(
     repo_root: Path,
     overrides: tuple[str, ...],
     args: tuple[str, ...],
     *,
     input: bytes | None = None,
+    stdout_limit: int | None = None,
+    stderr_limit: int = MAX_GIT_STDERR_BYTES,
 ) -> subprocess.CompletedProcess[bytes]:
+    argv = _argv(repo_root, overrides, args)
     try:
-        return subprocess.run(
-            _argv(repo_root, overrides, args),
-            input=input,
-            capture_output=True,
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env={**os.environ, **_ENVIRONMENT},
         )
-    except (OSError, ValueError) as exc:
+        stdout, stderr = _capture(
+            process,
+            input=input,
+            stdout_limit=stdout_limit,
+            stderr_limit=stderr_limit,
+            args=args,
+        )
+    except GitOutputTooLarge:
+        # Preserve the subtype so call sites may choose the served-stdout disposition.
+        raise
+    except (AttributeError, OSError, ValueError) as exc:
+        # `_capture` has already reaped a successfully spawned child before an error gets here.
         raise GitError(f"could not execute git {' '.join(args)} in {repo_root}: {exc}") from exc
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
@@ -171,7 +351,22 @@ def _filter_driver_overrides(repo_root: Path) -> tuple[str, ...]:
     filter `required` then makes `git status` fail, and the run reads `unwired` rather
     than clean.
     """
-    completed = _run(repo_root, _HARDENING, ("config", "--list", "--name-only", "-z"))
+    try:
+        completed = _run(
+            repo_root,
+            _HARDENING,
+            ("config", "--list", "--name-only", "-z"),
+            stdout_limit=MAX_CONFIG_LIST_BYTES,
+            stderr_limit=MAX_GIT_STDERR_BYTES,
+        )
+    except GitOutputTooLarge as exc:
+        # FAILS THE INVOCATION, and is never journaled. Its size is determined by `.git/config`,
+        # which the actor may edit at any time -- so a journaled refusal would replay differently
+        # once the file changed, and §5.3 would return EXPOSURE_UNREPRODUCIBLE for an honest run.
+        raise GitError(
+            f"the git configuration of {repo_root} is too large to read, so its filter drivers "
+            f"could not be neutralized: {exc}"
+        ) from exc
     if completed.returncode != 0:
         message = completed.stderr.decode("utf-8", "replace").strip()
         raise GitError(
@@ -210,6 +405,7 @@ def run_git(
     repo_root: Path,
     *args: str,
     input: bytes | None = None,
+    stdout_limit: int | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     """Run one hardened git command against `repo_root`.
 
@@ -219,16 +415,64 @@ def run_git(
     check turns one into a `Result`. What none of them may differ on is the argv, which
     is why it is built here and nowhere else.
 
-    Raises `GitError` only when git could not be invoked at all -- a missing binary is
-    `unwired`, and a caller that let `FileNotFoundError` escape would exit 1, which the
-    documented codes read as `quarantined`.
+    Raises `GitError` when git could not be started, the invocation could not be hardened,
+    or a bounded capture could not complete. A normal nonzero git exit is still returned
+    to the caller.
 
     Bytes, not text: `extract` has to detect non-UTF-8 blobs rather than have them
     silently replaced. `input` is passed to git's stdin for NUL-framed queries.
+
+    `stdout_limit` bounds the captured payload and RAISES `GitOutputTooLarge` rather than
+    truncating. It defaults to `None` -- unbounded -- because `extract` and `boundary/gitio`
+    legitimately capture large diffs and sync payloads through this same function, and a blanket
+    ceiling would regress them for a guarantee this design never made. The four call sites that
+    need a bound pass one, and each chooses its own disposition (design §3.2).
+
+    `stderr` is bounded on EVERY call at `MAX_GIT_STDERR_BYTES`, with no opt-out: it is captured
+    alongside stdout regardless, it is actor-influenced, and no caller has a reason to want an
+    unbounded diagnostic.
     """
     return _run(
         repo_root,
         (*_HARDENING, *_filter_driver_overrides(repo_root)),
         args,
         input=input,
+        stdout_limit=stdout_limit,
+        stderr_limit=MAX_GIT_STDERR_BYTES,
+    )
+
+
+def history_traversal_error(repo_root: Path, commit: str) -> str | None:
+    """git's own diagnostic if `commit`'s ancestry cannot be walked from local objects, else None.
+
+    A DIAGNOSTIC, not the guarantee. `GIT_SHALLOW_FILE` and `GIT_NO_LAZY_FETCH` above are what make
+    `history` answer completely or fail; this exists so that a repository which cannot answer is an
+    operator error at run open, naming the cause, rather than a `fatal: Failed to traverse parents`
+    in the middle of a run. The two cover disjoint intervals: at `start_run` no actor exists yet, so
+    an absence present then is genuine; anything appearing later is the actor's, and the pins
+    neutralize it.
+
+    IT ASKS THE SERVED PROPERTY, NOT A PROXY FOR IT. `serve._LOG_ARGV` carries no `-n`, so `history`
+    walks to the root -- walking to the root is what to measure. `rev-parse
+    --is-shallow-repository` is the proxy, and the pin blinds it: MEASURED, git 2.55, it reads
+    `true` for a COMPLETE repository under `GIT_SHALLOW_FILE=/dev/null`, because
+    `is_repository_shallow()` sets its flag on a SUCCESSFUL OPEN of the shallow file, before reading
+    a line, and `/dev/null` opens. Under the pins it is constant-`true`.
+
+    MEASURED, git 2.55, under the pins: a complete 6755-commit repository answers in 42 ms; a
+    complete repository with `.git/shallow` PLANTED still answers, because the plant is ignored; a
+    `--depth 1` clone exits 128.
+
+    COVERS MISSING COMMITS ONLY -- do not widen this by assumption. MEASURED: `--filter=tree:0` and
+    `--filter=blob:none` clones both report the full commit count. The tree case is refused at open
+    by the §3.1 tree scan (`ls-tree -r` -> `fatal: not a tree object`); the blob case is not
+    pre-empted at open and fails mid-run at exit 128, which is `GIT_NO_LAZY_FETCH` working. This is
+    not a completeness oracle.
+    """
+    completed = run_git(repo_root, "rev-list", "--count", commit)
+    if completed.returncode == 0:
+        return None
+    return (
+        completed.stderr.decode("utf-8", "replace").strip()
+        or f"git rev-list exited {completed.returncode} without a diagnostic"
     )
