@@ -102,7 +102,7 @@ this design has had.
 Revision 29 is pre-flight for plan 4b: §5 read against the merged tree rather than against itself.
 Three of its assumptions were **confirmed by probe** and are now stated as such; four points it left
 underdetermined are decided; two of §7's own rows are corrected; and design review of this revision
-closed four more, listed at the end. None is a defect in the production boundary. All four
+closed five more, listed at the end. None is a defect in the production boundary. All four
 undetermined points are places an implementer would have had to invent a rule, and three of them have
 a permissive default that an invented rule lands on by accident.
 
@@ -156,9 +156,9 @@ is exactly what §7's `Slice` column exists to catch, found one slice later than
 keeps a row it can certify on its own tree: a fresh interpreter importing
 `science_model.correspondence` must not load `science_model.audit` at all.
 
-**Design review of revision 29 closed four more, two of them inside revision 29's own fixes** —
+**Design review of revision 29 closed five more, two of them inside revision 29's own fixes** —
 the pattern this document has now recorded five rounds running. The fourth is older than all of
-them.
+them; the fifth was introduced by the implementation plan.
 
 1. **The merge table was incomplete in the same way the thing it replaced was.** Revision 29 replaced
    a one-pair rule with a five-row table and called it total; four pairs were missing, and the
@@ -190,6 +190,12 @@ them.
    nothing. Separating it needs both endpoints served and the middle not: lines 2–4 against `{2, 4}`.
    Found by self-review of the *plan*, not of this document, which is where a row's fixture first
    has to be written down concretely.
+5. **The plan silently invented a durable-model invariant.** It forbade `code` on `verified`, while
+   revision 17 required a code on non-verified results but did not state the reciprocal, and the
+   `InstrumentResult` invariant this type mirrors explicitly permits a code on `ok`. The tightening
+   is retained — a verified correspondence has no failure to classify, so a code beside it is stale
+   or contradictory — but §4.2 now states the deliberate divergence instead of letting 4c inherit a
+   plan-time assumption as though it had been reviewed here.
 
 Finding (3) is the **second** overshoot in this document to name a mechanism next to the property
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
@@ -1730,7 +1736,7 @@ class Uncertainty(_Base):
 
 class Correspondence(_Base):
     status: Literal["verified", "violated", "unwired"]
-    code: str | None = None      # required when unwired
+    code: str | None = None      # required when non-verified; forbidden when verified
     reason: str | None = None
 
 class ReviewAttestation(_Base):
@@ -1811,6 +1817,11 @@ that boundary (plan 4c): `check_correspondence` returns a `violated` result to a
 this the §5.3 codes `EXPOSURE_UNREPRODUCIBLE` and `CITATION_UNSERVED` would be unrepresentable on the
 value that carries them — recoverable only as prose in an error message. `verified` remains the one
 status with nothing to explain.
+
+**And that implication runs both ways: `verified` forbids a code.** This is deliberately stricter
+than `InstrumentResult`, whose `ok()` constructor accepts one despite supplying the invariant this
+type otherwise mirrors. Correspondence codes name the non-verified classifications in §5.3; a code
+on `verified` is therefore stale or contradictory state, not information to preserve.
 
 `evidence` is bounded by the existing `MAX_EVIDENCE_ENTRIES`.
 
