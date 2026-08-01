@@ -1135,8 +1135,8 @@ def test_an_oversized_history_refuses(tmp_path: Path, monkeypatch):
     assert served.denial.reason == "payload-too-large"
 
 
-def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkeypatch):
-    """The disposition split, in one test.
+def test_a_stderr_overflow_on_search_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """The search disposition split, exercised at the guard that could journal it.
 
     `stderr` is determined by mutable repository and runtime state. Journaled, it would replay
     differently once the environment changed and §5.3 would return EXPOSURE_UNREPRODUCIBLE --
@@ -1146,14 +1146,30 @@ def test_a_stderr_overflow_on_a_served_op_is_not_a_denial(tmp_path: Path, monkey
     real = serve_module.run_git
 
     def boom(repo_root, *args, **kwargs):
-        if args[:2] == ("cat-file", "blob"):
+        if args[:1] == ("grep",):
             raise GitOutputTooLarge("stderr", 32, 33, args)
         return real(repo_root, *args, **kwargs)
 
     monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
 
     with pytest.raises(GitOutputTooLarge):
-        serve(root, commit, _read("a.txt"), OPEN)
+        serve(root, commit, _search("secret"), OPEN)
+
+
+def test_a_stderr_overflow_on_history_is_not_a_denial(tmp_path: Path, monkeypatch):
+    """History has its own conversion guard, so search cannot certify it."""
+    root, commit = _repo(tmp_path)
+    real = serve_module.run_git
+
+    def boom(repo_root, *args, **kwargs):
+        if args[:1] == ("log",):
+            raise GitOutputTooLarge("stderr", 32, 33, args)
+        return real(repo_root, *args, **kwargs)
+
+    monkeypatch.setattr("science_tool.evidence_broker.serve.run_git", boom)
+
+    with pytest.raises(GitOutputTooLarge):
+        serve(root, commit, EvidenceRequest(op=EvidenceOp.HISTORY, target="a.txt"), OPEN)
 ```
 
 Add to the module's imports: `from science_model.evidence_broker import MAX_SERVED_BYTES`,
@@ -1612,7 +1628,8 @@ then `git checkout` the file.
 | Exempt the tree scan from the ceiling | `test_an_oversized_tree_scan_refuses_to_open` |
 | Remove the `cat-file -s` pre-check and refuse after capture | `test_an_oversized_read_refuses_without_reading_the_blob` |
 | Delete `_serve_history`'s bound, leaving `_serve_search`'s | `test_an_oversized_history_refuses` |
-| Journal a `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_a_served_op_is_not_a_denial` |
+| Journal a search `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_search_is_not_a_denial` |
+| Journal a history `stderr` overflow as a `Denial` | `test_a_stderr_overflow_on_history_is_not_a_denial` |
 | Make `GitOutputTooLarge` inherit `RuntimeError` again | `test_an_overflow_reaches_an_existing_git_error_handler` (Step 2) |
 | Write all of stdin before draining the pipes | `test_a_large_stdin_payload_does_not_deadlock` |
 | Keep the selector loop but drop `os.set_blocking` and write via `process.stdin.write` | `test_a_large_stdin_payload_does_not_deadlock` — **run this one; a shared loop alone does not fix the deadlock, and it is the mutation most likely to be "simplified" back in** |
