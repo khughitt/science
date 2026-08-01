@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import signal
 import subprocess
 from pathlib import Path
 
@@ -127,6 +128,20 @@ def test_full_bounds_lines_but_allows_a_pointer() -> None:
     assert _corresponds(LocationEvidence(path="a", line=2), Full(2))
     assert not _corresponds(LocationEvidence(path="a", line=3), Full(2))
     assert _corresponds(LocationEvidence(path="a", pointer="heading"), Full(0))
+
+
+def test_full_span_matching_is_bounded() -> None:
+    def _timeout(_signum, _frame):
+        raise TimeoutError("FULL span matching iterated an authored-unbounded range")
+
+    citation = LocationEvidence(path="a", span=Span(start_line=1, end_line=10**18))
+    previous = signal.signal(signal.SIGALRM, _timeout)
+    signal.alarm(1)
+    try:
+        assert not _corresponds(citation, Full(10**18 - 1))
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def test_lines_requires_every_line_of_a_span_and_forbids_a_pointer() -> None:
@@ -339,6 +354,45 @@ def test_inline_disagreement_is_unreproducible(
     result = check_correspondence(
         (LocationEvidence(path=target),),
         _exposure(commit, (entry,), inline=(manifest,)),
+        repo=root,
+    )
+    assert (result.status, result.code) == ("violated", "EXPOSURE_UNREPRODUCIBLE")
+
+
+def test_inline_manifest_item_without_an_entry_is_unreproducible(tmp_path: Path) -> None:
+    root, commit = _repo(tmp_path)
+    manifest, _entry = _inline(commit)
+    result = check_correspondence((), _exposure(commit, inline=(manifest,)), repo=root)
+    assert (result.status, result.code) == ("violated", "EXPOSURE_UNREPRODUCIBLE")
+
+
+def test_two_inline_entries_against_one_manifest_item_are_unreproducible(
+    tmp_path: Path,
+) -> None:
+    root, commit = _repo(tmp_path)
+    manifest, entry = _inline(commit)
+    result = check_correspondence(
+        (), _exposure(commit, (entry, entry), inline=(manifest,)), repo=root
+    )
+    assert (result.status, result.code) == ("violated", "EXPOSURE_UNREPRODUCIBLE")
+
+
+def test_identical_inline_duplicates_are_reproducible(tmp_path: Path) -> None:
+    root, commit = _repo(tmp_path)
+    manifest, entry = _inline(commit)
+    result = check_correspondence(
+        (), _exposure(commit, (entry, entry), inline=(manifest, manifest)), repo=root
+    )
+    assert result.status == "verified"
+
+
+def test_contradictory_inline_line_counts_are_unreproducible(tmp_path: Path) -> None:
+    root, commit = _repo(tmp_path)
+    manifest, entry = _inline(commit)
+    contradictory = manifest.model_copy(update={"lines": manifest.lines + 1})
+    result = check_correspondence(
+        (),
+        _exposure(commit, (entry, entry), inline=(manifest, contradictory)),
         repo=root,
     )
     assert (result.status, result.code) == ("violated", "EXPOSURE_UNREPRODUCIBLE")

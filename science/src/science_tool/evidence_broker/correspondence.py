@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,8 +93,15 @@ def _corresponds(citation: LocationEvidence, coverage: Coverage) -> bool:
     if citation.pointer is not None and not isinstance(coverage, Full):
         return False
     if isinstance(coverage, Full):
+        if citation.span is not None:
+            return citation.span.end_line <= coverage.line_count
         return all(line <= coverage.line_count for line in cited)
     if isinstance(coverage, Lines):
+        if (
+            citation.span is not None
+            and citation.span.end_line - citation.span.start_line + 1 > len(coverage.numbers)
+        ):
+            return False
         return all(line in coverage.numbers for line in cited)
     return not cited and citation.pointer is None
 
@@ -106,6 +114,7 @@ def _build_served_map(
     replayed: list[tuple[ExposureEntry, Served | InlineInput]], commit: str
 ) -> dict[str, Coverage]:
     served_map: dict[str, Coverage] = {}
+    search_lines: dict[str, set[int]] = {}
     for entry, answer in replayed:
         if isinstance(answer, InlineInput):
             _add_coverage(served_map, answer.target, Full(answer.lines))
@@ -118,9 +127,11 @@ def _build_served_map(
                 _add_coverage(served_map, answer.target, Absent())
         elif entry.op == "search" and answer.outcome is Outcome.SERVED:
             for path, line in parse_hits(answer.payload, commit):
-                _add_coverage(served_map, path, Lines(frozenset({line})))
+                search_lines.setdefault(path, set()).add(line)
         elif entry.op == "history" and answer.outcome is Outcome.SERVED:
             _add_coverage(served_map, answer.target, PathOnly())
+    for path, numbers in search_lines.items():
+        _add_coverage(served_map, path, Lines(frozenset(numbers)))
     return served_map
 
 
@@ -150,19 +161,34 @@ def check_correspondence(
             status="unwired", code="EXPOSURE_UNREACHABLE", reason=traversal_error
         )
 
-    inline = {(item.target, item.sha256): item for item in exposure.inline}
+    inline_entries = Counter(
+        (entry.target, entry.sha256) for entry in exposure.entries if entry.op == "inline"
+    )
+    inline_manifest = Counter((item.target, item.sha256) for item in exposure.inline)
+    if inline_entries != inline_manifest:
+        return Correspondence(
+            status="violated",
+            code="EXPOSURE_UNREPRODUCIBLE",
+            reason="inline entries disagree with the sealed manifest",
+        )
+
+    inline: dict[tuple[str, str], InlineInput] = {}
+    for item in exposure.inline:
+        key = (item.target, item.sha256)
+        previous = inline.get(key)
+        if previous is not None and previous.lines != item.lines:
+            return Correspondence(
+                status="violated",
+                code="EXPOSURE_UNREPRODUCIBLE",
+                reason=f"inline manifest has contradictory line counts for {item.target!r}",
+            )
+        inline[key] = item
+
     cache: dict[EvidenceRequest, Served] = {}
     replayed: list[tuple[ExposureEntry, Served | InlineInput]] = []
     for entry in exposure.entries:
         if entry.op == "inline":
-            item = inline.get((entry.target, entry.sha256))
-            if item is None:
-                return Correspondence(
-                    status="violated",
-                    code="EXPOSURE_UNREPRODUCIBLE",
-                    reason=f"inline entry {entry.target!r} disagrees with the sealed manifest",
-                )
-            replayed.append((entry, item))
+            replayed.append((entry, inline[(entry.target, entry.sha256)]))
             continue
 
         request = _request(entry)
