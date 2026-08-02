@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 33)
+**Status:** partially implemented (revision 34)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | four tasks implemented through `d1340e64`; revision 32's fix wave merged at `c7429300` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revision 34**, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -211,6 +211,51 @@ Finding (3) is the **second** overshoot in this document to name a mechanism nex
 instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
 in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
 protection from the error.
+
+Revision 34 settles plan 4c against the merged tree. Revision 26 designed it against a repository
+that contained neither 4a nor 4b, and left the mechanism of the append boundary underdetermined in
+six places. Each is closed below at the section that owns it; the entries here are the ones whose
+reasoning generalises.
+
+**A parameter that is validated and discarded is a fictional audit property.** Revision 26 gave
+`append_review` an `actor`, by symmetry with `ingest_report`. But `ingest_report` *persists* its
+actor — in the genesis `Transition` it writes — and `append_review` writes no transition. `Review`
+has no actor field and gains none here. The parameter would have been checked for nonblankness and
+NUL-freedom and then dropped, which is worse than omitting it: a public argument named `actor`
+advertises that the writer is recorded, and nothing in the stored record would carry it. `actor`
+is removed. It returns if and when writer provenance gains a durable field to land in.
+
+**A missing run record is refused, not stored as `unwired`.** Revision 34 first proposed a fourth
+§5.3 code, `NO_RUN_RECORD`, on the argument that §6 deliberately creates this state — a brokered run
+whose journal is gone writes no record — so refusing would discard an honest reviewer's findings for
+a supervisor's failure. That is wrong, and the reason is the asymmetry with `EXPOSURE_UNREACHABLE`:
+there, an attested run record *exists* and only its repository cannot answer. Here there is no
+record, so neither identity cross-check can run and no sealed exposure provenance exists at all.
+Storing the review would mint an agent `review_id` whose `run_ref` points at nothing. §6 already
+calls the lost-journal branch retryable; the run is re-run, not reviewed around.
+
+**That collapse deleted a test row, and the row must go rather than be rewritten.** While the two
+cases had different outcomes, "treat a broken `runs/` as a missing run" was an observable mutation.
+Now both refuse with `IngestError` and nothing distinguishes them but message text, so the mutation
+survives every assertion worth writing. The distinction is still real in the code and still stated in
+§5.4; it is simply no longer certifiable, and it joins §7's list of rows that must not be added. A
+ruling that simplifies behaviour can silently invalidate a guard written for the richer behaviour —
+the guards must be re-read against the ruling, not just extended.
+
+**A mutation that names a structure rather than a behaviour certifies nothing.** Revision 34's first
+draft of §7 carried the row "give the check its own predicate instead of `counts_as_support()`". A
+faithful copy of the predicate satisfies that mutation and changes no output, so the row was testing
+a refactor it could not observe. The rewritten row names the concrete wrong implementation — *report
+only non-verified correspondence* — which the vacuously-`verified` fixture genuinely separates. The
+shared predicate is still the right structure; it is just not what an outcome test can prove. This is
+the sibling of the vacuous-fixture error revisions 31 and 32 corrected: there the input could not
+distinguish the mutant, here the mutant is not distinct from the original.
+
+**And one clause per row.** §4.2.1's eligibility has four independent conditions — reviewer kind,
+correspondence present, status `verified`, and every entry a location. A single fixture that fails
+when any of them is dropped certifies whichever one it happens to trip first. §7 now carries a row
+per clause, each with a fixture that isolates it, which is the same discipline §7 applies to the
+coverage algebra.
 
 Revision 33 fixes the one place the widened tree rule had not reached: **§2.2's clause 1, which is
 where the guarantee is stated rather than merely described.**
@@ -805,9 +850,11 @@ science/model/src/science_model/
     evidence_broker.py   SurfacePolicy (shipped, plan 2); + Outcome, ExposureEntry,
                          InstrumentIdentity, InlineInput, EvidenceSession, EvidenceExposure
     autonomous_runs.py   + AutonomousRunRecord.evidence
-    audit/record.py      + Uncertainty, ReviewAttestation, ReviewSubmission; two Review fields
-                           (one importing Correspondence from science_model/correspondence.py);
-                           confirmation_count() gains a correspondence term
+    audit/record.py      + Uncertainty, ReviewAttestation, ReviewSubmission; THREE Review fields
+                           — evidence, uncertainty, correspondence (the last importing
+                           Correspondence from science_model/correspondence.py);
+                           + Review.counts_as_support(), which confirmation_count() now delegates to
+    audit/__init__.py    + re-exports Uncertainty, ReviewAttestation, ReviewSubmission beside Review
 
 science/src/science_tool/
     autonomy/baseline.py    + EvidenceSession on RunBaseline; journal path containment-checked
@@ -815,7 +862,10 @@ science/src/science_tool/
     autonomy/git.py         + a probed, canonical invocation for `grep` and `log`
     autonomy/lifecycle.py   start_run opens the session; finish_run seals it
     findings/reviews.py     # NEW — the trusted review-append boundary
-    validate/checks/        review.correspondence-unwired, info severity
+    findings/storage.py     + locked_store, moved out of ingest.py and raising CaseStorageError
+    validate/checks/review_confirmations.py  # NEW — review.uncounted-confirmation, info severity
+    validate/findings.py    + that rule id in _POLICY_INFO_RULE_IDS, so the finding keeps its
+                              rule, qualifiers, fingerprint and suppression
 ```
 
 `serve.py` uses `autonomy/git.py`, the existing hardened runner that neutralises `core.fsmonitor`,
@@ -860,10 +910,29 @@ may reach backwards**, and each is independently mergeable.
 |---|---|---|---|
 | **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
 | **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that it may classify an exposure itself — outcome, coverage and protocol are 4b's, and 4c calls `check_correspondence` for all three |
-| **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_correspondence.py` |
-| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `validate/checks/__init__.py` (register the new check), `findings/cli.py:317` |
-| **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py` |
+| **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_confirmations.py` |
+| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `science_model/audit/__init__.py` (re-export the three new types), `findings/storage.py` (gains `locked_store`), `findings/ingest.py` (loses `_locked_store`), `validate/checks/__init__.py` (register the new check), `validate/findings.py` (`_POLICY_INFO_RULE_IDS`) |
+| **Consumers, unchanged** | — | — | `findings/cli.py:317` — the call site is untouched; what `confirmation_count()` returns changes underneath it |
+| **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py`, `evidence_broker/correspondence.py`, `evidence_broker/hits.py`, `science_model/correspondence.py` |
 | **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
+
+**Revision 34 corrects three things about 4c's cells, all of the same kind: a cell must state what
+the slice's diff actually touches.**
+
+- **`findings/cli.py:317` was never an edit.** It is the `confirmation_count()` call in the findings
+  display payload, and 4c changes what that method returns, not the line that calls it. Listing a
+  consumer under *Modifies* invites an implementer to manufacture a change there to match the
+  contract. It moves to its own row.
+- **The cell was short by four files.** `audit/__init__.py` re-exports `Review` and must re-export
+  its three new peers, or consumers reach past the package's public boundary into `audit.record`.
+  `findings/storage.py` and `findings/ingest.py` move `locked_store` (§5.4). `validate/findings.py`
+  must list the new rule in `_POLICY_INFO_RULE_IDS`, or `validation_observation` degrades every
+  `info` result to a bare `ValidationNotice` — no rule, no qualifiers, no fingerprint, and therefore
+  no suppression. A check whose findings cannot be suppressed is a check that will be deleted.
+- **The fence grew because 4b is merged.** 4c consumes `check_correspondence` and the
+  `Correspondence` type; neither is its to adjust. The reason `serve.py` was fenced off from 4b
+  applies unchanged one slice over — a caller that edits its callee to suit itself has erased the
+  boundary that made the slices independently reviewable.
 
 **The guarantee 4a hands forward, stated as three clauses because 4b is entitled to rely on each and
 on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`:
@@ -1888,39 +1957,66 @@ Optionality here would have recreated `RunBudget`'s problem: a field that looks 
 ### 4.2 Review
 
 ```python
+MAX_UNCERTAINTY_ENTRIES = MAX_EVIDENCE_ENTRIES
+
 class Uncertainty(_Base):
-    field: AuthoredHashComponent
+    field: AuthoredProvenance
     what: AuthoredProvenance
     why: AuthoredProvenance
 
-class Correspondence(_Base):
-    status: Literal["verified", "violated", "unwired"]
-    code: str | None = None      # required when non-verified; forbidden when verified
-    reason: str | None = None
-
 class ReviewAttestation(_Base):
-    """Who is reviewing, asserted by the caller that KNOWS — never by the reviewer.
-    The exact counterpart of `IngestionProvenance` at `ingest_report`."""
+    """Who is reviewing and WHEN, asserted by the caller that KNOWS — never by the
+    reviewer. The exact counterpart of `IngestionProvenance` at `ingest_report`."""
     reviewer_kind: ReviewerKind
-    reviewer_ref: ...
-    lens: ...
-    model: ...
-    run_ref: ...
+    reviewer_ref: AuthoredHashComponent
+    lens: AuthoredHashComponent | None = None
+    model: AuthoredProvenance | None = None
+    run_ref: AuthoredHashComponent
+    at: Instant
+    # Same `_agent_provenance` invariant as `Review`: an agent requires lens and model.
 
 class ReviewSubmission(_Base):
     """What a producer offers: its FINDINGS, and nothing about its own identity.
     Carries no correspondence field and no identity field — not fields a producer
     may leave blank, fields it cannot express."""
-    outcome: ...
-    note: ...
-    evidence: tuple[Evidence, ...] = ()
-    uncertainty: tuple[Uncertainty, ...] = ()
+    outcome: ReviewOutcome
+    note: AuthoredProvenance
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
 
 # Review — the STORED shape
-    evidence: tuple[Evidence, ...] = ()      # existing discriminated union
-    uncertainty: tuple[Uncertainty, ...] = ()
-    correspondence: Correspondence | None = None
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
+    correspondence: Correspondence | None = None   # from science_model.correspondence
 ```
+
+`Correspondence` is not redeclared here: 4b shipped it at `science_model/correspondence.py` as a
+plain `BaseModel` with `extra="forbid", frozen=True`, deliberately not `_Base`, so the leaf reaches
+`science_model.audit` by no path (§7). 4c's import of it from `audit/record.py` is the edge that
+closes the cycle the two subprocess rows guard. It therefore lacks `_Base`'s
+`revalidate_instances="always"`, which changes nothing: `with_review` round-trips through
+`model_dump(mode="python")`, so the nested value is revalidated from a dict on every append, and the
+type is frozen and validated at construction besides. Recorded because the obvious "fix" — giving it
+`_Base` — is exactly the mutation §7 forbids.
+
+**Revision 34 settles four things revision 26 wrote as `...` or left unstated.**
+
+1. **`at` is attested, not clocked.** `ingest_report` takes `observed_at` from
+   `provenance.generated_at` rather than reading a clock, because when a thing happened is part of
+   what the trusted caller attests. `ReviewAttestation.at` is the same field at the same boundary, so
+   `append_review` needs no clock parameter and has no timestamp of its own to disagree with.
+2. **`ReviewAttestation` carries the agent invariant itself.** Without it, an attestation missing
+   `lens` reaches the cross-checks, compares `None` against a real instrument ref, and fails three
+   steps later when `Review` is constructed — with a message about the stored record rather than
+   about the argument that was wrong.
+3. **`uncertainty` is bounded.** Revision 26 bounded `evidence` and said nothing about `uncertainty`,
+   though both arrive on one submission from one untrusted producer; an unbounded tuple in a stored
+   record is a defect however small the intended payload. `MAX_UNCERTAINTY_ENTRIES` is *defined as*
+   `MAX_EVIDENCE_ENTRIES` — an honest name at each use, and one number.
+4. **`Uncertainty.field` is `AuthoredProvenance`, not `AuthoredHashComponent`.** It enters no digest.
+   Revision 34 first kept the hash-component type and explained in prose that the name was
+   misleading; a type whose name has to be argued away at every reading is the wrong type. NUL has no
+   demonstrated hazard on this field, and if one appears the field can be tightened then.
 
 **The submission/record split is the fix for actor-supplied `verified`.** Revision 1 forbade storing
 `violated` and stopped there, which left `verified` settable by any caller — a Pydantic invariant can
@@ -2006,8 +2102,9 @@ toolkit is still rejected by an older one, since `_Base` is `extra="forbid"`; ru
 ### 4.2.1 Eligibility
 
 ```python
-def confirmation_count(self) -> int:
-    """Distinct confirming reviews that COUNT AS SUPPORT.
+# on Review
+def counts_as_support(self) -> bool:
+    """Whether THIS review counts as support, independent of the record holding it.
 
     An agent confirmation counts only when EVERYTHING it cited was mechanically
     checkable and was checked against what the agent was shown. `unwired` is not
@@ -2016,17 +2113,31 @@ def confirmation_count(self) -> int:
     path at all -- is not evidence of anything either. Prose belongs in `note`,
     which every review already has, and costs nothing there.
     """
-    return len({
-        r.review_id for r in self.reviews
-        if r.outcome == "confirms" and (
-            r.reviewer_kind != "agent"
-            or (r.correspondence is not None
-                and r.correspondence.status == "verified"
-                and r.evidence
-                and all(e.type == "location" for e in r.evidence))
-        )
-    })
+    if self.outcome != "confirms":
+        return False
+    if self.reviewer_kind != "agent":
+        return True
+    return (
+        self.correspondence is not None
+        and self.correspondence.status == "verified"
+        and bool(self.evidence)
+        and all(e.type == "location" for e in self.evidence)
+    )
+
+# on AuditFindingRecord
+def confirmation_count(self) -> int:
+    """Distinct confirming reviews that COUNT AS SUPPORT."""
+    return len({r.review_id for r in self.reviews if r.counts_as_support()})
 ```
+
+**Revision 34 lifts the predicate onto `Review` because §5.4's validate check needs the same rule.**
+Eligibility is a property of one review, and it was written as a filter clause inside a record-level
+aggregate — readable while it had exactly one caller. The check added at §5.4 reports the reviews
+this method *excludes*, so a second copy of the condition would be a second thing to update when
+§5.3 gains a code or §4.2.1 gains a clause, with a silent disagreement between the count and the
+report as the failure mode. One definition, two callers, and the check is spelled
+`not r.counts_as_support()` rather than as a list of the codes it knows about — the same
+predicate-over-roster rule §7 applies to the coverage algebra.
 
 Recording a review's weaker standing while still counting it as support is a distinction with no
 consequence — revision 1's `unwired`-accepts rule preserved the exact fail-open the design exists to
@@ -2580,14 +2691,57 @@ two would be the empty/unwired confusion one level up.
 
 ```python
 def append_review(
-    project_root, finding_id, submission: ReviewSubmission,
-    *, attestation: ReviewAttestation, actor: str,
+    project_root: Path, finding_id: str, submission: ReviewSubmission,
+    *, attestation: ReviewAttestation,
 ) -> Review
 ```
 
-`actor` is the writer of the record — the same nonblank, NUL-free string `ingest_report` demands —
-and is not a reviewer identity. `attestation` is the reviewer identity, and is the *only* source of
-one: revisions 1–17 conflated the two into a single unexplained parameter.
+`attestation` is the reviewer identity, and is the *only* source of one: revisions 1–17 conflated
+reviewer identity with record authorship into a single unexplained parameter.
+
+**Revision 34 removes `actor`.** Revisions 18–33 kept it, described as "the writer of the record —
+the same nonblank, NUL-free string `ingest_report` demands". The symmetry is false.
+`ingest_report` *persists* its actor, in the genesis `Transition` it writes; `append_review` writes
+no transition, and `Review` has no actor field and gains none. The parameter would have been
+validated and discarded — and a discarded parameter is worse than an absent one, because a public
+argument named `actor` advertises a record of the writer that the stored record does not contain.
+This is `verified`-supplied-by-the-actor in a milder key: a property the type system appears to
+carry and does not. It returns only if writer provenance gains a durable field.
+
+**The executable order.** Stated as numbered steps, for the reason §5.3 needed them: a list of
+independent rules does not say which fires first, and every one of these can fire on the same input.
+
+1. **Not an agent** → `correspondence = None`, and nothing further runs: no run lookup, no git, no
+   control plane.
+2. **Agent** → `load_run_records(project_root)`, matching `record.id == attestation.run_ref`.
+   No match is an `IngestError` (below).
+3. **The cross-checks, before the checker.** `reviewer_ref` against `record.agent`, `model` against
+   `record.model`, and — only when `record.evidence is not None` — `lens` against
+   `record.evidence.instrument.ref`. Each mismatch is an `IngestError`. They run first because they
+   refuse: there is no reason to replay git for a review that will be rejected.
+4. `check_correspondence(submission.evidence, record.evidence, repo=project_root)`.
+5. `status == "violated"` → `IngestError`.
+6. `review_id(...)`, then the `Review`, stamped `at=attestation.at`.
+7. Under `locked_store(project_root)`: load the case, `with_review`, write.
+
+`repo=project_root` is not a convention: `EvidenceSession.__init__` binds `_project_root = repo_root`
+and `start_run` passes `project_root`, so an exposure's commit is a commit of this repository by
+construction.
+
+**A `run_ref` that resolves to no record is refused, not stored.** Revision 34 first proposed storing
+it as `unwired` under a fourth §5.3 code, reasoning that §6 creates this state deliberately — a
+brokered run whose journal is gone writes no record at all — so refusing discards an honest
+reviewer's findings for a supervisor's failure. The asymmetry with `EXPOSURE_UNREACHABLE` defeats
+that: there, an attested run record exists and only its repository cannot answer, so there is
+something to be `unwired` *about*. Here there is no record, so neither identity cross-check can run,
+no sealed exposure provenance exists, and the stored review's `run_ref` would point at nothing. §6
+already calls the lost-journal branch retryable — that run is re-run, not reviewed around.
+
+**Every failure to resolve is the same refusal, and that is deliberate.** `load_run_records` raises
+on a symlinked `runs/`, a `runs` that is not a directory, and a non-flat child; those are a broken
+project rather than a missing run. They and the no-match case all become `IngestError`. The
+distinction is real in the code and worth keeping there, but it is not observable at this boundary,
+so §7 carries no row for it — see the "must not be added" list.
 
 - **Branches on the ATTESTED `reviewer_kind`, never a submitted one.** Only an agent review resolves a run record and runs
   `check_correspondence`. Human and deterministic submissions get `correspondence=None` and are stored.
@@ -2608,11 +2762,56 @@ one: revisions 1–17 conflated the two into a single unexplained parameter.
 - Takes the store lock through the same anchored-descriptor path as `ingest_report`, and writes via
   `with_review`, which rebuilds through the constructor and re-checks every derived value.
 
+**That path is `_locked_store`, private to `findings/ingest.py`, and revision 34 moves it.** It is
+`CaseStore` plus a `flock` on that same descriptor, so `findings/storage.py` is where it belongs;
+importing a neighbour's underscore-prefixed contextmanager would make `append_review` raise
+`IngestError` out of a function it does not own. Two conditions on the move:
+
+- **The public `locked_store` converts to its own error.** Today `_locked_store` catches
+  `CaseStorageError` and `PathSafetyError` and raises `IngestError`; and the `flock`/`close` calls
+  raise `OSError` that nothing catches at all. The extracted function converts all three into
+  `CaseStorageError`. Otherwise every caller has to know which storage-internal exception types leak
+  through, which is the abstraction not existing.
+- **Each writer translates at its own boundary.** `ingest_report` catches `CaseStorageError` and
+  raises `IngestError`, exactly as callers observe today; `append_review` does the same for itself.
+  Storage raises storage errors; a boundary names its own.
+
 Plus two backstops:
 
 - The model invariant in §4.2, so a write path that bypasses this function still cannot store `violated`.
-- A non-gating `validate` check, `review.correspondence-unwired` at info severity, so unbrokered agent
-  reviews are visible in aggregate. The difference between a known weaker standing and a silent one.
+- A non-gating `validate` check at info severity, so agent confirmations that do not count are visible
+  in aggregate. The difference between a known weaker standing and a silent one.
+
+**Revision 34 widens that check and renames it.** Revision 26 specified
+`review.correspondence-unwired`, covering unwired reviews. But §4.2.1 excludes agent confirmations
+two ways, and the other one is invisible: a review whose correspondence is `verified` while its
+evidence is empty or mixed with `TextEvidence` is stored, renders as a confirming review, is excluded
+from `confirmation_count`, and is reported by nothing. That is §4.2.1's own "cheapest possible
+fabrication" — and a reader seeing three confirming reviews above `confirmations: 2` gets no account
+of the difference, which is precisely the silence this backstop exists to break.
+
+The check becomes **`review.uncounted-confirmation`** at `validate/checks/review_confirmations.py`,
+reporting every agent review with `outcome == "confirms"` for which `counts_as_support()` is false.
+Subject is the case file path; qualifiers are `(review_id, reason)` with `identity_qualifiers =
+("review_id",)`, so each review is its own stable, individually suppressible fingerprint. `reason` is
+derived, never authored: the correspondence code when there is one, otherwise `no location evidence`
+or `evidence mixes non-location entries`.
+
+Two mechanical requirements that are easy to miss:
+
+- **The rule id must be added to `_POLICY_INFO_RULE_IDS` in `validate/findings.py`.** Otherwise
+  `validation_observation` degrades every `info` result to a bare `ValidationNotice`, which carries no
+  rule, no qualifiers, no fingerprint and no suppression. An advisory finding nobody can suppress is
+  an advisory finding somebody eventually deletes.
+- **This is the first validate check to read the case store**, via `load_cases(project_root)`.
+  `validate` already depends on `findings` — `checks/__init__.py` imports `findings.producers` — so
+  the direction is established rather than new, but the store had not been read from here before.
+  Read failures propagate: the validation runner already converts them into `validate.check-error`,
+  and catching them here would trade a precise report for a vaguer one.
+
+One severity, `info`, for both exclusions. A vacuous `verified` is arguably louder than an `unwired`,
+and `severities` can express the split later; 2c's real population is what should decide it, not a
+guess made before any producer exists.
 
 ## 6. Error handling
 
@@ -2735,7 +2934,11 @@ downgrade is a lie about what was checked.
 - **Model** — agent review without `correspondence` rejected; `violated` unstorable; `ReviewSubmission`
   rejects a `correspondence` key outright; `requests_used > budget` rejected; entries disagreeing on
   commit rejected; `EvidenceExposure.commit != base_commit` rejected; an exposure without an
-  `instrument` rejected; `unwired` without a code rejected.
+  `instrument` rejected; `unwired` without a code rejected. Plus, from revision 34: `uncertainty`
+  over `MAX_UNCERTAINTY_ENTRIES` rejected on **both** `ReviewSubmission` and the stored `Review`,
+  since a producer reaches the first and a bypassing write path reaches the second; and a
+  `ReviewAttestation` whose `reviewer_kind` is `agent` is rejected without a `lens` and without a
+  `model`, at the attestation rather than three steps later at the record.
 - **Eligibility** — one test per `ReviewerKind`, asserted against the `Literal` rather than a hand-written
   list, so a kind added later fails loudly instead of silently landing on the wrong side: an agent
   `confirms` counts only when `verified` **and** every evidence entry is a location; `human` and
@@ -2763,7 +2966,24 @@ downgrade is a lie about what was checked.
   `reviewer_kind` at all, so the `human`-labelled-agent bypass is unconstructible; an attested agent
   whose `reviewer_ref` or `model` disagrees with the run record is an `IngestError`; the same for a
   `lens` that is not `exposure.instrument.ref`; and two submissions under one run cannot mint two
-  `review_id`s, because every field the id hashes is attested rather than supplied.
+  `review_id`s, because every field the id hashes is attested rather than supplied. Plus, from
+  revision 34: a `run_ref` matching no record is an `IngestError` that leaves the case file
+  byte-identical; a symlinked `runs/` is the same `IngestError` rather than a stored correspondence;
+  and the stored `Review.at` is the attested instant, not the moment of the write.
+
+  The cross-checks-before-checker order needs a fixture chosen with care, because the obvious one
+  cannot see it: against an unreachable repository the checker *returns* `unwired` rather than
+  raising, so both orders end in the same `IngestError` and the ordering is invisible. It is
+  observable only where the checker would **raise** — an exposure that verifies and traverses but
+  whose replay hits a `ServeError`, which §5.2 propagates rather than converting. Then the correct
+  order refuses on identity with an `IngestError` and the inverted one dies of the `ServeError`
+  first. Stated here because the natural test asserts the right outcome for a reason unrelated to
+  the guard.
+- **`review.uncounted-confirmation`** — reports an `unwired` agent confirmation **and** a vacuously
+  `verified` one, the second being the case revision 26's `review.correspondence-unwired` could not
+  see; reports neither a counted agent confirmation nor a human or deterministic one; and its result
+  carries a rule, qualifiers and a fingerprint, which is the assertion that fails if the rule id is
+  missing from `_POLICY_INFO_RULE_IDS` and the observation degrades to a bare `ValidationNotice`.
 - **Derived guard** — no path reaches git without passing `authorize`, asserted by walking the
   dispatch in `serve.py`. Same spirit as `tests/test_instrument_boundary.py`: derived from the code,
   not a list someone maintains.
@@ -2824,9 +3044,24 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4b | Drop the traversal check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
 | 4b | Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
 | 4c | Re-add `reviewer_kind` to `ReviewSubmission` and branch on it | constructing a submission carrying `reviewer_kind` raises |
-| 4c | Skip the agent cross-check against the run record | an attested agent whose `model` disagrees with its run record is stored |
+| 4c | Skip the `reviewer_ref` cross-check | an attested agent whose `reviewer_ref` disagrees with its run record's `agent`, **its `model` agreeing**, is stored |
+| 4c | Skip the `model` cross-check | an attested agent whose `model` disagrees with its run record, **its `reviewer_ref` agreeing**, is stored |
 | 4c | Skip the lens cross-check | an attested `lens` that is not `exposure.instrument.ref` is stored |
 | 4c | Apply the lens cross-check unconditionally | an agent review whose run has **no** exposure stores as `unwired`, not `IngestError` |
+| 4c | Store an unresolvable `run_ref` as a correspondence instead of refusing | an agent review naming a run with no record raises `IngestError` **and leaves the case file byte-identical** |
+| 4c | Resolve a baseline, or open the control plane, in `append_review` | a review appends with the control-plane directory **deleted** |
+| 4c | Stamp `Review.at` from a clock instead of `attestation.at` | a review appended with an attested `at` in the past stores that instant |
+| 4c | Drop the stored-`violated` invariant | a `Review` carrying `correspondence.status == "violated"` constructs |
+| 4c | Drop agent-requires-`correspondence` | an agent `Review` with `correspondence=None` constructs |
+| 4c | Drop `max_length` from `ReviewSubmission.uncertainty` | a submission of `MAX_UNCERTAINTY_ENTRIES + 1` entries raises |
+| 4c | Drop `max_length` from `Review.uncertainty` | constructing a stored `Review` with `MAX_UNCERTAINTY_ENTRIES + 1` entries raises |
+| 4c | `== "human"` instead of `!= "agent"` in `counts_as_support` | a **deterministic** confirmation counts |
+| 4c | Drop the `status == "verified"` clause | an `unwired` agent confirmation **carrying location evidence** does not count |
+| 4c | Drop the non-empty `evidence` clause | an agent confirmation, `verified`, citing **nothing**, does not count |
+| 4c | `any` instead of `all` over location evidence | an agent confirmation citing one location **and one `TextEvidence`** does not count |
+| 4c | Have the check report only non-`verified` correspondence | a **vacuously `verified`** agent confirmation is reported |
+| 4c | Omit `review.uncounted-confirmation` from `_POLICY_INFO_RULE_IDS` | the check's result carries a rule, qualifiers and a fingerprint |
+| 4c | Let `PathSafetyError` escape `locked_store` | `append_review` against an unsafe case path raises `IngestError` |
 
 **The import-cycle row must run in a subprocess, and the direction is not symmetric.** Written as an
 in-process `import science_model.audit.record`, the assertion probes the *safe* direction: it
@@ -2911,6 +3146,37 @@ belongs in §5.2's prose and nowhere here. Revision 27 established the disciplin
 `GIT_SHALLOW_FILE` pair for the same reason: a roster row whose mutation cannot fail certifies
 nothing and reads as though it does.
 
+**Two more that must not be added, both from revision 34's 4c rows.**
+
+- **Treating a broken `runs/` as a missing run.** While a missing record was to be stored as
+  `unwired` and a broken directory refused, the two had different outcomes and the mutation was
+  observable. §5.4 now refuses both with `IngestError`, and nothing distinguishes them but message
+  text. The distinction stays in the code and in §5.4's prose; the row would certify nothing. The
+  general form is new to this document: **a ruling that simplifies behaviour can invalidate a guard
+  written for the richer behaviour**, so the guards get re-read against every ruling rather than
+  merely extended by it.
+- **"Give the check its own predicate instead of `counts_as_support()`."** A faithful copy of the
+  predicate satisfies that mutation and changes no output. Sharing the predicate is the right
+  structure and §4.2.1 argues for it, but structure is not what an outcome test can observe — so the
+  row names a concrete wrong implementation, *report only non-`verified` correspondence*, which the
+  vacuously-`verified` fixture separates. This is the mirror image of the vacuous fixtures revisions
+  31 and 32 corrected: there the input could not distinguish a genuinely different mutant, here the
+  mutant was not different from the original.
+
+**Why §4.2.1 gets four rows rather than one.** Its eligibility has four independent conditions —
+reviewer kind, correspondence present, status `verified`, and every entry a location — and a single
+fixture that fails when any of them is dropped certifies only whichever one it trips first. Each row
+above therefore carries a fixture that satisfies the other three: the `verified`-clause fixture cites
+real locations, the non-empty-evidence fixture is `verified`, and the `all`/`any` fixture is
+`verified` with one genuine citation. The same reasoning split the `reviewer_ref` and `model`
+cross-checks, where revision 26's single row — "an attested agent whose `model` disagrees" — could
+not certify the `reviewer_ref` comparison at all.
+
+**The missing-run row asserts two things, and the second is the load-bearing one.** `IngestError`
+alone is satisfied by an implementation that writes the review and *then* raises. The row requires
+the case file to be byte-identical afterwards, which is what "refused" has to mean at a boundary that
+owns a write.
+
 **The lazy-fetch row has three ways to go wrong, and the third is the interesting one.**
 
 1. `uploadpack.allowFilter` defaults to **false**: a `--filter=tree:0` clone from a serving
@@ -2973,7 +3239,8 @@ plan 2.
 
 **Gained.** An agent review's citations become checkable against what the agent was shown, at line
 granularity. An agent confirmation that cited nothing, or whose citations could not be checked, stops
-counting as support. The toolkit's first enforced budget, its first review-append boundary, and its
+counting as support — and, from revision 34, is *reported* rather than merely subtracted, so the gap
+between a review list and a confirmation count always has a written reason. The toolkit's first enforced budget, its first review-append boundary, and its
 first addressable control plane. Instrument identity as a run-record term. A per-judgement
 uncertainty channel. A run record that is a complete, self-sufficient account of what its agents were
 shown. `unwired` extended from instruments to agent testimony.
