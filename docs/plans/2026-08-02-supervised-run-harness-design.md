@@ -1,6 +1,6 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** designed, unbuilt (revision 2)
+**Status:** designed, unbuilt (revision 3)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
 
 **Revision 2** closes five defects found in review of revision 1. Two are omissions of a
@@ -10,6 +10,13 @@ rule stated too narrowly (git calls, §3.5) and a guarantee stated too broadly (
 postcondition, §4.1) — the second would have destroyed a caller's uncommitted work. The fifth
 is a tail that assumed every outcome carries a record (§7), which `finish_run` does not
 promise.
+
+**Revision 3** closes four more, all of the same kind: **a value the design named without
+pinning.** The actor was "`science health`" and not an interpreter (§3.2); the failure contract
+was an exit code with no library counterpart (§3.4.1); two wall-clock instants were used and
+never sourced (§3.4.2); and the supervisor's commit identity was promised as fixed without
+being written down (§3.4.3), though it is observable in every repository's history. A named
+value that is not pinned is a value an implementer picks.
 
 This slice builds one thing: a supervised autonomous run, end to end, with a deterministic
 actor. It ships no concurrency, no assignment records, no LLM actor, and no dispatch policy.
@@ -155,6 +162,26 @@ capture commit need real writes in the real tree, and the subprocess seam is pre
 replaces. Running health in-process would let harness and actor share state and would exercise
 the trusted ingestion path rather than the untrusted one.
 
+**The invocation is pinned to the supervisor's own installation.** "Runs `science health`"
+would permit a bare `science` resolved from `PATH` — a *different toolkit revision* than the
+one the supervisor attests in `toolkit_revision`, which nothing would notice:
+`assert_toolkit_matches` checks the supervisor's toolkit, not the actor's. The argv is
+
+```python
+[sys.executable, "-P", "-m", "science_tool", "health", "--project-root", str(project_root), …]
+```
+
+`sys.executable` is the interpreter already running the supervisor, so the actor is the same
+installation by construction. `-P` keeps the current directory and the script directory off
+`sys.path`, so a project-local `science_tool/` cannot shadow the real one — the project tree is
+actor-controlled, and it is the one directory this subprocess must not import from. The
+subprocess runs with `cwd` set to a supervisor-created temporary directory rather than the
+project root, so no project-local file is reachable by a relative path; the project is named
+only by the explicit `--project-root`. Measured: exit 0, report written.
+
+This is probed like §3.5's hardening rather than asserted — a test plants a `science_tool/`
+package in the project root and requires the actor to still run the real one.
+
 ### 3.3 The report path is derived
 
 `doc/audits/reports/<run-slug>.json`, from the run id. It cannot collide across runs, needs no
@@ -163,13 +190,16 @@ flag, and is the single path `report-only` permits (`autonomy/path_gate.py:123`)
 ### 3.4 The contract
 
 ```python
+class HarnessError(RuntimeError):
+    """An orchestration step failed. No outcome exists."""
+
 class HarnessOutcome(BaseModel):          # frozen, extra="forbid"
     run_id: str
     disposition: RunDisposition
     reason: str
     actor_exit_code: int
-    capture_commit: str | None
-    post_verdict_commit: str | None
+    capture_commit: str                   # a returned outcome always has one
+    post_verdict_commit: str | None       # None when there was nothing to settle (§4.5)
     record_written: bool
     ingestion: IngestOutcome | None
     ingestion_refusal: str | None
@@ -198,6 +228,55 @@ slice cannot vary invites a false claim in an attested record.
 patching a clock or a random source. The CLI supplies `datetime.now(UTC)` and four hex
 characters from `secrets.token_hex(2)`, matching the existing run-id spelling.
 
+### 3.4.1 Failure is an exception, not a field
+
+**Every orchestration failure, at any stage, raises `HarnessError`; the CLI maps it to exit 3.**
+A `HarnessOutcome` is returned only when the loop reached a verdict.
+
+Revision 2 had these disagreeing. Exit 3 was described as "any step before `finish_run`", which
+left a step-9 switch, commit, or restore failure with no code at all — and `HarnessOutcome`
+could not represent a failure before the capture commit, since every other field would have
+been meaningless. Making failure an exception settles both, and it is why `capture_commit` is
+now non-optional: an outcome that exists is an outcome whose capture commit exists.
+
+`unwired` is *not* a harness failure. It is a verdict — the run was judged and could not be
+seen — so it returns an outcome and exits 2.
+
+### 3.4.2 Which clock, and when
+
+Three wall-clock instants and one duration, all from the supervisor:
+
+| Value | Read | Source |
+|---|---|---|
+| `started` | at loop entry, before `start_run` | `datetime.now(UTC)` |
+| `generated_at` | immediately before spawning the actor | `datetime.now(UTC).isoformat(timespec="microseconds")` |
+| `ended` | immediately after the actor's capture commit, before `finish_run` | `datetime.now(UTC)` |
+| `wall_clock_seconds` | around the subprocess only | `perf_counter()` |
+
+`perf_counter` for the duration and wall clocks for the instants: a duration must not go
+backwards when the system clock is adjusted, and a recorded instant must be comparable across
+machines.
+
+`generated_at` is a **string**, formatted once and used twice — passed to the actor as
+`--generated-at` and attested unchanged. That round-trips exactly because
+`AuditReport.generated_at` is `str` with a validating-but-non-normalizing field validator
+(`audit/report.py:218-233`): the report echoes the supervisor's spelling verbatim, and
+`_assert_attested_provenance` compares strings. Had it been a `datetime`, re-serialization
+could have changed the spelling and refused every ingestion.
+
+### 3.4.3 The two identities, named
+
+Both are observable in every repository's history, so both are contract, not implementation.
+
+| Constant | Value | Used for |
+|---|---|---|
+| `AGENT_EMAIL` (existing, `marks.py:20`) | `agent@science.local` | capture commit **author**, with the run's `agent` as the name |
+| `SUPERVISOR_NAME` (new) | `science-supervisor` | capture commit committer; post-verdict commit author and committer |
+| `SUPERVISOR_EMAIL` (new) | `supervisor@science.local` | the same |
+
+The new pair lands in `autonomy/marks.py` beside `AGENT_EMAIL`, because that module already
+owns the question of who a commit claims to be.
+
 **The baseline** goes to `control_plane.run_dir(project_root, run_id)/baseline.json` — outside
 the project root, as `start_run` requires, addressable from the run id, and retained after the
 run for triage. Using the control plane's addressing is not the same as opening a brokered
@@ -209,7 +288,8 @@ place.
 *committed* by the supervisor. The post-verdict commit is both authored and committed by the
 supervisor and carries no trailer. That is the whole semantic in two commits: the actor
 produced these bytes, the supervisor froze them. Both identities are pinned with `-c
-user.name` / `-c user.email` so the loop works in a repository with no configured identity.
+user.name` / `-c user.email` (§3.4.3) so the loop works in a repository with no configured
+identity.
 
 **CLI.** `science autonomy run --project-root PATH [--format table|json]`. Exit codes extend
 `autonomy finish`'s rather than inventing a scheme:
@@ -219,7 +299,7 @@ user.name` / `-c user.email` so the loop works in a repository with no configure
 | 0 | `clean`, and the report was ingested |
 | 1 | `quarantined` |
 | 2 | `unwired` |
-| 3 | harness abort — any step before `finish_run` |
+| 3 | `HarnessError` — an orchestration step failed at any stage (§3.4.1) |
 | 4 | `clean`, but ingestion refused |
 
 Code 4 exists because **an ingestion refusal is a failure of the run's purpose even when the
@@ -448,6 +528,7 @@ is cut over to it, so there is one spelling rather than two that can drift.
 | `autonomy/cli.py` | new `run` command |
 | `autonomy/lifecycle.py` | `start_run` restore postcondition (§4.1) |
 | `autonomy/git.py` | probe and pin the four write subcommands (§3.5) |
+| `autonomy/marks.py` | `SUPERVISOR_NAME` / `SUPERVISOR_EMAIL` (§3.4.3) |
 | `findings/ingest.py` | `ingestion_authority` (§5.4) |
 | `findings/cli.py` | cut `_load_ingestion_context` over to it |
 | `graph/health.py` | `expected_producer_ids` |
@@ -465,15 +546,17 @@ fixed summary per invocation plus whatever `finish_run` reports, so it is bounde
 argument. Registering the surface also means the `cli-and-workflows.md` entry, which the same
 suite covers.
 
-`autonomy/marks.py`, `autonomy/path_gate.py`, and `validate/checks/autonomous_runs.py` are
-**consumed unchanged**, as is `ingest_report` itself — §5.4 adds a derivation beside it, not a
-change to it. If the loop appears to need a change in any of them, that is a signal the loop is
-wrong, not that the contract is.
+`autonomy/path_gate.py` and `validate/checks/autonomous_runs.py` are **consumed unchanged**, as
+are `verify_marks` and `ingest_report` themselves — §3.4.3 adds two constants beside the first
+and §5.4 a derivation beside the second, but neither behaviour changes. If the loop appears to
+need a change to any of those four, that is a signal the loop is wrong, not that the contract
+is.
 
 ## 7. Errors
 
-Every step before `finish_run` aborts with a message naming the step, writes no record, and
-exits 3. The branch and every file are left in place for triage.
+Every orchestration failure raises `HarnessError` naming the step and exits 3 (§3.4.1) — before
+`finish_run` or after it, since a step-9 switch, commit, or restore can fail too. The branch and
+every file are left in place for triage.
 
 `finish_run` never raises for an expected condition — it returns `unwired`, which blocks — so
 steps 7 through 9 always complete once reached. Two things revision 1 got wrong about that
@@ -531,6 +614,10 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 19 | Pass `--allow-empty` rather than checking for nothing to settle | an empty post-verdict commit is recorded |
 | 20 | Derive the ingestion context from the health run's lenient sources | an identity conflict is ingested instead of refused (§5.4) |
 | 21 | Exit 0 on an ingestion refusal | a run that produced an unusable report reports success |
+| 22 | Invoke the actor as a bare `science` from `PATH` | a shadowing `science` on `PATH` runs instead of the supervisor's toolkit |
+| 23 | Drop `-P` from the actor argv | a `science_tool/` planted in the project root is imported by the actor |
+| 24 | Return an outcome instead of raising on a step-9 failure | a failed switch-back reports the run's own disposition |
+| 25 | Take `ended` from the actor's report rather than the supervisor's clock | the record's `ended` is actor-supplied |
 
 ### 8.1 Row 11 needs more than one fixture
 
@@ -557,9 +644,18 @@ code learns that actors are pluggable.
 
 Rows 16 and 17 need a repository configured to attack. One test plants, in `.git/config` and
 `$GIT_DIR/hooks/`, every vector the four new subcommands can reach — a `pre-commit` hook, a
-`post-checkout` hook, a `filter.<driver>.clean` bound by an untracked `.gitattributes`,
-`core.fsmonitor`, and `commit.gpgsign=true` with `gpg.program` naming a script — each writing a
-sentinel file. The loop runs to completion and **no sentinel exists**.
+`post-checkout` hook, a `filter.<driver>.clean` bound by an attribute, `core.fsmonitor`, and
+`commit.gpgsign=true` with `gpg.program` naming a script — each writing a sentinel file. The
+loop runs to completion and **no sentinel exists**.
+
+**The attribute goes in `$GIT_DIR/info/attributes`, not an untracked `.gitattributes`.** An
+untracked file makes `start_run`'s `assert_repository_is_at` refuse the run outright, so the
+test would never reach the vector it exists to probe — a fixture that passes for the wrong
+reason. `info/attributes` is also the better probe: it is one of the three attribute layers
+`_filter_driver_overrides` was written to cover, it is invisible to `git status`, and it is
+exactly the actor-controlled layer the gateway's threat model is about. (Committing the
+`.gitattributes` in the fixture, or planting it after `start_run` returns, would also work; both
+are weaker, because they exercise a layer the actor does not need.)
 
 The test asserts on the sentinels, not on the argv. An argv assertion passes for a harness that
 builds the right flags by hand and would keep passing when a later call site forgets them;
