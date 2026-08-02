@@ -99,6 +99,7 @@ CANONICAL_CHECK_MODULES = (
     "supersession",
     "materialization",
     "correspondence_drift",
+    "review_confirmations",
     "accepted_validation",
     "autonomous_runs",
     "boundary",
