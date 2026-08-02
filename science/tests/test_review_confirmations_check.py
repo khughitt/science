@@ -5,6 +5,7 @@ from pathlib import Path
 from science_model.audit import ReviewSubmission
 from science_model.audit.evidence import LocationEvidence, TextEvidence
 
+from science_tool.findings.catalog import build_project_registry
 from science_tool.findings.reviews import append_review
 from science_tool.findings.storage import case_path
 from science_tool.validate.checks.review_confirmations import (
@@ -136,6 +137,12 @@ def test_the_finding_keeps_its_rule_and_fingerprint(tmp_path: Path) -> None:
     from science_tool.validate.findings import is_policy_info_rule
 
     assert is_policy_info_rule(RULE_UNCOUNTED_CONFIRMATION)
+
+
+def test_the_rule_registers_without_a_section_order_collision(tmp_path: Path) -> None:
+    registry = build_project_registry(tmp_path)
+
+    assert registry.rule(RULE_UNCOUNTED_CONFIRMATION.id) == RULE_UNCOUNTED_CONFIRMATION
 
 
 def test_no_cases_yields_nothing(tmp_path: Path) -> None:

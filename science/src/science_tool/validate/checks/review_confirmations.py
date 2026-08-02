@@ -25,7 +25,7 @@ from science_tool.validate.result import Severity
 SECTION = FindingSection(
     id="review-confirmations",
     title="uncounted agent confirmations",
-    section_order=161,
+    section_order=163,
 )
 
 
@@ -44,7 +44,7 @@ RULE_UNCOUNTED_CONFIRMATION = FindingRule(
     identity_qualifiers=("review_id",),
     title="Agent confirmation that does not count as support",
     section=SECTION.id,
-    display_order=16101,
+    display_order=16301,
 )
 
 
