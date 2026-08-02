@@ -1865,15 +1865,17 @@ Composite refresh protocol's byte-stability gate in the retained worktree.
 Save the current graph hash, complete hybrid and hash diffs, task projection,
 research-semantic projection, peer list, and strict validation result set in
 the existing pan-disease evidence directory. Require exactly 599 hybrid rows,
-all `mtime_changed`, and zero hash rows before mutation.
+all `mtime_changed`, zero hash rows, and exactly one corresponding
+`graph.check` stale-input warning before mutation.
 
 - [ ] **Step 2: Rebuild and prove the graph-only correction**
 
 Run the normal graph build with default Commons resolution. Require only
 `knowledge/graph.trig` to change; zero complete hybrid and hash diff rows; graph
-validation success; zero absolute overlay identifiers; byte-identical task,
-research-semantic, and peer projections; and a byte-identical sorted strict
-validation result set. Commit only `knowledge/graph.trig` as
+validation success; zero absolute overlay identifiers; and byte-identical task,
+research-semantic, and peer projections. Require strict validation to remove
+only the exact 599-input `graph.check` stale warning while leaving every other
+sorted result byte-identical. Commit only `knowledge/graph.trig` as
 `chore(graph): close pan-disease graph provenance`, obtain independent review,
 and fast-forward local `main` before resuming Task 24. Do not push.
 
