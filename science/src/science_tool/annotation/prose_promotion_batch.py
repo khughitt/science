@@ -104,8 +104,11 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     targets = build_targets()
     store = ProseDecompositionStore(project_root)
     rows = _plan_rows(plan)
-    for source_slug in {row.source_slug for row in rows}:
-        store.load_latest(source_slug)
+    try:
+        for source_slug in {row.source_slug for row in rows}:
+            store.load_latest(source_slug)
+    except DecompositionError as exc:
+        raise ProsePromotionError(str(exc)) from exc
 
     report = ApplyReport()
     refusals: list[str] = []

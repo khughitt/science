@@ -279,6 +279,20 @@ def test_apply_rejects_stale_artifact_id(tmp_path: Path) -> None:
         apply_prose_promotion_plan(tmp_path, plan)
 
 
+def test_apply_translates_malformed_decomposition_index_before_writing(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    malformed_index = "{\n"
+    index_path.write_text(malformed_index, encoding="utf-8")
+
+    with pytest.raises(ProsePromotionError, match="invalid prose decomposition index JSON"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == malformed_index
+    assert not (tmp_path / "entities").exists()
+
+
 def test_apply_rejects_fingerprint_mismatch(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
     payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
