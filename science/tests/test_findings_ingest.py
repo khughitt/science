@@ -20,6 +20,7 @@ from science_tool.findings.ingest import (
     IngestionContext,
     IngestionProvenance,
     ingest_report as _ingest_report,
+    ingestion_authority,
     load_report,
 )
 from science_tool.findings.producers import FindingProducer, build_registry
@@ -496,15 +497,13 @@ def test_report_cannot_expand_the_trusted_canonical_entity_universe(tmp_path):
 
 
 def test_graph_context_accepts_an_adapter_backed_entity(tmp_path):
-    from science_tool.findings.cli import _load_ingestion_context
-
     papers = tmp_path / "papers"
     papers.mkdir()
     papers.joinpath("references.bib").write_text(
         "@article{Smith2024,\n  title = {Cells},\n  year = {2024},\n}\n",
         encoding="utf-8",
     )
-    context, _entity_registry = _load_ingestion_context(tmp_path)
+    _registry, context = ingestion_authority(tmp_path)
     assert "paper:Smith2024" in context.canonical_entity_ids
     report = _report(
         findings=[
@@ -527,8 +526,6 @@ def test_graph_context_accepts_an_adapter_backed_entity(tmp_path):
 
 
 def test_graph_context_refuses_duplicate_owners_before_ingestion(tmp_path):
-    from science_tool.findings.cli import _load_ingestion_context
-
     for name in ("q1.md", "q1-duplicate.md"):
         path = tmp_path / "entities" / "questions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -538,20 +535,18 @@ def test_graph_context_refuses_duplicate_owners_before_ingestion(tmp_path):
         )
 
     with pytest.raises(EntityIdentityCollisionError, match="question:q1"):
-        _load_ingestion_context(tmp_path)
+        ingestion_authority(tmp_path)
     assert not (tmp_path / CASES_DIRNAME).exists()
 
 
 def test_graph_invalid_entities_do_not_enter_the_trusted_context(tmp_path):
-    from science_tool.findings.cli import _load_ingestion_context
-
     invalid = tmp_path / "entities" / "reports" / "invalid.md"
     invalid.parent.mkdir(parents=True)
     invalid.write_text(
         "---\nid: mystery:invalid\nkind: mystery\ntitle: Invalid\n---\n",
         encoding="utf-8",
     )
-    context, _entity_registry = _load_ingestion_context(tmp_path)
+    _registry, context = ingestion_authority(tmp_path)
     assert "mystery:invalid" not in context.canonical_entity_ids
     report = _report(
         findings=[

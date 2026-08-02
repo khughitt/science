@@ -130,6 +130,28 @@ class IngestionContext(BaseModel):
         return value
 
 
+def ingestion_authority(project_root: Path) -> tuple[FindingRegistry, IngestionContext]:
+    """The registry and entity universe `ingest_report` judges a report against.
+
+    BOTH ARE AUTHORITY, NOT DATA. Neither may come from the report, and three wrong answers
+    are each one step away: reusing anything the actor produced; reusing the health run's
+    `load_project_sources(..., strict_identity=False)`, which is lenient on purpose so
+    materialization can carry identity conflicts into its audit gate; or reaching into
+    `findings/cli.py` for its private helper.
+
+    `load_project_sources` is called with its defaults, which include `strict_identity=True`:
+    an identity conflict refuses the write rather than being ingested (Spec 1 design §8).
+    """
+    from science_tool.findings.catalog import build_registry_for_entity_registry
+    from science_tool.graph.sources import load_project_sources
+
+    sources = load_project_sources(project_root)
+    context = IngestionContext(
+        canonical_entity_ids=frozenset(entity.canonical_id for entity in sources.entities)
+    )
+    return build_registry_for_entity_registry(sources.registry), context
+
+
 def _require_bounded_json_nesting(value: object, path: Path) -> None:
     stack: list[tuple[object, int]] = [(value, 0)]
     while stack:
