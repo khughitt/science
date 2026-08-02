@@ -13,6 +13,7 @@ from science_model.audit.record import (
     review_id,
 )
 from science_model.audit.subjects import EntitySubject
+from science_model.correspondence import Correspondence
 
 NOW = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
 FID = "a" * 64
@@ -333,6 +334,7 @@ def test_agent_review_requires_lens_and_model():
         at=NOW,
         outcome="confirms",
         note="checked",
+        correspondence=Correspondence(status="verified"),
     )
     with pytest.raises(ValidationError):
         Review(
@@ -837,6 +839,7 @@ def test_authored_provenance_accepts_exact_nonblank_values():
         at=NOW,
         outcome="confirms",
         note="checked",
+        correspondence=Correspondence(status="verified"),
     )
     assert transition.actor == "keith"
     assert review.note == "checked"

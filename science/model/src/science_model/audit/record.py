@@ -39,6 +39,7 @@ from science_model.audit.fingerprint import (
     normalize_identity_value,
 )
 from science_model.audit.subjects import FindingSubject, normalize_utf8_nfc
+from science_model.correspondence import Correspondence
 
 DOC_KIND = "audit-case"
 
@@ -350,6 +351,9 @@ class Review(_Base):
     at: Instant
     outcome: ReviewOutcome
     note: AuthoredProvenance
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
+    correspondence: Correspondence | None = None
 
     @model_validator(mode="after")
     def _agent_provenance(self) -> Review:
@@ -361,6 +365,19 @@ class Review(_Base):
                     "an agent review requires model provenance, so the correlation "
                     "caution stays measurable (design §4)"
                 )
+            # Absent reads as clean. `unwired` is permitted; missing is not.
+            if self.correspondence is None:
+                raise RecordError(
+                    "an agent review requires a correspondence; it may be 'unwired', "
+                    "it may not be absent (design §4.2)"
+                )
+        # A MODEL invariant, not a gate: `append_review` refuses `violated` too, and
+        # putting it here means every other write path inherits the refusal instead of
+        # each gate having to remember it.
+        if self.correspondence is not None and self.correspondence.status == "violated":
+            raise RecordError(
+                "a review with a 'violated' correspondence may not be stored (design §4.2)"
+            )
         return self
 
 
