@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -208,13 +209,20 @@ class ProseDecompositionStore:
         _atomic_write_json(self.index_path(slug), state)
         return StorePersistReport(source_slug=slug, artifact_id=artifact_id, stale_fingerprints=stale_fingerprints)
 
-    def record_promotion(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
+    def plan_promotion(
+        self, source_slug: str, fingerprint: str, promoted_to: str, *, state: dict | None = None
+    ) -> dict:
+        """Return the index state after recording this promotion. Writes nothing."""
         source_slug = _validate_store_slug(source_slug)
-        state = self.load_index(source_slug)
+        state = copy.deepcopy(self.load_index(source_slug)) if state is None else copy.deepcopy(state)
         if fingerprint not in state["units"]:
             raise DecompositionError(f"unknown decomposition unit fingerprint: {fingerprint}")
         state["units"][fingerprint]["promoted_to"] = promoted_to
-        _atomic_write_json(self.index_path(source_slug), state)
+        return state
+
+    def record_promotion(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
+        state = self.plan_promotion(source_slug, fingerprint, promoted_to)
+        _atomic_write_json(self.index_path(_validate_store_slug(source_slug)), state)
 
     def load_latest(self, slug: str) -> DecompositionArtifact:
         slug = _validate_store_slug(slug)
@@ -523,12 +531,12 @@ def _reject_unknown_keys(raw: dict[str, Any], *, allowed: frozenset[str], label:
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(_canonical_json_text(payload), encoding="utf-8")
+    tmp.write_text(canonical_json_text(payload), encoding="utf-8")
     tmp.replace(path)
 
 
 def _write_immutable_json(path: Path, payload: dict[str, Any]) -> None:
-    canonical_text = _canonical_json_text(payload)
+    canonical_text = canonical_json_text(payload)
     if path.exists():
         existing_text = path.read_text(encoding="utf-8")
         if existing_text == canonical_text:
@@ -540,7 +548,7 @@ def _write_immutable_json(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _canonical_json_text(payload: dict[str, Any]) -> str:
+def canonical_json_text(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 

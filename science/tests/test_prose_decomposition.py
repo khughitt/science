@@ -7,6 +7,7 @@ from science_tool.annotation.prose_decomposition import (
     DecompositionError,
     ProseDecompositionStore,
     artifact_unit_ref,
+    canonical_json_text,
     compute_source_hash,
     parse_submitted_decomposition,
 )
@@ -327,6 +328,47 @@ def test_store_preserves_promoted_link_across_unit_renumber(tmp_path):
     assert state["units"][first.units[0].fingerprint]["promoted_to"] == "proposition:x"
     assert state["units"][first.units[0].fingerprint]["latest_unit_id"] == "u777"
     assert state["units"][first.units[0].fingerprint]["stale"] is False
+
+
+def _persisted(tmp_path: Path):
+    """The module's own two-unit artifact, persisted, plus its store and fingerprints."""
+    artifact = parse_submitted_decomposition(json.dumps(_artifact(tmp_path)), project_root=tmp_path)
+    store = ProseDecompositionStore(tmp_path)
+    store.persist(artifact)
+    return artifact, store, [unit.fingerprint for unit in artifact.units]
+
+
+def test_plan_promotion_composes_across_rows_and_writes_nothing(tmp_path: Path):
+    """Two prose rows sharing one source slug must produce one index with both promotions."""
+    _artifact_obj, store, fingerprints = _persisted(tmp_path)
+    first, second = fingerprints
+    before = store.index_path("example").read_text(encoding="utf-8")
+
+    state = store.plan_promotion("example", first, "proposition:a")
+    state = store.plan_promotion("example", second, "proposition:b", state=state)
+
+    assert state["units"][first]["promoted_to"] == "proposition:a"
+    assert state["units"][second]["promoted_to"] == "proposition:b"
+    assert store.index_path("example").read_text(encoding="utf-8") == before
+
+
+def test_plan_promotion_rejects_an_unknown_fingerprint(tmp_path: Path):
+    _artifact_obj, store, _fingerprints = _persisted(tmp_path)
+
+    with pytest.raises(DecompositionError):
+        store.plan_promotion("example", "sha256:nope", "proposition:a")
+
+
+def test_canonical_json_text_is_what_record_promotion_writes(tmp_path: Path):
+    """The planner's text must be byte-identical to the writer's."""
+    _artifact_obj, store, fingerprints = _persisted(tmp_path)
+
+    planned = canonical_json_text(store.plan_promotion("example", fingerprints[0], "proposition:a"))
+    store.record_promotion(
+        source_slug="example", fingerprint=fingerprints[0], promoted_to="proposition:a"
+    )
+
+    assert store.index_path("example").read_text(encoding="utf-8") == planned
 
 
 def test_store_load_latest_reparses_generation(tmp_path):
