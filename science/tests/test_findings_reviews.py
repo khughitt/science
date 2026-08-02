@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from science_model.audit import ReviewSubmission
+from science_model.audit import ReviewAttestation, ReviewSubmission
 from science_model.audit.evidence import LocationEvidence
 
 from science_tool.findings.ingest import IngestError
@@ -244,3 +245,265 @@ def test_a_lock_close_failure_surfaces_as_ingest_error(
             ReviewSubmission(outcome="confirms", note="n"),
             attestation=human_attestation(),
         )
+
+
+def test_an_agent_review_of_an_unbrokered_run_is_unwired(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    unbrokered_run()
+    review = append_review(
+        tmp_path,
+        stored_case.finding_id,
+        ReviewSubmission(outcome="confirms", note="n"),
+        attestation=agent_attestation(),
+    )
+    assert review.correspondence is not None
+    assert review.correspondence.status == "unwired"
+    assert review.correspondence.code == "NO_EXPOSURE"
+
+
+def test_the_lens_check_is_skipped_when_the_run_has_no_exposure(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    unbrokered_run()
+    review = append_review(
+        tmp_path,
+        stored_case.finding_id,
+        ReviewSubmission(outcome="confirms", note="n"),
+        attestation=agent_attestation(lens="something-else.md"),
+    )
+    assert review.correspondence is not None
+    assert review.correspondence.status == "unwired"
+
+
+def test_a_lens_mismatch_against_an_EXPOSED_run_is_refused(
+    sealed_agent_run, agent_attestation
+) -> None:
+    """Exercise the lens comparison against a run that actually has an exposure."""
+    project, case, _control = sealed_agent_run
+    with pytest.raises(IngestError, match="lens|instrument"):
+        append_review(
+            project,
+            case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(lens="not-the-instrument.md"),
+        )
+
+
+def test_a_reviewer_ref_mismatch_is_refused(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    """`model` agrees, so this can only fail on reviewer_ref."""
+    unbrokered_run(agent="curation-sweep", model="test-model")
+    with pytest.raises(IngestError, match="reviewer_ref|agent"):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(reviewer_ref="someone-else", model="test-model"),
+        )
+
+
+def test_a_model_mismatch_is_refused(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    """`reviewer_ref` agrees, so this can only fail on model."""
+    unbrokered_run(agent="curation-sweep", model="test-model")
+    with pytest.raises(IngestError, match="model"):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(
+                reviewer_ref="curation-sweep", model="a-different-model"
+            ),
+        )
+
+
+def test_a_run_ref_with_no_record_is_refused_and_writes_nothing(
+    tmp_path: Path, stored_case, agent_attestation, case_files
+) -> None:
+    before = case_files(tmp_path)
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(run_ref="run:2020-01-01-nobody-0000"),
+        )
+    assert case_files(tmp_path) == before
+
+
+def test_a_symlinked_runs_directory_is_refused(
+    tmp_path: Path, stored_case, agent_attestation
+) -> None:
+    elsewhere = tmp_path.parent / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "runs").symlink_to(elsewhere)
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(),
+        )
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unreadable_runs_directory_is_an_ingest_error(
+    tmp_path: Path, stored_case, agent_attestation
+) -> None:
+    """A raw OSError from `load_run_records` stays inside the IngestError boundary."""
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    runs.chmod(0o000)
+    try:
+        with pytest.raises(IngestError):
+            append_review(
+                tmp_path,
+                stored_case.finding_id,
+                ReviewSubmission(outcome="confirms", note="n"),
+                attestation=agent_attestation(),
+            )
+    finally:
+        runs.chmod(0o755)
+
+
+def test_a_forged_attestation_is_refused_before_the_run_lookup(
+    tmp_path: Path, stored_case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The load-bearing assertion is that recursive validation prevents run lookup."""
+    monkeypatch.setattr(
+        "science_tool.findings.reviews.load_run_records",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("run lookup ran")),
+    )
+    forged = ReviewAttestation.model_construct(
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens=None,
+        model="test-model",
+        run_ref="run:2026-07-25-curation-sweep-a3f1",
+        at=datetime(2026, 8, 2, tzinfo=UTC),
+    )
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=forged,
+        )
+
+
+def test_a_forged_submission_is_refused_before_the_checker(
+    tmp_path: Path,
+    stored_case,
+    unbrokered_run,
+    agent_attestation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The agent path recursively validates the submission before correspondence."""
+    unbrokered_run()
+    monkeypatch.setattr(
+        "science_tool.findings.reviews.check_correspondence",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("checker ran")),
+    )
+    forged = ReviewSubmission.model_construct(
+        outcome="confirms",
+        note="n",
+        evidence=(
+            LocationEvidence.model_construct(
+                type="location", path="a/../b.txt", pointer=None, line=None, span=None
+            ),
+        ),
+        uncertainty=(),
+    )
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            forged,
+            attestation=agent_attestation(),
+        )
+
+
+def test_the_cross_checks_run_before_the_checker(
+    tmp_path: Path,
+    stored_case,
+    unbrokered_run,
+    agent_attestation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refusing identity cross-check must run before correspondence replay."""
+    from science_tool.evidence_broker.serve import ServeError
+
+    unbrokered_run(agent="curation-sweep", model="test-model")
+    monkeypatch.setattr(
+        "science_tool.findings.reviews.check_correspondence",
+        lambda *a, **k: (_ for _ in ()).throw(ServeError("replay exploded")),
+    )
+    with pytest.raises(IngestError, match="model"):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(model="a-different-model"),
+        )
+
+
+def test_a_sealed_run_replays_with_the_control_plane_deleted(
+    sealed_agent_run, agent_attestation
+) -> None:
+    """`append_review` resolves the sealed run record and no live baseline state."""
+    import shutil
+
+    project, case, control_plane_dir = sealed_agent_run
+    shutil.rmtree(control_plane_dir)
+    review = append_review(
+        project,
+        case.finding_id,
+        ReviewSubmission(
+            outcome="confirms",
+            note="n",
+            evidence=(LocationEvidence(type="location", path="science.yaml"),),
+        ),
+        attestation=agent_attestation(),
+    )
+    assert review.correspondence is not None
+    assert review.correspondence.status == "verified"
+
+
+def test_a_citation_the_run_was_never_shown_is_refused(
+    sealed_agent_run, agent_attestation, case_files
+) -> None:
+    project, case, _control = sealed_agent_run
+    before = case_files(project)
+    with pytest.raises(IngestError, match="CITATION_UNSERVED"):
+        append_review(
+            project,
+            case.finding_id,
+            ReviewSubmission(
+                outcome="confirms",
+                note="n",
+                evidence=(LocationEvidence(type="location", path="never-read.txt"),),
+            ),
+            attestation=agent_attestation(),
+        )
+    assert case_files(project) == before
+
+
+def test_a_verified_agent_confirmation_counts(
+    sealed_agent_run, agent_attestation
+) -> None:
+    """End-to-end: a verified agent confirmation affects the stored case."""
+    project, case, _control = sealed_agent_run
+    append_review(
+        project,
+        case.finding_id,
+        ReviewSubmission(
+            outcome="confirms",
+            note="n",
+            evidence=(LocationEvidence(type="location", path="science.yaml"),),
+        ),
+        attestation=agent_attestation(),
+    )
+    assert load_cases(project)[0].confirmation_count() == 1

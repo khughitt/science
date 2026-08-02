@@ -16,6 +16,18 @@ from science_model.audit import (
     finding_fingerprint,
     occurrence_key,
 )
+from science_model.autonomous_runs import (
+    AutonomousRunRecord,
+    PolicyIdentity,
+    RunBudget,
+    RunDisposition,
+    RunTier,
+)
+from science_model.evidence_broker import (
+    EvidenceSessionSpec,
+    InstrumentIdentity,
+    SurfacePolicy,
+)
 from science_model.run_fingerprint import (
     FINGERPRINT_POLICY_V1,
     ArtifactLocality,
@@ -884,7 +896,8 @@ def registrable_member_project(tmp_path: Path) -> tuple[Path, str, str]:
 # --- plan 4c: review-append fixtures -----------------------------------------
 
 REVIEW_AT = datetime(2026, 8, 2, tzinfo=UTC)
-REVIEW_RUN_ID = "run:2026-07-25-lifecycle-agent-a3f1"
+REVIEW_RUN_ID = "run:2026-07-25-curation-sweep-a3f1"
+AGENT = "curation-sweep"
 
 NOW = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
 SUBJECT = EntitySubject(ref="dataset:gtex-v8")
@@ -944,6 +957,134 @@ def _build_audit_finding_record(
     )
 
 
+def _build_run_record(**overrides) -> AutonomousRunRecord:
+    fields = {
+        "id": REVIEW_RUN_ID,
+        "agent": AGENT,
+        "model": "test-model",
+        "tier": RunTier.BELIEF_NEUTRAL,
+        "branch": f"auto/{REVIEW_RUN_ID.removeprefix('run:')}",
+        "base_commit": "a" * 40,
+        "head_commit": "b" * 40,
+        "toolkit_revision": "c" * 40,
+        "policy_identity": PolicyIdentity(id="core-default", version="1"),
+        "basis_digest": "d" * 64,
+        "started": datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        "ended": datetime(2026, 7, 25, 9, 30, tzinfo=UTC),
+        "budget": RunBudget(tokens=100, wall_clock_seconds=1800.0),
+        "disposition": RunDisposition.CLEAN,
+    }
+    fields.update(overrides)
+    return AutonomousRunRecord(**fields)
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root), *args],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def _write(root: Path, rel: str, text: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _seed_science_project(root: Path) -> None:
+    """A project with a real, non-empty belief basis.
+
+    The shape is copied from `test_autonomy_perturbation_alarm.py`'s `_seed_project`,
+    which is known to yield actual evidence units: a proposition, a belief-eligible
+    evidence line bearing on it, and the paper the line is sourced from. `pmid` is quoted
+    because unquoted digits parse as an int and pydantic rejects an int for a `str` field.
+    """
+    _write(root, "science.yaml", "name: lifecycle-fixture\nknowledge_profiles:\n  local: local\n")
+    _write(root, "entities/propositions/p1.md", "---\nid: proposition:p1\nkind: proposition\ntitle: P1\n---\n\nClaim.\n")
+    _write(
+        root,
+        "entities/papers/x.md",
+        "---\n"
+        "id: paper:x\n"
+        "kind: paper\n"
+        "title: X\n"
+        "venue: Nature\n"
+        'pmid: "111"\n'
+        "year: 2020\n"
+        "url: https://example.org/x\n"
+        "---\n\nBody.\n",
+    )
+    _write(
+        root,
+        "entities/evidence-lines/e1.md",
+        "---\n"
+        "id: evidence-line:e1\n"
+        "kind: evidence-line\n"
+        "title: Evidence line\n"
+        "stance: supports\n"
+        "target: proposition:p1\n"
+        "source: paper:x\n"
+        "strength: strong\n"
+        "belief_eligible: true\n"
+        "---\n",
+    )
+
+
+def _seeded_git_project(tmp_path: Path) -> Path:
+    """A git project with a real, non-empty belief basis, committed INCLUDING its graph.
+
+    Building and committing `knowledge/graph.trig` here is load-bearing, not tidiness.
+    `start_run` materializes, so a fixture that never built the graph leaves it untracked
+    the moment `start` returns -- and every dirty-tree test below would then pass because
+    of the supervisor's own write instead of the condition it names. With the graph
+    already committed, the deterministic rebuild leaves the tree clean.
+    """
+    from science_tool.graph.materialize import materialize_graph
+
+    root = tmp_path / "project"
+    root.mkdir()
+    _seed_science_project(root)
+    materialize_graph(root)
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    assert not _git(root, "status", "--porcelain"), "the fixture must start clean"
+    return root
+
+
+def _finish_run(project: Path, baseline_path: Path):
+    from science_tool.autonomy.lifecycle import finish_run
+
+    return finish_run(
+        project, baseline_path=baseline_path, head=_git(project, "rev-parse", "HEAD"),
+        ended=datetime(2026, 7, 25, 9, 30, tzinfo=UTC), tokens=100, wall_clock_seconds=1800.0,
+    )
+
+
+def _start_brokered_run(project: Path, tmp_path: Path, monkeypatch, *, inline_paths=()):
+    from science_tool.autonomy.lifecycle import start_run
+
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    return start_run(
+        project,
+        agent=AGENT,
+        model="test-model",
+        tier=RunTier.BELIEF_NEUTRAL,
+        short_id="a3f1",
+        started=datetime(2026, 7, 25, 9, 0, tzinfo=UTC),
+        evidence=_spec(inline_paths=inline_paths),
+    )
+
+
+def _spec(*, inline_paths: tuple[Path, ...] = ()) -> EvidenceSessionSpec:
+    return EvidenceSessionSpec(
+        budget=2,
+        surface_policy=SurfacePolicy(deny_prefixes=("private",), notice="withheld"),
+        instrument=InstrumentIdentity(ref="rubric.md", sha256="c" * 64, prompt_hash="d" * 64),
+        inline_paths=inline_paths,
+    )
+
+
 @pytest.fixture
 def stored_case(tmp_path: Path):
     """A project holding exactly one stored case, ready to review.
@@ -982,7 +1123,7 @@ def agent_attestation():
     def build(**overrides):
         fields = {
             "reviewer_kind": "agent",
-            "reviewer_ref": "lifecycle-agent",
+            "reviewer_ref": AGENT,
             "lens": "rubric.md",
             "model": "test-model",
             "run_ref": REVIEW_RUN_ID,
@@ -992,6 +1133,53 @@ def agent_attestation():
         return ReviewAttestation(**fields)
 
     return build
+
+
+@pytest.fixture
+def unbrokered_run(tmp_path: Path):
+    """A finalized run record with `evidence=None` — a run that was never brokered."""
+    from science_tool.autonomy.record_writer import write_run_record
+
+    def build(*, agent: str = AGENT, model: str = "test-model"):
+        record = _build_run_record(
+            id=REVIEW_RUN_ID,
+            agent=agent,
+            model=model,
+            evidence=None,
+        )
+        write_run_record(tmp_path, record)
+        return record
+
+    return build
+
+
+@pytest.fixture
+def sealed_agent_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A project with a real sealed exposure, plus one stored case to review.
+
+    The lifecycle fixture commits `knowledge/graph.trig` before `start_run`, and the
+    toolkit cleanliness pin keeps this test about exposure replay while 4c is built.
+    """
+    from science_tool.autonomy import toolkit as toolkit_module
+    from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+    from science_tool.evidence_broker.session import Session
+    from science_tool.findings.storage import write_case
+
+    project = _seeded_git_project(tmp_path)
+    monkeypatch.setattr(toolkit_module, "toolkit_is_clean", lambda root=None: True)
+    baseline = _start_brokered_run(project, tmp_path, monkeypatch)
+    assert baseline.evidence is not None
+    Session(project, baseline.evidence).request(
+        EvidenceRequest(op=EvidenceOp.READ, target="science.yaml")
+    )
+    outcome = _finish_run(
+        project, baseline.evidence.journal_path.parent / "baseline.json"
+    )
+    assert outcome.record is not None and outcome.record.evidence is not None
+
+    record = _build_audit_finding_record()
+    write_case(project, record)
+    return project, record, baseline.evidence.journal_path.parent
 
 
 @pytest.fixture
