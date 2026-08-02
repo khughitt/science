@@ -101,6 +101,7 @@ _POLICY_INFO_RULE_IDS = frozenset(
     {
         "prose-lints.config",
         "prose-lints.advisory",
+        "review.uncounted-confirmation",
     }
 )
 

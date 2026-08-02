@@ -39,6 +39,7 @@ from science_model.audit.fingerprint import (
     normalize_identity_value,
 )
 from science_model.audit.subjects import FindingSubject, normalize_utf8_nfc
+from science_model.correspondence import Correspondence
 
 DOC_KIND = "audit-case"
 
@@ -278,6 +279,66 @@ class Transition(_Base):
         return self
 
 
+#: The same number as the evidence bound, by an honest name. Both tuples arrive on one
+#: submission from one untrusted producer, and there is no reason for them to differ; a
+#: second literal would be a second thing to drift.
+MAX_UNCERTAINTY_ENTRIES = MAX_EVIDENCE_ENTRIES
+
+
+class Uncertainty(_Base):
+    """One thing a reviewer declined to be sure about.
+
+    `field` names what the reviewer was unsure of. It enters no digest -- so it is
+    `AuthoredProvenance`, not `AuthoredHashComponent`, whatever the shape of the
+    neighbouring identity fields suggests.
+    """
+
+    field: AuthoredProvenance
+    what: AuthoredProvenance
+    why: AuthoredProvenance
+
+
+class ReviewAttestation(_Base):
+    """Who is reviewing and WHEN, asserted by the caller that KNOWS -- never by the
+    reviewer. The exact counterpart of `IngestionProvenance` at `ingest_report`.
+
+    `at` is attested rather than clocked for the same reason `ingest_report` takes
+    `observed_at` from `provenance.generated_at`: when a thing happened is part of what
+    the trusted caller attests.
+    """
+
+    reviewer_kind: ReviewerKind
+    reviewer_ref: AuthoredHashComponent
+    lens: AuthoredHashComponent | None = None
+    model: AuthoredProvenance | None = None
+    run_ref: AuthoredHashComponent
+    at: Instant
+
+    @model_validator(mode="after")
+    def _agent_provenance(self) -> ReviewAttestation:
+        if self.reviewer_kind == "agent":
+            if not self.lens:
+                raise RecordError("an agent attestation requires a lens (design §4.2)")
+            if not self.model:
+                raise RecordError("an agent attestation requires model provenance (design §4.2)")
+        return self
+
+
+class ReviewSubmission(_Base):
+    """What a producer offers: its FINDINGS, and nothing about its own identity.
+
+    Carries no correspondence field and no identity field -- not fields a producer may
+    leave blank, fields it cannot express. A Pydantic invariant can constrain a value's
+    shape but can never establish its provenance, so the submitted type is made
+    structurally incapable of carrying either.
+    """
+
+    outcome: ReviewOutcome
+    note: AuthoredProvenance
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
+
+
 class Review(_Base):
     review_id: str
     #: `reviewer_kind` is a `Literal`, so it cannot carry a NUL; the other three are
@@ -290,6 +351,9 @@ class Review(_Base):
     at: Instant
     outcome: ReviewOutcome
     note: AuthoredProvenance
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
+    correspondence: Correspondence | None = None
 
     @model_validator(mode="after")
     def _agent_provenance(self) -> Review:
@@ -301,7 +365,47 @@ class Review(_Base):
                     "an agent review requires model provenance, so the correlation "
                     "caution stays measurable (design §4)"
                 )
+            # Absent reads as clean. `unwired` is permitted; missing is not.
+            if self.correspondence is None:
+                raise RecordError(
+                    "an agent review requires a correspondence; it may be 'unwired', "
+                    "it may not be absent (design §4.2)"
+                )
+        # A MODEL invariant, not a gate: `append_review` refuses `violated` too, and
+        # putting it here means every other write path inherits the refusal instead of
+        # each gate having to remember it.
+        if self.correspondence is not None and self.correspondence.status == "violated":
+            raise RecordError(
+                "a review with a 'violated' correspondence may not be stored (design §4.2)"
+            )
         return self
+
+    def counts_as_support(self) -> bool:
+        """Whether THIS review counts as support, independent of the record holding it.
+
+        An agent confirmation counts only when EVERYTHING it cited was mechanically
+        checkable and was checked against what the agent was shown. `unwired` is not a
+        weaker `verified`: a guard that cannot see must not report clean, and free
+        support is what it would be. A vacuous `verified` -- a review that cited no path
+        at all -- is not evidence of anything either. Prose belongs in `note`, which
+        every review already has, and costs nothing there.
+
+        Lifted out of `confirmation_count` because the `review.uncounted-confirmation`
+        validate check reports exactly the reviews this excludes. One definition, two
+        callers: a second copy would drift the moment §5.3 gains a code.
+        """
+        if self.outcome != "confirms":
+            return False
+        # `!= "agent"`, NOT `== "human"`: brokering is required of the kind that can
+        # confabulate, and the exclusion list is one entry long.
+        if self.reviewer_kind != "agent":
+            return True
+        return (
+            self.correspondence is not None
+            and self.correspondence.status == "verified"
+            and bool(self.evidence)
+            and all(entry.type == "location" for entry in self.evidence)
+        )
 
 
 #: Ordering for "the most severe observation", highest first.
@@ -557,5 +661,9 @@ class AuditFindingRecord(BaseModel):
         )
 
     def confirmation_count(self) -> int:
-        """Distinct confirming reviews. NEVER a confidence, NEVER aggregated."""
-        return len({r.review_id for r in self.reviews if r.outcome == "confirms"})
+        """Distinct confirming reviews that COUNT AS SUPPORT.
+
+        NEVER a confidence, NEVER aggregated. Eligibility, not a threshold: spec 1
+        reserves the confirmation threshold and promotion authority for spec 3.
+        """
+        return len({r.review_id for r in self.reviews if r.counts_as_support()})

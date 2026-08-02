@@ -14,13 +14,9 @@ occurrence is a no-op by idempotency key. Retry is the documented recovery.
 
 from __future__ import annotations
 
-import fcntl
 import json
-import os
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from pydantic_core import PydanticSerializationError
@@ -50,7 +46,7 @@ from science_tool.findings.storage import (
     CaseStorageError,
     CaseStore,
     case_filename,
-    case_store,
+    locked_store,
     serialize_case,
 )
 
@@ -231,34 +227,6 @@ def _snapshot_report(report: AuditReport) -> AuditReport:
         RecursionError,
     ) as exc:
         raise IngestError(f"report is not a valid audit report: {exc}") from exc
-
-
-@contextmanager
-def _locked_store(project_root: Path) -> Iterator[CaseStore]:
-    """Serialize ingestion per project and hand back the SAME anchored store.
-
-    The lock and every case operation act through ONE directory descriptor. Taking the
-    lock and then obtaining a store from a second walk would reintroduce exactly the
-    check/use gap the descriptor exists to close -- the lock would be held on one
-    directory while the writes went to whatever the pathname named by then.
-
-    The lock file is opened without `O_TRUNC` and required to be a regular file. Its
-    contents do not matter, which is why truncating it would be indefensible: if the
-    name were a hard link to something real, `O_TRUNC` would empty that for no benefit.
-    """
-    try:
-        with case_store(project_root, create=True) as store:
-            descriptor = store.lock()
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX)
-                try:
-                    yield store
-                finally:
-                    fcntl.flock(descriptor, fcntl.LOCK_UN)
-            finally:
-                os.close(descriptor)
-    except (CaseStorageError, PathSafetyError) as exc:
-        raise IngestError(str(exc)) from exc
 
 
 class _Planned(BaseModel):
@@ -559,15 +527,18 @@ def ingest_report(
         observed_at = observed_at.replace(tzinfo=UTC)
 
     probes = [_new_record(item, report, provenance, observed_at, actor) for item in planned]
-    with _locked_store(project_root) as store:
-        writes, written, appended, skipped = _classify_writes(
-            store,
-            probes,
-        )
-        for record in writes:
-            serialize_case(record)
-        for record in writes:
-            store.write(record)
+    try:
+        with locked_store(project_root) as store:
+            writes, written, appended, skipped = _classify_writes(
+                store,
+                probes,
+            )
+            for record in writes:
+                serialize_case(record)
+            for record in writes:
+                store.write(record)
+    except (CaseStorageError, PathSafetyError) as exc:
+        raise IngestError(str(exc)) from exc
 
     return IngestOutcome(
         records_written=written,
