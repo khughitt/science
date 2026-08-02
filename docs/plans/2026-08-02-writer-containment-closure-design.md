@@ -150,15 +150,33 @@ Two distinct obligations, and conflating them would over-promise:
 
 - **Translation (all five workflows, slice 1).** No planner may let `EntityDegradationError`
   reach its CLI. Each catches it and raises its own workflow error.
-- **Aggregation (the three immediate-write workflows, slice 2).** A planner that processes a
-  *batch* catches the refusal per planned edit, records it, continues planning so one refusal
-  does not hide the next, and raises once naming every refused record. This is the division
-  piece 3 used: the repair planner collected refusals and the caller raised once with all of
-  them.
+- **Aggregation (every workflow that processes a batch).** Such a planner catches the refusal
+  per planned edit, records it, continues planning so one refusal does not hide the next, and
+  raises once naming every refused record. This is the division piece 3 used: the repair
+  planner collected refusals and the caller raised once with all of them.
 
-The staged workflows are single-subject — one resynthesis draft, one canonicalization action
-set — so slice 2 assigns them no aggregation work. They owe translation only. If a later slice
-gives either of them a multi-subject batch, aggregation follows then.
+The test is whether more than one record can be refused in a single invocation, and by that
+test **four of the five workflows aggregate**:
+
+| Workflow | Batch? | Aggregates | Lands in |
+|---|---|---|---|
+| `apply_candidates` (promotion) | yes — candidate list | yes | slice 2 |
+| prose single-unit + batch promotion | yes — row list | yes | slice 2 |
+| `plan_canonicalization_apply` | **yes — selected action set** | **yes** | **slice 1** |
+| `apply_resynthesis_draft` | no — one draft | no, translation only | — |
+
+Canonicalization is not single-subject: `plan_canonicalization_apply` loops
+`for action in actions` over every selected action, and **both** renderer calls sit inside that
+loop (`proposition_reconciliation_apply.py:647`, `:668`), one per canonical and one per
+duplicate member. A ten-action set can therefore refuse ten times, and aborting on the first
+would make an operator re-run the command once per bad record. Because reconciliation already
+has a plan phase, its aggregation lands in **slice 1**, with the translation §2.3 assigns it —
+the same edit, extended to collect rather than raise on the first refusal, raising one
+`ReconciliationApplyError` that names every refused record.
+
+Resynthesis is the genuine single-subject case: one draft, one original proposition, one
+`render_entity_frontmatter_updates` call (`_original_edit`). It owes translation only. If a
+later slice gives it a multi-draft batch, aggregation follows then.
 
 ### 2.3 The workflow-level error contract, and what slice 1 owes
 
@@ -189,7 +207,8 @@ today:
   `ReconciliationApplyError`. Slice 1 adds that translation.
 
 So slice 1 owes translation in two places — `apply_candidates` and
-`plan_canonicalization_apply` — not one.
+`plan_canonicalization_apply` — not one, and in the canonicalization case that translation is
+also where its per-action aggregation (§2.2) lands.
 
 ---
 
@@ -251,7 +270,9 @@ then certify as correct. The preserving reader at `entities.py:1920-1923` is the
 ### 3.3 What slice 1 closes on its own
 
 The two staged workflows (resynthesis, reconciliation) already plan-then-write, so the guard
-contains them the moment it lands. `append_entity_source_ref` survives slice 1 unchanged as
+contains them the moment it lands. Reconciliation is a batch, so slice 1 lands its
+aggregation as well as its translation (§2.2); resynthesis needs only translation, which it
+already has. `append_entity_source_ref` survives slice 1 unchanged as
 the adapter its current callers need — it reads the file, calls the renderer, writes — and is
 **deleted in slice 2** once its production callers are gone.
 
@@ -310,11 +331,19 @@ Three failure modes remain, and the wrapper must cover all three:
 
 | Publish | Raises |
 |---|---|
-| update — `atomic_write_text` | `OSError` |
+| update — pre-publish hash check, then `atomic_write_text` | `PlannedEditDriftError` (§4.3), `OSError` |
 | create — exclusive `open("x")` + `os.link` | `EntityWriteError`, `OSError` |
 | numeric create — `claim_number_in_dir` | `EntityCommandError` (the drift it exists to detect), `OSError` |
 
-So the wrap set is **`(OSError, EntityCommandError, EntityWriteError)`**. These are *sibling*
+`PlannedEditDriftError` is new, defined in `planned_edits.py` beside `PlannedFileEdit` (§3.2)
+since the precondition belongs to the shared edit vocabulary, and it subclasses
+`EntityCommandError` for the same reason `EntityDegradationError` does: existing handlers keep
+their current shape. Its message names the path and states that the bytes changed after
+planning.
+
+So the wrap set is **`(OSError, EntityCommandError, EntityWriteError)`** — which covers
+`PlannedEditDriftError` by inheritance; it is listed above so the table stays a complete
+inventory of what the write stage can raise. These are *sibling*
 `ValueError` subclasses — `EntityCommandError` (`entities.py:47`), `EntityWriteError`
 (`dag/entity_frontmatter.py:314`) and `DecompositionError`
 (`annotation/prose_decomposition.py:37`) — so catching one catches neither of the others. An
@@ -348,7 +377,7 @@ The plan therefore carries two operations, and they apply differently:
 
 | Operation | Pre-image | Publish | On drift |
 |---|---|---|---|
-| update | required, read once from disk | re-read and compare against `before_sha256`, then `atomic_write_text` | **refuses** — see below |
+| update | required, read once from disk | re-read and compare against `before_sha256`, then `atomic_write_text` | **refuses**: `PlannedEditDriftError`, wrapped per §4.2 |
 | **create** | **absent** — asserted, not read | exclusive create (`open("x")` + `os.link`), i.e. `create_entity_file`'s primitive; numeric kinds use `claim_number_in_dir`, which is already exclusive | **refuses**: `EntityWriteError` / `EntityCommandError`, wrapped per §4.2 |
 
 **Updates get an optimistic precondition, for the same reason creates do.** `os.replace`
@@ -364,9 +393,14 @@ This applies to **every** planned update — entity files, the promotion sidecar
 decomposition index — not only to entity records. An index or sidecar clobbered by a
 concurrent writer loses exactly as much as a record does.
 
-A planned create never becomes an overwrite, and a planned update never overwrites bytes it
-did not plan against. In both cases the file on disk is left untouched and the batch reports
-the drift.
+The two guarantees are not equally strong, and the design should not claim they are. A planned
+**create** never becomes an overwrite, full stop: the exclusive `open("x")` + `os.link`
+publish is atomic against a concurrent creator, so there is no window in which it can clobber.
+A planned **update** refuses drift *observed by the immediate pre-publish check* — compare-then-
+`os.replace` leaves a narrow TOCTOU window in which a writer could land between the hash read
+and the replace, and that write would still be lost. The check shortens the exposure from the
+whole planning phase to a few syscalls; it does not eliminate it. In both cases, when drift is
+detected the file on disk is left untouched and the batch reports it.
 
 `PlannedFileEdit` gains that distinction rather than a parallel type — `before_sha256` is
 absent for a create, and `_edit` grows a sibling constructor for the create case rather than
@@ -452,8 +486,7 @@ Slice 2 does the same for both remaining side stores:
 This also closes a hole in §4.2's wrap set: `record_promotion` raises `DecompositionError`,
 which is neither `OSError` nor `EntityCommandError`. Left in the write stage it would escape
 the wrapper and lose the partial-write diagnostic; planned, it fails during preflight where it
-is aggregated with the other candidate-local errors. Any residual write-stage call that can
-raise `DecompositionError` is covered by the wrap set in §4.2.
+is aggregated with the other candidate-local errors.
 
 ### 4.6 Planned edits compose per path
 
@@ -512,6 +545,11 @@ equally consistent with abort-on-first. A second case mixes *kinds* of candidate
 — one degradation plus one slug-naming failure — so the report is proven to span the whole
 candidate-local set of §4.1 rather than degradation alone.
 
+**Canonicalization aggregation (§2.2, slice 1)** — a selected action set in which **two**
+actions each carry a degrading duplicate: `plan_canonicalization_apply` raises one
+`ReconciliationApplyError` naming both, and writes nothing. This is the test that fails if the
+loop keeps raising on the first refusal, and it belongs to slice 1, not slice 2.
+
 **Precondition abort** — a malformed packaged template aborts planning, reports one error
 naming its stage, and writes nothing. This is the §4.1 boundary's other half; without it,
 "may abort immediately" is untested and an implementer could aggregate everything.
@@ -521,9 +559,10 @@ for a degradation refusal, never `EntityDegradationError` itself. `plan_canonica
 is the one that fails this today, so it is the one the test would catch regressing.
 
 **Update drift (§4.3)** — a planned update whose target's bytes change between planning and
-apply: the batch refuses and **the target's new content is unchanged**. Run it for an entity
-record, the sidecar, and a decomposition index, since all three are planned updates and only
-the first is obviously one.
+apply: the batch refuses with `PlannedEditDriftError` and **the target's new content is
+unchanged**. Run it for an entity record, the sidecar, and a decomposition index, since all
+three are planned updates and only the first is obviously one. The residual TOCTOU window is
+not testable and is not claimed as closed.
 
 **Write-stage wrapping** — a `claim_number_in_dir` drift failure raised *after* an earlier
 file has been written carries `files_written` and `written_paths`. An `OSError`-only wrapper
