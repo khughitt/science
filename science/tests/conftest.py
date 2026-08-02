@@ -1195,3 +1195,64 @@ def case_files():
         return {p.name: p.read_bytes() for p in sorted(cases.glob("*.md"))}
 
     return snapshot
+
+
+@pytest.fixture
+def plant_attacks(tmp_path: Path):
+    """Factory: arm a repository with every git-config vector the write primitives reach.
+
+    Returns `plant(root) -> sentinels_dir`. Each vector writes a sentinel file into that
+    directory; a test's assertion is that the directory is still empty afterwards.
+
+    NOTHING IS PLANTED AS AN UNTRACKED FILE IN THE PROJECT. `start_run`'s
+    `assert_repository_is_at` refuses any dirty tree, untracked files included, so a driver
+    script dropped beside the entities would make the run refuse BEFORE the vector was
+    reached -- the test would pass without the defence ever running. The scripts live in
+    `workshop`, a SIBLING of the repository under test; everything else lives under `.git/`,
+    which git does not report.
+
+    For the same reason the filter attribute goes in `$GIT_DIR/info/attributes` rather than an
+    untracked `.gitattributes`. That is also the stronger probe: it is one of the three
+    attribute layers `_filter_driver_overrides` covers, `--attr-source` does not reach it, and
+    it is invisible to `git status` -- the actor-controlled layer the threat model is about.
+    """
+    workshop = tmp_path / "workshop"
+    sentinels = workshop / "sentinels"
+    sentinels.mkdir(parents=True, exist_ok=True)
+
+    def _script(name: str, body: str = "") -> Path:
+        path = workshop / f"{name}.sh"
+        path.write_text(f"#!/bin/sh\ntouch {sentinels / name}\n{body}", encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def _plant(root: Path) -> Path:
+        hooks = root / ".git" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        # `prepare-commit-msg` is planted because the probe claims it: a hook named in the
+        # docstring and absent from the fixture is a coverage claim nothing backs.
+        for hook in (
+            "pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout"
+        ):
+            path = hooks / hook
+            path.write_text(f"#!/bin/sh\ntouch {sentinels / hook}\n", encoding="utf-8")
+            path.chmod(0o755)
+
+        driver = _script("filter", "cat\n")
+        gpg = _script("gpg", "exit 1\n")
+        fsmonitor = _script("fsmonitor")
+
+        (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
+        (root / ".git" / "info" / "attributes").write_text("* filter=evil\n", encoding="utf-8")
+        config = root / ".git" / "config"
+        config.write_text(
+            config.read_text(encoding="utf-8")
+            + f'[filter "evil"]\n\tclean = {driver}\n\tsmudge = {driver}\n'
+            + f"[core]\n\tfsmonitor = {fsmonitor}\n"
+            + "[commit]\n\tgpgsign = true\n"
+            + f"[gpg]\n\tprogram = {gpg}\n",
+            encoding="utf-8",
+        )
+        return sentinels
+
+    return _plant
