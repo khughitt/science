@@ -15,7 +15,7 @@ argv so no call site can forget the hardening.
 **Tech Stack:** Python 3.13, click, pydantic v2, pytest, git 2.55.
 
 **Design:** [`2026-08-02-supervised-run-harness-design.md`](2026-08-02-supervised-run-harness-design.md),
-revision 3. Section references below point at it. The design is authoritative; where this plan
+revision 5. Section references below point at it. The design is authoritative; where this plan
 and the design disagree, stop and ask.
 
 ## Global Constraints
@@ -63,7 +63,7 @@ and the design disagree, stop and ask.
 | `tests/test_autonomy_start_restore.py` | **new** — Task 2 |
 | `tests/test_health_attested_provenance.py` | **new** — Task 3 |
 | `tests/test_findings_ingestion_authority.py` | **new** — Task 4 |
-| `tests/test_autonomy_harness.py` | **new** — Tasks 5, 6 |
+| `tests/test_autonomy_harness.py` | **new** — Tasks 5, 6; extended by Task 7 |
 | `docs/plans/2026-08-02-spec-2b-mutation-ledger.md` | **new** — Task 7 |
 
 **Dependencies:** Tasks 1–4 are independent of each other. Task 5 needs all four. Task 6 needs
@@ -300,7 +300,7 @@ Expected: 7 passed.
 Design §8.3. Append to `science/tests/test_autonomy_git_writes.py`:
 
 ```python
-def _plant_attacks(root: Path, workshop: Path) -> None:
+def _plant_attacks(root: Path, workshop: Path) -> Path:
     """Every vector the write subcommands can reach, each writing a sentinel.
 
     NOTHING IS PLANTED AS AN UNTRACKED FILE IN THE PROJECT. `start_run`'s
@@ -818,6 +818,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+import pytest
+
 from science_tool.findings import cli as findings_cli
 from science_tool.findings.ingest import IngestionContext, ingestion_authority
 
@@ -1186,7 +1188,6 @@ from science_model.autonomous_runs import RunDisposition, RunTier
 
 from science_tool.autonomy.control_plane import run_dir
 from science_tool.autonomy.git import (
-    GitError,
     commit_tree,
     create_branch,
     current_branch,
@@ -1401,16 +1402,17 @@ def run_supervised_audit(
             committer_email=SUPERVISOR_EMAIL,
         )
 
-    outcome = finish_run(
-        project_root,
-        baseline_path=baseline_path,
-        expect_run=run_id,
-        head=capture_commit,
-        ended=_now(),
-        tokens=None,
-        wall_clock_seconds=wall_clock_seconds,
-        report_path=report_relative,
-    )
+    with _step("the run could not be finished"):
+        outcome = finish_run(
+            project_root,
+            baseline_path=baseline_path,
+            expect_run=run_id,
+            head=capture_commit,
+            ended=_now(),
+            tokens=None,
+            wall_clock_seconds=wall_clock_seconds,
+            report_path=report_relative,
+        )
 
     ingestion: IngestOutcome | None = None
     refusal: str | None = None
@@ -1845,23 +1847,32 @@ cannot distinguish the two certifies nothing.
 | # | Mutation | Test node |
 |---|---|---|
 | 15 | Wrap `assert_repository_is_at` in the restore | `test_autonomy_start_restore.py::test_a_dirty_input_tree_is_refused_byte_for_byte_unchanged` |
-| 16 | Call `subprocess.run(["git", ...])` directly in `_settle` | `test_autonomy_git_writes.py::test_no_planted_vector_executes_through_the_write_primitives` |
+| 16 | Call `subprocess.run(["git", ...])` directly in `_settle` | add `test_no_planted_vector_executes_through_the_supervised_loop` (below) |
 | 17 | Drop `--no-gpg-sign` from `commit_tree` | `test_autonomy_git_writes.py::test_no_planted_vector_executes_through_the_write_primitives` |
 | 18 | `_settle` commits on the record-less path | add `test_a_recordless_outcome_commits_nothing` (below) |
-| 19 | `_settle` passes `--allow-empty` and skips the status check | `test_autonomy_harness.py::test_a_recordless_outcome_commits_nothing` |
+| 19 | `_settle` passes `--allow-empty` and skips the status check | add `test_settling_a_clean_tree_creates_no_commit` (below) |
 | 20 | `ingestion_authority` passes `strict_identity=False` | `test_findings_ingestion_authority.py::test_it_loads_sources_without_relaxing_identity` |
 | 21 | Exit 0 on an ingestion refusal | `test_autonomy_harness.py::test_the_command_exits_four_when_ingestion_refuses` |
 
-**Row 19's mutation lives in `_settle`**, so a test calling `commit_tree` directly never
-executes it. `test_a_recordless_outcome_commits_nothing` is the one that reaches it: on the
-record-less path there is nothing to settle after the restore, and `--allow-empty` would record
-a commit where the test asserts `HEAD` is unmoved.
+**Rows 18 and 19 look like one row and are not.** Row 18 removes the `record_written` guard;
+row 19 removes the *status* guard and adds `--allow-empty`. The record-less test kills 18 and
+cannot kill 19: on that path control reaches `if not record_written: restore; return None` and
+returns before any commit call, so the mutation's code never executes and
+`test_a_recordless_outcome_commits_nothing` stays green. Row 19's condition is the other one —
+`record_written=True` over a *clean* tree — and the full loop never produces it, because
+`finish_run` always leaves the record file on disk. It has to be induced by calling `_settle`
+directly.
 
-For row 16, the mutation is in `_settle`; the hostile-configuration test must be reachable from
-the harness. Extend it rather than duplicating: after the primitives assertions, run
-`run_supervised_audit` against a hostile `supervised_project` and re-assert no sentinel exists.
+**Row 16's mutation lives in `_settle`**, which the primitives test never calls. Proving the
+write primitives are hardened does not prove the loop uses them: a direct
+`subprocess.run(["git", ...])` in `_settle` bypasses every defence while
+`test_no_planted_vector_executes_through_the_write_primitives` stays green. The kill needs the
+whole loop run over a hostile repository, which means the `supervised_project` fixture — so the
+test belongs in `test_autonomy_harness.py`, reusing Task 1's `_plant_attacks` rather than
+re-inlining it. Cross-module test imports are the established pattern here
+(`test_autonomous_run_predicates.py` imports from `test_autonomous_runs.py`).
 
-Add row 18's test to `test_autonomy_harness.py`:
+Add rows 16, 18 and 19's tests to `test_autonomy_harness.py`:
 
 ```python
 def test_a_recordless_outcome_commits_nothing(
@@ -1886,7 +1897,56 @@ def test_a_recordless_outcome_commits_nothing(
     assert outcome.post_verdict_commit is None
     assert _git(supervised_project, "rev-parse", "HEAD") == head_before
     assert worktree_status(supervised_project) == ""
+
+
+def test_settling_a_clean_tree_creates_no_commit(supervised_project: Path):
+    """Row 19: the status check is the only thing standing between `_settle` and an empty
+    commit, and only the `record_written=True` branch reaches the commit call at all.
+
+    Called directly, because the loop cannot produce this state: `finish_run` writes the record
+    file, so every run that sets `record_written` arrives here with a dirty tree. Asserting on
+    the happy path would certify a guard whose condition was never false.
+    """
+    from science_tool.autonomy.harness import _settle
+
+    assert worktree_status(supervised_project) == ""
+    head_before = _git(supervised_project, "rev-parse", "HEAD")
+
+    assert _settle(
+        supervised_project, record_written=True, run_id="run:2026-08-02-health-audit-a1b2"
+    ) is None
+    assert _git(supervised_project, "rev-parse", "HEAD") == head_before
+
+
+def test_no_planted_vector_executes_through_the_supervised_loop(
+    supervised_project: Path, tmp_path: Path
+):
+    """Row 16: the whole loop over a hostile repository.
+
+    `.git/config`, `.git/hooks/` and `$GIT_DIR/info/attributes` all belong to the ACTOR, so
+    every git invocation the supervisor makes AFTER the actor runs is executing against a
+    configuration the actor wrote. `test_no_planted_vector_executes_through_the_write_primitives`
+    proves the primitives are hardened; it says nothing about whether `_settle` calls them.
+
+    `_plant_attacks` is reused rather than re-inlined -- its workshop lives outside the
+    repository precisely so `start_run`'s clean-tree assertion still passes (Task 1, Step 5).
+    """
+    from test_autonomy_git_writes import _plant_attacks
+
+    sentinels = _plant_attacks(supervised_project, tmp_path / "workshop")
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.CLEAN
+    fired = sorted(path.name for path in sentinels.iterdir())
+    assert fired == [], f"a hostile git configuration executed during the run: {fired}"
 ```
+
+If `test_no_planted_vector_executes_through_the_supervised_loop` errors rather than failing
+when row 16 is applied, that is still a kill — a raw `subprocess.run(["git", ...])` in `_settle`
+inherits `[commit] gpgsign = true` with a `gpg.program` that exits 1, so the commit fails before
+any sentinel is written. Record the row as certified on either signal, but read the failure
+output to confirm it is that one and not an unrelated fixture error.
 
 - [ ] **Step 5: Certify rows 22–29 (the revision-3 and -4 rows)**
 
@@ -2093,11 +2153,14 @@ convention, not a certifiable invariant: `verify_marks` reads only `base..head`,
 (`test_the_post_verdict_commit_is_the_supervisors_and_unmarked`) but **no mutation row**, and
 claiming one would be false.
 
-**A mutation must be reachable by the test that names it.** Four rows in the first draft named
-a mutation their test never induced — the happy path cannot notice a branch check that only
-fires when the actor wanders, and a test calling `commit_tree` never executes a mutation in
-`_settle`. The rule worth carrying: **name the test that induces the condition, not the test
-that would notice it if the condition arose.**
+**A mutation must be reachable by the test that names it.** Five rows named a mutation their
+test never induced — the happy path cannot notice a branch check that only fires when the actor
+wanders, and no test that returns before `_settle`'s commit call can execute a mutation on it.
+Rows 16 and 19 were each caught *after* a first repair had already moved them to a nearer test,
+which is the part to carry: a row matched to the right *subject* is not thereby a row whose
+inputs put control on the mutated line. Before certifying any row, name the input that reaches
+it. The rule: **name the test that induces the condition, not the test that would notice it if
+the condition arose.**
 
 **If a mutation leaves every test green,** that is a finding, not a step to skip. Record it in
 the ledger with what you tried, and report it — either the guard is not guarded or the row is

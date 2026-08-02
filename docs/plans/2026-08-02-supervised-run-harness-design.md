@@ -1,6 +1,6 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** designed, unbuilt (revision 4)
+**Status:** designed, unbuilt (revision 5)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
 
 **Revision 2** closes five defects found in review of revision 1. Two are omissions of a
@@ -17,6 +17,11 @@ was an exit code with no library counterpart (§3.4.1); two wall-clock instants 
 never sourced (§3.4.2); and the supervisor's commit identity was promised as fixed without
 being written down (§3.4.3), though it is observable in every repository's history. A named
 value that is not pinned is a value an implementer picks.
+
+**Revision 5** is revision 4's own defect, one layer in. Two of the four rows revision 4
+"repaired" were repointed to a nearer test that still could not execute the mutation — rows 16
+and 19, both of which live in `_settle` (§8.4). The repair had matched the row to the right
+*subject* and never asked which inputs put control on the mutated line.
 
 **Revision 4** comes from review of the implementation plan, and its findings are about
 **claims that no test could reach**. Four mutation rows named a condition their test never
@@ -689,11 +694,19 @@ code learns that actors are pluggable.
 
 ### 8.3 The hostile-configuration test
 
-Rows 16 and 17 need a repository configured to attack. One test plants, in `.git/config` and
-`$GIT_DIR/hooks/`, every vector the four new subcommands can reach — a `pre-commit` hook, a
+Rows 16 and 17 need a repository configured to attack. One planting function writes, into
+`.git/config` and `$GIT_DIR/hooks/`, every vector the four new subcommands can reach — a
+`pre-commit` hook, a `prepare-commit-msg` hook, a `commit-msg` hook, a `post-commit` hook, a
 `post-checkout` hook, a `filter.<driver>.clean` bound by an attribute, `core.fsmonitor`, and
 `commit.gpgsign=true` with `gpg.program` naming a script — each writing a sentinel file. The
-loop runs to completion and **no sentinel exists**.
+executables live **outside the repository**, for the same reason the attribute does (below).
+
+**Two tests share that planting function, at two levels, and both are needed.** One drives the
+write primitives directly: it certifies row 17, the missing flag. The other runs
+`run_supervised_audit` end to end over the same hostile repository: it certifies row 16, a git
+argv built by hand inside `_settle`. The first cannot reach row 16's mutation at all — proving
+the primitives are hardened says nothing about whether the loop calls them (§8.4). Each ends
+with the same assertion: **no sentinel exists**.
 
 **The attribute goes in `$GIT_DIR/info/attributes`, not an untracked `.gitattributes`.** An
 untracked file makes `start_run`'s `assert_repository_is_at` refuse the run outright, so the
@@ -710,17 +723,26 @@ the sentinel asserts the property the flags exist to produce.
 
 ### 8.4 A mutation must be reachable by the test that names it
 
-Four rows in revision 3 named a mutation their test could not reach, which is the same defect
-as a vacuous fixture wearing different clothes. Each is now paired with a test that *induces*
-the condition:
+Five rows named a mutation their test could not reach, which is the same defect as a vacuous
+fixture wearing different clothes. Each is now paired with a test that *induces* the condition:
 
 - **Row 4** (skip the branch-identity check) needs an actor that changes branch. The happy path
   never leaves `auto/<slug>`, so it passes with the check deleted.
-- **Row 19** (`--allow-empty` instead of checking for nothing to settle) is a mutation in
-  `_settle`; a test calling `commit_tree` directly never executes it.
+- **Row 16** (build a git argv by hand inside `_settle`) needs the hostile repository run
+  through the *whole loop*. The primitives test proves the primitives are hardened and says
+  nothing about whether `_settle` calls them.
+- **Row 19** (`--allow-empty` instead of checking for nothing to settle) needs
+  `record_written=True` over a *clean* tree — a state the loop never produces, since
+  `finish_run` always leaves the record file on disk. The record-less test returns before the
+  commit call, so the mutated code never executes.
 - **Row 23**: see §3.2 — one mutation, both halves.
 - **Row 24** (swallow a `_settle` failure) needs a `_settle` that fails. The happy path cannot
   distinguish raising from swallowing, because nothing raises.
+
+Rows 16 and 19 were each found *after* a first repair, which is the part worth noticing: the
+first pass repointed row 19 from a `commit_tree` test to the record-less harness test, and that
+test cannot reach it either. A row moved to a nearer test is not thereby a row whose test
+executes the mutation.
 
 The general rule, in the form worth carrying forward: **name the test that induces the
 condition, not the test that would notice it if the condition arose.**
