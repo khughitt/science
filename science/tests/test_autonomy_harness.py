@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from science_model.autonomous_runs import RunDisposition
 
+from science_tool.autonomy import harness as harness_module
 from science_tool.autonomy.git import current_branch, worktree_status
 from science_tool.autonomy.harness import HarnessError, run_supervised_audit
 
@@ -47,14 +48,11 @@ def test_the_post_verdict_commit_carries_exactly_what_settling_swept_up(
 ):
     """WHAT `_settle` committed, not merely that the tree ended clean.
 
-    A CHARACTERIZATION TEST, and the two non-case entries below are the finding, not the
-    expectation. `_settle` stages whatever the working tree holds after `finish_run`, and
-    `finish_run` re-materializes `knowledge/graph.trig` without restoring, while `ingest_report`
-    leaves `doc/audits/cases/.ingest.lock` behind. Both are derived/runtime state the operator
-    never asked to commit, and whether they belong in the commit that attests a run is a design
-    question above this module -- so this test pins the observed set rather than asserting the
-    set anyone wants. Changing either behaviour turns this red on purpose: update the set
-    deliberately, do not widen the predicate.
+    Design §4.5 names the post-verdict commit's contents exactly: `runs/<slug>.md`,
+    `knowledge/graph.trig`, and any cases. The graph is REQUIRED here, not residue --
+    §4.1 gives `start_run` a restore postcondition and withholds it from `finish_run` on
+    purpose, because that materialization happens after the range is fixed and reflects the
+    actor's work. Do not "fix" it away; removing it would break the design's named set.
 
     The case files are not enumerated: how many findings the fixture project has is not what
     this test is about, and pinning the count would make it fail for the wrong reason.
@@ -70,11 +68,92 @@ def test_the_post_verdict_commit_carries_exactly_what_settling_swept_up(
 
     assert cases, changed
     assert set(changed) - set(cases) == {
+        # Design §4.5's named set:
         f"runs/{slug}.md",
-        # The attestation and its cases are the only two the design asks for. Below the line:
-        "knowledge/graph.trig",  # `finish_run`'s `_capture` residue -- `start_run` restores, it does not
-        "doc/audits/cases/.ingest.lock",  # `locked_store`'s lock file, never cleaned up
+        "knowledge/graph.trig",
+        # NOT in §4.5's set, and the one open item here: `locked_store` creates this lock
+        # file and never unlinks it, so `stage_all` commits it. Under decision above this
+        # module -- pinned so the decision is made deliberately, not absorbed silently.
+        "doc/audits/cases/.ingest.lock",
     }
+
+
+def test_a_failed_ingestion_is_a_refusal_and_not_an_abort(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An unreadable report must not strand the operator on `auto/<slug>`.
+
+    `load_report` reaches the filesystem, so `OSError` is a live path, and it is the one the
+    loop must NOT let escape: ingestion happens between the verdict and step 9, so an
+    exception here would skip the branch switch and the settle entirely -- leaving the
+    operator on the run's branch with an uncommitted tree and a verdict already rendered.
+    The refusal is recorded on the outcome instead, and the tree still comes home.
+    """
+    start_branch = current_branch(supervised_project)
+    head_before = _git(supervised_project, "rev-parse", "HEAD")
+
+    def _unreadable(*args, **kwargs):
+        raise OSError("report is unreadable")
+
+    monkeypatch.setattr(harness_module, "load_report", _unreadable)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.CLEAN
+    assert outcome.ingestion is None
+    assert outcome.ingestion_refusal is not None
+    assert "unreadable" in outcome.ingestion_refusal
+
+    # The point of the test. A verdict was still reached and recorded, and the operator is
+    # back where they started rather than parked on the run's branch.
+    assert outcome.record_written is True
+    assert current_branch(supervised_project) == start_branch
+    assert worktree_status(supervised_project) == ""
+    assert _git(supervised_project, "rev-parse", "HEAD") != head_before
+
+
+def test_a_run_with_no_record_commits_nothing(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Design §4.5: no attestation means derived state must not be committed on its behalf.
+
+    `finish_run` returns `unwired` with `record=None` on five paths. `_settle` branches on
+    whether a RECORD exists rather than on the disposition, so this drives the branch through
+    the shape all five produce. Without it the `restore_worktree` arm never executes at all.
+
+    THE STUB DELEGATES TO THE REAL `finish_run` AND OVERRIDES ONLY ITS RETURN VALUE, which is
+    load-bearing. A lambda that replaces it outright also removes its materialization, so the
+    tree is clean when `_settle` runs and `_settle` returns at its FIRST guard -- "nothing to
+    settle" -- without ever reaching the branch this test names. Verified by mutation: against
+    the plain lambda, deleting the `record_written` branch outright left this test green.
+    Two of the five real paths (a record that fails model validation, and one the writer
+    refuses) occur inside `_finalize`, i.e. after `_capture` has already rebuilt the graph, so
+    a dirty tree with no record is the state this models.
+    """
+    from science_tool.autonomy.lifecycle import RunOutcome, finish_run as real_finish_run
+
+    start_branch = current_branch(supervised_project)
+    head_before = _git(supervised_project, "rev-parse", "HEAD")
+
+    def _no_record(*args, **kwargs):
+        real_finish_run(*args, **kwargs)
+        return RunOutcome(
+            disposition=RunDisposition.UNWIRED, record=None, reason="forced"
+        )
+
+    monkeypatch.setattr(harness_module, "finish_run", _no_record)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.UNWIRED
+    assert outcome.record_written is False
+    assert outcome.post_verdict_commit is None
+
+    # Nothing published, and nothing left behind either: the starting branch is exactly
+    # where it was, and the materialization the run produced was restored, not committed.
+    assert current_branch(supervised_project) == start_branch
+    assert _git(supervised_project, "rev-parse", "HEAD") == head_before
+    assert worktree_status(supervised_project) == ""
 
 
 def test_the_record_is_not_inside_its_own_range(supervised_project: Path):
@@ -98,12 +177,19 @@ def test_the_capture_commit_carries_the_agent_authorship_and_the_run_trailer(
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
     author = _git(supervised_project, "log", "-1", "--format=%an <%ae>", outcome.capture_commit)
+    committer = _git(
+        supervised_project, "log", "-1", "--format=%cn <%ce>", outcome.capture_commit
+    )
     trailer = _git(
         supervised_project, "log", "-1",
         "--format=%(trailers:key=Science-Run,valueonly)", outcome.capture_commit,
     ).strip()
 
+    # The split IS the design: the actor produced these bytes, the supervisor froze them.
+    # Asserting only the author would leave a `commit_tree` that dropped its committer
+    # overrides -- and so attributed the freezing to git's ambient identity -- uncaught.
     assert author == "health-audit <agent@science.local>"
+    assert committer == "science-supervisor <supervisor@science.local>"
     assert trailer == outcome.run_id
 
 
@@ -114,12 +200,18 @@ def test_the_post_verdict_commit_is_the_supervisors_and_unmarked(supervised_proj
     author = _git(
         supervised_project, "log", "-1", "--format=%an <%ae>", outcome.post_verdict_commit
     )
+    committer = _git(
+        supervised_project, "log", "-1", "--format=%cn <%ce>", outcome.post_verdict_commit
+    )
     trailer = _git(
         supervised_project, "log", "-1",
         "--format=%(trailers:key=Science-Run,valueonly)", outcome.post_verdict_commit,
     ).strip()
 
+    # Both halves the supervisor's, unlike the capture commit: nothing about this commit is
+    # the actor's, which is why it carries no trailer either.
     assert author == "science-supervisor <supervisor@science.local>"
+    assert committer == "science-supervisor <supervisor@science.local>"
     assert trailer == ""
 
 
@@ -156,7 +248,10 @@ def test_a_detached_head_is_refused_before_the_run_opens(supervised_project: Pat
 def test_an_existing_auto_branch_refuses_the_run(supervised_project: Path):
     _git(supervised_project, "branch", "auto/2026-08-02-health-audit-a1b2")
 
-    with pytest.raises(HarnessError):
+    # `match=` because a bare `HarnessError` is satisfied by any failure at all -- including
+    # the run never reaching branch creation, which would make this test green for the
+    # opposite of the reason it exists.
+    with pytest.raises(HarnessError, match="an existing branch is a run-id collision"):
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
 

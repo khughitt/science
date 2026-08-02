@@ -185,7 +185,15 @@ def run_supervised_audit(
             baseline_out=baseline_path,
         )
 
-    assert baseline.run_id == run_id
+    # Not an `assert`. `AssertionError` is neither `OSError` nor `ValueError`, so it would
+    # escape `_step` and exit 1 with a traceback where §3.4.1 promises 3 -- and it would
+    # vanish outright under `python -O`, which is the one configuration where a baseline
+    # naming another run must still stop the loop.
+    if baseline.run_id != run_id:
+        raise HarnessError(
+            f"start_run returned a baseline for {baseline.run_id!r}, not {run_id!r}; the "
+            "run this loop is about and the run its baseline attests are not the same run"
+        )
     slug = run_id.removeprefix("run:")
     report_relative = f"doc/audits/reports/{slug}.json"
 
@@ -200,7 +208,7 @@ def run_supervised_audit(
         report_path.parent.mkdir(parents=True, exist_ok=True)
 
     generated_at = _now().isoformat(timespec="microseconds")
-    elapsed = perf_counter()
+    started_at = perf_counter()
     with _step("the actor could not be started"):
         completed = _run_actor(
             project_root,
@@ -208,7 +216,7 @@ def run_supervised_audit(
             ingestion_ref=run_id,
             generated_at=generated_at,
         )
-    wall_clock_seconds = perf_counter() - elapsed
+    wall_clock_seconds = perf_counter() - started_at
 
     # Exit 2 is NOT actor failure: `science health` writes a complete report and then exits 2
     # for an invalid acceptance configuration (design §4.2).
