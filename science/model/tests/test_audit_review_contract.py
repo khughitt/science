@@ -15,13 +15,17 @@ from science_model.audit import (
 from science_model.audit.evidence import (
     MAX_EVIDENCE_ENTRIES,
     LocationEvidence,
-    TextEvidence,
+    TextEvidence as _Text,
 )
 from science_model.audit.record import MAX_UNCERTAINTY_ENTRIES
 from science_model.correspondence import Correspondence
 
 AT = datetime(2026, 8, 2, tzinfo=UTC)
 FINDING_ID = "0" * 64
+LOCATION = LocationEvidence(type="location", path="a.txt")
+PROSE = _Text(type="text", text="looks right to me")
+VERIFIED = Correspondence(status="verified")
+UNWIRED = Correspondence(status="unwired", code="NO_EXPOSURE")
 
 
 def _attestation(**overrides: object) -> ReviewAttestation:
@@ -75,7 +79,7 @@ def test_submission_cannot_express_a_correspondence() -> None:
 
 
 def test_submission_bounds_evidence() -> None:
-    entry = TextEvidence(type="text", text="x")
+    entry = _Text(type="text", text="x")
     ReviewSubmission(outcome="confirms", note="n", evidence=(entry,) * MAX_EVIDENCE_ENTRIES)
     with pytest.raises(ValidationError):
         ReviewSubmission(
@@ -156,3 +160,47 @@ def test_a_forged_nested_correspondence_is_refused() -> None:
     forged = Correspondence.model_construct(status="verified", code="SHOULD_BE_FORBIDDEN")
     with pytest.raises(ValidationError):
         _review(correspondence=forged)
+
+
+def test_a_checked_agent_confirmation_counts() -> None:
+    assert _review(evidence=(LOCATION,), correspondence=VERIFIED).counts_as_support()
+
+
+def test_outcome_must_be_confirms() -> None:
+    for outcome in ("refutes", "abstains"):
+        assert not _review(
+            reviewer_kind="human", lens=None, model=None, correspondence=None, outcome=outcome
+        ).counts_as_support()
+
+
+def test_human_and_deterministic_count_regardless() -> None:
+    for kind in ("human", "deterministic"):
+        assert _review(
+            reviewer_kind=kind, lens=None, model=None, correspondence=None
+        ).counts_as_support()
+
+
+def test_unwired_does_not_count_even_with_location_evidence() -> None:
+    assert not _review(evidence=(LOCATION,), correspondence=UNWIRED).counts_as_support()
+
+
+def test_a_vacuous_verified_confirmation_does_not_count() -> None:
+    assert not _review(evidence=(), correspondence=VERIFIED).counts_as_support()
+
+
+def test_one_location_mixed_with_prose_does_not_count() -> None:
+    """`all`, not `any`: the single real citation must not launder the prose."""
+    assert not _review(evidence=(LOCATION, PROSE), correspondence=VERIFIED).counts_as_support()
+
+
+def test_prose_only_does_not_count() -> None:
+    assert not _review(evidence=(PROSE,), correspondence=VERIFIED).counts_as_support()
+
+
+def test_every_reviewer_kind_is_covered() -> None:
+    """Asserted against the Literal, so a kind added later fails loudly here."""
+    from typing import get_args
+
+    from science_model.audit.record import ReviewerKind
+
+    assert set(get_args(ReviewerKind)) == {"human", "agent", "deterministic"}

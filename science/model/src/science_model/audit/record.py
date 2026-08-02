@@ -380,6 +380,33 @@ class Review(_Base):
             )
         return self
 
+    def counts_as_support(self) -> bool:
+        """Whether THIS review counts as support, independent of the record holding it.
+
+        An agent confirmation counts only when EVERYTHING it cited was mechanically
+        checkable and was checked against what the agent was shown. `unwired` is not a
+        weaker `verified`: a guard that cannot see must not report clean, and free
+        support is what it would be. A vacuous `verified` -- a review that cited no path
+        at all -- is not evidence of anything either. Prose belongs in `note`, which
+        every review already has, and costs nothing there.
+
+        Lifted out of `confirmation_count` because the `review.uncounted-confirmation`
+        validate check reports exactly the reviews this excludes. One definition, two
+        callers: a second copy would drift the moment §5.3 gains a code.
+        """
+        if self.outcome != "confirms":
+            return False
+        # `!= "agent"`, NOT `== "human"`: brokering is required of the kind that can
+        # confabulate, and the exclusion list is one entry long.
+        if self.reviewer_kind != "agent":
+            return True
+        return (
+            self.correspondence is not None
+            and self.correspondence.status == "verified"
+            and bool(self.evidence)
+            and all(entry.type == "location" for entry in self.evidence)
+        )
+
 
 #: Ordering for "the most severe observation", highest first.
 _SEVERITY_RANK: dict[str, int] = {"error": 3, "warn": 2, "info": 1}
@@ -634,5 +661,9 @@ class AuditFindingRecord(BaseModel):
         )
 
     def confirmation_count(self) -> int:
-        """Distinct confirming reviews. NEVER a confidence, NEVER aggregated."""
-        return len({r.review_id for r in self.reviews if r.outcome == "confirms"})
+        """Distinct confirming reviews that COUNT AS SUPPORT.
+
+        NEVER a confidence, NEVER aggregated. Eligibility, not a threshold: spec 1
+        reserves the confirmation threshold and promotion authority for spec 3.
+        """
+        return len({r.review_id for r in self.reviews if r.counts_as_support()})
