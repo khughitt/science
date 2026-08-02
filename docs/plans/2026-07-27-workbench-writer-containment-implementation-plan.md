@@ -1295,6 +1295,29 @@ Expected: both lines show a non-empty title and `unowned=[]`.
 Found by the final whole-branch review, each with a reproduction. Recorded here
 because the branch is mergeable without them and each needs its own design pass.
 
+- ✅ **CLOSED 2026-08-02 — by RULING, not by this item's proposed fix. Do not re-open.**
+  [`2026-07-31-proposition-reasoning-invalidation-design.md`](2026-07-31-proposition-reasoning-invalidation-design.md)
+  §3.4 rejected "deleting every absent owned key" by name, §3.1 kept preserve-by-default as
+  the renderer rule, and §3.2 fixed the reproduction below **at the source** —
+  `_proposition_for_row` canonicalizes a sign-less predicate's omitted polarity to
+  `not_applicable`. `certify_persisted` also gained typed validation (`6daf7141`), so the
+  "refuses to load" outcome is now a refused *write*. Verified by applying the proposed
+  `final.pop(key, None)`: 420 tests pass, exactly **one** fails —
+  `test_preserved_omitted_reasoning_field_does_not_clear_stamp`, which is the §3.1 ruling
+  expressed as a test — and it deletes `legacy_patch`/`legacy_edge_id` exactly as §3.1
+  predicted. A direct `render_update` refusal is reachable only from an entity state no live
+  writer produces; that is the invalidation design's own test #5, a deliberate
+  future-ownership guard. Still genuinely open from that design's §1: **the legacy triple's
+  fate.**
+
+  ⚠️ The claim below that the fix would also delete `discusses` **was wrong in the other
+  direction** — `discusses` was already being destroyed by the shipped code, because a list
+  with a `default_factory` is never `None` and so was never subject to preserve-by-default at
+  all. Fixed separately on branch `render-update-stale-keys` by making
+  `PropositionEntity.discusses` three-state.
+
+  <details><summary>Original filing, retained for the record</summary>
+
 - **`render_update`'s stale-owned-key hole — the highest-value follow-up.**
   `render_update` writes an owned key only `if key in generated`, and
   `render_entity_text` uses `exclude_none=True`, so **clearing** an owned key
@@ -1308,6 +1331,8 @@ because the branch is mergeable without them and each needs its own design pass.
   fix (`final.pop(key, None)`) is **not** safe as-is: it would also delete
   `legacy_relation_label` / `legacy_patch` / `legacy_edge_id` and `discusses`
   whenever a row omits them.
+
+  </details>
 - **Propositions still reach disk through the uncontained writer.**
   [`annotation/promote.py:283`](../../science/src/science_tool/annotation/promote.py)
   and [`annotation/synthesize.py:430`](../../science/src/science_tool/annotation/synthesize.py)
