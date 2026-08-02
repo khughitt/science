@@ -288,7 +288,7 @@ batch. The boundary:
   `question` template does not affect the `proposition` candidates in a mixed-kind batch. The
   justification for aborting is that the failure is not attributable to, or fixable at, the
   candidate level; it is not a claim about how many candidates would raise.
-- Only the collected candidate-local set is aggregated. A batch-global abort reports one
+- Only the collected candidate-local set is aggregated. A precondition abort reports one
   error, and says which stage it came from.
 
 ### 4.2 What all-or-nothing means, precisely
