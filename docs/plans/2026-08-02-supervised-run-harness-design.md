@@ -701,7 +701,8 @@ Rows 16 and 17 need a repository configured to attack. One planting function wri
 `commit.gpgsign=true` with `gpg.program` naming a script — each writing a sentinel file. The
 executables live **outside the repository**, for the same reason the attribute does (below).
 
-**Two tests share that planting function, at two levels, and both are needed.** One drives the
+**Two tests share that planter — as a `conftest.py` factory fixture — at two levels, and both
+are needed.** One drives the
 write primitives directly: it certifies row 17, the missing flag. The other runs
 `run_supervised_audit` end to end over the same hostile repository: it certifies row 16, a git
 argv built by hand inside `_settle`. The first cannot reach row 16's mutation at all — proving

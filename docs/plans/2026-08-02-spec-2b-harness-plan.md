@@ -38,8 +38,17 @@ and the design disagree, stop and ask.
   `SUPERVISOR_NAME = "science-supervisor"`, `SUPERVISOR_EMAIL = "supervisor@science.local"`.
 - Exit codes, from design §3.4: 0 clean+ingested, 1 quarantined, 2 unwired, 3 `HarnessError`,
   4 clean-but-ingestion-refused.
-- `science/tests/` has **no `__init__.py`**. Cross-file test helper imports do not resolve.
-  Shared fixtures go in `science/tests/conftest.py`.
+- **Shared test helpers and fixtures go in `science/tests/conftest.py`**, requested by name —
+  not imported from a sibling test module.
+
+  Correcting the reason this constraint used to give: cross-module imports *do* resolve here.
+  `science/tests/` has no `__init__.py`, and under pytest's default `prepend` import mode that
+  is precisely why `tests/` lands on `sys.path`. Ten modules in the suite already rely on it
+  (`test_autonomous_run_predicates.py` imports from `test_autonomous_runs.py`,
+  `test_graph_origins.py` from `test_graph_materialize.py`, …); both were run and pass. The
+  constraint stands as a **convention**, not a limitation: an import makes one test module's
+  collection depend on another's contents, and a helper two modules need is shared state, which
+  is what `conftest.py` is for. Do not "fix" the existing importers.
 
 ---
 
@@ -58,7 +67,7 @@ and the design disagree, stop and ask.
 | `src/science_tool/findings/cli.py` | **modified** — cut over to `ingestion_authority` |
 | `src/science_tool/budget/registry.py` | **modified** — classify `autonomy run` |
 | `docs/user-guide/cli-and-workflows.md` | **modified** — register the command surface |
-| `tests/conftest.py` | **modified** — `ungraphed_project`, `supervised_project` fixtures |
+| `tests/conftest.py` | **modified** — `plant_attacks`, `ungraphed_project`, `supervised_project` fixtures |
 | `tests/test_autonomy_git_writes.py` | **new** — Task 1 |
 | `tests/test_autonomy_start_restore.py` | **new** — Task 2 |
 | `tests/test_health_attested_provenance.py` | **new** — Task 3 |
@@ -66,7 +75,9 @@ and the design disagree, stop and ask.
 | `tests/test_autonomy_harness.py` | **new** — Tasks 5, 6; extended by Task 7 |
 | `docs/plans/2026-08-02-spec-2b-mutation-ledger.md` | **new** — Task 7 |
 
-**Dependencies:** Tasks 1–4 are independent of each other. Task 5 needs all four. Task 6 needs
+**Dependencies:** Tasks 1–4 are independent of each other, though 1, 2 and 5 each append a
+fixture to `tests/conftest.py` — run them in order rather than concurrently. Task 5 needs all
+four. Task 6 needs
 5. Task 7 needs 6. Task 8 is independent of everything and may run at any point.
 
 ---
@@ -80,11 +91,15 @@ else."
 
 **Files:**
 - Modify: `src/science_tool/autonomy/git.py`
+- Modify: `science/tests/conftest.py` — the `plant_attacks` factory fixture
 - Test: `science/tests/test_autonomy_git_writes.py` (create)
 
 **Interfaces:**
 - Consumes: `run_git(repo_root, *args) -> CompletedProcess[bytes]`, `GitError` — both existing
   in `autonomy/git.py`.
+- Produces, in `science/tests/conftest.py`:
+  - `plant_attacks` — a fixture returning `plant(root: Path) -> Path` (the sentinels directory).
+    Task 7 uses it too; see design §8.3 for why both levels are needed.
 - Produces, all in `autonomy/git.py`:
   - `current_branch(repo_root: Path) -> str | None` — `None` on a detached HEAD
   - `create_branch(repo_root: Path, name: str) -> None` — fails if it exists
@@ -295,26 +310,40 @@ def commit_tree(
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 7 passed.
 
-- [ ] **Step 5: Write the hostile-configuration test**
+- [ ] **Step 5: Add the hostile-configuration fixture**
 
-Design §8.3. Append to `science/tests/test_autonomy_git_writes.py`:
+Design §8.3. Two tests at two levels plant the same vectors — this one over the write
+primitives, Task 7's over the whole loop — so the planter is a **conftest factory fixture**, not
+a helper one test module imports from another.
+
+`tmp_path` is the anchor for the workshop because every repository fixture here is a *subdirectory*
+of it (`tmp_path / "repo"`, `tmp_path / "ungraphed"`), so `tmp_path / "workshop"` is a sibling
+of the repository under test and never inside it — which is the property the docstring below
+depends on.
+
+Append to `science/tests/conftest.py`:
 
 ```python
-def _plant_attacks(root: Path, workshop: Path) -> Path:
-    """Every vector the write subcommands can reach, each writing a sentinel.
+@pytest.fixture
+def plant_attacks(tmp_path: Path):
+    """Factory: arm a repository with every git-config vector the write primitives reach.
+
+    Returns `plant(root) -> sentinels_dir`. Each vector writes a sentinel file into that
+    directory; a test's assertion is that the directory is still empty afterwards.
 
     NOTHING IS PLANTED AS AN UNTRACKED FILE IN THE PROJECT. `start_run`'s
     `assert_repository_is_at` refuses any dirty tree, untracked files included, so a driver
     script dropped beside the entities would make the run refuse BEFORE the vector was
     reached -- the test would pass without the defence ever running. The scripts live in
-    `workshop`, outside the repository; everything else lives under `.git/`, which git does
-    not report.
+    `workshop`, a SIBLING of the repository under test; everything else lives under `.git/`,
+    which git does not report.
 
     For the same reason the filter attribute goes in `$GIT_DIR/info/attributes` rather than an
     untracked `.gitattributes`. That is also the stronger probe: it is one of the three
     attribute layers `_filter_driver_overrides` covers, `--attr-source` does not reach it, and
     it is invisible to `git status` -- the actor-controlled layer the threat model is about.
     """
+    workshop = tmp_path / "workshop"
     sentinels = workshop / "sentinels"
     sentinels.mkdir(parents=True, exist_ok=True)
 
@@ -324,35 +353,45 @@ def _plant_attacks(root: Path, workshop: Path) -> Path:
         path.chmod(0o755)
         return path
 
-    hooks = root / ".git" / "hooks"
-    hooks.mkdir(parents=True, exist_ok=True)
-    # `prepare-commit-msg` is planted because the probe claims it: a hook named in the
-    # docstring and absent from the fixture is a coverage claim nothing backs.
-    for hook in ("pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout"):
-        path = hooks / hook
-        path.write_text(f"#!/bin/sh\ntouch {sentinels / hook}\n", encoding="utf-8")
-        path.chmod(0o755)
+    def _plant(root: Path) -> Path:
+        hooks = root / ".git" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        # `prepare-commit-msg` is planted because the probe claims it: a hook named in the
+        # docstring and absent from the fixture is a coverage claim nothing backs.
+        for hook in (
+            "pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout"
+        ):
+            path = hooks / hook
+            path.write_text(f"#!/bin/sh\ntouch {sentinels / hook}\n", encoding="utf-8")
+            path.chmod(0o755)
 
-    driver = _script("filter", "cat\n")
-    gpg = _script("gpg", "exit 1\n")
-    fsmonitor = _script("fsmonitor")
+        driver = _script("filter", "cat\n")
+        gpg = _script("gpg", "exit 1\n")
+        fsmonitor = _script("fsmonitor")
 
-    (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
-    (root / ".git" / "info" / "attributes").write_text("* filter=evil\n", encoding="utf-8")
-    config = root / ".git" / "config"
-    config.write_text(
-        config.read_text(encoding="utf-8")
-        + f'[filter "evil"]\n\tclean = {driver}\n\tsmudge = {driver}\n'
-        + f"[core]\n\tfsmonitor = {fsmonitor}\n"
-        + "[commit]\n\tgpgsign = true\n"
-        + f"[gpg]\n\tprogram = {gpg}\n",
-        encoding="utf-8",
-    )
-    return sentinels
+        (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
+        (root / ".git" / "info" / "attributes").write_text("* filter=evil\n", encoding="utf-8")
+        config = root / ".git" / "config"
+        config.write_text(
+            config.read_text(encoding="utf-8")
+            + f'[filter "evil"]\n\tclean = {driver}\n\tsmudge = {driver}\n'
+            + f"[core]\n\tfsmonitor = {fsmonitor}\n"
+            + "[commit]\n\tgpgsign = true\n"
+            + f"[gpg]\n\tprogram = {gpg}\n",
+            encoding="utf-8",
+        )
+        return sentinels
 
+    return _plant
+```
 
-def test_no_planted_vector_executes_through_the_write_primitives(tmp_path: Path, repo: Path):
-    sentinels = _plant_attacks(repo, tmp_path / "workshop")
+- [ ] **Step 6: Write the hostile-configuration test**
+
+Append to `science/tests/test_autonomy_git_writes.py`:
+
+```python
+def test_no_planted_vector_executes_through_the_write_primitives(repo: Path, plant_attacks):
+    sentinels = plant_attacks(repo)
 
     create_branch(repo, "auto/hostile")
     (repo / "c.txt").write_text("c\n", encoding="utf-8")
@@ -366,13 +405,13 @@ def test_no_planted_vector_executes_through_the_write_primitives(tmp_path: Path,
     )
 ```
 
-- [ ] **Step 6: Run it**
+- [ ] **Step 7: Run it**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 8 passed. If the `gpg` sentinel appears, `--no-gpg-sign` is missing from
 `commit_tree`; if `filter` appears, the call is not going through `run_git`.
 
-- [ ] **Step 7: Record the probe in the module docstring**
+- [ ] **Step 8: Record the probe in the module docstring**
 
 `git.py`'s docstring records, per subcommand, what was built as a working attack and what
 executed. Add a paragraph in the same form, after the existing `cat-file` rows:
@@ -392,11 +431,12 @@ executed. Add a paragraph in the same form, after the existing `cat-file` rows:
   default `gpg` on `PATH`. Pinned in `commit_tree`, not at the call site.
 ```
 
-- [ ] **Step 8: Lint, type-check, and commit**
+- [ ] **Step 9: Lint, type-check, and commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
-git add science/src/science_tool/autonomy/git.py science/tests/test_autonomy_git_writes.py
+git add science/src/science_tool/autonomy/git.py science/tests/test_autonomy_git_writes.py \
+  science/tests/conftest.py
 git commit -m "feat(autonomy): build the harness's git write argv in the gateway"
 ```
 
@@ -1868,9 +1908,8 @@ write primitives are hardened does not prove the loop uses them: a direct
 `subprocess.run(["git", ...])` in `_settle` bypasses every defence while
 `test_no_planted_vector_executes_through_the_write_primitives` stays green. The kill needs the
 whole loop run over a hostile repository, which means the `supervised_project` fixture — so the
-test belongs in `test_autonomy_harness.py`, reusing Task 1's `_plant_attacks` rather than
-re-inlining it. Cross-module test imports are the established pattern here
-(`test_autonomous_run_predicates.py` imports from `test_autonomous_runs.py`).
+test belongs in `test_autonomy_harness.py`, requesting Task 1's `plant_attacks` fixture rather
+than re-inlining the vectors.
 
 Add rows 16, 18 and 19's tests to `test_autonomy_harness.py`:
 
@@ -1919,7 +1958,7 @@ def test_settling_a_clean_tree_creates_no_commit(supervised_project: Path):
 
 
 def test_no_planted_vector_executes_through_the_supervised_loop(
-    supervised_project: Path, tmp_path: Path
+    supervised_project: Path, plant_attacks
 ):
     """Row 16: the whole loop over a hostile repository.
 
@@ -1928,12 +1967,11 @@ def test_no_planted_vector_executes_through_the_supervised_loop(
     configuration the actor wrote. `test_no_planted_vector_executes_through_the_write_primitives`
     proves the primitives are hardened; it says nothing about whether `_settle` calls them.
 
-    `_plant_attacks` is reused rather than re-inlined -- its workshop lives outside the
-    repository precisely so `start_run`'s clean-tree assertion still passes (Task 1, Step 5).
+    The `plant_attacks` fixture is shared with that test rather than re-inlined -- its workshop
+    is a sibling of the repository precisely so `start_run`'s clean-tree assertion still passes
+    (Task 1, Step 5).
     """
-    from test_autonomy_git_writes import _plant_attacks
-
-    sentinels = _plant_attacks(supervised_project, tmp_path / "workshop")
+    sentinels = plant_attacks(supervised_project)
 
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
