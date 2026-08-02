@@ -19,7 +19,7 @@ from science_tool.annotation.planned_edits import (
     current_text,
     edits_for_planned_texts,
     path_string,
-    plan_update,
+    plan_update_from_text,
     publish_edit,
     publish_order,
 )
@@ -102,22 +102,45 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     """
     project_root = project_root.resolve()
     targets = build_targets()
-    current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
-    _reject_duplicate_mint_targets(current_rows, targets)
     store = ProseDecompositionStore(project_root)
+    rows = _plan_rows(plan)
+    for source_slug in {row.source_slug for row in rows}:
+        store.load_latest(source_slug)
+
     report = ApplyReport()
     refusals: list[str] = []
+    current_rows: list[_ValidatedPromotionRow] = []
+    for row in rows:
+        try:
+            current_rows.append(_validate_current_row(project_root, row))
+        except ProsePromotionError as exc:
+            refusals.append(f"{row.unit_id}: {exc}")
+    try:
+        _reject_duplicate_mint_targets(current_rows, targets)
+    except ProsePromotionError as exc:
+        refusals.append(f"promotion plan: {exc}")
+
     planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
     creates: dict[Path, tuple[str, str, int] | None] = {}
     index_state_by_slug: dict[str, dict] = {}
+    index_text_by_slug: dict[str, str] = {}
     next_number: dict[str, int] = {}
+
+    for source_slug in {current.row.source_slug for current in current_rows}:
+        index_path = store.index_path(source_slug)
+        index_text_by_slug[source_slug] = current_text(index_path)
+        index_state_by_slug[source_slug] = store.parse_index(
+            source_slug, index_text_by_slug[source_slug]
+        )
 
     def composed(path: Path) -> str | None:
         if path in planned_text_by_path:
             return planned_text_by_path[path]
         if not path.exists():
             return None
-        planned_text_by_path[path] = current_text(path)
+        original_text_by_path[path] = current_text(path)
+        planned_text_by_path[path] = original_text_by_path[path]
         return planned_text_by_path[path]
 
     for current in current_rows:
@@ -138,9 +161,14 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
                     row.source_slug,
                     row.fingerprint,
                     promoted_to,
-                    state=index_state_by_slug.get(row.source_slug),
+                    state=index_state_by_slug[row.source_slug],
                 )
-        except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
+        except (
+            DecompositionError,
+            EntityCommandError,
+            PromotionApplyError,
+            ProsePromotionError,
+        ) as exc:
             refusals.append(f"{current.row.unit_id}: {exc}")
 
     if refusals:
@@ -151,14 +179,18 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
 
     edits = edits_for_planned_texts(
         planned_text_by_path,
+        original_text_by_path,
         creates,
         reason_create="prose_promotion_mint",
         reason_update="prose_promotion_accrual",
     )
     for slug, state in index_state_by_slug.items():
         index_path = store.index_path(slug)
-        edits[index_path] = plan_update(
-            index_path, canonical_json_text(state), "prose_decomposition_index"
+        edits[index_path] = plan_update_from_text(
+            index_path,
+            index_text_by_slug[slug],
+            canonical_json_text(state),
+            "prose_decomposition_index",
         )
 
     written: list[str] = []

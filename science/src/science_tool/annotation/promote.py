@@ -21,11 +21,14 @@ from science_tool.annotation.planned_edits import (
     current_text,
     edits_for_planned_texts,
     path_string,
-    plan_update,
+    plan_update_from_text,
     publish_edit,
     publish_order,
 )
-from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
+from science_tool.annotation.query import (
+    entity_relpath_for_sidecar,
+    read_sidecar_snapshot_strict,
+)
 from science_tool.dag.entity_frontmatter import (
     CREATE_ONLY_KEYS,
     EntityWriteError,
@@ -445,8 +448,9 @@ def apply_candidates(
     report = ApplyReport()
     backlinks: dict[str, str] = {}
     refusals: list[str] = []
-    sidecar = read_sidecar_strict(sidecar_path)
+    sidecar, sidecar_before = read_sidecar_snapshot_strict(sidecar_path)
     planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
     creates: dict[Path, tuple[str, str, int] | None] = {}
     next_number: dict[str, int] = {}
 
@@ -455,7 +459,8 @@ def apply_candidates(
             return planned_text_by_path[path]
         if not path.exists():
             return None
-        planned_text_by_path[path] = current_text(path)
+        original_text_by_path[path] = current_text(path)
+        planned_text_by_path[path] = original_text_by_path[path]
         return planned_text_by_path[path]
 
     for c in candidates:
@@ -517,6 +522,7 @@ def apply_candidates(
 
     edits = edits_for_planned_texts(
         planned_text_by_path,
+        original_text_by_path,
         creates,
         reason_create="promotion_mint",
         reason_update="promotion_accrual",
@@ -527,8 +533,9 @@ def apply_candidates(
             dataclasses.replace(a, promoted_to=backlinks[a.id]) if a.id in backlinks else a
             for a in sidecar.annotations
         )
-        edits[sidecar_path] = plan_update(
+        edits[sidecar_path] = plan_update_from_text(
             sidecar_path,
+            sidecar_before,
             serialize_sidecar(dataclasses.replace(sidecar, annotations=new_anns)),
             "promotion_sidecar",
         )

@@ -21,7 +21,7 @@ from science_tool.annotation.planned_edits import (
     current_text,
     edits_for_planned_texts,
     path_string,
-    plan_update,
+    plan_update_from_text,
     publish_edit,
     publish_order,
 )
@@ -167,7 +167,9 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
 
     try:
         artifact = store.load_latest(source_slug)
-        index = store.load_index(source_slug)
+        index_path = store.index_path(source_slug)
+        index_before = current_text(index_path)
+        index = store.parse_index(source_slug, index_before)
     except DecompositionError as exc:
         raise ProsePromotionError(str(exc)) from exc
 
@@ -204,13 +206,15 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
                 source_slug=source_slug,
                 fingerprint=unit.fingerprint,
                 promoted_to=recovered_to,
+                state=index,
             )
             recovery_report = ApplyReport()
             _publish(
                 project_root,
                 [
-                    plan_update(
-                        store.index_path(source_slug),
+                    plan_update_from_text(
+                        index_path,
+                        index_before,
                         canonical_json_text(state),
                         "prose_decomposition_index",
                     )
@@ -249,6 +253,7 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
 
     report = ApplyReport()
     planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
     creates: dict[Path, tuple[str, str, int] | None] = {}
     promoted_to: str | None = None
     try:
@@ -261,6 +266,8 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
                 else None
             )
             existing = current_text(dest) if dest is not None and dest.exists() else None
+            if dest is not None and existing is not None:
+                original_text_by_path[dest] = existing
             planned = target.plan_mint(
                 decision,
                 [source_ref, decision.ref],
@@ -285,8 +292,10 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
             if decision.slug is None:
                 raise ProsePromotionError(f"LINK decision for unit {unit_id!r} is missing target ref")
             dest = find_entity(project_root, decision.slug).path
+            before = current_text(dest)
+            original_text_by_path[dest] = before
             post_image, _changed = render_entity_source_refs(
-                current_text(dest), [source_ref, decision.ref], entity_path=dest
+                before, [source_ref, decision.ref], entity_path=dest
             )
             planned_text_by_path[dest] = post_image
             report.linked += 1
@@ -296,6 +305,7 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
 
         edits = edits_for_planned_texts(
             planned_text_by_path,
+            original_text_by_path,
             creates,
             reason_create="prose_promotion_mint",
             reason_update="prose_promotion_accrual",
@@ -305,10 +315,13 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
                 source_slug=source_slug,
                 fingerprint=unit.fingerprint,
                 promoted_to=promoted_to,
+                state=index,
             )
-            index_path = store.index_path(source_slug)
-            edits[index_path] = plan_update(
-                index_path, canonical_json_text(state), "prose_decomposition_index"
+            edits[index_path] = plan_update_from_text(
+                index_path,
+                index_before,
+                canonical_json_text(state),
+                "prose_decomposition_index",
             )
     except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
         raise ProsePromotionError(str(exc)) from exc

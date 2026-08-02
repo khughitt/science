@@ -273,6 +273,7 @@ def test_apply_candidates_counts_accrual_as_linked(tmp_path: Path, monkeypatch) 
 
     root = _seed(tmp_path)
     _write_existing_identical_claim(root)
+    monkeypatch.setattr(promote, "edits_for_planned_texts", lambda *_args, **_kwargs: {})
     report = promote.apply_candidates(
         [_mint_candidate()], sidecar_path=_sidecar(root), project_root=root,
         paper_ref="paper:new", as_of=date(2026, 7, 31), targets=_accruing_targets(),
@@ -281,28 +282,27 @@ def test_apply_candidates_counts_accrual_as_linked(tmp_path: Path, monkeypatch) 
 
 
 def test_prose_promote_counts_accrual_as_linked(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.annotation.prose_promote import promote_prose_unit
+    import science_tool.annotation.prose_promote as prose_promote
 
     monkeypatch.setattr(
         "science_tool.annotation.prose_promote.build_targets", _accruing_targets
     )
+    monkeypatch.setattr(prose_promote, "edits_for_planned_texts", lambda *_args, **_kwargs: {})
     root = _prose_project_for_mint(tmp_path)
-    report = promote_prose_unit(root, "prose-source:example", "u001", apply=True)
+    report = prose_promote.promote_prose_unit(root, "prose-source:example", "u001", apply=True)
     assert (report.minted, report.linked, report.written_paths) == (0, 1, [])
 
 
 def test_prose_promotion_batch_counts_accrual_as_linked(tmp_path: Path, monkeypatch) -> None:
-    from science_tool.annotation.prose_promotion_batch import (
-        apply_prose_promotion_plan,
-        plan_prose_promotions,
-    )
+    import science_tool.annotation.prose_promotion_batch as prose_batch
 
     monkeypatch.setattr(
         "science_tool.annotation.prose_promotion_batch.build_targets", _accruing_targets
     )
+    monkeypatch.setattr(prose_batch, "edits_for_planned_texts", lambda *_args, **_kwargs: {})
     root = _prose_project_for_mint(tmp_path)
-    plan = plan_prose_promotions(root, "example", ["u001"])
-    report = apply_prose_promotion_plan(root, plan)
+    plan = prose_batch.plan_prose_promotions(root, "example", ["u001"])
+    report = prose_batch.apply_prose_promotion_plan(root, plan)
     assert (report.minted, report.linked, report.written_paths) == (0, 1, [])
 
 

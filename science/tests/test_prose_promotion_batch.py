@@ -436,6 +436,28 @@ def test_index_drift_between_planning_and_apply_refuses(tmp_path: Path, monkeypa
     assert index_path.read_text(encoding="utf-8") == '{"units": {}}\n'
 
 
+def test_index_drift_before_edit_construction_refuses(tmp_path: Path, monkeypatch) -> None:
+    """The index edit hashes the same bytes used to compose its planned state."""
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    concurrent = '{"units": {}}\n'
+    real_edits = batch.edits_for_planned_texts
+
+    def drift_before_edit_construction(*args, **kwargs):
+        index_path.write_text(concurrent, encoding="utf-8")
+        return real_edits(*args, **kwargs)
+
+    monkeypatch.setattr(batch, "edits_for_planned_texts", drift_before_edit_construction)
+
+    with pytest.raises(ProsePromotionError, match="stage=write"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == concurrent
+
+
 def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
 
@@ -455,6 +477,32 @@ def test_apply_rejects_decision_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ProsePromotionError, match="decision drift"):
         apply_prose_promotion_plan(tmp_path, plan)
+
+
+def test_apply_aggregates_multiple_row_validation_refusals(tmp_path: Path) -> None:
+    """Every row-local validation failure is reported before any entity or index write."""
+    from dataclasses import replace
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    refused = replace(
+        plan,
+        rows=(
+            replace(plan.rows[0], source_ref="prose-source:wrong"),
+            replace(plan.rows[1], artifact_id="stale-artifact"),
+        ),
+    )
+    store = ProseDecompositionStore(tmp_path)
+    index_before = store.index_path("example").read_text(encoding="utf-8")
+
+    with pytest.raises(ProsePromotionError) as excinfo:
+        apply_prose_promotion_plan(tmp_path, refused)
+
+    message = str(excinfo.value)
+    assert "u001" in message and "source_ref mismatch" in message
+    assert "u002" in message and "stale artifact" in message
+    assert store.index_path("example").read_text(encoding="utf-8") == index_before
+    assert not any((tmp_path / "entities").rglob("*.md"))
 
 
 def test_apply_rejects_artifact_skip_unit(tmp_path: Path) -> None:

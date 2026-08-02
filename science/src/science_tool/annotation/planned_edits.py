@@ -64,14 +64,20 @@ def current_text(path: Path) -> str:
 
 
 def plan_update(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
-    before = current_text(path)
+    return plan_update_from_text(path, current_text(path), final_text, reason)
+
+
+def plan_update_from_text(
+    path: Path, before_text: str, final_text: str, reason: str
+) -> PlannedFileEdit:
+    """Plan an update against the exact pre-image its post-image was derived from."""
     return PlannedFileEdit(
         path=path,
         reason=reason,
-        before_sha256=sha256_text(before),
+        before_sha256=sha256_text(before_text),
         after_sha256=sha256_text(final_text),
         final_text=final_text,
-        changed=before != final_text,
+        changed=before_text != final_text,
     )
 
 
@@ -163,6 +169,7 @@ def publish_edit(edit: PlannedFileEdit, *, project_root: Path) -> None:
 
 def edits_for_planned_texts(
     planned_text_by_path: Mapping[Path, str],
+    original_text_by_path: Mapping[Path, str],
     creates: Mapping[Path, tuple[str, str, int] | None],
     *,
     reason_create: str,
@@ -170,10 +177,8 @@ def edits_for_planned_texts(
 ) -> dict[Path, PlannedFileEdit]:
     """One PlannedFileEdit per path, AFTER composition.
 
-    Constructing an edit mid-composition would capture an intermediate post-image as
-    `after_sha256` and re-read disk for `before_sha256` on the next edit to the same path,
-    losing the earlier change. Building them all here, once, is what makes `before_sha256`
-    the on-disk pre-image and `after_sha256` the composed result.
+    `original_text_by_path` retains the exact first read used for composition, so edit
+    construction never accepts a concurrent change as the pre-image of a stale post-image.
 
     `creates` maps a path to `(kind, local_part, number)` for a numeric create, or to `None`
     for a slug-addressed create. Paths absent from it are updates.
@@ -195,7 +200,9 @@ def edits_for_planned_texts(
                 else plan_create(path, post_image, reason_create)
             )
         else:
-            edits[path] = plan_update(path, post_image, reason_update)
+            edits[path] = plan_update_from_text(
+                path, original_text_by_path[path], post_image, reason_update
+            )
     return edits
 
 

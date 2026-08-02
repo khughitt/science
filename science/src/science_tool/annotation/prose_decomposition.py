@@ -170,8 +170,14 @@ class ProseDecompositionStore:
                 "artifacts": [],
                 "units": {},
             }
+        return self.parse_index(slug, path.read_text(encoding="utf-8"))
+
+    def parse_index(self, slug: str, text: str) -> dict[str, Any]:
+        """Parse index text already captured by a planner."""
+        slug = _validate_store_slug(slug)
+        path = self.index_path(slug)
         try:
-            state = json.loads(path.read_text(encoding="utf-8"))
+            state = json.loads(text)
         except json.JSONDecodeError as exc:
             raise DecompositionError(f"invalid prose decomposition index JSON: {path}: {exc}") from exc
         return _validate_store_index(state, path=path, slug=slug)

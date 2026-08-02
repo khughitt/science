@@ -87,9 +87,15 @@ def read_sidecar(path: Path) -> Sidecar:
     """
     if not path.exists():
         raise FileNotFoundError(path)
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return parse_sidecar(handle.read(), path=path)
+
+
+def parse_sidecar(text: str, *, path: Path) -> Sidecar:
+    """Parse sidecar text using ``path`` as the base for relative source IRIs."""
     base_dir_uri = path.parent.resolve().as_uri() + "/"
     ds = Dataset(default_union=True)
-    ds.parse(source=str(path), format="trig", publicID=base_dir_uri)
+    ds.parse(data=text, format="trig", publicID=base_dir_uri)
 
     shared_targets = tuple(_iter_shared_targets(ds, base_dir_uri))
     target_index = {t.id: t for t in shared_targets if t.id is not None}

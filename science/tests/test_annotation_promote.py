@@ -555,6 +555,69 @@ def test_sidecar_drift_between_planning_and_apply_refuses(tmp_path, monkeypatch)
     assert sp.read_text(encoding="utf-8") == "{}\n"
 
 
+def test_entity_drift_before_edit_construction_refuses(tmp_path, monkeypatch):
+    """The edit must hash the entity pre-image used to compose its post-image."""
+    import science_tool.annotation.promote as promote_mod
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.promote import PromotionApplyError, apply_candidates
+
+    root, sp = _promotion_project(tmp_path, existing={"shared": "Shared"})
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=()))
+    dest = root / "entities" / "propositions" / "shared.md"
+    concurrent = "concurrent entity writer\n"
+    real_edits = promote_mod.edits_for_planned_texts
+
+    def drift_before_edit_construction(*args, **kwargs):
+        dest.write_text(concurrent, encoding="utf-8")
+        return real_edits(*args, **kwargs)
+
+    monkeypatch.setattr(promote_mod, "edits_for_planned_texts", drift_before_edit_construction)
+
+    with pytest.raises(PromotionApplyError, match="stage=write"):
+        apply_candidates(
+            [_link_candidate("proposition:shared", "a-1")],
+            sidecar_path=sp,
+            project_root=root,
+            paper_ref="paper:p",
+        )
+
+    assert dest.read_text(encoding="utf-8") == concurrent
+
+
+def test_sidecar_drift_before_edit_construction_refuses(tmp_path, monkeypatch):
+    """Sidecar edits retain the bytes parsed to build the backlink post-image."""
+    import science_tool.annotation.promote as promote_mod
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.promote import PromotionApplyError, apply_candidates
+
+    root, sp = _promotion_project(tmp_path, existing={"known-claim": "Known claim"})
+    anno_io.write_sidecar(
+        sp,
+        anno_io.Sidecar(
+            annotations=(_statement_ann("a-1", "Known claim", status=Status.OPEN),)
+        ),
+    )
+    concurrent = "{}\n"
+    real_edits = promote_mod.edits_for_planned_texts
+
+    def drift_before_edit_construction(*args, **kwargs):
+        sp.write_text(concurrent, encoding="utf-8")
+        return real_edits(*args, **kwargs)
+
+    monkeypatch.setattr(promote_mod, "edits_for_planned_texts", drift_before_edit_construction)
+
+    with pytest.raises(PromotionApplyError, match="stage=write"):
+        apply_candidates(
+            [_link_candidate("proposition:known-claim", "a-1")],
+            sidecar_path=sp,
+            project_root=root,
+            paper_ref="paper:p",
+        )
+
+    assert sp.read_text(encoding="utf-8") == concurrent
+
+
 def test_apply_refuses_overwrite_of_different_claim(tmp_path):
     # An explicit-id MINT (e.g. from a curator override) must never clobber an unrelated proposition.
     from datetime import date
