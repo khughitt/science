@@ -1,15 +1,16 @@
 # Plan 4c mutation ledger
 
-Certified against production baseline `24547746`. Each mutation was applied alone, its named node
-was required to fail for the stated reason, the mutation was reversed, and the same node was
-required to pass before the next row began. Model nodes ran from `science/model/`; CLI nodes ran
-from `science/`, each with `uv run --frozen pytest -q`.
+Rows 1–38 were certified against production baseline `24547746`; the revision 38 final-review rows
+39–44 were certified on `feat/evidence-broker-boundary` based at `69a39b22`. Each mutation was
+applied alone, its named node was required to fail for the stated reason, the mutation was reversed,
+and the same node was required to pass before the next row began. Model nodes ran from
+`science/model/`; CLI nodes ran from `science/`, each with `uv run --frozen pytest -q`.
 
 Design revision 37 removed the former row 32, “unknown `finding_id` surfaces as
 `CaseStorageError`.” The exact scan-specific mutant stayed green because the enclosing
 `except CaseStorageError` translates it to the same public `IngestError`; only cause, message, or
 source structure distinguishes the implementations. It is therefore recorded in the design's
-“must not be added” list and is not one of the 38 certifiable rows below.
+“must not be added” list and is not one of the 44 certifiable rows below.
 
 | # | Mutation | Test node | Observed result |
 |---:|---|---|---|
@@ -47,19 +48,26 @@ source structure distinguishes the implementations. It is therefore recorded in 
 | 32 | Rely on `_validate_reviews` for the duplicate | `test_findings_reviews.py::test_a_duplicate_review_is_refused_and_writes_nothing` | **FAILED as required:** raw `ValidationError` escaped instead of the boundary's duplicate `IngestError`; restored node passed. |
 | 33 | Catch only `RunRecordError` | `test_findings_reviews.py::test_an_unreadable_runs_directory_is_an_ingest_error` | **FAILED as required:** raw `PermissionError` escaped; restored node passed. |
 | 34 | `OSError` from `flock` acquisition escapes | `test_findings_locked_store.py::test_flock_acquisition_failure_becomes_case_storage_error` and `test_findings_reviews.py::test_a_lock_acquisition_failure_surfaces_as_ingest_error` | **FAILED as required at both layers:** raw acquisition `OSError` escaped the storage and append boundaries; both restored nodes passed. |
-| 35 | `OSError` from `flock` release escapes | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error` and `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` | **FAILED as required at both layers:** raw release `OSError` escaped the storage and append boundaries; both restored nodes passed. |
-| 36 | `OSError` from `os.close` escapes | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error` and `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` | **FAILED as required at both layers:** raw close `OSError` escaped the storage and append boundaries; both restored nodes passed. |
+| 35 | `OSError` from `flock` release escapes or replaces an active body exception | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` | **FAILED as required:** raw release `OSError` escaped both public layers; under the unconditional-conversion mutant, release replaced the exact body sentinel. Restored nodes passed. |
+| 36 | `OSError` from lock `os.close` escapes or replaces an active body exception | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` | **FAILED as required:** raw lock-close `OSError` escaped both public layers; under the unconditional-conversion mutant, lock close replaced the exact body sentinel. Restored nodes passed. |
 | 37 | Widen `locked_store`'s `try` across its `yield` | `test_findings_locked_store.py::test_body_exception_is_not_relabelled` | **FAILED as required:** the sentinel body `OSError` was relabelled `CaseStorageError`; restored node passed. |
 | 38 | Derive `review_id` before the case scan | `test_findings_reviews.py::test_an_unknown_nul_bearing_finding_id_is_an_ingest_error` | **FAILED as required:** raw `RecordError` escaped before the unknown-case refusal; restored node passed. |
+| 39 | Accept a behavioural `ReviewSubmission` subtype by rebuilding through `type(value)` | `test_findings_reviews.py::test_a_behavioral_submission_subclass_is_rejected_before_any_side_effect` | **FAILED as required:** the subtype was accepted, so the expected exact-type `IngestError` was not raised; restored node rejected it before any caller method, field, run lookup, checker call, or storage access. |
+| 40 | Accept a behavioural `ReviewAttestation` subtype by rebuilding through `type(value)` | `test_findings_reviews.py::test_a_behavioral_attestation_subclass_is_rejected_before_any_side_effect` | **FAILED as required:** the subtype was accepted, so the expected exact-type `IngestError` was not raised. The restored node rejects it before reading either argument or reaching run lookup, checker, or storage. |
+| 41 | Let lock `fstat` `OSError` escape `open_lock_at` | `test_findings_locked_store.py::test_lock_validation_failure_becomes_case_storage_error` and `test_findings_reviews.py::test_a_lock_validation_failure_surfaces_as_ingest_error` | **FAILED as required at both layers:** raw `OSError(EIO)` escaped instead of `CaseStorageError` / `IngestError`; both restored nodes passed. |
+| 42 | Let validation-cleanup lock close replace the path failure | `test_findings_locked_store.py::test_lock_validation_cleanup_failure_does_not_escape_storage_boundary` and `test_findings_reviews.py::test_a_lock_validation_cleanup_failure_surfaces_as_ingest_error` | **FAILED as required at both layers:** the cleanup `OSError(EIO)` replaced the lock-validation failure and escaped raw; both restored nodes kept cleanup secondary and passed. |
+| 43 | Let the directory-descriptor close escape or replace an active body exception | `test_findings_locked_store.py::test_directory_close_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_directory_close_failure_surfaces_as_ingest_error` | **FAILED as required:** raw directory-close `OSError` escaped both public layers, and under simultaneous body/release/close failures it replaced the exact body sentinel; all restored nodes passed. |
+| 44 | Restore `confirmation_count`'s outcome-only filter | `test_audit_record.py::test_confirmation_count_excludes_an_unwired_agent_confirmation`, `::test_confirmation_count_excludes_a_vacuous_verified_agent_confirmation`, and `::test_confirmation_count_excludes_a_mixed_evidence_agent_confirmation` | **FAILED as required:** every excluded review counted as 1 instead of 0; all three restored nodes passed. |
 
 Restored-tree focused verification:
 
 ```text
-science/model: uv run --frozen pytest -q tests/test_audit_import_cycle.py tests/test_audit_review_contract.py tests/test_correspondence.py
-30 passed
+science/model: uv run --frozen pytest tests/test_audit_import_cycle.py tests/test_audit_review_contract.py tests/test_correspondence.py tests/test_audit_record.py
+106 passed
 
-science: uv run --frozen pytest -q tests/test_findings_reviews.py tests/test_findings_locked_store.py tests/test_review_confirmations_check.py
-39 passed
+science: uv run --frozen pytest tests/test_findings_reviews.py tests/test_findings_locked_store.py tests/test_review_confirmations_check.py
+49 passed
 ```
 
-The top-level integration agent owns the full model and CLI suites plus final Ruff and Pyright runs.
+The adjacent `test_findings_paths.py` and `test_findings_storage.py` modules also passed in the same
+restored tree. The top-level integration agent owns the full model and CLI suites.

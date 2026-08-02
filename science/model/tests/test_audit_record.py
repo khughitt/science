@@ -12,6 +12,7 @@ from science_model.audit.record import (
     occurrence_key,
     review_id,
 )
+from science_model.audit.evidence import LocationEvidence, TextEvidence
 from science_model.audit.subjects import EntitySubject
 from science_model.correspondence import Correspondence
 
@@ -55,6 +56,18 @@ def _review(**overrides) -> Review:
         note="checked",
     )
     return Review(**{**base, **overrides})
+
+
+def _agent_review(**overrides) -> Review:
+    fields = dict(
+        reviewer_kind="agent",
+        reviewer_ref="curation-sweep",
+        lens="instrument:review-v1",
+        model="test-model",
+        correspondence=Correspondence(status="verified"),
+    )
+    fields.update(overrides)
+    return _review(**fields)
 
 
 def _record(**overrides) -> AuditFindingRecord:
@@ -380,6 +393,28 @@ def test_confirmation_count_is_derived_from_distinct_confirming_reviews():
         ]
     )
     assert record.confirmation_count() == 1
+
+
+def test_confirmation_count_excludes_an_unwired_agent_confirmation():
+    review = _agent_review(
+        evidence=(LocationEvidence(type="location", path="a.txt"),),
+        correspondence=Correspondence(status="unwired", code="NO_EXPOSURE"),
+    )
+    assert _record(reviews=[review]).confirmation_count() == 0
+
+
+def test_confirmation_count_excludes_a_vacuous_verified_agent_confirmation():
+    assert _record(reviews=[_agent_review(evidence=())]).confirmation_count() == 0
+
+
+def test_confirmation_count_excludes_a_mixed_evidence_agent_confirmation():
+    review = _agent_review(
+        evidence=(
+            LocationEvidence(type="location", path="a.txt"),
+            TextEvidence(type="text", text="prose is not a citation"),
+        )
+    )
+    assert _record(reviews=[review]).confirmation_count() == 0
 
 
 def test_idempotency_key_is_required_and_must_match_its_own_fields():

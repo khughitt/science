@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 37)
+**Status:** partially implemented (revision 38)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | **merged** at `cbb7656f` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–37**, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | **implemented on `feat/evidence-broker-boundary` and settled through revision 38; not merged** |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -293,6 +293,36 @@ The first is the fourth appearance in this design of a mutation whose outcome is
 unrelated to the guard, and the pattern is now specific enough to state as a check: **when a mutation
 removes an early refusal, ask what the later stages would do with the same input** — if they refuse
 too, the row must assert that the later stage never ran.
+
+**Revision 38 closes the final whole-branch review of plan 4c.** Four findings changed the settled
+contract or the evidence that guards it.
+
+1. **Boundary models must be exact types, not merely valid instances.** Step 0 rebuilt with
+   `type(value)`, preserving caller-owned behavioural subclasses. A measured `ReviewSubmission`
+   subtype returned the evidence the run had seen to `check_correspondence`, then returned different
+   evidence to the stored `Review`; the stored correspondence vouched for a tuple it had never
+   checked. `append_review` now rejects a non-exact `ReviewSubmission` or `ReviewAttestation` before
+   reading any property or invoking any method on it, then dumps and strictly validates through the
+   named concrete base type. Separate mutations cover both arguments because either call site can
+   accidentally reintroduce `type(value)`.
+2. **Storage totality ends at the primitive that owns each descriptor.** `open_lock_at` converted
+   `os.open` failures but leaked `os.fstat`, and its cleanup `os.close` could replace the validation
+   failure. `open_dir_inside` likewise leaked its final close. Those failures now become
+   `PathSafetyError` at their owner and therefore `CaseStorageError` and `IngestError` at the two
+   enclosing boundaries. If caller work is already failing, release/close failures are attached as
+   notes and the caller's exception remains primary; no catch was added around `locked_store`'s
+   `yield`.
+3. **A predicate test is not an aggregate wiring test.** Every eligibility clause was guarded on
+   `Review.counts_as_support()`, but restoring `confirmation_count`'s former outcome-only filter left
+   them green. Three record-level negatives — unwired, vacuously verified, and mixed evidence — now
+   fail that mutation together.
+4. **The implementation plan lagged its collision fix.** The registered validation section is 163
+   with display order 16301 because 161 and 162 are already owned; the registration guard is the
+   ninth check test. The plan now records those shipped values and the collision rationale.
+
+Six distinct mutations are added: the two exact-type call sites, lock `fstat`, validation-cleanup
+close, directory close, and the old aggregate filter. Together with revision 37's 38 rows, plan 4c
+now has **44 certifiable rows**.
 
 **Revision 37 removes one vacuous 4c mutation found by the mechanical certification sweep.** The
 scan-specific mutant raised `CaseStorageError` rather than `IngestError` when no case matched a
@@ -977,7 +1007,7 @@ may reach backwards**, and each is independently mergeable.
 | **May assume** | plans 1–3 as merged; nothing about correspondence | 4a's guarantee below; that `LocationEvidence` exists (it is merged) | 4b's `check_correspondence` and `Correspondence` |
 | **May NOT assume** | that any checker exists | that a stored `Review` has `evidence` — it does not until 4c | that it may classify an exposure itself — outcome, coverage and protocol are 4b's, and 4c calls `check_correspondence` for all three |
 | **Creates** | — | `evidence_broker/hits.py`, `evidence_broker/correspondence.py`, `science_model/correspondence.py` | `findings/reviews.py`, `validate/checks/review_confirmations.py` |
-| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `science_model/audit/__init__.py` (re-export the three new types), `findings/storage.py` (gains `locked_store`), `findings/ingest.py` (loses `_locked_store`), `validate/checks/__init__.py` (register the new check), `validate/findings.py` (`_POLICY_INFO_RULE_IDS`) |
+| **Modifies** | `autonomy/lifecycle.py` (tree scan + traversal check, at `start_run`), `autonomy/cli.py` (map hardened-git open failures to the documented exit 2), `evidence_broker/serve.py`, `autonomy/git.py`, `science_model/evidence_broker.py` (bounds + protocol) | — | `science_model/audit/record.py`, `science_model/audit/__init__.py` (re-export the three new types), `findings/storage.py` (gains `locked_store`), `findings/ingest.py` (loses `_locked_store`), `findings/paths.py` (**primitive-owned lock validation and descriptor teardown failures stay inside `PathSafetyError` without replacing an active caller exception**), `validate/checks/__init__.py` (register the new check), `validate/findings.py` (`_POLICY_INFO_RULE_IDS`) |
 | **Consumers, unchanged** | — | — | `findings/cli.py:317` — the call site is untouched; what `confirmation_count()` returns changes underneath it |
 | **Must not touch** | `science_model/audit/*` | **any stored-record model** — `audit/record.py` above all | `evidence_broker/serve.py`, `evidence_broker/correspondence.py`, `evidence_broker/hits.py`, `science_model/correspondence.py` |
 | **Owns in §5.3** | — | the classification column | "Stored?" and "Counts as support?" |
@@ -2214,6 +2244,12 @@ report as the failure mode. One definition, two callers, and the check is spelle
 `not r.counts_as_support()` rather than as a list of the codes it knows about — the same
 predicate-over-roster rule §7 applies to the coverage algebra.
 
+**Revision 38 guards the delegation at the aggregate as well as at the predicate.** Predicate-level
+tests alone did not prove that `AuditFindingRecord.confirmation_count()` still called
+`counts_as_support()`: restoring the former outcome-only filter left every one green. Record-level
+negatives now cover an unwired confirmation, a vacuous verified confirmation, and a mixed-evidence
+confirmation. All three count as zero, and all three fail together under the old aggregate.
+
 Recording a review's weaker standing while still counting it as support is a distinction with no
 consequence — revision 1's `unwired`-accepts rule preserved the exact fail-open the design exists to
 close, and paid for it with an info notice. An unbrokered agent review is still stored, still
@@ -2786,13 +2822,22 @@ carry and does not. It returns only if writer provenance gains a durable field.
 **The executable order.** Stated as numbered steps, for the reason §5.3 needed them: a list of
 independent rules does not say which fires first, and every one of these can fire on the same input.
 
-0. **Revalidate both arguments before reading either**, each as
-   `T.model_validate(arg.model_dump(mode="python", warnings="error"), strict=True)`, with
+0. **Reject non-exact argument types before reading either, then revalidate both**, each as
+   `ExpectedBase.model_validate(arg.model_dump(mode="python", warnings="error"), strict=True)`,
+   where `ExpectedBase` is concretely `ReviewSubmission` or `ReviewAttestation`, with
    `ValidationError` and any serialization failure becoming `IngestError`. Without this the boundary
    is not total: an instance built with `model_construct`, or mutated past `frozen=True` through
    `__dict__`, reaches step 4 and hands forged `LocationEvidence` straight to the checker. A boundary
    that trusts the shape of its own arguments has moved the trust decision to its callers, which is
    what §4.2's submission/record split exists to prevent.
+
+   Exact means `type(arg) is ExpectedBase`, checked **before** `model_dump` or any property access.
+   A Pydantic model subclass is executable caller code, not a passive schema extension: it can
+   override `__getattribute__` or `model_dump`. Rebuilding with `type(arg)` preserves that behaviour.
+   Measured, a stateful submission subtype returned a served location to the checker and an unserved
+   one to `Review`, storing unshown evidence under a verified correspondence; an attestation subtype
+   can likewise pass a run identity cross-check under one value and store another. Neither subtype is
+   accepted, and the rebuild returns the named base class rather than the caller's class.
 
    **Two spellings that look like this one and do not work.** Revision 34 said only "the same as
    `_snapshot_report`", which is a defect twice over:
@@ -2892,10 +2937,13 @@ totality resting on a roster of the cases its author happened to think of.
 importing a neighbour's underscore-prefixed contextmanager would make `append_review` raise
 `IngestError` out of a function it does not own. Two conditions on the move:
 
-- **The public `locked_store` adds exactly one conversion, over `flock` and `close`.** Those raise
-  `OSError` that nothing catches today; the extracted function converts them to `CaseStorageError`,
-  and the contract covers **acquisition, release and close** rather than acquisition alone, because
-  a failed unlock or a failed close is as much a lock-management failure as a failed acquire.
+- **Each descriptor primitive owns its conversion, and `locked_store` adds the lock-management
+  layer.** `locked_store` converts `flock` and lock-descriptor `close` failures to
+  `CaseStorageError`; the contract covers **acquisition, release and close** rather than acquisition
+  alone. Revision 38 extends the same ownership rule down one layer: `open_lock_at` converts both
+  lock `fstat` and validation-cleanup close failures to `PathSafetyError`, while `open_dir_inside`
+  converts its final directory-descriptor close. `case_store` then maps those path failures to
+  `CaseStorageError`, and each writer maps that to its own boundary error.
 
   **It needs no `PathSafetyError` clause, and revisions 34's two attempts at one were both wrong.**
   `case_store` keeps its `try` **active across its own `yield`** (`storage.py:255–261`), so a
@@ -2903,6 +2951,12 @@ importing a neighbour's underscore-prefixed contextmanager would make `append_re
   that generator and converted there. Measured, with a FIFO planted at `.ingest.lock` and every
   other conversion removed: the call still raises `CaseStorageError`. The claim that the lock leaf
   "sits outside `case_store`'s try" was false, and both fixtures written to prove it were vacuous.
+
+  **Teardown never replaces an exception already in flight.** If caller work is failing and unlock
+  or descriptor close also fails, the teardown failure is attached as a note to the active
+  exception. With release, lock close, and directory close all injected to fail, the same sentinel
+  from the body remains primary and all three cleanup attempts still run. When there is no active
+  failure, the owner raises its documented `PathSafetyError` or `CaseStorageError` normally.
 
   **Its scope is setup and teardown, and the claim has to be stated as what it adds.**
   `locked_store` introduces **no catch spanning its body**: its conversion wraps the code around the
@@ -3220,10 +3274,16 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Rely on `_validate_reviews` for the duplicate instead of checking first | re-submitting an identical review raises `IngestError`, **not `RecordError`**, and leaves the case byte-identical |
 | 4c | Catch only `RunRecordError` around `load_run_records` | an agent review against an **unreadable** `runs/` raises `IngestError`, not `PermissionError` |
 | 4c | Let `OSError` from `flock` **acquisition** escape `locked_store` | with `fcntl.flock` injected to raise `OSError`, a **non-agent** review raises `IngestError` |
-| 4c | Let `OSError` from `flock` **release** escape `locked_store` | with release-only injection, a non-agent review that otherwise succeeds raises `IngestError` |
-| 4c | Let `OSError` from `os.close` escape `locked_store` | with `os.close` injected to raise, a non-agent review raises `IngestError` |
+| 4c | Let `OSError` from `flock` **release** escape `locked_store`, or replace an active body exception | with release-only injection, a non-agent review that otherwise succeeds raises `IngestError`; with body, release, and close failures together, the body's exact exception remains primary |
+| 4c | Let `OSError` from the lock `os.close` escape `locked_store`, or replace an active body exception | with lock-close injection, a non-agent review raises `IngestError`; with body, release, and close failures together, the body's exact exception remains primary |
 | 4c | Widen `locked_store`'s `try` to span its own `yield` | an `OSError(EIO)` raised **inside** a `with locked_store(...)` body propagates as that same exception |
 | 4c | Derive `review_id` before the case scan | an unknown `finding_id` **containing a NUL** raises `IngestError`, not `RecordError` |
+| 4c | Accept a behavioural `ReviewSubmission` subtype by rebuilding through `type(value)` | the subtype is rejected before `model_dump`, field access, run lookup, checker invocation, or storage |
+| 4c | Accept a behavioural `ReviewAttestation` subtype by rebuilding through `type(value)` | the subtype is rejected before either argument is read and before run lookup, checker invocation, or storage |
+| 4c | Let lock `fstat` `OSError` escape `open_lock_at` | the storage API raises `CaseStorageError` and a non-agent append raises `IngestError` |
+| 4c | Let validation-cleanup lock `close` replace the path failure | the original lock-validation failure remains inside `CaseStorageError` / `IngestError`, with cleanup failure secondary |
+| 4c | Let the directory-descriptor `close` escape or replace an active body exception | an otherwise-successful append raises `IngestError`; under simultaneous body and teardown failures, the body exception remains primary |
+| 4c | Restore `confirmation_count`'s former outcome-only filter | record-level unwired, vacuous verified, and mixed-evidence agent confirmations each count as zero |
 
 **The import-cycle row must run in a subprocess, and the direction is not symmetric.** Written as an
 in-process `import science_model.audit.record`, the assertion probes the *safe* direction: it

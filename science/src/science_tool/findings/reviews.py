@@ -29,8 +29,16 @@ from science_tool.graph.autonomous_runs import load_run_records
 _Model = TypeVar("_Model", ReviewSubmission, ReviewAttestation)
 
 
-def _revalidated(value: _Model) -> _Model:
-    """Rebuild an argument through its own validators, recursively.
+def _require_exact(value: object, expected: type[_Model]) -> None:
+    """Reject executable caller subtypes before touching either boundary model."""
+    if type(value) is not expected:
+        raise IngestError(
+            f"expected exact {expected.__name__}, got {type(value).__name__}"
+        )
+
+
+def _revalidated(value: _Model, expected: type[_Model]) -> _Model:
+    """Rebuild a boundary value through the named type's validators, recursively.
 
     Passing an instance directly to ``model_validate`` skips members built with
     ``model_construct``. Dumping in Python mode forces recursive validation while
@@ -38,9 +46,9 @@ def _revalidated(value: _Model) -> _Model:
     """
     try:
         dumped = value.model_dump(mode="python", warnings="error")
-        return type(value).model_validate(dumped, strict=True)
+        return expected.model_validate(dumped, strict=True)
     except (ValidationError, ValueError, TypeError) as exc:
-        raise IngestError(f"{type(value).__name__} is not valid: {exc}") from exc
+        raise IngestError(f"{expected.__name__} is not valid: {exc}") from exc
 
 
 def append_review(
@@ -51,9 +59,11 @@ def append_review(
     attestation: ReviewAttestation,
 ) -> Review:
     """Append one review to a stored case, computing its correspondence."""
-    # Step 0: revalidate both arguments before reading either.
-    submission = _revalidated(submission)
-    attestation = _revalidated(attestation)
+    # Step 0: reject both executable subtypes before reading either argument.
+    _require_exact(submission, ReviewSubmission)
+    _require_exact(attestation, ReviewAttestation)
+    submission = _revalidated(submission, ReviewSubmission)
+    attestation = _revalidated(attestation, ReviewAttestation)
 
     if attestation.reviewer_kind != "agent":
         correspondence = None

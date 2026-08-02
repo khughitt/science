@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -242,7 +243,14 @@ def open_dir_inside(
     try:
         yield descriptor
     finally:
-        os.close(descriptor)
+        active = sys.exception()
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            message = f"could not close directory descriptor for {rel_dir!r}: {exc}"
+            if active is None:
+                raise PathSafetyError(message) from exc
+            BaseException.add_note(active, message)
 
 
 @contextmanager
@@ -563,7 +571,10 @@ def open_lock_at(dir_fd: int, name: str) -> int:
     except OSError as exc:
         raise PathSafetyError(f"could not open lock {name!r}: {exc}") from exc
     try:
-        info = os.fstat(descriptor)
+        try:
+            info = os.fstat(descriptor)
+        except OSError as exc:
+            raise PathSafetyError(f"could not inspect lock {name!r}: {exc}") from exc
         if not stat.S_ISREG(info.st_mode):
             raise PathSafetyError(f"lock {name!r} is not a regular file")
         if info.st_nlink != 1:
@@ -571,8 +582,13 @@ def open_lock_at(dir_fd: int, name: str) -> int:
                 f"lock {name!r} has {info.st_nlink} links; a hard-linked lock lets "
                 "whoever planted it choose the inode this project serializes on"
             )
-    except BaseException:
-        os.close(descriptor)
+    except BaseException as error:
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            BaseException.add_note(
+                error, f"could not close lock {name!r} after validation failed: {exc}"
+            )
         raise
     return descriptor
 

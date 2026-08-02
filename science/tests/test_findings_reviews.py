@@ -3,11 +3,14 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import ClassVar
+from unittest.mock import Mock
 
 import pytest
 from science_model.audit import ReviewAttestation, ReviewSubmission
 from science_model.audit.evidence import LocationEvidence
 
+import science_tool.findings.reviews as reviews_module
 from science_tool.findings.ingest import IngestError
 from science_tool.findings.reviews import append_review
 from science_tool.findings.storage import load_cases
@@ -247,6 +250,107 @@ def test_a_lock_close_failure_surfaces_as_ingest_error(
         )
 
 
+def test_a_lock_validation_failure_surfaces_as_ingest_error(
+    tmp_path: Path,
+    stored_case,
+    human_attestation,
+    case_files,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import errno
+
+    before = case_files(tmp_path)
+    monkeypatch.setattr(
+        os,
+        "fstat",
+        lambda fd: (_ for _ in ()).throw(OSError(errno.EIO, "fstat failed")),
+    )
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+    assert case_files(tmp_path) == before
+
+
+def test_a_lock_validation_cleanup_failure_surfaces_as_ingest_error(
+    tmp_path: Path,
+    stored_case,
+    human_attestation,
+    case_files,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import errno
+
+    real_close = os.close
+    armed = False
+
+    def broken_fstat(fd: int) -> os.stat_result:
+        nonlocal armed
+        armed = True
+        raise OSError(errno.EIO, "fstat failed")
+
+    def flaky_close(fd: int) -> None:
+        nonlocal armed
+        real_close(fd)
+        if armed:
+            armed = False
+            raise OSError(errno.EIO, "validation cleanup failed")
+
+    before = case_files(tmp_path)
+    monkeypatch.setattr(os, "fstat", broken_fstat)
+    monkeypatch.setattr(os, "close", flaky_close)
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+    assert case_files(tmp_path) == before
+
+
+def test_a_directory_close_failure_surfaces_as_ingest_error(
+    tmp_path: Path,
+    stored_case,
+    human_attestation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import errno
+    import fcntl
+
+    real_flock = fcntl.flock
+    real_close = os.close
+    lock_fd: int | None = None
+    lock_closed = False
+
+    def capture_lock(fd: int, operation: int) -> None:
+        nonlocal lock_fd
+        if operation == fcntl.LOCK_EX:
+            lock_fd = fd
+        real_flock(fd, operation)
+
+    def flaky_close(fd: int) -> None:
+        nonlocal lock_closed
+        real_close(fd)
+        if fd == lock_fd:
+            lock_closed = True
+        elif lock_closed:
+            raise OSError(errno.EIO, "directory close failed")
+
+    monkeypatch.setattr(fcntl, "flock", capture_lock)
+    monkeypatch.setattr(os, "close", flaky_close)
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path,
+            stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+
+
 def test_an_agent_review_of_an_unbrokered_run_is_unwired(
     tmp_path: Path, stored_case, unbrokered_run, agent_attestation
 ) -> None:
@@ -424,6 +528,115 @@ def test_a_forged_submission_is_refused_before_the_checker(
             forged,
             attestation=agent_attestation(),
         )
+
+
+def test_a_behavioral_submission_subclass_is_rejected_before_any_side_effect(
+    sealed_agent_run,
+    agent_attestation,
+    case_files,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller-owned subtype must not choose checked and stored evidence separately."""
+    project, case, _control = sealed_agent_run
+
+    class StatefulSubmission(ReviewSubmission):
+        touches: ClassVar[list[str]] = []
+        shown: ClassVar[tuple[LocationEvidence, ...]] = (
+            LocationEvidence(type="location", path="science.yaml"),
+        )
+        unshown: ClassVar[tuple[LocationEvidence, ...]] = (
+            LocationEvidence(type="location", path="never-read.txt"),
+        )
+
+        def __getattribute__(self, name: str):
+            if name == "model_dump":
+                type(self).touches.append(name)
+            elif name == "evidence":
+                type(self).touches.append(name)
+                reads = type(self).touches.count(name)
+                return type(self).shown if reads == 1 else type(self).unshown
+            return super().__getattribute__(name)
+
+    load_spy = Mock(wraps=reviews_module.load_run_records)
+    check_spy = Mock(wraps=reviews_module.check_correspondence)
+    store_spy = Mock(wraps=reviews_module.locked_store)
+    monkeypatch.setattr(reviews_module, "load_run_records", load_spy)
+    monkeypatch.setattr(reviews_module, "check_correspondence", check_spy)
+    monkeypatch.setattr(reviews_module, "locked_store", store_spy)
+    before = case_files(project)
+
+    with pytest.raises(IngestError, match="ReviewSubmission"):
+        append_review(
+            project,
+            case.finding_id,
+            StatefulSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(),
+        )
+
+    assert StatefulSubmission.touches == []
+    assert load_spy.call_count == check_spy.call_count == store_spy.call_count == 0
+    assert case_files(project) == before
+
+
+def test_a_behavioral_attestation_subclass_is_rejected_before_any_side_effect(
+    sealed_agent_run,
+    agent_attestation,
+    case_files,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A subtype must not pass the run cross-check under one identity and store another."""
+    project, case, _control = sealed_agent_run
+
+    class StatefulAttestation(ReviewAttestation):
+        touches: ClassVar[list[str]] = []
+
+        def __getattribute__(self, name: str):
+            if name == "model_dump":
+                type(self).touches.append(name)
+            elif name == "reviewer_ref":
+                type(self).touches.append(name)
+                return (
+                    "curation-sweep"
+                    if type(self).touches.count(name) == 1
+                    else "unchecked-agent"
+                )
+            return super().__getattribute__(name)
+
+    load_spy = Mock(wraps=reviews_module.load_run_records)
+    check_spy = Mock(wraps=reviews_module.check_correspondence)
+    store_spy = Mock(wraps=reviews_module.locked_store)
+    monkeypatch.setattr(reviews_module, "load_run_records", load_spy)
+    monkeypatch.setattr(reviews_module, "check_correspondence", check_spy)
+    monkeypatch.setattr(reviews_module, "locked_store", store_spy)
+    submission_reads: list[str] = []
+    real_model_dump = ReviewSubmission.model_dump
+
+    def tracked_submission_dump(self, *args, **kwargs):
+        submission_reads.append("model_dump")
+        return real_model_dump(self, *args, **kwargs)
+
+    monkeypatch.setattr(ReviewSubmission, "model_dump", tracked_submission_dump)
+    before = case_files(project)
+    attestation = StatefulAttestation.model_validate(
+        agent_attestation().model_dump(mode="python")
+    )
+
+    with pytest.raises(IngestError, match="ReviewAttestation"):
+        append_review(
+            project,
+            case.finding_id,
+            ReviewSubmission(
+                outcome="confirms",
+                note="n",
+                evidence=(LocationEvidence(type="location", path="science.yaml"),),
+            ),
+            attestation=attestation,
+        )
+
+    assert StatefulAttestation.touches == []
+    assert submission_reads == []
+    assert load_spy.call_count == check_spy.call_count == store_spy.call_count == 0
+    assert case_files(project) == before
 
 
 def test_the_cross_checks_run_before_the_checker(

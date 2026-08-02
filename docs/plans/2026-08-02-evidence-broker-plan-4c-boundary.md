@@ -20,13 +20,14 @@ arrives in spec 2c, and §4.2's zero-migration argument holds until it does.
 
 ## Global Constraints
 
-- **Design of record:** `docs/plans/2026-07-30-agent-evidence-broker-design.md` at **revision 37**.
+- **Design of record:** `docs/plans/2026-07-30-agent-evidence-broker-design.md` at **revision 38**.
   Where this plan and the design disagree, the design governs — raise the conflict, do not silently
   deviate.
 - **Exact file boundary (design §2.2, 4c column).** Create only `science/src/science_tool/findings/reviews.py`
   and `science/src/science_tool/validate/checks/review_confirmations.py`. Modify only
   `science/model/src/science_model/audit/record.py`, `science/model/src/science_model/audit/__init__.py`,
   `science/src/science_tool/findings/storage.py`, `science/src/science_tool/findings/ingest.py`,
+  `science/src/science_tool/findings/paths.py`,
   `science/src/science_tool/validate/checks/__init__.py`, `science/src/science_tool/validate/findings.py`.
 - **Must not touch:** `science/src/science_tool/evidence_broker/serve.py`,
   `science/src/science_tool/evidence_broker/correspondence.py`,
@@ -58,6 +59,7 @@ arrives in spec 2c, and §4.2's zero-migration argument holds until it does.
 | `science/model/src/science_model/audit/__init__.py` | re-export the three new types beside `Review` |
 | `science/src/science_tool/findings/storage.py` | public `locked_store`, moved from `ingest.py`, converting `flock`/`close` `OSError` to `CaseStorageError` |
 | `science/src/science_tool/findings/ingest.py` | drops `_locked_store`; `ingest_report` translates `CaseStorageError` to `IngestError` at its own boundary |
+| `science/src/science_tool/findings/paths.py` | converts lock validation and descriptor-close failures at the primitive that owns each descriptor, preserving an already-active caller exception |
 | `science/src/science_tool/findings/reviews.py` | **NEW** — `append_review` and nothing else |
 | `science/src/science_tool/validate/checks/review_confirmations.py` | **NEW** — rule `review.uncounted-confirmation` |
 | `science/src/science_tool/validate/checks/__init__.py` | register the new check module |
@@ -81,6 +83,7 @@ Test files (flat, matching the repo's existing convention):
 **Files:**
 - Modify: `science/src/science_tool/findings/storage.py`
 - Modify: `science/src/science_tool/findings/ingest.py:237-261` (delete `_locked_store`), `:562` (call site)
+- Modify: `science/src/science_tool/findings/paths.py` (lock validation and descriptor teardown)
 - Test: `science/tests/test_findings_locked_store.py` (create)
 
 **Interfaces:**
@@ -98,8 +101,12 @@ the callers instead. Two facts, both **measured**, that decide the shape:
    `PathSafetyError` raised by `store.lock()` inside the caller's `with` body is thrown back into
    that generator and converted to `CaseStorageError` there. `locked_store` therefore needs **no**
    `PathSafetyError` clause — that conversion already happens one layer down.
-2. The `fcntl.flock` and `os.close` calls raise `OSError` that nothing catches. Those are what
-   `locked_store` adds, and the contract covers **acquisition, release and close**.
+2. The `fcntl.flock` and lock-descriptor `os.close` calls raise `OSError` that nothing catches.
+   Those are what `locked_store` adds, and the contract covers **acquisition, release and close**.
+   The descriptor primitives retain their own layer: `open_lock_at` converts lock `fstat` and its
+   validation-cleanup close to `PathSafetyError`, and `open_dir_inside` converts its directory close
+   the same way. A teardown failure is attached as a note when caller work is already failing, so it
+   cannot replace the primary exception.
 
 `locked_store` must **not** widen its `try` across its own `yield`.
 
@@ -936,17 +943,21 @@ git commit -m "feat(audit): make agent confirmation eligibility a review-level p
 branch (steps 2–5) is Task 6, and until then a `reviewer_kind == "agent"` attestation raises
 `NotImplementedError` — a deliberate, visible hole that Task 6 fills, never a silent `None`.
 
-Three mechanisms that the natural spelling gets wrong, all **measured**:
+Four mechanisms that the natural spelling gets wrong, all **measured**:
 
-1. **Step 0's revalidation must dump first.** `ReviewSubmission.model_validate(submission)` does
+1. **Step 0 rejects both behavioural subtypes before reading either argument.** Rebuilding through
+   `type(value)` preserves caller-owned overrides of `model_dump` and field access. A stateful
+   submission used that to show the checker one evidence tuple and store another. Check both exact
+   base types first, before invoking either model, then rebuild through the named base types.
+2. **Step 0's revalidation must dump first.** `ReviewSubmission.model_validate(submission)` does
    **not** recurse into a member built with `model_construct` — measured: a `LocationEvidence` whose
    `path` holds a `..` segment survives it unchanged. `revalidate_instances="always"` governs
    instances appearing *as fields of something being built*, which is not this case. Dumping to
    `mode="python"` and validating strictly is what forces every member back through its validators.
-2. **Do not copy `_snapshot_report` literally.** It dumps in JSON mode, which renders
+3. **Do not copy `_snapshot_report` literally.** It dumps in JSON mode, which renders
    `ReviewAttestation.at` as a string that `strict=True` then refuses. `mode="python"` keeps the
    `datetime`.
-3. **`CaseStore` has no load-by-id.** Its API is `names()`, `has()`, `read()`, `write()`, `lock()`.
+4. **`CaseStore` has no load-by-id.** Its API is `names()`, `has()`, `read()`, `write()`, `lock()`.
    The boundary scans, through the held descriptor, so the read is inside the lock.
 
 And one ordering rule: **derive `review_id` only after the case scan matches.** `review_id` hashes
@@ -1231,10 +1242,18 @@ from science_tool.findings.storage import CaseStorageError, locked_store
 _Model = TypeVar("_Model", ReviewSubmission, ReviewAttestation)
 
 
-def _revalidated(value: _Model) -> _Model:
-    """Rebuild an argument through its own validators, recursively.
+def _require_exact(value: object, expected: type[_Model]) -> None:
+    """Reject executable caller subtypes before touching either boundary model."""
+    if type(value) is not expected:
+        raise IngestError(
+            f"expected exact {expected.__name__}, got {type(value).__name__}"
+        )
 
-    `type(value).model_validate(value)` does NOT do this: passing an instance skips
+
+def _revalidated(value: _Model, expected: type[_Model]) -> _Model:
+    """Rebuild a boundary value through the named type's validators, recursively.
+
+    `expected.model_validate(value)` does NOT do this: passing an instance skips
     every member built with `model_construct`. `revalidate_instances="always"` governs
     instances appearing as FIELDS of something being built, which is not this case.
     Dumping first is what forces each member back through its own validators.
@@ -1246,9 +1265,9 @@ def _revalidated(value: _Model) -> _Model:
     """
     try:
         dumped = value.model_dump(mode="python", warnings="error")
-        return type(value).model_validate(dumped, strict=True)
+        return expected.model_validate(dumped, strict=True)
     except (ValidationError, ValueError, TypeError) as exc:
-        raise IngestError(f"{type(value).__name__} is not valid: {exc}") from exc
+        raise IngestError(f"{expected.__name__} is not valid: {exc}") from exc
 
 
 def append_review(
@@ -1265,9 +1284,11 @@ def append_review(
     this function writes no transition, and a validated-then-discarded argument would
     advertise a record of the writer that the stored record does not contain.
     """
-    # Step 0 -- revalidate BOTH arguments before reading either.
-    submission = _revalidated(submission)
-    attestation = _revalidated(attestation)
+    # Step 0 -- reject both executable subtypes before reading either argument.
+    _require_exact(submission, ReviewSubmission)
+    _require_exact(attestation, ReviewAttestation)
+    submission = _revalidated(submission, ReviewSubmission)
+    attestation = _revalidated(attestation, ReviewAttestation)
 
     # Step 1 -- not an agent: nothing further runs.
     if attestation.reviewer_kind != "agent":
@@ -1886,6 +1907,7 @@ from pathlib import Path
 from science_model.audit.evidence import LocationEvidence, TextEvidence
 from science_model.audit import ReviewSubmission
 
+from science_tool.findings.catalog import build_project_registry
 from science_tool.findings.reviews import append_review
 from science_tool.findings.storage import case_path
 from science_tool.validate.checks.review_confirmations import (
@@ -1995,6 +2017,12 @@ def test_the_finding_keeps_its_rule_and_fingerprint(tmp_path: Path) -> None:
     assert is_policy_info_rule(RULE_UNCOUNTED_CONFIRMATION)
 
 
+def test_the_rule_registers_without_a_section_order_collision(tmp_path: Path) -> None:
+    registry = build_project_registry(tmp_path)
+
+    assert registry.rule(RULE_UNCOUNTED_CONFIRMATION.id) == RULE_UNCOUNTED_CONFIRMATION
+
+
 def test_no_cases_yields_nothing(tmp_path: Path) -> None:
     (tmp_path / "doc").mkdir()
     assert list(check_review_confirmations(_ctx(tmp_path))) == []
@@ -2039,7 +2067,8 @@ from science_tool.validate.result import Severity
 SECTION = FindingSection(
     id="review-confirmations",
     title="uncounted agent confirmations",
-    section_order=161,
+    # 161 is autonomous_runs and 162 is boundary; 163 is the first free section.
+    section_order=163,
 )
 
 
@@ -2058,7 +2087,7 @@ RULE_UNCOUNTED_CONFIRMATION = FindingRule(
     identity_qualifiers=("review_id",),
     title="Agent confirmation that does not count as support",
     section=SECTION.id,
-    display_order=16101,
+    display_order=16301,
 )
 
 
@@ -2133,7 +2162,9 @@ _POLICY_INFO_RULE_IDS = frozenset(
 cd science && uv run --frozen pytest tests/test_review_confirmations_check.py -q
 ```
 
-Expected: 8 passed.
+Expected: 9 passed. The registration test is the collision guard: sections 161 and 162 already
+belong to `autonomous_runs` and `boundary`, so this check uses the first free section, 163, and its
+rule uses display order 16301.
 
 - [ ] **Step 6: Check registration did not disturb the validate surface**
 
@@ -2156,9 +2187,10 @@ git commit -m "feat(validate): report agent confirmations that do not count as s
 
 ## Task 8: Certify every §7 mutation row
 
-**Files:** no production changes expected. Add tests where a row has no test that can fail.
+**Files:** add tests where a row has no test that can fail; change production only when certification
+exposes a real guard defect.
 
-**Background.** The design's §7 carries **38 rows tagged `4c`**. A row is certified when you break
+**Background.** The design's §7 carries **44 rows tagged `4c`**. A row is certified when you break
 what it guards and watch a **named** test fail. This is not a review pass — it is a mechanical sweep,
 and it has repeatedly found rows that certified nothing.
 
@@ -2180,21 +2212,22 @@ since both refuse identically; "give the check its own predicate instead of
 `counts_as_support()`"; and raising `CaseStorageError` rather than `IngestError` on a case-scan
 no-match, since the enclosing translation makes their public behaviour identical.
 
-- [ ] **Step 1: Confirm the row list still has 38 entries**
+- [ ] **Step 1: Confirm the row list still has 44 entries**
 
 From the repository root:
 
 ```bash
-grep -c "^| 4c |" docs/plans/2026-07-30-agent-evidence-broker-design.md
+rg -c '^\| 4c \|' docs/plans/2026-07-30-agent-evidence-broker-design.md
 ```
 
-Expected: `38`. If the count differs, the design moved and this table is stale — reconcile before
+Expected: `44`. If the count differs, the design moved and this table is stale — reconcile before
 continuing.
 
 - [ ] **Step 2: Certify each row against its named test**
 
-Every row already has a test written in Tasks 1–7. For each: apply the mutation to the production
-code, run the **named** node, confirm it FAILS, revert, confirm green.
+Rows 1–38 have tests written in Tasks 1–7; rows 39–44 came from the final whole-branch review. For
+each: apply the mutation to the production code, run the **named** node, confirm it FAILS, revert,
+confirm green.
 
 Model-package nodes run from `science/model/`, CLI nodes from `science/`.
 
@@ -2234,19 +2267,26 @@ Model-package nodes run from `science/model/`, CLI nodes from `science/`.
 | 32 | Rely on `_validate_reviews` for the duplicate | `test_findings_reviews.py::test_a_duplicate_review_is_refused_and_writes_nothing` |
 | 33 | Catch only `RunRecordError` | `test_findings_reviews.py::test_an_unreadable_runs_directory_is_an_ingest_error` |
 | 34 | `OSError` from `flock` acquisition escapes | `test_findings_locked_store.py::test_flock_acquisition_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_acquisition_failure_surfaces_as_ingest_error` |
-| 35 | `OSError` from `flock` release escapes | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` |
-| 36 | `OSError` from `os.close` escapes | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` |
+| 35 | `OSError` from `flock` release escapes or replaces an active body exception | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` |
+| 36 | `OSError` from lock `os.close` escapes or replaces an active body exception | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` |
 | 37 | Widen `locked_store`'s `try` across its `yield` | `test_findings_locked_store.py::test_body_exception_is_not_relabelled` |
 | 38 | Derive `review_id` before the case scan | `test_findings_reviews.py::test_an_unknown_nul_bearing_finding_id_is_an_ingest_error` |
+| 39 | Accept a behavioural `ReviewSubmission` subtype by rebuilding through `type(value)` | `test_findings_reviews.py::test_a_behavioral_submission_subclass_is_rejected_before_any_side_effect` |
+| 40 | Accept a behavioural `ReviewAttestation` subtype by rebuilding through `type(value)` | `test_findings_reviews.py::test_a_behavioral_attestation_subclass_is_rejected_before_any_side_effect` |
+| 41 | Let lock `fstat` `OSError` escape `open_lock_at` | `test_findings_locked_store.py::test_lock_validation_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_validation_failure_surfaces_as_ingest_error` |
+| 42 | Let a validation-cleanup lock close replace the `PathSafetyError` | `test_findings_locked_store.py::test_lock_validation_cleanup_failure_does_not_escape_storage_boundary` **and** `test_findings_reviews.py::test_a_lock_validation_cleanup_failure_surfaces_as_ingest_error` |
+| 43 | Let the directory-descriptor close escape or replace an active body exception | `test_findings_locked_store.py::test_directory_close_failure_becomes_case_storage_error`, `::test_body_exception_is_not_replaced_by_teardown_failures`, and `test_findings_reviews.py::test_a_directory_close_failure_surfaces_as_ingest_error` |
+| 44 | Restore `confirmation_count`'s outcome-only filter | `test_audit_record.py::test_confirmation_count_excludes_an_unwired_agent_confirmation`, `::test_confirmation_count_excludes_a_vacuous_verified_agent_confirmation`, and `::test_confirmation_count_excludes_a_mixed_evidence_agent_confirmation` |
 
-**Rows 34–36 are certified twice on purpose.** The `locked_store` node proves the conversion to
-`CaseStorageError`; the `append_review` node proves the translation to `IngestError`, which is
-different code in a different task. A row satisfied only at the storage layer says nothing about
-what the boundary raises.
+**The storage rows are certified at every owned boundary on purpose.** A `locked_store` node proves
+conversion to `CaseStorageError`; an `append_review` node proves the separate translation to
+`IngestError`. The teardown-precedence node proves release and close failures do not replace an
+already-active caller exception. A row satisfied at only one of those layers says nothing about the
+others.
 
 - [ ] **Step 3: Record and commit the ledger**
 
-Write the 38-row table above to `docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with a fourth column
+Write the 44-row table above to `docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with a fourth column
 holding the observed result (`FAILED as required` / an explanation).
 
 A row whose mutation leaves everything green is a **defect in the guard, not a formality**. Stop,
@@ -2286,9 +2326,9 @@ cd science && uv run ruff check && uv run pyright
 
 - [ ] **Step 6: Update the design's status table**
 
-In `docs/plans/2026-07-30-agent-evidence-broker-design.md`, change plan 4c's State cell from
-`designed at revision 26, settled against the merged tree at revisions 34–37, not implemented` to
-`merged at <commit>` once the branch lands. Commit with the merge, not before.
+The design currently records plan 4c as implemented on `feat/evidence-broker-boundary`, settled
+through revision 38, and not merged. Change that state to `merged at <commit>` only once the branch
+lands. Commit the merged status with the merge, not before.
 
 ---
 
@@ -2297,7 +2337,8 @@ In `docs/plans/2026-07-30-agent-evidence-broker-design.md`, change plan 4c's Sta
 **Spec coverage.** §4.2's types → Tasks 2–3. §4.2's two stored invariants → Task 3. §4.2.1 →
 Task 4. §5.4's executable order → Tasks 5–6 (steps 0–1, 6–7 in Task 5; steps 2–5 in Task 6). §5.4's
 `locked_store` extraction → Task 1. §5.4's two backstops → Task 3 (model invariant) and Task 7
-(validate check). §7's 38 rows → Task 8, with the certifying tests written in Tasks 1–7. §2.2's file
+(validate check). §7's 44 rows → Task 8, with the certifying tests written in Tasks 1–7 and the final
+whole-branch review. §2.2's file
 boundary → Global Constraints.
 
 **Known gaps, stated rather than hidden.** Three places send the implementer to read rather than
