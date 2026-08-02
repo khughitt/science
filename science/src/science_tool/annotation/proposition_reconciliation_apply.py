@@ -15,6 +15,7 @@ from science_tool.annotation.model import Sidecar
 from science_tool.annotation.planned_edits import (
     PlannedFileEdit,
     changed_and_noop_paths,
+    current_text,
     path_string,
     plan_update,
 )
@@ -608,8 +609,9 @@ def plan_canonicalization_apply(
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
         final_text, _changed = render_entity_source_refs(
-            canonical_location.path,
+            current_text(canonical_location.path),
             canonical_refs,
+            entity_path=canonical_location.path,
             as_of=as_of,
         )
         canonical_edit = plan_update(
@@ -629,8 +631,9 @@ def plan_canonicalization_apply(
             if existing_superseded_by is not None and str(existing_superseded_by) != canonical:
                 raise ReconciliationApplyError(f"{duplicate} already has superseded_by {existing_superseded_by}")
             final_text, _changed = render_entity_frontmatter_updates(
-                duplicate_location.path,
+                current_text(duplicate_location.path),
                 {"status": "superseded", "superseded_by": canonical},
+                entity_path=duplicate_location.path,
                 as_of=as_of,
             )
             duplicate_edit = plan_update(

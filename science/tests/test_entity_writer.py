@@ -6,6 +6,8 @@ import pytest
 from science_tool.entities import (
     EntityCommandError,
     append_entity_source_ref,
+    render_entity_frontmatter_updates,
+    render_entity_source_refs,
     slug_for_claim_text,
     slug_from_raw,
 )
@@ -76,6 +78,55 @@ def test_append_entity_source_ref_noops_when_ref_exists(tmp_path: Path):
     assert dest.read_text(encoding="utf-8") == original
 
 
+def test_render_entity_source_refs_takes_text_not_a_path(tmp_path: Path):
+    text = (
+        "---\n"
+        "id: proposition:x\n"
+        "kind: proposition\n"
+        "title: a claim\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "---\n"
+        "body\n"
+    )
+
+    rendered, changed = render_entity_source_refs(
+        text,
+        ["paper:new"],
+        entity_path=tmp_path / "x.md",
+        as_of=date(2026, 6, 16),
+    )
+
+    assert changed is True
+    assert "paper:new" in rendered
+    # No file was ever created: the renderer does no filesystem I/O.
+    assert not (tmp_path / "x.md").exists()
+
+
+def test_render_entity_frontmatter_updates_returns_input_text_when_unchanged(tmp_path: Path):
+    text = (
+        "---\n"
+        "id: proposition:x\n"
+        "kind: proposition\n"
+        "title: a claim\n"
+        "status: superseded\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "---\n"
+        "body\n"
+    )
+
+    rendered, changed = render_entity_frontmatter_updates(
+        text,
+        {"status": "superseded"},
+        entity_path=tmp_path / "x.md",
+        as_of=date(2026, 6, 16),
+    )
+
+    assert changed is False
+    assert rendered == text
+
+
 def test_render_entity_source_refs_computes_text_without_writing(tmp_path: Path):
     root = _project(tmp_path)
     dest = root / "entities" / "propositions" / "existing.md"
@@ -97,8 +148,9 @@ def test_render_entity_source_refs_computes_text_without_writing(tmp_path: Path)
     from science_tool.entities import render_entity_source_refs
 
     rendered, changed = render_entity_source_refs(
-        dest,
+        dest.read_text(encoding="utf-8"),
         ["paper:old", "annotation:entities/papers/A.source#a1", "paper:A"],
+        entity_path=dest,
         as_of=date(2026, 7, 1),
     )
 
@@ -134,7 +186,12 @@ def test_render_entity_source_refs_noops_when_all_refs_exist(tmp_path: Path):
 
     from science_tool.entities import render_entity_source_refs
 
-    rendered, changed = render_entity_source_refs(dest, ["paper:old"], as_of=date(2026, 7, 1))
+    rendered, changed = render_entity_source_refs(
+        dest.read_text(encoding="utf-8"),
+        ["paper:old"],
+        entity_path=dest,
+        as_of=date(2026, 7, 1),
+    )
 
     assert changed is False
     assert rendered == original
@@ -159,7 +216,12 @@ def test_render_entity_source_refs_preserves_leading_body_blank_lines(tmp_path: 
 
     from science_tool.entities import render_entity_source_refs
 
-    rendered, changed = render_entity_source_refs(dest, ["paper:new"], as_of=date(2026, 7, 1))
+    rendered, changed = render_entity_source_refs(
+        dest.read_text(encoding="utf-8"),
+        ["paper:new"],
+        entity_path=dest,
+        as_of=date(2026, 7, 1),
+    )
 
     assert changed is True
     assert rendered.split("---\n", 2)[2].startswith("\n\n# Existing\n")
@@ -183,8 +245,9 @@ def test_render_entity_frontmatter_updates_sets_supersession_without_writing(tmp
     from science_tool.entities import render_entity_frontmatter_updates
 
     rendered, changed = render_entity_frontmatter_updates(
-        dest,
+        dest.read_text(encoding="utf-8"),
         {"status": "superseded", "superseded_by": "proposition:canonical"},
+        entity_path=dest,
         as_of=date(2026, 7, 1),
     )
 
@@ -217,8 +280,9 @@ def test_render_entity_frontmatter_updates_noops_when_values_unchanged(tmp_path:
     from science_tool.entities import render_entity_frontmatter_updates
 
     rendered, changed = render_entity_frontmatter_updates(
-        dest,
+        dest.read_text(encoding="utf-8"),
         {"status": "superseded", "superseded_by": "proposition:canonical"},
+        entity_path=dest,
         as_of=date(2026, 7, 1),
     )
 

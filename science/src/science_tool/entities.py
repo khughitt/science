@@ -475,18 +475,23 @@ def render_entity_text(
 
 
 def render_entity_source_refs(
-    file_path: Path,
+    current_text: str,
     refs_to_append: Sequence[str],
     *,
+    entity_path: Path,
     as_of: date | None = None,
 ) -> tuple[str, bool]:
     """Return rendered entity markdown after appending missing source refs.
 
-    Existing refs keep their current order, new refs are appended in
-    caller-provided order, exact strings are deduped, and updated advances only
-    when the rendered content changes.
+    Text in, text out: the CALLER reads the pre-image. That is what lets a planner
+    compose several edits to one path without each one re-reading the unmodified file.
+    `entity_path` is diagnostic only -- this function performs no filesystem I/O.
+
+    Existing refs keep their current order, new refs are appended in caller-provided
+    order, exact strings are deduped, and updated advances only when the rendered
+    content changes.
     """
-    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
+    frontmatter, body = split_frontmatter(current_text)
     refs = list(frontmatter.get("source_refs") or [])
     changed = False
     for ref in refs_to_append:
@@ -495,20 +500,24 @@ def render_entity_source_refs(
         refs.append(ref)
         changed = True
     if not changed:
-        return (file_path.read_text(encoding="utf-8"), False)
+        return (current_text, False)
     frontmatter["source_refs"] = refs
     frontmatter["updated"] = (as_of or date.today()).isoformat()
     return (_render_markdown(frontmatter, body), True)
 
 
 def render_entity_frontmatter_updates(
-    file_path: Path,
+    current_text: str,
     updates: Mapping[str, object],
     *,
+    entity_path: Path,
     as_of: date | None = None,
 ) -> tuple[str, bool]:
-    """Return rendered entity markdown after applying exact frontmatter updates."""
-    frontmatter, body = _parse_markdown_file_preserving_body(file_path)
+    """Return rendered entity markdown after applying exact frontmatter updates.
+
+    Text in, text out; `entity_path` is diagnostic only. See `render_entity_source_refs`.
+    """
+    frontmatter, body = split_frontmatter(current_text)
     changed = False
     for key, value in updates.items():
         if frontmatter.get(key) == value:
@@ -516,7 +525,7 @@ def render_entity_frontmatter_updates(
         frontmatter[key] = value
         changed = True
     if not changed:
-        return (file_path.read_text(encoding="utf-8"), False)
+        return (current_text, False)
     frontmatter["updated"] = (as_of or date.today()).isoformat()
     return (_render_markdown(frontmatter, body), True)
 
@@ -525,8 +534,14 @@ def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = 
     """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
     the body. Returns True if added, False if already present. Used by promotion LINK so a
     hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
-    advances to ``as_of`` (or today), matching other entity mutations."""
-    rendered, changed = render_entity_source_refs(file_path, [ref], as_of=as_of)
+    advances to ``as_of`` (or today), matching other entity mutations.
+
+    This is the read-render-write adapter for callers that still write as they go. It is
+    deleted in Task 8, once the promotion and prose workflows plan their writes.
+    """
+    with file_path.open("r", encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    rendered, changed = render_entity_source_refs(text, [ref], entity_path=file_path, as_of=as_of)
     if not changed:
         return False
     _atomic_replace_text(file_path, rendered)

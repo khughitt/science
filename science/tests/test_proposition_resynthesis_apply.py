@@ -783,7 +783,7 @@ def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_origina
     original_path = tmp_path / "entities" / "propositions" / "broad.md"
     original_frontmatter, _body = parse_markdown_entity_file(original_path)
     rendered, changed = render_entity_frontmatter_updates(
-        original_path,
+        original_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 ref
@@ -791,6 +791,7 @@ def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_origina
                 if not str(ref).startswith("annotation:")
             ]
         },
+        entity_path=original_path,
         as_of=date(2026, 7, 1),
     )
     assert changed is True
@@ -929,7 +930,7 @@ def test_apply_resynthesis_draft_resume_rejects_tampered_extra_input_snapshot_mi
     positive_path = tmp_path / "entities" / "propositions" / "broad-positive.md"
     positive_frontmatter, _body = parse_markdown_entity_file(positive_path)
     rendered, changed = render_entity_frontmatter_updates(
-        positive_path,
+        positive_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 *positive_frontmatter["source_refs"],
@@ -937,6 +938,7 @@ def test_apply_resynthesis_draft_resume_rejects_tampered_extra_input_snapshot_mi
                 "annotation:entities/papers/C2022.source#c1",
             ]
         },
+        entity_path=positive_path,
         as_of=date(2026, 7, 2),
     )
     assert changed is True
@@ -1120,7 +1122,7 @@ def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_sour
     original_path = tmp_path / "entities" / "propositions" / "broad.md"
     original_frontmatter, _body = parse_markdown_entity_file(original_path)
     rendered, changed = render_entity_frontmatter_updates(
-        original_path,
+        original_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 *original_frontmatter["source_refs"],
@@ -1128,6 +1130,7 @@ def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_sour
                 "annotation:entities/papers/C2022.source#c1",
             ]
         },
+        entity_path=original_path,
         as_of=date(2026, 7, 1),
     )
     assert changed is True

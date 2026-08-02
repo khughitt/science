@@ -495,7 +495,12 @@ def _original_edit(
         return None
     try:
         location = find_entity(project_root, draft.original_proposition)
-        final_text, _changed = render_entity_frontmatter_updates(location.path, updates, as_of=as_of)
+        final_text, _changed = render_entity_frontmatter_updates(
+            current_text(location.path),
+            updates,
+            entity_path=location.path,
+            as_of=as_of,
+        )
     except EntityCommandError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
     return plan_update(location.path, final_text, "original_resynthesis_lineage")
