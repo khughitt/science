@@ -4,9 +4,18 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from science_model.audit import (
+    AuditFindingRecord,
+    EntitySubject,
+    Occurrence,
+    Transition,
+    finding_fingerprint,
+    occurrence_key,
+)
 from science_model.run_fingerprint import (
     FINGERPRINT_POLICY_V1,
     ArtifactLocality,
@@ -870,3 +879,131 @@ def registrable_member_project(tmp_path: Path) -> tuple[Path, str, str]:
     )
     assert build.exit_code == 0, build.output
     return tmp_path, "dataset:clusters-subset", "workflow-run:pipe-r1"
+
+
+# --- plan 4c: review-append fixtures -----------------------------------------
+
+REVIEW_AT = datetime(2026, 8, 2, tzinfo=UTC)
+REVIEW_RUN_ID = "run:2026-07-25-lifecycle-agent-a3f1"
+
+NOW = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
+SUBJECT = EntitySubject(ref="dataset:gtex-v8")
+RULE = "dataset.cached-field-drift"
+QUALS = {"field": "year"}
+
+
+def _occurrence(
+    finding_id: str,
+    *,
+    ingestion_ref: str = "ing:1",
+    quals: dict | None = None,
+    message: str = "drifted",
+) -> Occurrence:
+    # The occurrence's qualifiers must agree with the record's identity on every
+    # identity-bearing key, so this helper takes them rather than hardcoding one set.
+    return Occurrence(
+        idempotency_key=occurrence_key(
+            producer_id="dataset_anomalies",
+            ingestion_ref=ingestion_ref,
+            finding_id=finding_id,
+        ),
+        producer_id="dataset_anomalies",
+        ingestion_ref=ingestion_ref,
+        observed_at=NOW,
+        severity="warn",
+        message=message,
+        qualifiers=dict(QUALS if quals is None else quals),
+        evidence=(),
+    )
+
+
+def _build_audit_finding_record(
+    quals: dict | None = None, *, message: str = "drifted"
+) -> AuditFindingRecord:
+    quals = QUALS if quals is None else quals
+    finding_id = finding_fingerprint(
+        rule_id=RULE, subject=SUBJECT, identity_qualifiers=quals
+    )
+    return AuditFindingRecord(
+        finding_id=finding_id,
+        fingerprint_version=1,
+        rule_id=RULE,
+        subject=SUBJECT,
+        identity_qualifiers=quals,
+        occurrences=(_occurrence(finding_id, quals=quals, message=message),),
+        transitions=(
+            Transition(
+                from_status=None,
+                to_status="proposed",
+                actor="ingest",
+                at=NOW,
+                reason="detected",
+            ),
+        ),
+        status="proposed",
+    )
+
+
+@pytest.fixture
+def stored_case(tmp_path: Path):
+    """A project holding exactly one stored case, ready to review.
+
+    Built through ``AuditFindingRecord``'s own constructor and written with
+    ``write_case``, so every derived value is the one the model computes.
+    """
+    from science_tool.findings.storage import write_case
+
+    record = _build_audit_finding_record()
+    write_case(tmp_path, record)
+    return record
+
+
+@pytest.fixture
+def human_attestation():
+    from science_model.audit import ReviewAttestation
+
+    def build(**overrides):
+        fields = {
+            "reviewer_kind": "human",
+            "reviewer_ref": "keith",
+            "run_ref": "manual-review-2026-08-02",
+            "at": REVIEW_AT,
+        }
+        fields.update(overrides)
+        return ReviewAttestation(**fields)
+
+    return build
+
+
+@pytest.fixture
+def agent_attestation():
+    from science_model.audit import ReviewAttestation
+
+    def build(**overrides):
+        fields = {
+            "reviewer_kind": "agent",
+            "reviewer_ref": "lifecycle-agent",
+            "lens": "rubric.md",
+            "model": "test-model",
+            "run_ref": REVIEW_RUN_ID,
+            "at": REVIEW_AT,
+        }
+        fields.update(overrides)
+        return ReviewAttestation(**fields)
+
+    return build
+
+
+@pytest.fixture
+def case_files():
+    """Snapshot the canonical case files only.
+
+    Entering ``locked_store`` creates ``.ingest.lock``; refused appends must compare
+    the canonical case bytes rather than treating that operational file as a write.
+    """
+
+    def snapshot(project_root: Path) -> dict[str, bytes]:
+        cases = project_root / "doc" / "audits" / "cases"
+        return {p.name: p.read_bytes() for p in sorted(cases.glob("*.md"))}
+
+    return snapshot
