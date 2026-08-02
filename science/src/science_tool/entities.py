@@ -584,24 +584,6 @@ def render_entity_frontmatter_updates(
     return (rendered, True)
 
 
-def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
-    """Append ``ref`` to an existing entity file's ``source_refs`` frontmatter, preserving
-    the body. Returns True if added, False if already present. Used by promotion LINK so a
-    hand-authored proposition's prose is never clobbered. When a ref is added, `updated`
-    advances to ``as_of`` (or today), matching other entity mutations.
-
-    This is the read-render-write adapter for callers that still write as they go. It is
-    deleted in Task 8, once the promotion and prose workflows plan their writes.
-    """
-    with file_path.open("r", encoding="utf-8", newline="") as handle:
-        text = handle.read()
-    rendered, changed = render_entity_source_refs(text, [ref], entity_path=file_path, as_of=as_of)
-    if not changed:
-        return False
-    _atomic_replace_text(file_path, rendered)
-    return True
-
-
 def derive_slug(title: str) -> str:
     slug = truncate_slug_on_word_boundary(normalize_to_slug(title), DERIVED_SLUG_MAX_LENGTH)
     if len(slug) < 2:

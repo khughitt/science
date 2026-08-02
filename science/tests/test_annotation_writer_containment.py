@@ -207,22 +207,28 @@ def test_reminting_identical_claim_accrues_and_destroys_nothing(tmp_path: Path) 
 
 
 def _accruing_targets():
-    """Targets whose proposition mint reports accrual, so each caller's non-created branch is
-    exercised directly.
+    """Targets whose proposition plan reports accrual, exercising each caller directly.
 
-    The fake does NOT delegate to the real mint. Two reasons: the real mint would need an
+    The fake does NOT delegate to the real planner. The real planner would need an
     existing same-claim record to accrue onto, and creating that record makes `decide_all`
     classify the candidate as LINK -- so the MINT branch under test would never be reached.
-    The subject here is the CALLER's branching on `MintOutcome.created`, not the mint itself;
+    The subject here is the caller's branching on `PlannedMint.operation`, not planning itself;
     accrual behaviour proper is covered by the §5.3 and §5.8 tests above.
     """
-    from science_tool.annotation.promote import MintOutcome, PromotionTarget, build_targets
+    from science_tool.annotation.promote import PlannedMint, PromotionTarget, build_targets
 
-    def accruing_mint(c, source_refs, project_root, as_of):
-        return MintOutcome(entity_id=f"proposition:{c.slug}", created=False)
+    def accruing_plan(c, source_refs, project_root, as_of, assigned_number, current_text):
+        path = next(project_root.rglob("*.md"))
+        return PlannedMint(
+            entity_id=f"proposition:{c.slug}",
+            operation="accrue",
+            path=path,
+            post_image=path.read_text(encoding="utf-8"),
+            claim_number=None,
+        )
 
     return {**build_targets(), "proposition": PromotionTarget(
-        kind="proposition", slug_addressed=True, mint=accruing_mint
+        kind="proposition", slug_addressed=True, plan_mint=accruing_plan
     )}
 
 

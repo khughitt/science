@@ -7,7 +7,6 @@ import science_tool.entities as entities
 from science_tool.entities import (
     EntityCommandError,
     EntityDegradationError,
-    append_entity_source_ref,
     render_entity_frontmatter_updates,
     render_entity_source_refs,
     slug_for_claim_text,
@@ -50,50 +49,9 @@ def test_slug_for_claim_text_unsluggable_raises():
         slug_for_claim_text("…")  # normalizes to <2 chars
 
 
-def test_append_entity_source_ref_preserves_body_and_updates_timestamp(tmp_path: Path):
-    root = _project(tmp_path)
-    dest = root / "entities" / "propositions" / "existing.md"
-    dest.write_text(
-        "---\n"
-        "id: proposition:existing\n"
-        "kind: proposition\n"
-        "title: Existing\n"
-        "status: draft\n"
-        "source_refs:\n"
-        '  - "paper:old"\n'
-        'created: "2026-06-01"\n'
-        'updated: "2026-06-01"\n'
-        "---\n"
-        "# Existing\n\n## Claim\n\nHand-authored prose.\n",
-        encoding="utf-8",
-    )
-
-    assert append_entity_source_ref(dest, "annotation:papers/p.source#a-1", as_of=date(2026, 6, 16)) is True
-    text = dest.read_text(encoding="utf-8")
-    assert "Hand-authored prose." in text
-    assert "annotation:papers/p.source#a-1" in text
-    assert "updated: 2026-06-16" in text or 'updated: "2026-06-16"' in text or "updated: '2026-06-16'" in text
-
-
-def test_append_entity_source_ref_noops_when_ref_exists(tmp_path: Path):
-    root = _project(tmp_path)
-    dest = root / "entities" / "propositions" / "existing.md"
-    original = (
-        "---\n"
-        "id: proposition:existing\n"
-        "kind: proposition\n"
-        "title: Existing\n"
-        "status: draft\n"
-        "source_refs:\n"
-        '  - "paper:old"\n'
-        'updated: "2026-06-01"\n'
-        "---\n"
-        "Body.\n"
-    )
-    dest.write_text(original, encoding="utf-8")
-
-    assert append_entity_source_ref(dest, "paper:old", as_of=date(2026, 7, 1)) is False
-    assert dest.read_text(encoding="utf-8") == original
+def test_append_entity_source_ref_is_gone():
+    """The obsolete writing adapter is deleted with its production callers."""
+    assert not hasattr(entities, "append_entity_source_ref")
 
 
 def test_render_entity_source_refs_takes_text_not_a_path(tmp_path: Path):

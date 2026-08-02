@@ -344,11 +344,12 @@ def test_plan_promotion_composes_across_rows_and_writes_nothing(tmp_path: Path):
     first, second = fingerprints
     before = store.index_path("example").read_text(encoding="utf-8")
 
-    state = store.plan_promotion("example", first, "proposition:a")
-    state = store.plan_promotion("example", second, "proposition:b", state=state)
+    supplied = store.plan_promotion("example", first, "proposition:a")
+    state = store.plan_promotion("example", second, "proposition:b", state=supplied)
 
     assert state["units"][first]["promoted_to"] == "proposition:a"
     assert state["units"][second]["promoted_to"] == "proposition:b"
+    assert "promoted_to" not in supplied["units"][second]
     assert store.index_path("example").read_text(encoding="utf-8") == before
 
 

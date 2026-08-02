@@ -372,6 +372,70 @@ def test_plan_allows_duplicate_numeric_mint_titles(tmp_path: Path) -> None:
     assert [row["decision"] for row in rows if isinstance(row, dict)] == ["mint", "mint"]
 
 
+def test_two_rows_sharing_a_source_slug_produce_one_index_write(tmp_path: Path) -> None:
+    artifact = _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+
+    report = apply_prose_promotion_plan(tmp_path, plan)
+
+    assert report.minted == 2
+    index = ProseDecompositionStore(tmp_path).load_index("example")
+    promoted = {index["units"][unit.fingerprint].get("promoted_to") for unit in artifact.units}
+    assert None not in promoted
+    assert len(promoted) == 2
+
+
+def test_a_refused_row_leaves_the_index_and_every_entity_unchanged(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import science_tool.annotation.prose_promotion_batch as batch
+    from science_tool.entities import EntityDegradationError
+
+    _persist_duplicate_claim_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    store = ProseDecompositionStore(tmp_path)
+    index_before = store.index_path("example").read_text(encoding="utf-8")
+    entities_before = {
+        path: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "entities").rglob("*.md")
+    }
+
+    def refuse(*_a, entity_path, **_k):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(batch, "render_entity_source_refs", refuse)
+
+    with pytest.raises(ProsePromotionError):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert store.index_path("example").read_text(encoding="utf-8") == index_before
+    for path, text in entities_before.items():
+        assert path.read_text(encoding="utf-8") == text
+
+
+def test_index_drift_between_planning_and_apply_refuses(tmp_path: Path, monkeypatch) -> None:
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    real_publish = batch.publish_edit
+
+    def drift_the_index_first(edit, *, project_root):
+        if edit.path == index_path:
+            index_path.write_text('{"units": {}}\n', encoding="utf-8")
+        return real_publish(edit, project_root=project_root)
+
+    monkeypatch.setattr(batch, "publish_edit", drift_the_index_first)
+
+    with pytest.raises(ProsePromotionError) as excinfo:
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert "stage=write" in str(excinfo.value)
+    assert index_path.read_text(encoding="utf-8") == '{"units": {}}\n'
+
+
 def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
 
