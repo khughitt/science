@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **All `uv` commands run from `science/`**, never the repo root. There is no root `pyproject.toml`.
-- **Run scoped test selections**, not the full suite. The full CLI suite is ~12k tests / ~7 minutes and exceeds the default 120s command timeout. Each task names the exact selection to run.
+- **Run scoped test selections**, not the full suite. The full CLI suite is ~12k tests and takes many minutes — far longer than the default 120s command timeout. Each task names the exact selection to run; only Task 8's last step runs the whole thing, with an explicit timeout.
 - **Never run two pytest suites concurrently in the same worktree** — they race on shared test-output paths.
 - **`pytest -q` is wrong here**: the package's `addopts` already carries `-q`, so adding another yields `-qq` and suppresses the summary line. Run bare `pytest`.
 - Lint and types, from `science/`: `uv run ruff check` (line-length 120) and `uv run pyright`. Pyright is configured once by `pyrightconfig.json` at the repo root; test directories are **not** type-checked.
@@ -22,7 +22,7 @@
 - **No "legacy" or "compatibility" layers**, and no `Unified` prefix on component names.
 - In documentation and code, write filepaths as `~/d/...` or repo-relative — never `/home/keith/...` or `/mnt/ssd/Dropbox/...`.
 - **The forbidden transition is exactly one**: pre-image valid AND post-image invalid → refuse. `invalid → invalid` and `invalid → valid` both write. This branch performs **no intentional backfill** (§2).
-- **Validate the post-image after rendering AND reparsing it** — never the in-memory mapping (§2.1). That round trip is what catches a date the YAML dumper emitted as a bare scalar.
+- **Validate the post-image after rendering AND reparsing it** — never the in-memory mapping (§2.1). The rendered text is what becomes authored source; the mapping is not the artifact, and any difference introduced between building the mapping and emitting the text is invisible to a mapping-reading guard. (The unquoted-date example the design originally gave does **not** discriminate — measured 2026-08-02; see §2.1's correction and Task 3.)
 - **Base shape only.** `EntityValidator().validate_persisted_base_shape`. No typed certification on these paths (§2, §6).
 - The 183 records that already fail base shape are **not** repaired by this branch (§6).
 - **Every commit leaves the tree green.** No task commits a deliberately broken intermediate API.
@@ -761,10 +761,12 @@ def _refuse_degradation(before_text: str, after_text: str, entity_path: Path) ->
     live promotion LINK target -- and refusing writes to those would couple containment to
     migrating them.
 
-    `after_text` is REPARSED here rather than validated as the mapping that was dumped, for
-    the reason `certify_persisted` documents: the round trip is what catches an unquoted
-    date the dumper emitted as a bare scalar, which reloads as `datetime.date` where the
-    schema requires a string.
+    `after_text` is REPARSED here rather than validated as the mapping that was dumped,
+    because the rendered text is what becomes authored source and the mapping is not the
+    artifact: anything introduced between building the mapping and emitting the text is
+    invisible to a mapping-reading guard. (`certify_persisted` gives the unquoted-date
+    scalar as its example; measured 2026-08-02, that case does not actually distinguish the
+    two -- `type: string` rejects a `datetime.date` either way. The rule is structural.)
     """
     if not _satisfies_base_shape(before_text):
         return
@@ -1103,20 +1105,24 @@ Then wrap the candidate loop:
 
 Add imports: `EntityDegradationError` and `render_entity_source_refs` from `science_tool.entities`, and `current_text` from `science_tool.annotation.planned_edits`. `append_entity_source_ref` is no longer used by this module — drop its import.
 
-- [ ] **Step 7: Pin the workflows covered by inheritance**
+- [ ] **Step 7: Pin the two workflows covered by inheritance**
 
-Add to `science/tests/test_proposition_resynthesis_apply.py`, modelled on that module's existing draft fixtures:
+Resynthesis and `promote_prose_unit` need no code change — `EntityDegradationError` subclasses `EntityCommandError`, which both already catch. Inheritance coverage is real but invisible, so pin it in both.
+
+Add to `science/tests/test_proposition_resynthesis_apply.py`. The construction is the one this module already uses at `:50-51`, via helpers it imports from `test_proposition_resynthesis` at `:17`:
 
 ```python
 def test_resynthesis_surfaces_a_degradation_refusal_as_its_own_error(tmp_path: Path, monkeypatch):
     """`_original_edit` already catches EntityCommandError, so EntityDegradationError is
-    covered by inheritance and needs no code change. This test is what would notice if that
-    catch were ever narrowed to a sibling type -- EntityCommandError, EntityWriteError and
-    DecompositionError are SIBLINGS, not a hierarchy."""
+    covered by inheritance. This test is what would notice if that catch were ever narrowed
+    to a sibling type -- EntityCommandError, EntityWriteError and DecompositionError are
+    SIBLINGS, not a hierarchy, so `except EntityCommandError` catches neither of the others.
+    """
     import science_tool.annotation.proposition_resynthesis_apply as resynth
     from science_tool.entities import EntityDegradationError
 
-    root, draft = _resynthesis_fixture(tmp_path)   # the module's existing draft builder
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
 
     def refuse(current_text, updates, *, entity_path, as_of=None):
         raise EntityDegradationError(f"{entity_path} would be degraded")
@@ -1124,21 +1130,44 @@ def test_resynthesis_surfaces_a_degradation_refusal_as_its_own_error(tmp_path: P
     monkeypatch.setattr(resynth, "render_entity_frontmatter_updates", refuse)
 
     with pytest.raises(ResynthesisApplyError):
-        resynth.plan_resynthesis_apply(root, draft)
+        resynth.plan_resynthesis_apply(tmp_path, draft)
 ```
 
-Replace `_resynthesis_fixture` with whatever this module actually uses to build a root and a supersession draft — find it first:
+`_draft_payload(ctx)` produces a supersession draft, not a `split_partial` — which matters, because `_original_updates` returns `{}` for `split_partial` and `_original_edit` then returns `None` without ever calling the renderer.
 
-```bash
-cd science && grep -n "^def _\|^@pytest.fixture" tests/test_proposition_resynthesis_apply.py
+Add to `science/tests/test_prose_promote.py`. This is the **fifth** workflow, and Task 8 covers only the batch prose path — the single-unit one needs its own case. In slice 1 the LINK write still goes through `append_entity_source_ref`, so that is the local name to patch; Task 8 Step 10 updates this test to patch `render_entity_source_refs` once the workflow calls the renderer directly.
+
+```python
+def test_promote_prose_unit_surfaces_a_degradation_refusal_as_its_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fifth workflow. `promote_prose_unit` already catches
+    (DecompositionError, EntityCommandError, PromotionApplyError), so EntityDegradationError
+    is covered by inheritance -- and this is what would notice if that tuple were narrowed.
+    """
+    import science_tool.annotation.prose_promote as prose_promote_mod
+    from science_tool.entities import EntityDegradationError
+
+    _persist_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)   # makes the decision a LINK
+
+    def refuse(file_path, ref, *, as_of=None):
+        raise EntityDegradationError(f"{file_path} would be degraded")
+
+    monkeypatch.setattr(prose_promote_mod, "append_entity_source_ref", refuse)
+
+    with pytest.raises(ProsePromotionError):
+        promote_prose_unit(
+            project_root=tmp_path, source_ref="prose-source:example", unit_id="u001", apply=True
+        )
 ```
 
-Pick the helper that produces a draft whose `disposition` is not `split_partial`, since `_original_updates` returns `{}` for that case and `_original_edit` returns `None` without calling the renderer.
+`_write_existing_proposition` lives in `tests/test_prose_promotion_batch.py:152`; if `test_prose_promote.py` has no equivalent, copy that eight-line writer into this module rather than importing across test modules.
 
 - [ ] **Step 8: Run the affected suites**
 
 ```bash
-cd science && uv run --frozen pytest tests/test_annotation_promote.py tests/test_annotate_promote_cli.py tests/test_proposition_reconciliation_apply.py tests/test_proposition_reconciliation_cli.py tests/test_promote_qh_integration.py tests/test_proposition_resynthesis_apply.py tests/test_promote_numeric_mint.py
+cd science && uv run --frozen pytest tests/test_annotation_promote.py tests/test_annotate_promote_cli.py tests/test_proposition_reconciliation_apply.py tests/test_proposition_reconciliation_cli.py tests/test_promote_qh_integration.py tests/test_proposition_resynthesis_apply.py tests/test_promote_numeric_mint.py tests/test_prose_promote.py
 ```
 
 Expected: all pass.
@@ -1330,6 +1359,24 @@ def edits_for_planned_texts(
 ```
 
 - Also produces `publish_new_file(dest: Path, text: str) -> None` in `science_tool.dag.entity_frontmatter`, extracted from `create_entity_file` so the exclusive-create publish can be used without re-rendering.
+- And `publish_order(edits: Iterable[PlannedFileEdit]) -> list[PlannedFileEdit]`, which sorts **entity edits before side-store edits** (sidecar, decomposition index), each group by path. Ordering is not cosmetic: prose promotion's recovery contract depends on the entity landing before the index, so a write-stage failure strands a recoverable entity rather than an index pointing at nothing. Resynthesis already encodes the same idea in `_ordered_file_edits`'s `phase_by_reason` map. A path-sorted publish would make that contract depend on where the store happens to put `index.json`.
+
+```python
+_SIDE_STORE_REASONS = frozenset({"promotion_sidecar", "prose_decomposition_index"})
+
+
+def publish_order(edits: Iterable[PlannedFileEdit]) -> list[PlannedFileEdit]:
+    """Entity edits first, side stores last; within each group, by path.
+
+    A write-stage failure can strand a partially applied batch (§4.2 claims no rollback), so
+    WHICH half lands first is a real contract. Entity first means the next run sees the
+    entity and can recover the index from it; index first means an index row pointing at a
+    record that was never written.
+    """
+    return sorted(
+        edits, key=lambda e: (e.reason in _SIDE_STORE_REASONS, e.path.as_posix())
+    )
+```
 - `plan_create_or_update` replaces resynthesis's `_new_or_existing_edit`: it dispatches on `path.exists()` at plan time, so a resume snapshot or replacement proposition that does not yet exist becomes a create and one that does becomes a drift-checked update.
 
 - [ ] **Step 1: Write the failing drift tests**
@@ -1987,7 +2034,17 @@ def test_apply_candidates_aggregates_every_candidate_local_refusal(tmp_path, mon
     good = root / "entities" / "propositions" / "good.md"
     good_before = good.read_text(encoding="utf-8")
 
-    monkeypatch.setattr(promote_mod, "render_entity_source_refs", _refusing_source_refs_renderer)
+    # Refuse ONLY the two bad records. A blanket refusal would make the "good" candidate a
+    # third refusal rather than the edit that would have succeeded, and the final assertion
+    # would then prove nothing about all-or-nothing.
+    real_renderer = promote_mod.render_entity_source_refs
+
+    def refuse_the_bad_ones(current_text, refs, *, entity_path, as_of=None):
+        if entity_path.name in ("bad-a.md", "bad-b.md"):
+            return _refusing_source_refs_renderer(entity_path=entity_path)
+        return real_renderer(current_text, refs, entity_path=entity_path, as_of=as_of)
+
+    monkeypatch.setattr(promote_mod, "render_entity_source_refs", refuse_the_bad_ones)
 
     with pytest.raises(PromotionApplyError) as excinfo:
         apply_candidates(
@@ -2707,7 +2764,7 @@ def apply_candidates(
         )
 
     written: list[str] = []
-    for edit in sorted(edits.values(), key=lambda e: e.path.as_posix()):
+    for edit in publish_order(edits.values()):
         if not edit.changed:
             continue
         try:
@@ -2736,6 +2793,7 @@ from science_tool.annotation.planned_edits import (
     path_string,
     plan_update,
     publish_edit,
+    publish_order,
 )
 from science_tool.dag.entity_frontmatter import EntityWriteError, render_create
 from science_tool.entities import EntityCommandError, render_entity_source_refs, validate_slug
@@ -2808,7 +2866,7 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
         )
 
     written: list[str] = []
-    for edit in sorted(edits.values(), key=lambda e: e.path.as_posix()):
+    for edit in publish_order(edits.values()):
         if not edit.changed:
             continue
         try:
@@ -2912,13 +2970,14 @@ Replace the recovery block (`:220-234`) so the index write is planned:
             state = store.plan_promotion(
                 source_slug=source_slug, fingerprint=unit.fingerprint, promoted_to=recovered_to
             )
+            recovery_report = ApplyReport()
             _publish(project_root, [
                 plan_update(store.index_path(source_slug), canonical_json_text(state),
                             "prose_decomposition_index"),
-            ])
+            ], recovery_report)
         except DecompositionError as exc:
             raise ProsePromotionError(str(exc)) from exc
-        return ApplyReport()
+        return recovery_report
 ```
 
 Replace the write section (`:220-260` in the original numbering, the `report = ApplyReport()` block onward) with plan-then-publish:
@@ -2983,14 +3042,14 @@ Replace the write section (`:220-260` in the original numbering, the `report = A
     except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
         raise ProsePromotionError(str(exc)) from exc
 
-    _publish(project_root, sorted(edits.values(), key=lambda e: e.path.as_posix()))
+    _publish(project_root, publish_order(edits.values()), report)
     return report
 ```
 
-and add the shared publisher at module level:
+and add the shared publisher at module level. It appends created paths to the report, which the current implementation does and a naive conversion drops — `promote_prose_unit` records a newly minted entity path in `ApplyReport.written_paths` today, exactly as both other converted workflows do:
 
 ```python
-def _publish(project_root: Path, edits: Sequence[PlannedFileEdit]) -> None:
+def _publish(project_root: Path, edits: Sequence[PlannedFileEdit], report: ApplyReport) -> None:
     written: list[str] = []
     for edit in edits:
         if not edit.changed:
@@ -3003,6 +3062,16 @@ def _publish(project_root: Path, edits: Sequence[PlannedFileEdit]) -> None:
                 f"failed to write {path_string(edit.path)}: {exc}"
             ) from exc
         written.append(path_string(edit.path))
+        if edit.operation == "create":
+            report.written_paths.append(str(edit.path))
+```
+
+Both call sites pass the report: `_publish(project_root, publish_order(edits.values()), report)`, and the recovery block's call passes the `ApplyReport()` it is about to return.
+
+Add the assertion to `test_promote_prose_unit_mints_proposition_and_records_state` (`tests/test_prose_promote.py:95`), which does not currently check it:
+
+```python
+    assert report.written_paths == [str(dest)]
 ```
 
 Both prose modules need these imports, replacing `append_entity_source_ref`:
@@ -3015,6 +3084,7 @@ from science_tool.annotation.planned_edits import (
     path_string,
     plan_update,
     publish_edit,
+    publish_order,
 )
 from science_tool.annotation.prose_decomposition import canonical_json_text
 from science_tool.dag.entity_frontmatter import EntityWriteError
@@ -3022,7 +3092,62 @@ from science_tool.entities import EntityCommandError, find_entity, render_entity
 from science_tool.entity_reservation import propose_number
 ```
 
-- [ ] **Step 11: Delete `append_entity_source_ref`**
+- [ ] **Step 11: Adapt the three existing tests this conversion invalidates**
+
+Three tests assert behavior the conversion deliberately changes. Each names what it was protecting and how the replacement preserves it — do not defer these to Step 12's general rule.
+
+**(a) and (b) — the two recovery tests.** `test_promote_prose_unit_recovers_index_when_retry_sees_minted_ref` (`tests/test_prose_promote.py:135`) and `test_promote_prose_unit_recovers_index_when_retry_sees_linked_ref_without_duplicate_refs` (`:215`) both inject failure by monkeypatching `ProseDecompositionStore.record_promotion` to raise on its first call. The converted workflow never calls that method — it plans through `plan_promotion` and publishes — so `fail_once` is never invoked and both tests fail with `DID NOT RAISE`.
+
+Their contract is still live and still worth protecting: **a write-stage failure may strand the entity edit, and the next run must recover the index without duplicating refs.** `publish_order` (see Task 6) is what makes that reachable — the entity edit publishes before the index. Inject the failure at the new seam instead. In both tests, replace the `original_record` / `fail_once` / `monkeypatch.setattr(ProseDecompositionStore, ...)` block with:
+
+```python
+    import science_tool.annotation.prose_promote as prose_promote_mod
+
+    real_publish = prose_promote_mod.publish_edit
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    failed = {"done": False}
+
+    def fail_the_index_once(edit, *, project_root):
+        if edit.path == index_path and not failed["done"]:
+            failed["done"] = True
+            raise RuntimeError("simulated index write failure")
+        return real_publish(edit, project_root=project_root)
+
+    monkeypatch.setattr(prose_promote_mod, "publish_edit", fail_the_index_once)
+```
+
+Then widen the raise expectation, because the workflow now wraps write-stage failures:
+
+```python
+    with pytest.raises((RuntimeError, ProsePromotionError)):
+```
+
+Every other assertion in both tests stands unchanged — the entity exists after the first run, the index has no `promoted_to`, the retry mints nothing, and the linked case's ref counts stay at 1. That those assertions survive verbatim is the evidence the contract was preserved rather than rewritten.
+
+**(c) — the never-overwrite test.** `test_apply_refuses_overwrite_of_different_claim` (`tests/test_annotation_promote.py:297`) passes `sidecar_path=tmp_path / "x.anno.trig"`, which does not exist. That was harmless while the sidecar was read after the loop; preflight now calls `read_sidecar_strict` **first**, as an environment precondition, so the test would fail on the missing sidecar before ever reaching the guard it exists to test. Seed one:
+
+```python
+    from science_tool.annotation import io as anno_io
+
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text("Body.\n", encoding="utf-8")
+    sidecar_path = anno_io.sidecar_for_markdown(md)
+    anno_io.write_sidecar(sidecar_path, anno_io.Sidecar(annotations=()))
+```
+
+and pass `sidecar_path=sidecar_path`. The assertion — `PromotionApplyError` because the slug holds a different claim — is unchanged.
+
+Finally, retarget the slice-1 translation test added in Task 4 Step 7. `test_promote_prose_unit_surfaces_a_degradation_refusal_as_its_own_error` patches `prose_promote_mod.append_entity_source_ref`, which no longer exists. Patch the renderer the converted workflow calls instead:
+
+```python
+    def refuse(current_text, refs, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(prose_promote_mod, "render_entity_source_refs", refuse)
+```
+
+- [ ] **Step 12: Delete `append_entity_source_ref`**
 
 Confirm it has no production callers left:
 
@@ -3032,7 +3157,7 @@ cd science && grep -rn "append_entity_source_ref" src/
 
 Expected: no results. Delete the function from `science/src/science_tool/entities.py` and remove it from `tests/test_entity_writer.py`'s import list. Delete the two tests that exercised it directly, `test_append_entity_source_ref_preserves_body_and_updates_timestamp` (`:33`) and `test_append_entity_source_ref_noops_when_ref_exists` (`:58`) — the behavior they covered is now covered by `render_entity_source_refs`'s own tests plus the publish tests in `test_planned_edits.py`. Do not leave it as a compatibility shim.
 
-- [ ] **Step 12: Run the whole affected surface**
+- [ ] **Step 13: Run the whole affected surface**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_planned_edits.py tests/test_entity_writer.py \
@@ -3045,9 +3170,9 @@ cd science && uv run --frozen pytest tests/test_planned_edits.py tests/test_enti
   tests/test_proposition_reconciliation_plan.py tests/test_proposition_resynthesis_apply.py
 ```
 
-Expected: all pass. Where an existing test fails, decide which of two things it was asserting before changing anything: the immediate-write behavior this design deliberately removes (update the test, and say so in the commit message), or a property that must survive (fix the code).
+Expected: all pass. Step 11 named the three tests this conversion knowingly invalidates. If any OTHER existing test fails, decide which of two things it was asserting before changing anything: the immediate-write behavior this design deliberately removes (update the test, and say so in the commit message), or a property that must survive (fix the code).
 
-- [ ] **Step 13: Certify the new guards by mutation**
+- [ ] **Step 14: Certify the new guards by mutation**
 
 ```bash
 cd science
@@ -3065,13 +3190,13 @@ uv run --frozen pytest tests/test_prose_promotion_batch.py::test_two_rows_sharin
 
 Revert each mutation before applying the next. A guard that cannot be made to fail is not certified, and this plan treats an uncertified guard as unfinished work.
 
-- [ ] **Step 14: Lint and types**
+- [ ] **Step 15: Lint and types**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
 ```
 
-- [ ] **Step 15: Commit**
+- [ ] **Step 16: Commit**
 
 ```bash
 git add science/src/science_tool/annotation/promote.py \
@@ -3082,12 +3207,14 @@ git add science/src/science_tool/annotation/promote.py \
 git commit -m "feat(annotation): preflight every promotion workflow before writing"
 ```
 
-- [ ] **Step 16: Run the full CLI suite**
+- [ ] **Step 17: Run the full CLI suite**
 
-This change crosses subsystem boundaries — serialization, entity writers, and three workflow surfaces — which is a full-suite trigger. The top-level agent owns this run and must pass an explicit long timeout; it takes ~7 minutes.
+This change crosses subsystem boundaries — serialization, entity writers, and three workflow surfaces — which is a full-suite trigger. The top-level agent owns this run and passes an explicit long timeout.
+
+`AGENTS.md` records 6:42–7:24 ("about seven minutes"), but that was measured before this branch and a Dropbox-backed checkout is variable. **Pass at least 900000 ms** so a slower run is not killed mid-suite; a foreground run that exceeds the timeout auto-backgrounds, and a subagent that yields waiting on it will not reliably resume.
 
 ```bash
-cd science && uv run --frozen pytest
+cd science && uv run --frozen pytest    # timeout: 900000
 ```
 
 Expected: green. Report the actual summary line — do not read a dots-only tail as green.
