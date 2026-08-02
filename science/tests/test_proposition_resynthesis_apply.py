@@ -42,6 +42,149 @@ def _annotation_stance(sidecar_path: Path, annotation_id: str) -> str:
     raise AssertionError(f"{annotation_id} has no JSON body")
 
 
+def test_resynthesis_surfaces_a_degradation_refusal_as_its_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EntityDegradationError is covered by _original_edit's EntityCommandError catch."""
+    import science_tool.annotation.proposition_resynthesis_apply as resynth
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        plan_resynthesis_apply,
+    )
+    from science_tool.entities import EntityDegradationError
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    def refuse(current_text, updates, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(resynth, "render_entity_frontmatter_updates", refuse)
+
+    with pytest.raises(ResynthesisApplyError):
+        plan_resynthesis_apply(tmp_path, draft)
+
+
+def test_resynthesis_original_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    original = tmp_path / "entities" / "propositions" / "broad.md"
+    concurrent = "someone else changed the original before edit construction\n"
+    real_renderer = apply_module.render_entity_frontmatter_updates
+
+    def render_then_drift(current_text, updates, *, entity_path, as_of=None):
+        rendered = real_renderer(
+            current_text,
+            updates,
+            entity_path=entity_path,
+            as_of=as_of,
+        )
+        original.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(apply_module, "render_entity_frontmatter_updates", render_then_drift)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert original.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_replacement_created_before_edit_construction_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    concurrent = "another writer created this replacement\n"
+    real_renderer = apply_module.render_replacement_proposition
+
+    def render_then_create(*args, **kwargs):
+        rendered = real_renderer(*args, **kwargs)
+        if rendered.path.name == "broad-positive.md":
+            rendered.path.parent.mkdir(parents=True, exist_ok=True)
+            rendered.path.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(apply_module, "render_replacement_proposition", render_then_create)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    positive = tmp_path / "entities" / "propositions" / "broad-positive.md"
+    assert positive.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_sidecar_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    concurrent = "someone else changed the sidecar before edit construction\n"
+    real_final_texts = apply_module._sidecar_final_texts_for_assignments
+
+    def render_then_drift(*args, **kwargs):
+        rendered = real_final_texts(*args, **kwargs)
+        sidecar_path.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(
+        apply_module,
+        "_sidecar_final_texts_for_assignments",
+        render_then_drift,
+    )
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert sidecar_path.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_snapshot_created_during_validation_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    snapshot_path = _snapshot_path(tmp_path, draft.action_id)
+    concurrent = "another writer created this snapshot\n"
+    real_validate = apply_module._validate
+
+    def validate_then_create(*args, **kwargs):
+        validation = real_validate(*args, **kwargs)
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text(concurrent, encoding="utf-8")
+        return validation
+
+    monkeypatch.setattr(apply_module, "_validate", validate_then_create)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert snapshot_path.read_text(encoding="utf-8") == concurrent
+
+
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
     tmp_path: Path,
 ):
@@ -116,7 +259,8 @@ def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_super
     assert snapshot_edit.final_text == json.dumps(snapshot_payload, sort_keys=True, indent=2) + "\n"
 
     assert positive_edit.reason == "replacement_proposition"
-    assert positive_edit.before_sha256 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    assert positive_edit.before_sha256 is None
+    assert positive_edit.operation == "create"
     assert positive_edit.changed is True
     assert "id: proposition:broad-positive" in positive_edit.final_text
     assert "annotation:entities/papers/A2020.source#a1" in positive_edit.final_text
@@ -534,10 +678,10 @@ def test_apply_resynthesis_draft_resume_uses_snapshot_when_review_decision_chang
     ctx["review_path"].write_text(json.dumps(review), encoding="utf-8")
     writes: list[Path] = []
 
-    def spy_atomic_write_text(path: Path, text: str) -> None:
-        writes.append(path)
+    def spy_publish_edit(edit, *, project_root: Path) -> None:
+        writes.append(edit.path)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+    monkeypatch.setattr(apply_module, "publish_edit", spy_publish_edit)
 
     report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
@@ -783,7 +927,7 @@ def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_origina
     original_path = tmp_path / "entities" / "propositions" / "broad.md"
     original_frontmatter, _body = parse_markdown_entity_file(original_path)
     rendered, changed = render_entity_frontmatter_updates(
-        original_path,
+        original_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 ref
@@ -791,6 +935,7 @@ def test_apply_resynthesis_draft_resume_uses_draft_input_annotations_not_origina
                 if not str(ref).startswith("annotation:")
             ]
         },
+        entity_path=original_path,
         as_of=date(2026, 7, 1),
     )
     assert changed is True
@@ -929,7 +1074,7 @@ def test_apply_resynthesis_draft_resume_rejects_tampered_extra_input_snapshot_mi
     positive_path = tmp_path / "entities" / "propositions" / "broad-positive.md"
     positive_frontmatter, _body = parse_markdown_entity_file(positive_path)
     rendered, changed = render_entity_frontmatter_updates(
-        positive_path,
+        positive_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 *positive_frontmatter["source_refs"],
@@ -937,6 +1082,7 @@ def test_apply_resynthesis_draft_resume_rejects_tampered_extra_input_snapshot_mi
                 "annotation:entities/papers/C2022.source#c1",
             ]
         },
+        entity_path=positive_path,
         as_of=date(2026, 7, 2),
     )
     assert changed is True
@@ -1120,7 +1266,7 @@ def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_sour
     original_path = tmp_path / "entities" / "propositions" / "broad.md"
     original_frontmatter, _body = parse_markdown_entity_file(original_path)
     rendered, changed = render_entity_frontmatter_updates(
-        original_path,
+        original_path.read_text(encoding="utf-8"),
         {
             "source_refs": [
                 *original_frontmatter["source_refs"],
@@ -1128,6 +1274,7 @@ def test_apply_resynthesis_draft_resume_rejects_assignment_only_in_original_sour
                 "annotation:entities/papers/C2022.source#c1",
             ]
         },
+        entity_path=original_path,
         as_of=date(2026, 7, 1),
     )
     assert changed is True
@@ -1380,10 +1527,10 @@ def test_apply_resynthesis_draft_preflight_failure_writes_nothing(
     draft = parse_resynthesis_draft(payload)
     writes: list[Path] = []
 
-    def spy_atomic_write_text(path: Path, text: str) -> None:
-        writes.append(path)
+    def spy_publish_edit(edit, *, project_root: Path) -> None:
+        writes.append(edit.path)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+    monkeypatch.setattr(apply_module, "publish_edit", spy_publish_edit)
 
     with pytest.raises(ResynthesisApplyError, match="replacement propositions must match assigned annotation targets"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
@@ -1407,17 +1554,20 @@ def test_apply_resynthesis_draft_postflight_rejects_corrupted_planned_file(
 
     ctx = _factorization_project(tmp_path)
     draft = parse_resynthesis_draft(_draft_payload(ctx))
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def corrupt_positive_replacement(path: Path, text: str) -> None:
-        if path.name == "broad-positive.md":
-            text = text.replace(
-                "BES can behave similarly to meta-analysis when evidence is informative.",
-                "BES can behave similarly to meta-analysis when evidence is informative. Corrupted.",
+    def corrupt_positive_replacement(edit, *, project_root: Path) -> None:
+        if edit.path.name == "broad-positive.md":
+            edit = replace(
+                edit,
+                final_text=edit.final_text.replace(
+                    "BES can behave similarly to meta-analysis when evidence is informative.",
+                    "BES can behave similarly to meta-analysis when evidence is informative. Corrupted.",
+                ),
             )
-        original_atomic_write_text(path, text)
+        original_publish_edit(edit, project_root=project_root)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_positive_replacement)
+    monkeypatch.setattr(apply_module, "publish_edit", corrupt_positive_replacement)
 
     with pytest.raises(ResynthesisApplyError, match="postflight.*hash|planned file state"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))

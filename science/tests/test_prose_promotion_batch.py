@@ -6,6 +6,7 @@ import pytest
 from science_tool.annotation.prose_decomposition import (
     ProseDecompositionStore,
     artifact_unit_ref,
+    canonical_json_text,
     compute_source_hash,
     parse_submitted_decomposition,
 )
@@ -279,6 +280,20 @@ def test_apply_rejects_stale_artifact_id(tmp_path: Path) -> None:
         apply_prose_promotion_plan(tmp_path, plan)
 
 
+def test_apply_translates_malformed_decomposition_index_before_writing(tmp_path: Path) -> None:
+    _persist_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    malformed_index = "{\n"
+    index_path.write_text(malformed_index, encoding="utf-8")
+
+    with pytest.raises(ProsePromotionError, match="invalid prose decomposition index JSON"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == malformed_index
+    assert not (tmp_path / "entities").exists()
+
+
 def test_apply_rejects_fingerprint_mismatch(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
     payload = plan_prose_promotions(tmp_path, "example", ["u001"]).to_json()
@@ -372,6 +387,152 @@ def test_plan_allows_duplicate_numeric_mint_titles(tmp_path: Path) -> None:
     assert [row["decision"] for row in rows if isinstance(row, dict)] == ["mint", "mint"]
 
 
+def test_two_rows_sharing_a_source_slug_produce_one_index_write(tmp_path: Path) -> None:
+    artifact = _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+
+    report = apply_prose_promotion_plan(tmp_path, plan)
+
+    assert report.minted == 2
+    index = ProseDecompositionStore(tmp_path).load_index("example")
+    promoted = {index["units"][unit.fingerprint].get("promoted_to") for unit in artifact.units}
+    assert None not in promoted
+    assert len(promoted) == 2
+
+
+def test_two_link_rows_to_one_existing_entity_compose_source_refs(tmp_path: Path) -> None:
+    """The second row must render from the first row's batch-local post-image."""
+    from science_tool.entities import parse_markdown_entity_file
+
+    artifact = _persist_duplicate_claim_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    assert [(row.decision, row.target_ref) for row in plan.rows] == [
+        ("link", "proposition:existing"),
+        ("link", "proposition:existing"),
+    ]
+
+    report = apply_prose_promotion_plan(tmp_path, plan)
+
+    assert report.linked == 2
+    frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "existing.md"
+    )
+    source_refs = set(frontmatter["source_refs"])
+    assert {
+        artifact_unit_ref(artifact, artifact.units[0]),
+        artifact_unit_ref(artifact, artifact.units[1]),
+    } <= source_refs
+
+
+def test_a_refused_row_leaves_the_index_and_every_entity_unchanged(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import science_tool.annotation.prose_promotion_batch as batch
+    from science_tool.entities import EntityDegradationError
+
+    _persist_duplicate_claim_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    store = ProseDecompositionStore(tmp_path)
+    index_before = store.index_path("example").read_text(encoding="utf-8")
+    entities_before = {
+        path: path.read_text(encoding="utf-8")
+        for path in (tmp_path / "entities").rglob("*.md")
+    }
+
+    def refuse(*_a, entity_path, **_k):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(batch, "render_entity_source_refs", refuse)
+
+    with pytest.raises(ProsePromotionError):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert store.index_path("example").read_text(encoding="utf-8") == index_before
+    for path, text in entities_before.items():
+        assert path.read_text(encoding="utf-8") == text
+
+
+def test_index_drift_between_planning_and_apply_refuses(tmp_path: Path, monkeypatch) -> None:
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    real_publish = batch.publish_edit
+
+    def drift_the_index_first(edit, *, project_root):
+        if edit.path == index_path:
+            index_path.write_text('{"units": {}}\n', encoding="utf-8")
+        return real_publish(edit, project_root=project_root)
+
+    monkeypatch.setattr(batch, "publish_edit", drift_the_index_first)
+
+    with pytest.raises(ProsePromotionError) as excinfo:
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert "stage=write" in str(excinfo.value)
+    assert index_path.read_text(encoding="utf-8") == '{"units": {}}\n'
+
+
+def test_index_drift_before_edit_construction_refuses(tmp_path: Path, monkeypatch) -> None:
+    """The index edit hashes the same bytes used to compose its planned state."""
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    concurrent = '{"units": {}}\n'
+    real_edits = batch.edits_for_planned_texts
+
+    def drift_before_edit_construction(*args, **kwargs):
+        index_path.write_text(concurrent, encoding="utf-8")
+        return real_edits(*args, **kwargs)
+
+    monkeypatch.setattr(batch, "edits_for_planned_texts", drift_before_edit_construction)
+
+    with pytest.raises(ProsePromotionError, match="stage=write"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == concurrent
+
+
+def test_index_change_between_row_validation_and_planning_snapshot_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Row validation and index composition must consume one exact index snapshot."""
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    artifact = _persist_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    concurrent_state = store.load_index("example")
+    concurrent_state["units"][artifact.units[0].fingerprint]["promoted_to"] = (
+        "proposition:concurrent"
+    )
+    concurrent_state["concurrent_note"] = "these bytes must survive"
+    concurrent_text = canonical_json_text(concurrent_state)
+    real_validate = batch._validate_current_row
+    changed = False
+
+    def validate_then_promote(*args, **kwargs):
+        nonlocal changed
+        current = real_validate(*args, **kwargs)
+        if not changed:
+            changed = True
+            index_path.write_text(concurrent_text, encoding="utf-8")
+        return current
+
+    monkeypatch.setattr(batch, "_validate_current_row", validate_then_promote)
+
+    with pytest.raises(ProsePromotionError, match="stage=write"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == concurrent_text
+
+
 def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:
     _persist_artifact(tmp_path)
 
@@ -391,6 +552,32 @@ def test_apply_rejects_decision_drift(tmp_path: Path) -> None:
 
     with pytest.raises(ProsePromotionError, match="decision drift"):
         apply_prose_promotion_plan(tmp_path, plan)
+
+
+def test_apply_aggregates_multiple_row_validation_refusals(tmp_path: Path) -> None:
+    """Every row-local validation failure is reported before any entity or index write."""
+    from dataclasses import replace
+
+    _persist_duplicate_question_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    refused = replace(
+        plan,
+        rows=(
+            replace(plan.rows[0], source_ref="prose-source:wrong"),
+            replace(plan.rows[1], artifact_id="stale-artifact"),
+        ),
+    )
+    store = ProseDecompositionStore(tmp_path)
+    index_before = store.index_path("example").read_text(encoding="utf-8")
+
+    with pytest.raises(ProsePromotionError) as excinfo:
+        apply_prose_promotion_plan(tmp_path, refused)
+
+    message = str(excinfo.value)
+    assert "u001" in message and "source_ref mismatch" in message
+    assert "u002" in message and "stale artifact" in message
+    assert store.index_path("example").read_text(encoding="utf-8") == index_before
+    assert not any((tmp_path / "entities").rglob("*.md"))
 
 
 def test_apply_rejects_artifact_skip_unit(tmp_path: Path) -> None:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from science_tool.annotation.promote import (
     ApplyReport,
@@ -15,13 +15,35 @@ from science_tool.annotation.promote import (
     entity_dest,
     load_corpora,
 )
-from science_tool.annotation.prose_decomposition import DecompositionError, ProseDecompositionStore, artifact_unit_ref
+from science_tool.annotation.planned_edits import (
+    current_text,
+    edits_for_planned_texts,
+    path_string,
+    plan_update_from_text,
+    publish_edit,
+    publish_order,
+)
+from science_tool.annotation.prose_decomposition import (
+    DecompositionError,
+    DecompositionArtifact,
+    ProseDecompositionStore,
+    artifact_unit_ref,
+    canonical_json_text,
+)
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
     ProsePromotionPlanRow,
+    _plan_prose_unit_promotion_from_snapshot,
     plan_prose_unit_promotion,
 )
-from science_tool.entities import EntityCommandError, append_entity_source_ref, find_entity, slug_for_claim_text
+from science_tool.dag.entity_frontmatter import EntityWriteError
+from science_tool.entities import (
+    EntityCommandError,
+    find_entity,
+    render_entity_source_refs,
+    slug_for_claim_text,
+)
+from science_tool.entity_reservation import propose_number
 
 _SCHEMA_VERSION = 1
 _PLAN_KEYS = frozenset({"schema_version", "source_slug", "rows"})
@@ -70,87 +92,217 @@ def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequen
             raise ProsePromotionError(f"unit {unit_id!r} does not have a mint/link promotion decision")
         rows.append(row)
     targets = build_targets()
-    _reject_duplicate_mint_targets([_validate_current_row(project_root.resolve(), row) for row in rows], targets)
+    project_root = project_root.resolve()
+    store = ProseDecompositionStore(project_root)
+    index = store.load_index(source_slug)
+    artifact = store.load_latest_from_index(source_slug, index)
+    _reject_duplicate_mint_targets(
+        [_validate_current_row(project_root, row, artifact, index) for row in rows],
+        targets,
+    )
     return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
 
 
 def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> ApplyReport:
-    """Apply a read-only prose promotion plan after validating latest state.
+    """Plan every row, aggregate refusals, then publish.
 
     Recovered units can inherit promote_prose_unit's empty ApplyReport because the
-    entity already has the artifact unit ref and apply only records decomposition
-    index recovery.
+    entity already has the artifact unit ref and apply only records index recovery.
     """
     project_root = project_root.resolve()
     targets = build_targets()
-    current_rows = [_validate_current_row(project_root, row) for row in _plan_rows(plan)]
-    _reject_duplicate_mint_targets(current_rows, targets)
+    store = ProseDecompositionStore(project_root)
+    rows = _plan_rows(plan)
+    index_state_by_slug: dict[str, dict[str, Any]] = {}
+    index_text_by_slug: dict[str, str] = {}
+    artifact_by_slug: dict[str, DecompositionArtifact] = {}
+    try:
+        for source_slug in {row.source_slug for row in rows}:
+            index_path = store.index_path(source_slug)
+            index_text_by_slug[source_slug] = current_text(index_path)
+            index_state_by_slug[source_slug] = store.parse_index(
+                source_slug,
+                index_text_by_slug[source_slug],
+            )
+            artifact_by_slug[source_slug] = store.load_latest_from_index(
+                source_slug,
+                index_state_by_slug[source_slug],
+            )
+    except (DecompositionError, OSError) as exc:
+        raise ProsePromotionError(str(exc)) from exc
+
     report = ApplyReport()
+    refusals: list[str] = []
+    current_rows: list[_ValidatedPromotionRow] = []
+    for row in rows:
+        try:
+            current_rows.append(
+                _validate_current_row(
+                    project_root,
+                    row,
+                    artifact_by_slug[row.source_slug],
+                    index_state_by_slug[row.source_slug],
+                )
+            )
+        except ProsePromotionError as exc:
+            refusals.append(f"{row.unit_id}: {exc}")
+    try:
+        _reject_duplicate_mint_targets(current_rows, targets)
+    except ProsePromotionError as exc:
+        refusals.append(f"promotion plan: {exc}")
+
+    planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
+    creates: dict[Path, tuple[str, str, int] | None] = {}
+    next_number: dict[str, int] = {}
+
+    def composed(path: Path) -> str | None:
+        if path in planned_text_by_path:
+            return planned_text_by_path[path]
+        if not path.exists():
+            return None
+        original_text_by_path[path] = current_text(path)
+        planned_text_by_path[path] = original_text_by_path[path]
+        return planned_text_by_path[path]
+
     for current in current_rows:
-        unit_report = _apply_validated_row(project_root, current, targets)
-        report.minted += unit_report.minted
-        report.linked += unit_report.linked
-        report.skipped.update(unit_report.skipped)
-        report.written_paths.extend(unit_report.written_paths)
+        try:
+            promoted_to = _plan_row_edit(
+                project_root,
+                current,
+                targets,
+                composed,
+                planned_text_by_path,
+                creates,
+                next_number,
+                report,
+            )
+            row = current.row
+            if promoted_to is not None:
+                index_state_by_slug[row.source_slug] = store.plan_promotion(
+                    row.source_slug,
+                    row.fingerprint,
+                    promoted_to,
+                    state=index_state_by_slug[row.source_slug],
+                )
+        except (
+            DecompositionError,
+            EntityCommandError,
+            PromotionApplyError,
+            ProsePromotionError,
+        ) as exc:
+            refusals.append(f"{current.row.unit_id}: {exc}")
+
+    if refusals:
+        joined = "\n  ".join(refusals)
+        raise ProsePromotionError(
+            f"{len(refusals)} row(s) were refused and nothing was written:\n  {joined}"
+        )
+
+    edits = edits_for_planned_texts(
+        planned_text_by_path,
+        original_text_by_path,
+        creates,
+        reason_create="prose_promotion_mint",
+        reason_update="prose_promotion_accrual",
+    )
+    for slug, state in index_state_by_slug.items():
+        index_path = store.index_path(slug)
+        edits[index_path] = plan_update_from_text(
+            index_path,
+            index_text_by_slug[slug],
+            canonical_json_text(state),
+            "prose_decomposition_index",
+        )
+
+    written: list[str] = []
+    for edit in publish_order(edits.values()):
+        if not edit.changed:
+            continue
+        try:
+            publish_edit(edit, project_root=project_root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
+            raise ProsePromotionError(
+                f"[stage=write, files_written={len(written)}, written_paths={tuple(written)}] "
+                f"failed to write {path_string(edit.path)}: {exc}"
+            ) from exc
+        written.append(path_string(edit.path))
+        if edit.operation == "create":
+            report.written_paths.append(str(edit.path))
+
     return report
 
 
-def _apply_validated_row(
+def _plan_row_edit(
     project_root: Path,
     current: _ValidatedPromotionRow,
     targets: dict[str, PromotionTarget],
-) -> ApplyReport:
+    composed: Callable[[Path], str | None],
+    planned_text_by_path: dict[Path, str],
+    creates: dict[Path, tuple[str, str, int] | None],
+    next_number: dict[str, int],
+    report: ApplyReport,
+) -> str | None:
+    """Plan one row's entity edit and return its promoted target ref."""
     row = current.row
     candidate = current.candidate
-    report = ApplyReport()
-    promoted_to: str | None = None
     if current.recovered_link:
         if candidate.slug is None:
-            raise ProsePromotionError(f"recovered link for unit {row.unit_id!r} is missing target ref")
-        try:
-            ProseDecompositionStore(project_root).record_promotion(
-                source_slug=row.source_slug,
-                fingerprint=row.fingerprint,
-                promoted_to=candidate.slug,
+            raise ProsePromotionError(
+                f"recovered link for unit {row.unit_id!r} is missing target ref"
             )
-        except DecompositionError as exc:
-            raise ProsePromotionError(str(exc)) from exc
-        return report
+        return candidate.slug
 
-    try:
-        if candidate.decision == "MINT":
-            outcome = targets[candidate.kind].mint(
-                candidate, [row.source_ref, row.artifact_unit_ref], project_root, None
-            )
-            if outcome.created:
-                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
-                report.minted += 1
-            else:
-                report.linked += 1
-            promoted_to = outcome.entity_id
-        elif candidate.decision == "LINK":
-            if candidate.slug is None:
-                raise ProsePromotionError(f"LINK decision for unit {row.unit_id!r} is missing target ref")
-            dest = find_entity(project_root, candidate.slug).path
-            append_entity_source_ref(dest, row.source_ref)
-            append_entity_source_ref(dest, row.artifact_unit_ref)
-            report.linked += 1
-            promoted_to = candidate.slug
+    if candidate.decision == "MINT":
+        target = targets[candidate.kind]
+        assigned: int | None = None
+        dest: Path | None = None
+        if target.slug_addressed:
+            dest = entity_dest(f"{candidate.kind}:{candidate.slug}", project_root)
         else:
-            report.skipped[candidate.reason] += 1
-    except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
-        raise ProsePromotionError(str(exc)) from exc
-
-    if promoted_to is not None:
-        try:
-            ProseDecompositionStore(project_root).record_promotion(
-                source_slug=row.source_slug,
-                fingerprint=row.fingerprint,
-                promoted_to=promoted_to,
+            if candidate.kind not in next_number:
+                next_number[candidate.kind] = propose_number(project_root, candidate.kind)
+            assigned = next_number[candidate.kind]
+            next_number[candidate.kind] += 1
+        planned = target.plan_mint(
+            candidate,
+            [row.source_ref, row.artifact_unit_ref],
+            project_root,
+            None,
+            assigned,
+            composed(dest) if dest is not None else None,
+        )
+        planned_text_by_path[planned.path] = planned.post_image
+        if planned.operation == "create":
+            kind, local_part = planned.entity_id.split(":", 1)
+            creates[planned.path] = (
+                (kind, local_part, planned.claim_number)
+                if planned.claim_number is not None
+                else None
             )
-        except DecompositionError as exc:
-            raise ProsePromotionError(str(exc)) from exc
-    return report
+            report.minted += 1
+        else:
+            report.linked += 1
+        return planned.entity_id
+
+    if candidate.decision == "LINK":
+        if candidate.slug is None:
+            raise ProsePromotionError(
+                f"LINK decision for unit {row.unit_id!r} is missing target ref"
+            )
+        dest = find_entity(project_root, candidate.slug).path
+        before = composed(dest)
+        if before is None:
+            raise ProsePromotionError(f"LINK target {candidate.slug} does not exist at {dest}")
+        post_image, _changed = render_entity_source_refs(
+            before, [row.source_ref, row.artifact_unit_ref], entity_path=dest
+        )
+        planned_text_by_path[dest] = post_image
+        report.linked += 1
+        return candidate.slug
+
+    report.skipped[candidate.reason] += 1
+    return None
 
 
 def plan_to_json_text(plan: ProsePromotionPlan) -> str:
@@ -180,12 +332,12 @@ def plan_from_json(payload: object) -> ProsePromotionPlan:
     return ProsePromotionPlan(source_slug=source_slug, rows=rows)
 
 
-def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _ValidatedPromotionRow:
-    store = ProseDecompositionStore(project_root)
-    try:
-        artifact = store.load_latest(row.source_slug)
-    except DecompositionError as exc:
-        raise ProsePromotionError(str(exc)) from exc
+def _validate_current_row(
+    project_root: Path,
+    row: ProsePromotionPlanRow,
+    artifact: DecompositionArtifact,
+    index: dict[str, Any],
+) -> _ValidatedPromotionRow:
     if row.source_ref != artifact.source_ref:
         raise ProsePromotionError(
             f"source_ref mismatch for unit {row.unit_id!r}: "
@@ -214,7 +366,13 @@ def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _Va
             f"fingerprint mismatch for unit {row.unit_id!r}: "
             f"planned {row.fingerprint!r}, latest {unit.fingerprint!r}"
         )
-    current = plan_prose_unit_promotion(project_root, row.source_slug, row.unit_id)
+    current = _plan_prose_unit_promotion_from_snapshot(
+        project_root,
+        row.source_slug,
+        row.unit_id,
+        artifact,
+        index,
+    )
     if current is None:
         raise ProsePromotionError(f"unit {row.unit_id!r} no longer has a mint/link promotion decision")
     if (current.decision, current.target_ref) != (row.decision, row.target_ref):

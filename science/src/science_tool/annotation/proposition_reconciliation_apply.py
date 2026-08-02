@@ -1,18 +1,27 @@
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+from science_model.frontmatter import split_frontmatter
+
 from science_tool.annotation.cross_paper_evidence import (
     _iter_project_annotation_sidecar_paths,
     _resolve_paper_ref,
 )
-from science_tool.annotation.io import atomic_write_text, serialize_sidecar
+from science_tool.annotation.io import serialize_sidecar
 from science_tool.annotation.model import Sidecar
+from science_tool.annotation.planned_edits import (
+    PlannedFileEdit,
+    changed_and_noop_paths,
+    current_text,
+    path_string,
+    plan_update_from_text,
+    publish_edit,
+)
 from science_tool.annotation.proposition_reconciliation_plan import (
     ReconciliationAction,
     ReconciliationActionPlan,
@@ -21,7 +30,9 @@ from science_tool.annotation.query import (
     SidecarParseError,
     entity_relpath_for_sidecar,
     read_sidecar_strict,
+    read_sidecar_snapshot_strict,
 )
+from science_tool.dag.entity_frontmatter import EntityWriteError
 from science_tool.entities import (
     EntityCommandError,
     find_entity,
@@ -33,16 +44,6 @@ from science_tool.entities import (
 
 class ReconciliationApplyError(RuntimeError):
     """Raised when proposition reconciliation apply cannot proceed safely."""
-
-
-@dataclass(frozen=True)
-class PlannedFileEdit:
-    path: Path
-    reason: str
-    before_sha256: str
-    after_sha256: str
-    final_text: str
-    changed: bool
 
 
 @dataclass(frozen=True)
@@ -154,44 +155,12 @@ def apply_report_to_json(
     }
 
 
-def _path_string(path: Path) -> str:
-    return path.as_posix()
-
-
-def _sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _current_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def _changed_and_noop_paths(
-    edits: Sequence[PlannedFileEdit],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    changed = tuple(_path_string(edit.path) for edit in edits if edit.changed)
-    noop = tuple(_path_string(edit.path) for edit in edits if not edit.changed)
-    return changed, noop
-
-
 def _changed_and_noop_paths_from_path_changes(
     path_changes: Mapping[Path, bool],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    changed = tuple(_path_string(path) for path, path_changed in sorted(path_changes.items()) if path_changed)
-    noop = tuple(_path_string(path) for path, path_changed in sorted(path_changes.items()) if not path_changed)
+    changed = tuple(path_string(path) for path, path_changed in sorted(path_changes.items()) if path_changed)
+    noop = tuple(path_string(path) for path, path_changed in sorted(path_changes.items()) if not path_changed)
     return changed, noop
-
-
-def _edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
-    before = _current_text(path)
-    return PlannedFileEdit(
-        path=path,
-        reason=reason,
-        before_sha256=_sha256_text(before),
-        after_sha256=_sha256_text(final_text),
-        final_text=final_text,
-        changed=before != final_text,
-    )
 
 
 def _annotation_ref(sidecar_path: Path, project_root: Path, annotation_id: str) -> str:
@@ -445,7 +414,7 @@ def _canonical_source_refs(
 def _sidecar_final_texts(
     project_root: Path,
     live_backlinks: Sequence[InboundBacklink],
-) -> dict[Path, str]:
+) -> dict[Path, tuple[str, str]]:
     targets: dict[Path, dict[str, str]] = {}
     for backlink in live_backlinks:
         sidecar_targets = targets.setdefault(backlink.sidecar_path, {})
@@ -456,10 +425,10 @@ def _sidecar_final_texts(
             )
         sidecar_targets[backlink.annotation_id] = backlink.canonical
 
-    final_texts: dict[Path, str] = {}
+    final_texts: dict[Path, tuple[str, str]] = {}
     for sidecar_path, sidecar_targets in targets.items():
         try:
-            sidecar = read_sidecar_strict(sidecar_path)
+            sidecar, before_text = read_sidecar_snapshot_strict(sidecar_path)
         except SidecarParseError as exc:
             raise ReconciliationApplyError(str(exc)) from exc
         seen: set[str] = set()
@@ -475,11 +444,14 @@ def _sidecar_final_texts(
         if missing:
             rel = sidecar_path.relative_to(project_root).as_posix()
             raise ReconciliationApplyError(f"{rel} missing targeted annotation(s): {', '.join(missing)}")
-        final_texts[sidecar_path] = serialize_sidecar(
-            Sidecar(
-                annotations=tuple(annotations),
-                ledgers=sidecar.ledgers,
-                shared_targets=sidecar.shared_targets,
+        final_texts[sidecar_path] = (
+            before_text,
+            serialize_sidecar(
+                Sidecar(
+                    annotations=tuple(annotations),
+                    ledgers=sidecar.ledgers,
+                    shared_targets=sidecar.shared_targets,
+                )
             )
         )
     return final_texts
@@ -634,6 +606,7 @@ def plan_canonicalization_apply(
     listed_refs_by_action = _listed_sidecar_refs_by_action(actions)
     action_edit_paths_by_id: dict[str, tuple[Path, ...]] = {}
     action_path_changed_by_id: dict[str, Mapping[Path, bool]] = {}
+    degradations: list[str] = []
 
     for action in actions:
         canonical = action.canonical_proposition
@@ -641,37 +614,60 @@ def plan_canonicalization_apply(
             raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
 
         action_path_changed: dict[Path, bool] = {}
-        canonical_location = _entity_location(project_root, canonical)
+        try:
+            canonical_location = find_entity(project_root, canonical)
+        except EntityCommandError as exc:
+            degradations.append(f"{canonical}: {exc}")
+            canonical_location = None
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
-        final_text, _changed = render_entity_source_refs(
-            canonical_location.path,
-            canonical_refs,
-            as_of=as_of,
-        )
-        canonical_edit = _edit(
-            canonical_location.path,
-            final_text,
-            "canonical_source_refs",
-        )
-        edits[canonical_location.path] = canonical_edit
-        action_path_changed[canonical_location.path] = canonical_edit.changed
+        if canonical_location is not None:
+            try:
+                canonical_before = current_text(canonical_location.path)
+                final_text, _changed = render_entity_source_refs(
+                    canonical_before,
+                    canonical_refs,
+                    entity_path=canonical_location.path,
+                    as_of=as_of,
+                )
+            except EntityCommandError as exc:
+                degradations.append(f"{canonical}: {exc}")
+            else:
+                canonical_edit = plan_update_from_text(
+                    canonical_location.path,
+                    canonical_before,
+                    final_text,
+                    "canonical_source_refs",
+                )
+                edits[canonical_location.path] = canonical_edit
+                action_path_changed[canonical_location.path] = canonical_edit.changed
 
         for duplicate in action.members:
             if duplicate == canonical:
                 continue
-            duplicate_location = _entity_location(project_root, duplicate)
-            frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
+            try:
+                duplicate_location = find_entity(project_root, duplicate)
+            except EntityCommandError as exc:
+                degradations.append(f"{duplicate}: {exc}")
+                continue
+            duplicate_before = current_text(duplicate_location.path)
+            frontmatter, _body = split_frontmatter(duplicate_before)
             existing_superseded_by = frontmatter.get("superseded_by")
             if existing_superseded_by is not None and str(existing_superseded_by) != canonical:
                 raise ReconciliationApplyError(f"{duplicate} already has superseded_by {existing_superseded_by}")
-            final_text, _changed = render_entity_frontmatter_updates(
+            try:
+                final_text, _changed = render_entity_frontmatter_updates(
+                    duplicate_before,
+                    {"status": "superseded", "superseded_by": canonical},
+                    entity_path=duplicate_location.path,
+                    as_of=as_of,
+                )
+            except EntityCommandError as exc:
+                degradations.append(f"{duplicate}: {exc}")
+                continue
+            duplicate_edit = plan_update_from_text(
                 duplicate_location.path,
-                {"status": "superseded", "superseded_by": canonical},
-                as_of=as_of,
-            )
-            duplicate_edit = _edit(
-                duplicate_location.path,
+                duplicate_before,
                 final_text,
                 "duplicate_supersession",
             )
@@ -691,11 +687,23 @@ def plan_canonicalization_apply(
         action_edit_paths_by_id[action.action_id] = tuple(sorted(action_path_changed))
         action_path_changed_by_id[action.action_id] = dict(action_path_changed)
 
-    for sidecar_path, final_text in _sidecar_final_texts(
+    if degradations:
+        joined = "\n  ".join(degradations)
+        raise ReconciliationApplyError(
+            f"{len(degradations)} record(s) would be degraded by this canonicalization and "
+            f"nothing was written:\n  {joined}"
+        )
+
+    for sidecar_path, (before_text, final_text) in _sidecar_final_texts(
         project_root,
         live_backlinks,
     ).items():
-        edits[sidecar_path] = _edit(sidecar_path, final_text, "sidecar_promoted_to")
+        edits[sidecar_path] = plan_update_from_text(
+            sidecar_path,
+            before_text,
+            final_text,
+            "sidecar_promoted_to",
+        )
 
     return CanonicalizationPreflight(
         actions=actions,
@@ -799,22 +807,22 @@ def apply_canonicalization_plan(
         requested_action_ids=requested_action_ids,
         as_of=as_of,
     )
-    changed_paths, noop_paths = _changed_and_noop_paths(preflight.file_edits)
+    changed_paths, noop_paths = changed_and_noop_paths(preflight.file_edits)
     written: list[str] = []
     for edit in preflight.file_edits:
         if not edit.changed:
             continue
         try:
-            atomic_write_text(edit.path, edit.final_text)
-        except OSError as exc:
+            publish_edit(edit, project_root=project_root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
             written_paths = tuple(written)
             raise ReconciliationApplyError(
                 "[stage=write, "
                 f"files_written={len(written_paths)}, "
                 f"written_paths={written_paths}] "
-                f"failed to write {_path_string(edit.path)}: {exc}"
+                f"failed to write {path_string(edit.path)}: {exc}"
             ) from exc
-        written.append(_path_string(edit.path))
+        written.append(path_string(edit.path))
 
     try:
         _postflight(

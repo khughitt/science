@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from science_tool.annotation.internal_prose_adapter import InternalProseAdapter, LocatorStatus
 from science_tool.annotation.promote import (
@@ -15,13 +16,26 @@ from science_tool.annotation.promote import (
     entity_dest,
     load_corpora,
 )
+from science_tool.annotation.planned_edits import (
+    PlannedFileEdit,
+    current_text,
+    edits_for_planned_texts,
+    path_string,
+    plan_update_from_text,
+    publish_edit,
+    publish_order,
+)
 from science_tool.annotation.prose_decomposition import (
     DecompositionError,
+    DecompositionArtifact,
     ProseDecompositionStore,
     Quote,
     artifact_unit_ref,
+    canonical_json_text,
 )
-from science_tool.entities import EntityCommandError, append_entity_source_ref, find_entity
+from science_tool.dag.entity_frontmatter import EntityWriteError
+from science_tool.entities import EntityCommandError, find_entity, render_entity_source_refs
+from science_tool.entity_reservation import propose_number
 
 
 class ProsePromotionError(ValueError):
@@ -62,6 +76,23 @@ def plan_prose_unit_promotion(project_root: Path, source_slug: str, unit_id: str
     except DecompositionError as exc:
         raise ProsePromotionError(str(exc)) from exc
 
+    return _plan_prose_unit_promotion_from_snapshot(
+        project_root,
+        source_slug,
+        unit_id,
+        artifact,
+        index,
+    )
+
+
+def _plan_prose_unit_promotion_from_snapshot(
+    project_root: Path,
+    source_slug: str,
+    unit_id: str,
+    artifact: DecompositionArtifact,
+    index: dict[str, Any],
+) -> ProsePromotionPlanRow | None:
+
     source_ref = artifact.source_ref
     if artifact.source.slug != source_slug:
         raise ProsePromotionError(
@@ -80,9 +111,11 @@ def plan_prose_unit_promotion(project_root: Path, source_slug: str, unit_id: str
     row = _index_row(index, unit.fingerprint)
     if row.get("stale") is True:
         raise ProsePromotionError(f"unit {unit_id!r} is stale in the decomposition index")
-    promoted_to = row.get("promoted_to")
-    if promoted_to:
-        raise ProsePromotionError(f"unit {unit_id!r} is already promoted to {promoted_to}")
+    existing_promotion = row.get("promoted_to")
+    if existing_promotion:
+        raise ProsePromotionError(
+            f"unit {unit_id!r} is already promoted to {existing_promotion}"
+        )
 
     corpora, derived_refs = load_corpora(project_root)
     if ref in derived_refs:
@@ -152,7 +185,9 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
 
     try:
         artifact = store.load_latest(source_slug)
-        index = store.load_index(source_slug)
+        index_path = store.index_path(source_slug)
+        index_before = current_text(index_path)
+        index = store.parse_index(source_slug, index_before)
     except DecompositionError as exc:
         raise ProsePromotionError(str(exc)) from exc
 
@@ -173,9 +208,11 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
     row = _index_row(index, unit.fingerprint)
     if row.get("stale") is True:
         raise ProsePromotionError(f"unit {unit_id!r} is stale in the decomposition index")
-    promoted_to = row.get("promoted_to")
-    if promoted_to:
-        raise ProsePromotionError(f"unit {unit_id!r} is already promoted to {promoted_to}")
+    existing_promotion = row.get("promoted_to")
+    if existing_promotion:
+        raise ProsePromotionError(
+            f"unit {unit_id!r} is already promoted to {existing_promotion}"
+        )
 
     corpora, derived_refs = load_corpora(project_root)
     if apply and ref in derived_refs:
@@ -183,14 +220,28 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
         if recovered_to is None:
             raise ProsePromotionError(f"artifact unit ref {ref!r} is present in derived refs but no entity was found")
         try:
-            store.record_promotion(
+            state = store.plan_promotion(
                 source_slug=source_slug,
                 fingerprint=unit.fingerprint,
                 promoted_to=recovered_to,
+                state=index,
+            )
+            recovery_report = ApplyReport()
+            _publish(
+                project_root,
+                [
+                    plan_update_from_text(
+                        index_path,
+                        index_before,
+                        canonical_json_text(state),
+                        "prose_decomposition_index",
+                    )
+                ],
+                recovery_report,
             )
         except DecompositionError as exc:
             raise ProsePromotionError(str(exc)) from exc
-        return ApplyReport()
+        return recovery_report
 
     quote = Quote(unit.candidate.exact, unit.candidate.prefix, unit.candidate.suffix)
     try:
@@ -219,41 +270,101 @@ def promote_prose_unit(project_root: Path, source_ref: str, unit_id: str, apply:
         return _read_only_report(decision)
 
     report = ApplyReport()
-    promoted_to = None
+    planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
+    creates: dict[Path, tuple[str, str, int] | None] = {}
+    promoted_to: str | None = None
     try:
         if decision.decision == "MINT":
-            outcome = targets[decision.kind].mint(
-                decision, [source_ref, decision.ref], project_root, None
+            target = targets[decision.kind]
+            assigned = None if target.slug_addressed else propose_number(project_root, decision.kind)
+            dest = (
+                entity_dest(f"{decision.kind}:{decision.slug}", project_root)
+                if target.slug_addressed
+                else None
             )
-            if outcome.created:
-                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
+            existing = current_text(dest) if dest is not None and dest.exists() else None
+            if dest is not None and existing is not None:
+                original_text_by_path[dest] = existing
+            planned = target.plan_mint(
+                decision,
+                [source_ref, decision.ref],
+                project_root,
+                None,
+                assigned,
+                existing,
+            )
+            planned_text_by_path[planned.path] = planned.post_image
+            if planned.operation == "create":
+                kind, local_part = planned.entity_id.split(":", 1)
+                creates[planned.path] = (
+                    (kind, local_part, planned.claim_number)
+                    if planned.claim_number is not None
+                    else None
+                )
                 report.minted += 1
             else:
                 report.linked += 1
-            promoted_to = outcome.entity_id
+            promoted_to = planned.entity_id
         elif decision.decision == "LINK":
             if decision.slug is None:
                 raise ProsePromotionError(f"LINK decision for unit {unit_id!r} is missing target ref")
             dest = find_entity(project_root, decision.slug).path
-            append_entity_source_ref(dest, source_ref)
-            append_entity_source_ref(dest, decision.ref)
+            before = current_text(dest)
+            original_text_by_path[dest] = before
+            post_image, _changed = render_entity_source_refs(
+                before, [source_ref, decision.ref], entity_path=dest
+            )
+            planned_text_by_path[dest] = post_image
             report.linked += 1
             promoted_to = decision.slug
         else:
             report.skipped[decision.reason] += 1
-    except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
-        raise ProsePromotionError(str(exc)) from exc
 
-    if promoted_to is not None:
-        try:
-            store.record_promotion(
+        edits = edits_for_planned_texts(
+            planned_text_by_path,
+            original_text_by_path,
+            creates,
+            reason_create="prose_promotion_mint",
+            reason_update="prose_promotion_accrual",
+        )
+        if promoted_to is not None:
+            state = store.plan_promotion(
                 source_slug=source_slug,
                 fingerprint=unit.fingerprint,
                 promoted_to=promoted_to,
+                state=index,
             )
-        except DecompositionError as exc:
-            raise ProsePromotionError(str(exc)) from exc
+            edits[index_path] = plan_update_from_text(
+                index_path,
+                index_before,
+                canonical_json_text(state),
+                "prose_decomposition_index",
+            )
+    except (DecompositionError, EntityCommandError, PromotionApplyError) as exc:
+        raise ProsePromotionError(str(exc)) from exc
+
+    _publish(project_root, publish_order(edits.values()), report)
     return report
+
+
+def _publish(
+    project_root: Path, edits: Sequence[PlannedFileEdit], report: ApplyReport
+) -> None:
+    written: list[str] = []
+    for edit in edits:
+        if not edit.changed:
+            continue
+        try:
+            publish_edit(edit, project_root=project_root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
+            raise ProsePromotionError(
+                f"[stage=write, files_written={len(written)}, written_paths={tuple(written)}] "
+                f"failed to write {path_string(edit.path)}: {exc}"
+            ) from exc
+        written.append(path_string(edit.path))
+        if edit.operation == "create":
+            report.written_paths.append(str(edit.path))
 
 
 def _source_slug(source_ref: str) -> str:

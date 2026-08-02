@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
 
-from science_tool.annotation.io import markdown_for_sidecar, read_sidecar
+from science_tool.annotation.io import markdown_for_sidecar, parse_sidecar, read_sidecar
 from science_tool.annotation.model import Annotation, Sidecar, Status
 
 # ---- Errors ----------------------------------------------------------
@@ -55,6 +55,16 @@ def read_sidecar_strict(path: Path) -> Sidecar:
     """
     try:
         return read_sidecar(path)
+    except Exception as exc:
+        raise SidecarParseError(path, exc) from exc
+
+
+def read_sidecar_snapshot_strict(path: Path) -> tuple[Sidecar, str]:
+    """Parse and return the exact sidecar text used for the parsed snapshot."""
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            text = handle.read()
+        return parse_sidecar(text, path=path), text
     except Exception as exc:
         raise SidecarParseError(path, exc) from exc
 

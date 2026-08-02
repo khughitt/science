@@ -92,6 +92,23 @@ def _persist_artifact(
     return artifact
 
 
+def _write_existing_proposition(root: Path) -> None:
+    dest = root / "entities" / "propositions" / "existing.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        "---\n"
+        "id: proposition:existing\n"
+        "kind: proposition\n"
+        "title: Basalt flows record the cooling history.\n"
+        "status: active\n"
+        "source_refs: []\n"
+        "---\n"
+        "\n"
+        "Existing body.\n",
+        encoding="utf-8",
+    )
+
+
 def test_promote_prose_unit_mints_proposition_and_records_state(tmp_path: Path) -> None:
     artifact = _persist_artifact(tmp_path)
     unit = artifact.units[0]
@@ -105,6 +122,7 @@ def test_promote_prose_unit_mints_proposition_and_records_state(tmp_path: Path) 
 
     assert report.minted == 1
     dest = tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md"
+    assert report.written_paths == [str(dest)]
     assert dest.exists()
     text = dest.read_text(encoding="utf-8")
     assert "prose-source:example" in text
@@ -136,21 +154,23 @@ def test_promote_prose_unit_recovers_index_when_retry_sees_minted_ref(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import science_tool.annotation.prose_promote as prose_promote_mod
+
     artifact = _persist_artifact(tmp_path)
     unit = artifact.units[0]
-    original_record = ProseDecompositionStore.record_promotion
-    calls = 0
+    real_publish = prose_promote_mod.publish_edit
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    failed = {"done": False}
 
-    def fail_once(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise RuntimeError("simulated index write failure")
-        original_record(self, source_slug, fingerprint, promoted_to)
+    def fail_the_index_once(edit, *, project_root):
+        if edit.path == index_path and not failed["done"]:
+            failed["done"] = True
+            raise OSError("simulated index write failure")
+        return real_publish(edit, project_root=project_root)
 
-    monkeypatch.setattr(ProseDecompositionStore, "record_promotion", fail_once)
+    monkeypatch.setattr(prose_promote_mod, "publish_edit", fail_the_index_once)
 
-    with pytest.raises(RuntimeError, match="simulated index write failure"):
+    with pytest.raises(ProsePromotionError, match="stage=write"):
         promote_prose_unit(
             project_root=tmp_path,
             source_ref="prose-source:example",
@@ -212,10 +232,33 @@ def test_promote_prose_unit_links_existing_proposition_and_appends_two_refs(tmp_
     assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
 
 
+def test_promote_prose_unit_surfaces_a_degradation_refusal_as_its_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EntityDegradationError is covered by promote_prose_unit's EntityCommandError catch."""
+    import science_tool.annotation.prose_promote as prose_promote_mod
+    from science_tool.entities import EntityDegradationError
+
+    _persist_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+
+    def refuse(current_text, refs, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(prose_promote_mod, "render_entity_source_refs", refuse)
+
+    with pytest.raises(ProsePromotionError):
+        promote_prose_unit(
+            project_root=tmp_path, source_ref="prose-source:example", unit_id="u001", apply=True
+        )
+
+
 def test_promote_prose_unit_recovers_index_when_retry_sees_linked_ref_without_duplicate_refs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import science_tool.annotation.prose_promote as prose_promote_mod
+
     artifact = _persist_artifact(tmp_path)
     unit = artifact.units[0]
     dest = tmp_path / "entities" / "propositions" / "existing.md"
@@ -232,19 +275,19 @@ def test_promote_prose_unit_recovers_index_when_retry_sees_linked_ref_without_du
         "Existing body.\n",
         encoding="utf-8",
     )
-    original_record = ProseDecompositionStore.record_promotion
-    calls = 0
+    real_publish = prose_promote_mod.publish_edit
+    index_path = ProseDecompositionStore(tmp_path).index_path("example")
+    failed = {"done": False}
 
-    def fail_once(self, source_slug: str, fingerprint: str, promoted_to: str) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise RuntimeError("simulated index write failure")
-        original_record(self, source_slug, fingerprint, promoted_to)
+    def fail_the_index_once(edit, *, project_root):
+        if edit.path == index_path and not failed["done"]:
+            failed["done"] = True
+            raise OSError("simulated index write failure")
+        return real_publish(edit, project_root=project_root)
 
-    monkeypatch.setattr(ProseDecompositionStore, "record_promotion", fail_once)
+    monkeypatch.setattr(prose_promote_mod, "publish_edit", fail_the_index_once)
 
-    with pytest.raises(RuntimeError, match="simulated index write failure"):
+    with pytest.raises(ProsePromotionError, match="stage=write"):
         promote_prose_unit(
             project_root=tmp_path,
             source_ref="prose-source:example",

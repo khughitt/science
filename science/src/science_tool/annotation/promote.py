@@ -9,29 +9,41 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
+from science_model.frontmatter import split_frontmatter
 from science_model.propositions import PropositionEntity
 from science_model.templates import Renderer
 
-from science_tool.annotation import io as anno_io
+from science_tool.annotation.io import serialize_sidecar
 from science_tool.annotation.model import Status, TextualBody
-from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
+from science_tool.annotation.planned_edits import (
+    current_text,
+    edits_for_planned_texts,
+    path_string,
+    plan_update_from_text,
+    publish_edit,
+    publish_order,
+)
+from science_tool.annotation.query import (
+    entity_relpath_for_sidecar,
+    read_sidecar_snapshot_strict,
+)
 from science_tool.dag.entity_frontmatter import (
     CREATE_ONLY_KEYS,
+    EntityWriteError,
     Ownership,
-    create_entity_file,
+    render_create,
 )
 from science_tool.entities import (
     EntityCommandError,
-    _atomic_replace_text,
-    _parse_markdown_file,
-    append_entity_source_ref,
     default_status,
+    render_entity_source_refs,
     resolve_path_policy,
     slug_for_claim_text,
     validate_slug,
 )
-from science_tool.entity_reservation import reserve_entity
+from science_tool.entity_reservation import LOCAL_PART_WIDTH, propose_number
 
 
 def normalize_claim(text: str) -> str:
@@ -256,23 +268,27 @@ PROMOTE_PROPOSITION = Ownership(
 
 
 @dataclass(frozen=True)
-class MintOutcome:
-    """What a mint did. `created` is False when an identical claim already existed and the
-    mint accrued provenance onto it instead (§4.3) -- provenance accrual, not a rewrite."""
+class PlannedMint:
+    """What a mint would do. Nothing here has touched the filesystem."""
 
     entity_id: str
-    created: bool
+    operation: Literal["create", "accrue"]
+    path: Path
+    post_image: str
+    claim_number: int | None
 
 
-# (candidate, source_refs, project_root, as_of) -> MintOutcome
-MintFn = Callable[["PromotionCandidate", list[str], Path, "date | None"], MintOutcome]
+PlanMintFn = Callable[
+    ["PromotionCandidate", list[str], Path, "date | None", int | None, str | None],
+    PlannedMint,
+]
 
 
 @dataclass(frozen=True)
 class PromotionTarget:
     kind: str
     slug_addressed: bool   # proposition True (content-addressed slug); numeric kinds False
-    mint: MintFn
+    plan_mint: PlanMintFn
 
 
 def entity_dest(entity_id: str, project_root: Path) -> Path:
@@ -282,17 +298,23 @@ def entity_dest(entity_id: str, project_root: Path) -> Path:
     return project_root / policy.root / f"{local_part}.md"
 
 
-def _mint_proposition(
-    c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
-) -> MintOutcome:
-    """4a proposition mint: create-only, with provenance accrual on an identical claim (§4.3)."""
+def _plan_proposition_mint(
+    c: PromotionCandidate,
+    source_refs: list[str],
+    project_root: Path,
+    as_of: date | None,
+    assigned_number: int | None,
+    current_text: str | None,
+) -> PlannedMint:
+    """Plan a proposition create or identical-claim provenance accrual without writing."""
     assert c.slug is not None
-    prop_ref = f"proposition:{c.slug}"
+    assert assigned_number is None, "proposition is slug-addressed; it consumes no number"
+    prop_ref = f"proposition:{validate_slug(c.slug)}"
     dest = entity_dest(prop_ref, project_root)
-    if dest.exists():
+    if current_text is not None:
         # Never-overwrite guard: a MINT slug colliding with a DIFFERENT-claim proposition
         # (only reachable via an explicit-id override; auto mints are pre-screened) fails loud.
-        existing_fm, _ = _parse_markdown_file(dest)
+        existing_fm, _body = split_frontmatter(current_text)
         if normalize_claim(str(existing_fm.get("title") or "")) != normalize_claim(c.claim):
             raise PromotionApplyError(
                 f"refusing to overwrite {dest.name}: it holds a different proposition"
@@ -300,26 +322,42 @@ def _mint_proposition(
         # Same claim from a second source: ACCRUE, exactly as the LINK path does. Rendering it
         # as an update would replace source_refs with only this paper's refs and overwrite the
         # subject/object refinements synthesize owns.
-        for ref in source_refs:
-            append_entity_source_ref(dest, ref, as_of=as_of)
-        return MintOutcome(entity_id=prop_ref, created=False)
+        post_image, _changed = render_entity_source_refs(
+            current_text, source_refs, entity_path=dest, as_of=as_of
+        )
+        return PlannedMint(
+            entity_id=prop_ref,
+            operation="accrue",
+            path=dest,
+            post_image=post_image,
+            claim_number=None,
+        )
 
     prop = PropositionEntity(
         id=prop_ref, title=c.claim, subject=c.subject, object=c.object,
         source_refs=list(source_refs),
     )
-    create_entity_file(
+    today = (as_of or date.today()).isoformat()
+    post_image = render_create(
         prop,
-        project_root=project_root,
         ownership=PROMOTE_PROPOSITION,
-        create_body=_proposition_body(c.claim),
-        as_of=as_of,
+        body=_proposition_body(c.claim),
+        created=today,
+        updated=today,
     )
-    return MintOutcome(entity_id=prop_ref, created=True)
+    return PlannedMint(
+        entity_id=prop_ref,
+        operation="create",
+        path=dest,
+        post_image=post_image,
+        claim_number=None,
+    )
 
 
 def proposition_target() -> PromotionTarget:
-    return PromotionTarget(kind="proposition", slug_addressed=True, mint=_mint_proposition)
+    return PromotionTarget(
+        kind="proposition", slug_addressed=True, plan_mint=_plan_proposition_mint
+    )
 
 
 _LEAD_SECTION: dict[str, str] = {
@@ -338,55 +376,54 @@ def _insert_claim_into_lead(rendered: str, section_name: str, claim: str) -> str
     return f"{rendered[:at]}\n{claim}\n{rendered[at:]}"
 
 
-def _mint_numeric(kind: str) -> MintFn:
+def _plan_numeric_mint(kind: str) -> PlanMintFn:
     lead = _LEAD_SECTION[kind]
 
-    def mint(
-        c: PromotionCandidate, source_refs: list[str], project_root: Path, as_of: date | None
-    ) -> MintOutcome:
+    def plan(
+        c: PromotionCandidate,
+        source_refs: list[str],
+        project_root: Path,
+        as_of: date | None,
+        assigned_number: int | None,
+        current_text: str | None,
+    ) -> PlannedMint:
         assert c.slug is not None
+        assert assigned_number is not None, f"{kind} is numeric; the planner must assign a number"
+        assert current_text is None, f"{kind} mints are create-only; accrual is not reachable"
+        slug = validate_slug(c.slug)
         today = (as_of or date.today()).isoformat()
-        # (1) Preflight the template (pure read, no number consumed). Raises if the packaged
-        #     template is missing/malformed — a loud environment error.
         renderer = Renderer()
         renderer.sections(kind)
-        # (2) Reserve the number atomically (empty placeholder .md backs the claimed number).
-        reservation = reserve_entity(project_root, kind, title=c.claim, slug=c.slug)
-        try:
-            # (3) Render template-faithful with the real id, then insert the claim into the lead.
-            fields: dict[str, object] = {
-                "entity_id": reservation.entity_id,
-                "title": c.claim,
-                "status": default_status(kind),
-                "source_refs": list(source_refs),
-                "related": [],
-                "created": today,
-                "updated": today,
-            }
-            if kind == "hypothesis":
-                # A promoted claim is a TRIAL FRAMING, not a committed one -- which is what
-                # `phase: candidate` said. `draft` is the lifecycle word it folded into.
-                fields["status"] = "draft"
-            rendered = renderer.render(kind, fields=fields)
-            rendered = _insert_claim_into_lead(rendered, lead, c.claim)
-            # (4) Final write — overwrites the empty placeholder. Last step.
-            _atomic_replace_text(reservation.path, rendered)
-        except Exception as exc:  # explicit post-reservation rollback, then fail loud
-            reservation.path.unlink(missing_ok=True)
-            if isinstance(exc, PromotionApplyError):
-                raise
-            raise PromotionApplyError(
-                f"failed to write {kind} {reservation.entity_id}: {exc}"
-            ) from exc
-        return MintOutcome(entity_id=reservation.entity_id, created=True)
+        local_part = f"{assigned_number:0{LOCAL_PART_WIDTH}d}-{slug}"
+        entity_id = f"{kind}:{local_part}"
+        fields: dict[str, object] = {
+            "entity_id": entity_id,
+            "title": c.claim,
+            "status": default_status(kind),
+            "source_refs": list(source_refs),
+            "related": [],
+            "created": today,
+            "updated": today,
+        }
+        if kind == "hypothesis":
+            fields["status"] = "draft"
+        rendered = renderer.render(kind, fields=fields)
+        rendered = _insert_claim_into_lead(rendered, lead, c.claim)
+        return PlannedMint(
+            entity_id=entity_id,
+            operation="create",
+            path=entity_dest(entity_id, project_root),
+            post_image=rendered,
+            claim_number=assigned_number,
+        )
 
-    return mint
+    return plan
 
 
 def numeric_target(kind: str) -> PromotionTarget:
     if kind not in ("question", "hypothesis"):
         raise ValueError(f"numeric_target supports question/hypothesis, got {kind!r}")
-    return PromotionTarget(kind=kind, slug_addressed=False, mint=_mint_numeric(kind))
+    return PromotionTarget(kind=kind, slug_addressed=False, plan_mint=_plan_numeric_mint(kind))
 
 
 def build_targets() -> dict[str, PromotionTarget]:
@@ -406,40 +443,118 @@ def apply_candidates(
     as_of: date | None = None,
     targets: dict[str, PromotionTarget] | None = None,
 ) -> ApplyReport:
-    """Execute MINT/LINK candidates: mint via the per-kind target, accrue provenance, backlink."""
+    """Plan every MINT/LINK candidate, aggregate refusals, then publish."""
     targets = targets if targets is not None else build_targets()
     report = ApplyReport()
-    backlinks: dict[str, str] = {}  # frag -> "<kind>:<local_part>"
+    backlinks: dict[str, str] = {}
+    refusals: list[str] = []
+    sidecar, sidecar_before = read_sidecar_snapshot_strict(sidecar_path)
+    planned_text_by_path: dict[Path, str] = {}
+    original_text_by_path: dict[Path, str] = {}
+    creates: dict[Path, tuple[str, str, int] | None] = {}
+    next_number: dict[str, int] = {}
+
+    def composed(path: Path) -> str | None:
+        if path in planned_text_by_path:
+            return planned_text_by_path[path]
+        if not path.exists():
+            return None
+        original_text_by_path[path] = current_text(path)
+        planned_text_by_path[path] = original_text_by_path[path]
+        return planned_text_by_path[path]
 
     for c in candidates:
-        if c.decision == "MINT":
-            outcome = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
-            if outcome.created:
-                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
-                report.minted += 1
-            else:
-                report.linked += 1
-            backlinks[c.frag] = outcome.entity_id
-        elif c.decision == "LINK":
-            assert c.slug is not None  # "<kind>:<local_part>"
-            dest = entity_dest(c.slug, project_root)
-            # Accrue BOTH provenance refs onto the existing entity; append_entity_source_ref
-            # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
-            # whenever it actually appends a ref.
-            for ref in (paper_ref, c.ref):
-                append_entity_source_ref(dest, ref, as_of=as_of)
-            report.linked += 1
-            backlinks[c.frag] = c.slug
-        else:  # COLLISION / SKIP — not applied
+        if c.decision not in ("MINT", "LINK"):
             report.skipped[c.reason] += 1
+            continue
+        try:
+            if c.decision == "MINT":
+                target = targets[c.kind]
+                assigned: int | None = None
+                dest: Path | None = None
+                if target.slug_addressed:
+                    dest = entity_dest(f"{c.kind}:{c.slug}", project_root)
+                else:
+                    if c.kind not in next_number:
+                        next_number[c.kind] = propose_number(project_root, c.kind)
+                    assigned = next_number[c.kind]
+                    next_number[c.kind] += 1
+                planned = target.plan_mint(
+                    c,
+                    [paper_ref, c.ref],
+                    project_root,
+                    as_of,
+                    assigned,
+                    composed(dest) if dest is not None else None,
+                )
+                planned_text_by_path[planned.path] = planned.post_image
+                if planned.operation == "create":
+                    kind, local_part = planned.entity_id.split(":", 1)
+                    creates[planned.path] = (
+                        (kind, local_part, planned.claim_number)
+                        if planned.claim_number is not None
+                        else None
+                    )
+                    report.minted += 1
+                else:
+                    report.linked += 1
+                backlinks[c.frag] = planned.entity_id
+            else:
+                assert c.slug is not None  # "<kind>:<local_part>"
+                dest = entity_dest(c.slug, project_root)
+                before = composed(dest)
+                if before is None:
+                    raise PromotionApplyError(f"LINK target {c.slug} does not exist at {dest}")
+                post_image, _changed = render_entity_source_refs(
+                    before, [paper_ref, c.ref], entity_path=dest, as_of=as_of
+                )
+                planned_text_by_path[dest] = post_image
+                report.linked += 1
+                backlinks[c.frag] = c.slug
+        except (EntityCommandError, PromotionApplyError) as exc:
+            refusals.append(f"{c.ref} ({c.slug}): {exc}")
+
+    if refusals:
+        joined = "\n  ".join(refusals)
+        raise PromotionApplyError(
+            f"{len(refusals)} candidate(s) were refused and nothing was written:\n  {joined}"
+        )
+
+    edits = edits_for_planned_texts(
+        planned_text_by_path,
+        original_text_by_path,
+        creates,
+        reason_create="promotion_mint",
+        reason_update="promotion_accrual",
+    )
 
     if backlinks:
-        sidecar = read_sidecar_strict(sidecar_path)
         new_anns = tuple(
             dataclasses.replace(a, promoted_to=backlinks[a.id]) if a.id in backlinks else a
             for a in sidecar.annotations
         )
-        anno_io.write_sidecar(sidecar_path, dataclasses.replace(sidecar, annotations=new_anns))
+        edits[sidecar_path] = plan_update_from_text(
+            sidecar_path,
+            sidecar_before,
+            serialize_sidecar(dataclasses.replace(sidecar, annotations=new_anns)),
+            "promotion_sidecar",
+        )
+
+    written: list[str] = []
+    for edit in publish_order(edits.values()):
+        if not edit.changed:
+            continue
+        try:
+            publish_edit(edit, project_root=project_root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
+            raise PromotionApplyError(
+                f"[stage=write, files_written={len(written)}, written_paths={tuple(written)}] "
+                f"failed to write {path_string(edit.path)}: {exc}"
+            ) from exc
+        written.append(path_string(edit.path))
+        if edit.operation == "create":
+            report.written_paths.append(str(edit.path))
+
     return report
 
 

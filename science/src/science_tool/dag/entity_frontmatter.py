@@ -209,10 +209,16 @@ def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
 
     Parses `text` with `split_frontmatter` -- the same parser `read_existing_target` uses for
     admission -- rather than a bare `split("---\\n", 2)`, so the two halves of "admit, then
-    certify" agree on what frontmatter is. This still validates the ROUND-TRIPPED mapping (parsing
-    the rendered text back), not the in-memory `dict` that was dumped: that is what catches an
-    unquoted date the YAML dumper emitted as a bare scalar, which reloads as a `datetime.date`
-    rather than the string the schema requires.
+    certify" agree on what frontmatter is. It validates the mapping reparsed FROM the rendered
+    text, not the in-memory `dict` that was dumped, because the text is the artifact: every later
+    reader sees only what the dumper wrote and the loader hands back, so any divergence the
+    dump/load round trip introduces is invisible to a check on the pre-dump mapping.
+
+    Measured 2026-08-02, correcting an earlier revision of this docstring: an unquoted date
+    reloading as a `datetime.date` is NOT an instance of that divergence.
+    `validate_persisted_base_shape` refuses a `datetime.date` identically either way, because
+    `type: string` rejects the object in the in-memory mapping too. The reparse rule rests on
+    the structure above, not on that example.
     """
     frontmatter, _body = split_frontmatter(text)
     try:
@@ -349,22 +355,14 @@ def _render_update_for(
     )
 
 
-def create_entity_file(
-    entity: WorkbenchEntity,
-    *,
-    project_root: Path,
-    ownership: Ownership,
-    create_body: str,
-    as_of: date | None = None,
-) -> Path:
-    """Write a NEW entity file, publishing only a complete no-clobber result."""
-    dest = _entity_dest(entity, project_root)
-    if dest.exists():
-        raise EntityWriteError(f"refusing to create {dest}: it already exists")
-    today = (as_of or date.today()).isoformat()
-    text = render_create(
-        entity, ownership=ownership, body=create_body, created=today, updated=today
-    )
+def publish_new_file(dest: Path, text: str) -> None:
+    """Publish `text` to `dest`, refusing to clobber an existing file.
+
+    Stages to a random temp name opened "x" and publishes with `os.link`, so a file that
+    appears BETWEEN a caller's existence check and this publish still raises. Under
+    plan-then-apply that window is no longer microseconds -- it spans the whole planning
+    phase -- so this is the mechanism that makes preflight safe, not belt-and-braces.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         while True:
@@ -386,6 +384,25 @@ def create_entity_file(
         raise EntityWriteError(f"refusing to create {dest}: it already exists") from exc
     except OSError as exc:
         raise EntityWriteError(f"could not create {dest}: {exc}") from exc
+
+
+def create_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Write a NEW entity file, publishing only a complete no-clobber result."""
+    dest = _entity_dest(entity, project_root)
+    if dest.exists():
+        raise EntityWriteError(f"refusing to create {dest}: it already exists")
+    today = (as_of or date.today()).isoformat()
+    text = render_create(
+        entity, ownership=ownership, body=create_body, created=today, updated=today
+    )
+    publish_new_file(dest, text)
     return dest
 
 
