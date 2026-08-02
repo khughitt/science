@@ -10,7 +10,7 @@ from science_tool.annotation.cross_paper_evidence import (
     _iter_project_annotation_sidecar_paths,
     _resolve_paper_ref,
 )
-from science_tool.annotation.io import atomic_write_text, serialize_sidecar
+from science_tool.annotation.io import serialize_sidecar
 from science_tool.annotation.model import Sidecar
 from science_tool.annotation.planned_edits import (
     PlannedFileEdit,
@@ -18,6 +18,7 @@ from science_tool.annotation.planned_edits import (
     current_text,
     path_string,
     plan_update,
+    publish_edit,
 )
 from science_tool.annotation.proposition_reconciliation_plan import (
     ReconciliationAction,
@@ -28,6 +29,7 @@ from science_tool.annotation.query import (
     entity_relpath_for_sidecar,
     read_sidecar_strict,
 )
+from science_tool.dag.entity_frontmatter import EntityWriteError
 from science_tool.entities import (
     EntityCommandError,
     find_entity,
@@ -795,8 +797,8 @@ def apply_canonicalization_plan(
         if not edit.changed:
             continue
         try:
-            atomic_write_text(edit.path, edit.final_text)
-        except OSError as exc:
+            publish_edit(edit, project_root=project_root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
             written_paths = tuple(written)
             raise ReconciliationApplyError(
                 "[stage=write, "

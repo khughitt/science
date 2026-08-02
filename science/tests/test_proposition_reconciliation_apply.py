@@ -143,6 +143,50 @@ def test_canonicalization_aggregates_every_lookup_refusal(
     )
 
 
+def test_canonicalization_refuses_a_drifted_entity_without_clobbering_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The drift precondition applies to EVERY planned update, including the two workflows
+    that already planned before this branch existed. Before this task, before_sha256 was
+    stored and read by nothing."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "Claim a")
+    _proposition(tmp_path, "b", "Claim b")
+    plan = _manual_ready_plan(
+        actions=(
+            _action(
+                canonical="proposition:a",
+                members=("proposition:a", "proposition:b"),
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:b",),
+                },
+            ),
+        )
+    )
+    duplicate = tmp_path / "entities" / "propositions" / "b.md"
+
+    real_publish = recon.publish_edit
+    drifted = {"done": False}
+
+    def drift_then_publish(edit, *, project_root):
+        if not drifted["done"]:
+            drifted["done"] = True
+            duplicate.write_text("someone else got here first\n", encoding="utf-8")
+        return real_publish(edit, project_root=project_root)
+
+    monkeypatch.setattr(recon, "publish_edit", drift_then_publish)
+
+    with pytest.raises(ReconciliationApplyError) as excinfo:
+        recon.apply_canonicalization_plan(tmp_path, plan)
+
+    assert "stage=write" in str(excinfo.value)
+    assert duplicate.read_text(encoding="utf-8") == "someone else got here first\n"
+
+
 def _action(
     *,
     kind: str = "canonicalize_propositions",
@@ -974,13 +1018,13 @@ def test_apply_canonicalization_second_run_does_not_write_noop_files(
     plan = _ready_plan(tmp_path, review_doc)
     apply_canonicalization_plan(tmp_path, plan)
     writes: list[Path] = []
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def spy_atomic_write_text(path: Path, text: str) -> None:
-        writes.append(path)
-        original_atomic_write_text(path, text)
+    def spy_publish_edit(edit, *, project_root: Path) -> None:
+        writes.append(edit.path)
+        original_publish_edit(edit, project_root=project_root)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+    monkeypatch.setattr(apply_module, "publish_edit", spy_publish_edit)
 
     second = apply_canonicalization_plan(tmp_path, plan)
 
@@ -1008,14 +1052,17 @@ def test_postflight_fails_if_sidecar_rewrite_points_to_wrong_canonical(
     )
     _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
     _paper_sidecar(tmp_path, "B", (_ann("b1", "proposition:b"),))
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def corrupt_sidecar(path: Path, text: str) -> None:
-        if path.name.endswith(".anno.trig"):
-            text = text.replace("proposition:a", "proposition:other")
-        original_atomic_write_text(path, text)
+    def corrupt_sidecar(edit, *, project_root: Path) -> None:
+        if edit.path.name.endswith(".anno.trig"):
+            edit = replace(
+                edit,
+                final_text=edit.final_text.replace("proposition:a", "proposition:other"),
+            )
+        original_publish_edit(edit, project_root=project_root)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_sidecar)
+    monkeypatch.setattr(apply_module, "publish_edit", corrupt_sidecar)
 
     with pytest.raises(ReconciliationApplyError) as exc_info:
         apply_canonicalization_plan(tmp_path, _manual_ready_plan())
@@ -1076,19 +1123,19 @@ def test_postflight_checks_listed_already_canonical_sidecar_refs(
         and diagnostic.get("annotation_ref") == "annotation:entities/papers/B.source#b2"
         for diagnostic in preflight.diagnostics
     )
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def corrupt_already_canonical_ref(path: Path, text: str) -> None:
-        original_atomic_write_text(path, text)
-        if not path.name.endswith(".anno.trig"):
+    def corrupt_already_canonical_ref(edit, *, project_root: Path) -> None:
+        original_publish_edit(edit, project_root=project_root)
+        if not edit.path.name.endswith(".anno.trig"):
             return
-        sidecar = read_sidecar_strict(path)
+        sidecar = read_sidecar_strict(edit.path)
         annotations = tuple(
             replace(annotation, promoted_to="proposition:other") if annotation.id == "b2" else annotation
             for annotation in sidecar.annotations
         )
-        original_atomic_write_text(
-            path,
+        anno_io.atomic_write_text(
+            edit.path,
             anno_io.serialize_sidecar(
                 Sidecar(
                     annotations=annotations,
@@ -1098,7 +1145,7 @@ def test_postflight_checks_listed_already_canonical_sidecar_refs(
             ),
         )
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_already_canonical_ref)
+    monkeypatch.setattr(apply_module, "publish_edit", corrupt_already_canonical_ref)
 
     with pytest.raises(ReconciliationApplyError) as exc_info:
         apply_canonicalization_plan(tmp_path, plan)
@@ -1130,14 +1177,14 @@ def test_postflight_fails_if_duplicate_backlink_remains_after_write(
     _paper_sidecar(tmp_path, "A2020", (_ann("a1", "proposition:a"),))
     _paper_sidecar(tmp_path, "B2021", (_ann("b1", "proposition:b"),))
     review_doc = _review_doc_for_current_candidate(tmp_path)
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def skip_sidecars(path: Path, text: str) -> None:
-        if path.name.endswith(".anno.trig"):
+    def skip_sidecars(edit, *, project_root: Path) -> None:
+        if edit.path.name.endswith(".anno.trig"):
             return
-        original_atomic_write_text(path, text)
+        original_publish_edit(edit, project_root=project_root)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", skip_sidecars)
+    monkeypatch.setattr(apply_module, "publish_edit", skip_sidecars)
 
     with pytest.raises(ReconciliationApplyError) as exc_info:
         apply_canonicalization_plan(tmp_path, _ready_plan(tmp_path, review_doc))

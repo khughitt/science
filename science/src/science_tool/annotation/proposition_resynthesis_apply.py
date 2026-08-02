@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from science_tool.annotation.io import atomic_write_text, serialize_sidecar
+from science_tool.annotation.io import serialize_sidecar
 from science_tool.annotation.model import Sidecar, TextualBody
 from science_tool.annotation.cross_paper_evidence import _resolve_paper_ref
 from science_tool.annotation.planned_edits import (
@@ -15,7 +15,9 @@ from science_tool.annotation.planned_edits import (
     changed_and_noop_paths,
     current_text,
     path_string,
+    plan_create_or_update,
     plan_update,
+    publish_edit,
     sha256_text,
 )
 from science_tool.annotation.proposition_reconciliation_apply import (
@@ -36,6 +38,7 @@ from science_tool.annotation.proposition_resynthesis import (
     validate_resynthesis_draft,
 )
 from science_tool.annotation.query import SidecarParseError, read_sidecar_strict
+from science_tool.dag.entity_frontmatter import EntityWriteError
 from science_tool.entities import (
     EntityCommandError,
     find_entity,
@@ -506,18 +509,6 @@ def _original_edit(
     return plan_update(location.path, final_text, "original_resynthesis_lineage")
 
 
-def _new_or_existing_edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
-    before = path.read_text(encoding="utf-8") if path.exists() else ""
-    return PlannedFileEdit(
-        path=path,
-        reason=reason,
-        before_sha256=sha256_text(before),
-        after_sha256=sha256_text(final_text),
-        final_text=final_text,
-        changed=before != final_text,
-    )
-
-
 def _ordered_file_edits(edits: Mapping[Path, PlannedFileEdit]) -> tuple[PlannedFileEdit, ...]:
     phase_by_reason = {
         "resynthesis_resume_snapshot": 0,
@@ -544,7 +535,7 @@ def plan_resynthesis_apply(
 
     edits: dict[Path, PlannedFileEdit] = {}
     snapshot_path = _resume_snapshot_path(root, draft.action_id)
-    edits[snapshot_path] = _new_or_existing_edit(
+    edits[snapshot_path] = plan_create_or_update(
         snapshot_path,
         _resume_snapshot_text(draft),
         "resynthesis_resume_snapshot",
@@ -552,7 +543,7 @@ def plan_resynthesis_apply(
     for replacement in draft.new_propositions:
         expected_refs = validation.expected_source_refs_by_replacement[replacement.id]
         rendered = render_replacement_proposition(root, replacement, expected_refs, as_of=as_of)
-        edits[rendered.path] = _new_or_existing_edit(
+        edits[rendered.path] = plan_create_or_update(
             rendered.path,
             rendered.text,
             "replacement_proposition",
@@ -684,9 +675,8 @@ def apply_resynthesis_draft(
         if not edit.changed:
             continue
         try:
-            edit.path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(edit.path, edit.final_text)
-        except OSError as exc:
+            publish_edit(edit, project_root=root)
+        except (OSError, EntityCommandError, EntityWriteError) as exc:
             written_paths = tuple(written)
             raise ResynthesisApplyError(
                 "[stage=write, "

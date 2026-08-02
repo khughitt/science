@@ -139,7 +139,8 @@ def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_super
     assert snapshot_edit.final_text == json.dumps(snapshot_payload, sort_keys=True, indent=2) + "\n"
 
     assert positive_edit.reason == "replacement_proposition"
-    assert positive_edit.before_sha256 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    assert positive_edit.before_sha256 is None
+    assert positive_edit.operation == "create"
     assert positive_edit.changed is True
     assert "id: proposition:broad-positive" in positive_edit.final_text
     assert "annotation:entities/papers/A2020.source#a1" in positive_edit.final_text
@@ -557,10 +558,10 @@ def test_apply_resynthesis_draft_resume_uses_snapshot_when_review_decision_chang
     ctx["review_path"].write_text(json.dumps(review), encoding="utf-8")
     writes: list[Path] = []
 
-    def spy_atomic_write_text(path: Path, text: str) -> None:
-        writes.append(path)
+    def spy_publish_edit(edit, *, project_root: Path) -> None:
+        writes.append(edit.path)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+    monkeypatch.setattr(apply_module, "publish_edit", spy_publish_edit)
 
     report = apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 2))
 
@@ -1406,10 +1407,10 @@ def test_apply_resynthesis_draft_preflight_failure_writes_nothing(
     draft = parse_resynthesis_draft(payload)
     writes: list[Path] = []
 
-    def spy_atomic_write_text(path: Path, text: str) -> None:
-        writes.append(path)
+    def spy_publish_edit(edit, *, project_root: Path) -> None:
+        writes.append(edit.path)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", spy_atomic_write_text)
+    monkeypatch.setattr(apply_module, "publish_edit", spy_publish_edit)
 
     with pytest.raises(ResynthesisApplyError, match="replacement propositions must match assigned annotation targets"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
@@ -1433,17 +1434,20 @@ def test_apply_resynthesis_draft_postflight_rejects_corrupted_planned_file(
 
     ctx = _factorization_project(tmp_path)
     draft = parse_resynthesis_draft(_draft_payload(ctx))
-    original_atomic_write_text = apply_module.atomic_write_text
+    original_publish_edit = apply_module.publish_edit
 
-    def corrupt_positive_replacement(path: Path, text: str) -> None:
-        if path.name == "broad-positive.md":
-            text = text.replace(
-                "BES can behave similarly to meta-analysis when evidence is informative.",
-                "BES can behave similarly to meta-analysis when evidence is informative. Corrupted.",
+    def corrupt_positive_replacement(edit, *, project_root: Path) -> None:
+        if edit.path.name == "broad-positive.md":
+            edit = replace(
+                edit,
+                final_text=edit.final_text.replace(
+                    "BES can behave similarly to meta-analysis when evidence is informative.",
+                    "BES can behave similarly to meta-analysis when evidence is informative. Corrupted.",
+                ),
             )
-        original_atomic_write_text(path, text)
+        original_publish_edit(edit, project_root=project_root)
 
-    monkeypatch.setattr(apply_module, "atomic_write_text", corrupt_positive_replacement)
+    monkeypatch.setattr(apply_module, "publish_edit", corrupt_positive_replacement)
 
     with pytest.raises(ResynthesisApplyError, match="postflight.*hash|planned file state"):
         apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))

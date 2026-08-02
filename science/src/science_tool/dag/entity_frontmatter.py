@@ -355,22 +355,14 @@ def _render_update_for(
     )
 
 
-def create_entity_file(
-    entity: WorkbenchEntity,
-    *,
-    project_root: Path,
-    ownership: Ownership,
-    create_body: str,
-    as_of: date | None = None,
-) -> Path:
-    """Write a NEW entity file, publishing only a complete no-clobber result."""
-    dest = _entity_dest(entity, project_root)
-    if dest.exists():
-        raise EntityWriteError(f"refusing to create {dest}: it already exists")
-    today = (as_of or date.today()).isoformat()
-    text = render_create(
-        entity, ownership=ownership, body=create_body, created=today, updated=today
-    )
+def publish_new_file(dest: Path, text: str) -> None:
+    """Publish `text` to `dest`, refusing to clobber an existing file.
+
+    Stages to a random temp name opened "x" and publishes with `os.link`, so a file that
+    appears BETWEEN a caller's existence check and this publish still raises. Under
+    plan-then-apply that window is no longer microseconds -- it spans the whole planning
+    phase -- so this is the mechanism that makes preflight safe, not belt-and-braces.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         while True:
@@ -392,6 +384,25 @@ def create_entity_file(
         raise EntityWriteError(f"refusing to create {dest}: it already exists") from exc
     except OSError as exc:
         raise EntityWriteError(f"could not create {dest}: {exc}") from exc
+
+
+def create_entity_file(
+    entity: WorkbenchEntity,
+    *,
+    project_root: Path,
+    ownership: Ownership,
+    create_body: str,
+    as_of: date | None = None,
+) -> Path:
+    """Write a NEW entity file, publishing only a complete no-clobber result."""
+    dest = _entity_dest(entity, project_root)
+    if dest.exists():
+        raise EntityWriteError(f"refusing to create {dest}: it already exists")
+    today = (as_of or date.today()).isoformat()
+    text = render_create(
+        entity, ownership=ownership, body=create_body, created=today, updated=today
+    )
+    publish_new_file(dest, text)
     return dest
 
 
