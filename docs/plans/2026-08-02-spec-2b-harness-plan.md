@@ -20,8 +20,12 @@ and the design disagree, stop and ask.
 
 ## Global Constraints
 
-- Run all commands from `science/`. There is **no root `pyproject.toml`** — `cd science` first.
+- There is **no root `pyproject.toml`**: python tooling runs from `science/`.
   Tests: `uv run --frozen pytest`. Lint: `uv run ruff check`. Types: `uv run pyright`.
+  Every such command below is written as `(cd science && …)` — in a **subshell**, so the
+  directory change does not persist. Git commands that follow name paths from the repository
+  root, and a lingering `cd science` would turn `git add science/src/…` into a path that does
+  not exist.
 - Use **scoped** pytest selections. The full CLI suite is ~12k tests and takes 6:42–7:24,
   longer than the default command timeout. Never run it inside a subagent.
 - Conventional commits. **No AI-attribution trailer or footer** on any commit, PR, or comment.
@@ -195,7 +199,7 @@ def test_commit_tree_raises_when_there_is_nothing_to_commit(repo: Path):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: collection error — `ImportError: cannot import name 'commit_tree'`.
 
 - [ ] **Step 3: Add the primitives**
@@ -288,7 +292,7 @@ def commit_tree(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 7 passed.
 
 - [ ] **Step 5: Write the hostile-configuration test**
@@ -296,32 +300,42 @@ Expected: 7 passed.
 Design §8.3. Append to `science/tests/test_autonomy_git_writes.py`:
 
 ```python
-def _plant_attacks(root: Path, sentinel_dir: Path) -> None:
-    """Every vector the four write subcommands can reach, each writing a sentinel.
+def _plant_attacks(root: Path, workshop: Path) -> None:
+    """Every vector the write subcommands can reach, each writing a sentinel.
 
-    The filter attribute goes in `$GIT_DIR/info/attributes`, NOT an untracked
-    `.gitattributes`: the harness runs after `assert_repository_is_at`, which refuses an
-    untracked file, so the attack would never be reached and the test would pass for the
-    wrong reason. `info/attributes` is also invisible to `git status`, which is exactly the
-    actor-controlled layer `_filter_driver_overrides` exists to cover.
+    NOTHING IS PLANTED AS AN UNTRACKED FILE IN THE PROJECT. `start_run`'s
+    `assert_repository_is_at` refuses any dirty tree, untracked files included, so a driver
+    script dropped beside the entities would make the run refuse BEFORE the vector was
+    reached -- the test would pass without the defence ever running. The scripts live in
+    `workshop`, outside the repository; everything else lives under `.git/`, which git does
+    not report.
+
+    For the same reason the filter attribute goes in `$GIT_DIR/info/attributes` rather than an
+    untracked `.gitattributes`. That is also the stronger probe: it is one of the three
+    attribute layers `_filter_driver_overrides` covers, `--attr-source` does not reach it, and
+    it is invisible to `git status` -- the actor-controlled layer the threat model is about.
     """
-    sentinel_dir.mkdir(parents=True, exist_ok=True)
+    sentinels = workshop / "sentinels"
+    sentinels.mkdir(parents=True, exist_ok=True)
+
+    def _script(name: str, body: str = "") -> Path:
+        path = workshop / f"{name}.sh"
+        path.write_text(f"#!/bin/sh\ntouch {sentinels / name}\n{body}", encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
     hooks = root / ".git" / "hooks"
     hooks.mkdir(parents=True, exist_ok=True)
-    for hook in ("pre-commit", "post-commit", "post-checkout", "commit-msg"):
+    # `prepare-commit-msg` is planted because the probe claims it: a hook named in the
+    # docstring and absent from the fixture is a coverage claim nothing backs.
+    for hook in ("pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout"):
         path = hooks / hook
-        path.write_text(f"#!/bin/sh\ntouch {sentinel_dir / hook}\n", encoding="utf-8")
+        path.write_text(f"#!/bin/sh\ntouch {sentinels / hook}\n", encoding="utf-8")
         path.chmod(0o755)
 
-    driver = root / "driver.sh"
-    driver.write_text(f"#!/bin/sh\ntouch {sentinel_dir / 'filter'}\ncat\n", encoding="utf-8")
-    driver.chmod(0o755)
-    gpg = root / "gpg.sh"
-    gpg.write_text(f"#!/bin/sh\ntouch {sentinel_dir / 'gpg'}\nexit 1\n", encoding="utf-8")
-    gpg.chmod(0o755)
-    fsmonitor = root / "fsmonitor.sh"
-    fsmonitor.write_text(f"#!/bin/sh\ntouch {sentinel_dir / 'fsmonitor'}\n", encoding="utf-8")
-    fsmonitor.chmod(0o755)
+    driver = _script("filter", "cat\n")
+    gpg = _script("gpg", "exit 1\n")
+    fsmonitor = _script("fsmonitor")
 
     (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
     (root / ".git" / "info" / "attributes").write_text("* filter=evil\n", encoding="utf-8")
@@ -334,11 +348,11 @@ def _plant_attacks(root: Path, sentinel_dir: Path) -> None:
         + f"[gpg]\n\tprogram = {gpg}\n",
         encoding="utf-8",
     )
+    return sentinels
 
 
 def test_no_planted_vector_executes_through_the_write_primitives(tmp_path: Path, repo: Path):
-    sentinels = tmp_path / "sentinels"
-    _plant_attacks(repo, sentinels)
+    sentinels = _plant_attacks(repo, tmp_path / "workshop")
 
     create_branch(repo, "auto/hostile")
     (repo / "c.txt").write_text("c\n", encoding="utf-8")
@@ -354,7 +368,7 @@ def test_no_planted_vector_executes_through_the_write_primitives(tmp_path: Path,
 
 - [ ] **Step 6: Run it**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 8 passed. If the `gpg` sentinel appears, `--no-gpg-sign` is missing from
 `commit_tree`; if `filter` appears, the call is not going through `run_git`.
 
@@ -381,7 +395,7 @@ executed. Add a paragraph in the same form, after the existing `cat-file` rows:
 - [ ] **Step 8: Lint, type-check, and commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/autonomy/git.py science/tests/test_autonomy_git_writes.py
 git commit -m "feat(autonomy): build the harness's git write argv in the gateway"
 ```
@@ -532,7 +546,7 @@ def test_a_dirty_input_tree_is_refused_byte_for_byte_unchanged(
 
 - [ ] **Step 3: Run them to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q)`
 Expected: the first two FAIL with a non-empty status naming `?? knowledge/`. The third
 PASSES already — `assert_repository_is_at` raises before anything is written. Keep it: it is
 the regression guard that stops Step 4 from over-restoring.
@@ -575,12 +589,12 @@ Then replace the single `result = _capture(project_root)` line inside `start_run
 
 - [ ] **Step 5: Run them to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q)`
 Expected: 3 passed.
 
 - [ ] **Step 6: Run the neighbouring suites**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_autonomy_record_writer.py tests/test_autonomy_perturbation_alarm.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_autonomy_record_writer.py tests/test_autonomy_perturbation_alarm.py -q)`
 Expected: all pass. The `project` fixture commits its graph, so the restore is a no-op there.
 If a test fails because it *expected* residue, stop and report it — that is a real behaviour
 change the design should name, not a test to adjust.
@@ -588,7 +602,7 @@ change the design should name, not a test to adjust.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/autonomy/lifecycle.py science/tests/test_autonomy_start_restore.py science/tests/conftest.py
 git commit -m "fix(autonomy): leave no materialization residue when a run opens"
 ```
@@ -697,7 +711,7 @@ def test_the_two_provenance_options_are_required_together(ungraphed_project: Pat
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q)`
 Expected: `ImportError: cannot import name 'expected_producer_ids'`.
 
 - [ ] **Step 3: Add `expected_producer_ids`**
@@ -762,18 +776,18 @@ Add both to `health_command`'s signature as `ingestion_ref: str | None` and
 
 - [ ] **Step 5: Run them to verify they pass**
 
-Run: `cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q`
-Expected: 9 passed.
+Run: `(cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q)`
+Expected: 8 passed (5 parametrized + 3).
 
 - [ ] **Step 6: Run the health suites**
 
-Run: `cd science && uv run --frozen pytest tests/test_health.py tests/test_health_projection.py tests/test_health_subject_contract.py tests/test_command_docs.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_health.py tests/test_health_projection.py tests/test_health_subject_contract.py tests/test_command_docs.py -q)`
 Expected: all pass.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/graph/health.py science/src/science_tool/graph/health_cli.py science/src/science_tool/cli.py science/tests/test_health_attested_provenance.py
 git commit -m "feat(health): accept a dictated ingestion provenance and predict its producers"
 ```
@@ -816,26 +830,46 @@ def test_it_returns_a_registry_and_a_context_over_the_project(ungraphed_project:
     assert registry.rule("managed-artifact.missing") is not None
 
 
-def test_it_loads_sources_strictly(ungraphed_project: Path):
+def test_it_loads_sources_without_relaxing_identity(
+    ungraphed_project: Path, monkeypatch: pytest.MonkeyPatch
+):
     """Spec 1 §8: ingestion keeps `strict_identity=True`, so an identity conflict refuses the
-    write. Health uses `strict_identity=False` on purpose, to carry conflicts into its audit
-    gate -- reusing the health loader here would silently ingest what should be refused."""
-    source = inspect.getsource(ingestion_authority)
+    write. Health passes `strict_identity=False` on purpose, to carry conflicts into its audit
+    gate -- reusing the health loader here would silently ingest what should be refused.
 
-    assert "strict_identity" not in source, (
-        "pass no strict_identity argument: `load_project_sources`'s default is the strict one, "
-        "and naming it invites someone to change it"
+    Asserted on the CALL, not on the source text: a source-text assertion cannot tell a
+    docstring from an argument, so a correct implementation that merely EXPLAINS the rule in a
+    comment would fail it.
+    """
+    import science_tool.findings.ingest as ingest_module
+    from science_tool.graph import sources as sources_module
+
+    seen: dict[str, object] = {}
+    real = sources_module.load_project_sources
+
+    def _record(project_root, **kwargs):
+        seen.update(kwargs)
+        return real(project_root, **kwargs)
+
+    monkeypatch.setattr(sources_module, "load_project_sources", _record)
+    ingest_module.ingestion_authority(ungraphed_project)
+
+    assert seen.get("strict_identity", True) is True, (
+        "the strict default must stand: a relaxed identity check ingests a conflict that "
+        "Spec 1 refuses"
     )
 
 
-def test_the_cli_uses_the_shared_derivation(ungraphed_project: Path):
-    """One spelling, not two that can drift."""
-    assert "ingestion_authority" in inspect.getsource(findings_cli._load_ingestion_context)
+def test_the_cli_uses_the_shared_derivation():
+    """One spelling, not two that can drift. The old private helpers are gone."""
+    assert not hasattr(findings_cli, "_load_ingestion_context")
+    assert not hasattr(findings_cli, "_registry")
+    assert "ingestion_authority" in inspect.getsource(findings_cli.ingest_command)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py -q)`
 Expected: `ImportError: cannot import name 'ingestion_authority'`.
 
 - [ ] **Step 3: Add the derivation**
@@ -867,29 +901,50 @@ def ingestion_authority(project_root: Path) -> tuple[FindingRegistry, IngestionC
 
 - [ ] **Step 4: Cut the CLI over**
 
-Replace `_load_ingestion_context` in `src/science_tool/findings/cli.py:44-52` with:
+**Do not keep the old helpers as adapters.** The existing call site
+(`findings/cli.py:262`) reads
 
 ```python
-def _load_ingestion_context(project_root: Path):
-    """Build the trusted entity universe through the graph's strict source boundary."""
-    from science_tool.findings.ingest import ingestion_authority
-
-    registry, context = ingestion_authority(project_root)
-    return context, registry
+        context, entity_registry = _load_ingestion_context(project_root)
+        outcome = ingest_report(project_root, report, _registry(entity_registry), ...)
 ```
 
-Note the return order is `(context, registry)` — that is what the existing call site expects.
-Do not change the call site.
+so `_load_ingestion_context` returns an **`EntityRegistry`** which `_registry` then converts to
+a `FindingRegistry`. `ingestion_authority` returns the `FindingRegistry` already, so wrapping it
+in `_registry` would pass the wrong type — `build_registry_for_entity_registry` would receive a
+`FindingRegistry`. Change the call site instead:
+
+```python
+        registry, context = ingestion_authority(project_root)
+        outcome = ingest_report(
+            project_root,
+            report,
+            registry,
+            provenance=provenance,
+            context=context,
+        )
+```
+
+Then **delete** `_load_ingestion_context` and `_registry` from `findings/cli.py:37-52`, and add
+`from science_tool.findings.ingest import ingestion_authority` to the imports the command
+already makes. Before deleting `_registry`, check for other callers:
+
+```bash
+(cd science && grep -rn "_registry(\|_load_ingestion_context" src/ tests/)
+```
+
+If either has another caller, cut that one over too rather than keeping the helper — two
+spellings of one derivation is the defect this task removes.
 
 - [ ] **Step 5: Run the tests**
 
-Run: `cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py tests/test_findings_cli.py tests/test_findings_ingest.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py tests/test_findings_cli.py tests/test_findings_ingest.py -q)`
 Expected: all pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/findings/ingest.py science/src/science_tool/findings/cli.py science/tests/test_findings_ingestion_authority.py
 git commit -m "refactor(findings): give the ingestion authority one derivation"
 ```
@@ -1099,7 +1154,7 @@ def test_the_actor_runs_the_supervisors_own_toolkit(supervised_project: Path):
 
 - [ ] **Step 4: Run them to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q)`
 Expected: collection error — `No module named 'science_tool.autonomy.harness'`.
 
 - [ ] **Step 5: Write the harness**
@@ -1121,6 +1176,7 @@ import secrets
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -1128,7 +1184,6 @@ from time import perf_counter
 from pydantic import BaseModel, ConfigDict
 from science_model.autonomous_runs import RunDisposition, RunTier
 
-from science_tool.autonomy.baseline import BaselineError
 from science_tool.autonomy.control_plane import run_dir
 from science_tool.autonomy.git import (
     GitError,
@@ -1242,6 +1297,28 @@ def _settle(project_root: Path, *, record_written: bool, run_id: str) -> str | N
     )
 
 
+@contextmanager
+def _step(description: str):
+    """Normalize one orchestration step's failure into `HarnessError`.
+
+    "Every orchestration failure raises `HarnessError`" is a claim about NORMALIZATION, not
+    about the functions this loop happens to call. `current_branch`, `run_dir`, `stage_all` and
+    the report directory's `mkdir` all raise `GitError` or `OSError` of their own, and the CLI
+    catches only `HarnessError` -- so an unnormalized path exits 1 with a traceback instead of
+    3. Every step goes through here, and the message names the step.
+
+    `GitError`, `BaselineError`, `RepositoryStateError` and `IngestError` are all `ValueError`
+    subclasses -- verified, not assumed -- so `ValueError` covers every expected refusal in the
+    loop and naming them individually would be noise that goes stale.
+    """
+    try:
+        yield
+    except HarnessError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise HarnessError(f"{description}: {exc}") from exc
+
+
 def run_supervised_audit(
     project_root: Path, *, started: datetime, short_id: str
 ) -> HarnessOutcome:
@@ -1250,7 +1327,8 @@ def run_supervised_audit(
     `started` and `short_id` are parameters rather than internals so the loop is testable
     without patching a clock or a random source.
     """
-    starting_branch = current_branch(project_root)
+    with _step("could not read the current branch"):
+        starting_branch = current_branch(project_root)
     if starting_branch is None:
         raise HarnessError(
             "the harness must start from a named branch: it returns there when the run ends, "
@@ -1261,40 +1339,40 @@ def run_supervised_audit(
     # from it. Built with the same function `start_run` uses, not by formatting the parts by
     # hand: `generate_run_id` also validates the agent and short id, so a value the record
     # could never carry is refused here rather than after the tree has been touched.
-    run_id = generate_run_id(started.date(), AGENT, short_id)
-    baseline_path = run_dir(project_root, run_id) / "baseline.json"
+    with _step("the run id could not be built"):
+        run_id = generate_run_id(started.date(), AGENT, short_id)
+        baseline_path = run_dir(project_root, run_id) / "baseline.json"
 
-    try:
+    with _step("the run could not be opened"):
         baseline = start_run(
             project_root,
             agent=AGENT, model=MODEL, tier=TIER, short_id=short_id, started=started,
             baseline_out=baseline_path,
         )
-    except (BaselineError, OSError) as exc:
-        raise HarnessError(f"the run could not be opened: {exc}") from exc
 
     assert baseline.run_id == run_id
     slug = run_id.removeprefix("run:")
     report_relative = f"doc/audits/reports/{slug}.json"
 
-    try:
+    with _step(
+        f"could not create {baseline.branch} -- an existing branch is a run-id collision, "
+        "and resuming another run's branch is not a recovery"
+    ):
         create_branch(project_root, baseline.branch)
-    except GitError as exc:
-        raise HarnessError(
-            f"could not create {baseline.branch}: {exc}. An existing branch is a run-id "
-            "collision, and resuming another run's branch is not a recovery"
-        ) from exc
 
     report_path = project_root / report_relative
-    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with _step("the report directory could not be created"):
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+
     generated_at = _now().isoformat(timespec="microseconds")
     elapsed = perf_counter()
-    completed = _run_actor(
-        project_root,
-        report_path=report_path,
-        ingestion_ref=run_id,
-        generated_at=generated_at,
-    )
+    with _step("the actor could not be started"):
+        completed = _run_actor(
+            project_root,
+            report_path=report_path,
+            ingestion_ref=run_id,
+            generated_at=generated_at,
+        )
     wall_clock_seconds = perf_counter() - elapsed
 
     # Exit 2 is NOT actor failure: `science health` writes a complete report and then exits 2
@@ -1305,14 +1383,16 @@ def run_supervised_audit(
             f"{completed.stderr.decode('utf-8', 'replace').strip()}"
         )
 
-    if current_branch(project_root) != baseline.branch:
+    with _step("could not re-read the current branch"):
+        landed_on = current_branch(project_root)
+    if landed_on != baseline.branch:
         raise HarnessError(
-            f"the actor left {baseline.branch}; nothing is captured, finished, or ingested, "
-            "and every branch is left intact for triage"
+            f"the actor left {baseline.branch} for {landed_on!r}; nothing is captured, "
+            "finished, or ingested, and every branch is left intact for triage"
         )
 
-    stage_all(project_root)
-    try:
+    with _step("the actor's output could not be captured"):
+        stage_all(project_root)
         capture_commit = commit_tree(
             project_root,
             message=f"audit: {AGENT} report\n\nScience-Run: {run_id}",
@@ -1320,8 +1400,6 @@ def run_supervised_audit(
             committer_name=SUPERVISOR_NAME,
             committer_email=SUPERVISOR_EMAIL,
         )
-    except GitError as exc:
-        raise HarnessError(f"the actor's output could not be captured: {exc}") from exc
 
     outcome = finish_run(
         project_root,
@@ -1352,16 +1430,17 @@ def run_supervised_audit(
                 context=context,
                 actor=AGENT,
             )
-        except (IngestError, ValueError) as exc:
+        # `OSError` belongs here with the rest: `load_report` reaches the filesystem, so an
+        # unreadable report is a refusal to INGEST -- not a reason to abandon the tree before
+        # step 9, which is what letting it escape would do.
+        except (IngestError, OSError, ValueError) as exc:
             refusal = str(exc)
 
-    try:
+    with _step("the run's results could not be settled"):
         switch_branch(project_root, starting_branch)
         post_verdict_commit = _settle(
             project_root, record_written=outcome.record is not None, run_id=run_id
         )
-    except GitError as exc:
-        raise HarnessError(f"the run's results could not be settled: {exc}") from exc
 
     return HarnessOutcome(
         run_id=run_id,
@@ -1378,7 +1457,7 @@ def run_supervised_audit(
 
 - [ ] **Step 6: Run the tests**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q)`
 Expected: 8 passed.
 
 `IngestionProvenance`'s fields are `ingestion_ref: str`, `generated_at: str`, and
@@ -1388,7 +1467,7 @@ empty or NUL-bearing values — verified, not assumed.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/autonomy/harness.py science/src/science_tool/autonomy/marks.py science/tests/test_autonomy_harness.py science/tests/conftest.py
 git commit -m "feat(autonomy): run a supervised audit end to end"
 ```
@@ -1462,6 +1541,44 @@ def test_the_command_exits_four_when_ingestion_refuses(
     assert result.exit_code == 4, result.output
 
 
+@pytest.mark.parametrize(
+    ("disposition", "expected_code"),
+    [("quarantined", 1), ("unwired", 2)],
+)
+def test_the_command_maps_each_disposition_to_its_exit_code(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch, disposition, expected_code
+):
+    """Codes 1 and 2 need no end-to-end run: the mapping is the thing under test, and a
+    constructed outcome exercises it without a second full loop."""
+    from click.testing import CliRunner
+
+    from science_tool.autonomy import harness as harness_module
+    from science_tool.autonomy.harness import HarnessOutcome
+    from science_tool.cli import cli
+
+    outcome = HarnessOutcome(
+        run_id="run:2026-08-02-health-audit-a1b2",
+        disposition=RunDisposition(disposition),
+        reason="constructed for the exit-code mapping",
+        actor_exit_code=0,
+        capture_commit="0" * 40,
+        post_verdict_commit=None,
+        record_written=True,
+        ingestion=None,
+        ingestion_refusal=None,
+    )
+    # Patch the HARNESS module, not the CLI one: `run_command` imports the function inside its
+    # body, so the name is resolved from `science_tool.autonomy.harness` at call time and an
+    # attribute set on the CLI module would never be consulted.
+    monkeypatch.setattr(harness_module, "run_supervised_audit", lambda *a, **k: outcome)
+
+    result = CliRunner().invoke(
+        cli, ["autonomy", "run", "--project-root", str(supervised_project)]
+    )
+
+    assert result.exit_code == expected_code, result.output
+
+
 def test_the_command_is_classified_for_the_budget_boundary():
     from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
 
@@ -1470,7 +1587,7 @@ def test_the_command_is_classified_for_the_budget_boundary():
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q -k command_exits or classified`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q -k 'command_exits or classified')`
 Expected: `Error: No such command 'run'`.
 
 - [ ] **Step 3: Add the command**
@@ -1557,13 +1674,13 @@ form as the neighbouring `autonomy start` / `autonomy finish` entries.
 
 - [ ] **Step 6: Run the tests**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_budget_boundary.py tests/test_command_docs.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_budget_boundary.py tests/test_command_docs.py -q)`
 Expected: all pass.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/autonomy/cli.py science/src/science_tool/budget/registry.py docs/user-guide/cli-and-workflows.md science/tests/test_autonomy_harness.py
 git commit -m "feat(autonomy): register the supervised run command surface"
 ```
@@ -1572,7 +1689,7 @@ git commit -m "feat(autonomy): register the supervised run command surface"
 
 ## Task 7: Certify every mutation row
 
-Design §8. Twenty-five rows. The discipline, from plan 4c: apply **one** mutation alone,
+Design §8. Twenty-nine rows. The discipline, from plan 4c: apply **one** mutation alone,
 require a **named** test to fail **for the stated reason**, revert, require the same test to
 pass before the next row.
 
@@ -1598,15 +1715,16 @@ baseline sha, and a table with columns `# | Mutation | Test node | Observed resu
 | 1 | Delete the `try`/`finally` restore in `start_run` | `test_autonomy_start_restore.py::test_start_leaves_no_materialization_residue` |
 | 2 | Restore after `_capture` returns, not in a `finally` | `test_autonomy_start_restore.py::test_start_removes_its_residue_when_it_raises` |
 | 3 | Restore `knowledge/graph.trig` by name instead of `restore_worktree` | `test_autonomy_git_writes.py::test_restore_worktree_discards_modifications_and_untracked_files` |
-| 4 | Delete the `current_branch != baseline.branch` check | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` |
+| 4 | Delete the `current_branch != baseline.branch` check | `test_autonomy_harness.py::test_an_actor_that_leaves_the_branch_is_refused` |
 | 5 | `create_branch` uses `checkout -B` instead of `-b` | `test_autonomy_harness.py::test_an_existing_auto_branch_refuses_the_run` |
 | 6 | Author the capture commit as the supervisor | `test_autonomy_harness.py::test_the_capture_commit_carries_the_agent_authorship_and_the_run_trailer` |
 | 7 | Drop the `Science-Run` trailer from the capture message | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` |
 | 8 | `_settle` before `switch_branch` | `test_autonomy_harness.py::test_the_autonomous_runs_check_is_silent_from_the_starting_branch` |
 | 9 | Return before `_settle` | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` |
 
-For row 4, the mutation must be paired with an actor that changes branch. Add to
-`test_autonomy_harness.py` before certifying:
+**Row 4's test must *induce* the condition, not merely be able to notice it.** The happy path
+never leaves `auto/<slug>`, so it passes with the check deleted. Add this to
+`test_autonomy_harness.py` before certifying, and point the row at it:
 
 ```python
 def test_an_actor_that_leaves_the_branch_is_refused(
@@ -1730,9 +1848,14 @@ cannot distinguish the two certifies nothing.
 | 16 | Call `subprocess.run(["git", ...])` directly in `_settle` | `test_autonomy_git_writes.py::test_no_planted_vector_executes_through_the_write_primitives` |
 | 17 | Drop `--no-gpg-sign` from `commit_tree` | `test_autonomy_git_writes.py::test_no_planted_vector_executes_through_the_write_primitives` |
 | 18 | `_settle` commits on the record-less path | add `test_a_recordless_outcome_commits_nothing` (below) |
-| 19 | `_settle` passes `--allow-empty` and skips the status check | `test_autonomy_git_writes.py::test_commit_tree_raises_when_there_is_nothing_to_commit` |
-| 20 | `ingestion_authority` passes `strict_identity=False` | `test_findings_ingestion_authority.py::test_it_loads_sources_strictly` |
+| 19 | `_settle` passes `--allow-empty` and skips the status check | `test_autonomy_harness.py::test_a_recordless_outcome_commits_nothing` |
+| 20 | `ingestion_authority` passes `strict_identity=False` | `test_findings_ingestion_authority.py::test_it_loads_sources_without_relaxing_identity` |
 | 21 | Exit 0 on an ingestion refusal | `test_autonomy_harness.py::test_the_command_exits_four_when_ingestion_refuses` |
+
+**Row 19's mutation lives in `_settle`**, so a test calling `commit_tree` directly never
+executes it. `test_a_recordless_outcome_commits_nothing` is the one that reaches it: on the
+record-less path there is nothing to settle after the restore, and `--allow-empty` would record
+a commit where the test asserts `HEAD` is unmoved.
 
 For row 16, the mutation is in `_settle`; the hostile-configuration test must be reachable from
 the harness. Extend it rather than duplicating: after the primitives assertions, run
@@ -1765,24 +1888,89 @@ def test_a_recordless_outcome_commits_nothing(
     assert worktree_status(supervised_project) == ""
 ```
 
-- [ ] **Step 5: Certify rows 22–25 (the revision-3 rows)**
+- [ ] **Step 5: Certify rows 22–29 (the revision-3 and -4 rows)**
 
 | # | Mutation | Test node |
 |---|---|---|
 | 22 | `_run_actor` uses `["science", "health", ...]` | `test_autonomy_harness.py::test_the_actor_runs_the_supervisors_own_toolkit` |
-| 23 | Drop `-P` from the actor argv | `test_autonomy_harness.py::test_the_actor_runs_the_supervisors_own_toolkit` |
-| 24 | Return an outcome instead of raising on a `_settle` failure | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` |
+| 23 | Drop `-P` **and** pass `cwd=project_root` | `test_autonomy_harness.py::test_the_actor_runs_the_supervisors_own_toolkit` |
+| 24 | Swallow a `_settle` failure instead of raising | add `test_a_settlement_failure_raises` (below) |
 | 25 | Take `ended` from the loaded report | add `test_the_record_ended_is_the_supervisors_clock` (below) |
+| 26 | Remove the `_step` wrapper from `current_branch` | add `test_a_raw_git_failure_is_normalized` (below) |
+| 27 | Catch only `ValueError` around ingestion | add `test_an_unreadable_report_is_a_refusal_not_an_abort` (below) |
+| 28 | Return exit 0 for a quarantined outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[quarantined-1]` |
+| 29 | Return exit 0 for an unwired outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[unwired-2]` |
+
+**Row 23 is one mutation with two halves, and that is deliberate.** Measured under Python 3.14:
+`python -m` puts `''` on `sys.path`, and `''` resolves to the *cwd* — which the harness sets to
+a neutral temporary directory. So dropping `-P` alone changes nothing observable, and setting
+`cwd=project_root` alone is covered by `-P`. Each measure suffices independently; only removing
+both reaches the planted package. Splitting this into two rows would put two mutations in the
+ledger that cannot fail (design §3.2).
 
 Row 22 needs a `science` on `PATH` that is not the supervisor's. The test plants one in a
 directory prepended to `PATH` via `monkeypatch.setenv`; with the real argv it is never
 consulted, and with the mutation it runs and the report is never written. Add that setup to
-`test_the_actor_runs_the_supervisors_own_toolkit` before certifying, so one test kills both 22
-and 23.
+`test_the_actor_runs_the_supervisors_own_toolkit` before certifying, so one test kills 22 and
+23 both.
 
-Add row 25's test:
+Add the four new tests to `test_autonomy_harness.py`:
 
 ```python
+def test_a_settlement_failure_raises(supervised_project: Path, monkeypatch: pytest.MonkeyPatch):
+    """Design §8.4: the happy path cannot distinguish raising from swallowing, because nothing
+    raises. The condition has to be induced."""
+    from science_tool.autonomy import harness as harness_module
+    from science_tool.autonomy.git import GitError
+
+    def _explode(*args, **kwargs):
+        raise GitError("settlement blew up")
+
+    monkeypatch.setattr(harness_module, "_settle", _explode)
+
+    with pytest.raises(HarnessError, match="settled"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_a_raw_git_failure_is_normalized(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Every orchestration failure raises `HarnessError`, including one from a helper that
+    raises on its own -- the CLI catches nothing else."""
+    from science_tool.autonomy import harness as harness_module
+    from science_tool.autonomy.git import GitError
+
+    def _explode(*args, **kwargs):
+        raise GitError("cannot read HEAD")
+
+    monkeypatch.setattr(harness_module, "current_branch", _explode)
+
+    with pytest.raises(HarnessError):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_an_unreadable_report_is_a_refusal_not_an_abort(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`load_report` reaches the filesystem, so an `OSError` there is a refusal to INGEST --
+    letting it escape would abandon the tree before step 9 and leave the operator on
+    `auto/<slug>` with uncommitted supervisor output."""
+    from science_tool.autonomy import harness as harness_module
+
+    def _unreadable(*args, **kwargs):
+        raise OSError("report vanished")
+
+    monkeypatch.setattr(harness_module, "load_report", _unreadable)
+    start_branch = current_branch(supervised_project)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.ingestion is None
+    assert outcome.ingestion_refusal is not None
+    assert current_branch(supervised_project) == start_branch
+    assert worktree_status(supervised_project) == ""
+
+
 def test_the_record_ended_is_the_supervisors_clock(supervised_project: Path):
     """Design §3.4.2: every wall instant comes from the supervisor, never from the actor."""
     from science_tool.graph.autonomous_runs import load_run_records
@@ -1801,7 +1989,7 @@ writer and the reader are deliberately in different modules.
 
 - [ ] **Step 6: Run the whole 2b test set**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_autonomy_git_writes.py tests/test_autonomy_start_restore.py tests/test_health_attested_provenance.py tests/test_findings_ingestion_authority.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_autonomy_git_writes.py tests/test_autonomy_start_restore.py tests/test_health_attested_provenance.py tests/test_findings_ingestion_authority.py -q)`
 Expected: all pass.
 
 - [ ] **Step 7: Commit the ledger**
@@ -1854,7 +2042,7 @@ def test_an_inline_input_counts_lines_the_way_the_checker_does(project: Path, tm
 
 - [ ] **Step 3: Run it to verify it fails**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py::test_an_inline_input_counts_lines_the_way_the_checker_does -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py::test_an_inline_input_counts_lines_the_way_the_checker_does -q)`
 Expected: FAIL — `3 != 2`.
 
 - [ ] **Step 4: Use one line-counting rule**
@@ -1872,14 +2060,14 @@ arithmetic — two spellings of one rule is the defect being fixed.
 
 - [ ] **Step 5: Run it and its neighbours**
 
-Run: `cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_evidence_broker_correspondence.py -q`
+Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_evidence_broker_correspondence.py -q)`
 Expected: all pass. If no `test_evidence_broker_correspondence.py` exists, find the
 correspondence tests with `ls science/tests | grep correspondence` and run those.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science && uv run ruff check && uv run pyright
+(cd science && uv run ruff check && uv run pyright)
 git add science/src/science_tool/autonomy/lifecycle.py science/tests/test_autonomy_lifecycle.py docs/plans/2026-07-30-agent-evidence-broker-design.md
 git commit -m "fix(evidence-broker): count an inline input's lines the way the checker does"
 ```
@@ -1905,6 +2093,14 @@ convention, not a certifiable invariant: `verify_marks` reads only `base..head`,
 (`test_the_post_verdict_commit_is_the_supervisors_and_unmarked`) but **no mutation row**, and
 claiming one would be false.
 
+**A mutation must be reachable by the test that names it.** Four rows in the first draft named
+a mutation their test never induced — the happy path cannot notice a branch check that only
+fires when the actor wanders, and a test calling `commit_tree` never executes a mutation in
+`_settle`. The rule worth carrying: **name the test that induces the condition, not the test
+that would notice it if the condition arose.**
+
 **If a mutation leaves every test green,** that is a finding, not a step to skip. Record it in
 the ledger with what you tried, and report it — either the guard is not guarded or the row is
-wrong, and both matter.
+wrong, and both matter. Row 23 is the worked example: `-P` and the neutral cwd are independent
+defences, so each alone is unkillable, and the honest response was one row removing both rather
+than two rows that cannot fail.

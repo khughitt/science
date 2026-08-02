@@ -1,6 +1,6 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** designed, unbuilt (revision 3)
+**Status:** designed, unbuilt (revision 4)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
 
 **Revision 2** closes five defects found in review of revision 1. Two are omissions of a
@@ -17,6 +17,15 @@ was an exit code with no library counterpart (§3.4.1); two wall-clock instants 
 never sourced (§3.4.2); and the supervisor's commit identity was promised as fixed without
 being written down (§3.4.3), though it is observable in every repository's history. A named
 value that is not pinned is a value an implementer picks.
+
+**Revision 4** comes from review of the implementation plan, and its findings are about
+**claims that no test could reach**. Four mutation rows named a condition their test never
+induced (§8.4); `-P` and the neutral cwd turned out to be independent defences, so neither was
+individually observable and the honest row removes both (§3.2); and "every orchestration
+failure raises `HarnessError`" was a statement about intent rather than about the several
+functions in the loop that raise on their own (§3.4.1). It also aligns §3.5's helper names with
+the ones the plan actually builds — a design that names a different interface than the code is
+no longer authoritative over it.
 
 This slice builds one thing: a supervised autonomous run, end to end, with a deterministic
 actor. It ships no concurrency, no assignment records, no LLM actor, and no dispatch policy.
@@ -184,15 +193,20 @@ one the supervisor attests in `toolkit_revision`, which nothing would notice:
 ```
 
 `sys.executable` is the interpreter already running the supervisor, so the actor is the same
-installation by construction. `-P` keeps the current directory and the script directory off
-`sys.path`, so a project-local `science_tool/` cannot shadow the real one — the project tree is
-actor-controlled, and it is the one directory this subprocess must not import from. The
-subprocess runs with `cwd` set to a supervisor-created temporary directory rather than the
-project root, so no project-local file is reachable by a relative path; the project is named
-only by the explicit `--project-root`. Measured: exit 0, report written.
+installation by construction. Measured: exit 0, report written.
 
-This is probed like §3.5's hardening rather than asserted — a test plants a `science_tool/`
-package in the project root and requires the actor to still run the real one.
+**Two independent defences keep the project off the actor's `sys.path`, and each alone
+suffices.** `-m` puts the current directory on `sys.path` as `''`; `cwd` is a
+supervisor-created temporary directory, so that entry names the temp dir and not the project.
+`-P` removes the entry altogether. Measured under Python 3.14: without `-P`, `sys.path[:3]`
+begins `['', …]` where `''` resolves to the neutral cwd; with `-P` it begins with the stdlib
+zip. Either measure alone already makes a project-local `science_tool/` unreachable.
+
+**That redundancy has a testing consequence, and it is stated rather than papered over: neither
+measure is individually certifiable by mutation.** Removing `-P` while the cwd stays neutral
+changes nothing observable, and so does the reverse. §8 row 23 therefore removes **both** — the
+only mutation that actually reaches the shadowing package. Writing two rows, one per flag,
+would put two mutations in the ledger that cannot fail.
 
 ### 3.3 The report path is derived
 
@@ -253,6 +267,15 @@ now non-optional: an outcome that exists is an outcome whose capture commit exis
 
 `unwired` is *not* a harness failure. It is a verdict — the run was judged and could not be
 seen — so it returns an outcome and exits 2.
+
+**"Every failure raises `HarnessError`" is a claim about *normalization*, not about the
+functions the loop happens to call.** `current_branch`, `run_dir`, `stage_all`, the report
+directory's `mkdir`, and the actor subprocess itself all raise `GitError` or `OSError` of their
+own, and the CLI catches only `HarnessError` — so an unnormalized path exits 1 with a traceback
+instead of 3. Each orchestration step is wrapped at the library boundary and re-raised as
+`HarnessError` naming the step. The ingestion step's refusal set is `IngestError`, `OSError`,
+and `ValueError` together: `load_report` reaches the filesystem, so an unreadable report is a
+refusal to ingest, not a reason to abandon the tree before step 9.
 
 ### 3.4.2 Which clock, and when
 
@@ -345,9 +368,10 @@ commit. The commit invocation therefore pins `--no-gpg-sign`, and supplies its m
 **The argv is built in the gateway, not at the call site.** `--no-gpg-sign` passed by the
 harness is a flag that can be forgotten by the next caller; `git.py`'s own rule is that "what
 none of them may differ on is the argv, which is why it is built here and nowhere else". The
-four write subcommands therefore get named functions in `autonomy/git.py` — `checkout_branch`,
-`checkout_paths`, `clean_worktree`, `stage_all`, `commit_tree` — each building its own argv and
-checking its own return code. The harness passes values, never flags.
+four write subcommands therefore get named functions in `autonomy/git.py` — `current_branch`,
+`worktree_status`, `create_branch`, `switch_branch`, `restore_worktree`, `stage_all`,
+`commit_tree` — each building its own argv and failing closed on a non-zero exit. The harness
+passes values, never flags.
 
 **The hardening set is probed, not assumed.** `git.py`'s standing rule is that a key is pinned
 only where it demonstrably reaches a program under that subcommand, and each row in its
@@ -634,9 +658,13 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 20 | Derive the ingestion context from the health run's lenient sources | an identity conflict is ingested instead of refused (§5.4) |
 | 21 | Exit 0 on an ingestion refusal | a run that produced an unusable report reports success |
 | 22 | Invoke the actor as a bare `science` from `PATH` | a shadowing `science` on `PATH` runs instead of the supervisor's toolkit |
-| 23 | Drop `-P` from the actor argv | a `science_tool/` planted in the project root is imported by the actor |
-| 24 | Return an outcome instead of raising on a step-9 failure | a failed switch-back reports the run's own disposition |
+| 23 | Drop `-P` **and** run the actor with `cwd=project_root` | a `science_tool/` planted in the project root is imported by the actor (§3.2 — neither half alone is observable) |
+| 24 | Return an outcome instead of raising when `_settle` fails | a failed switch-back reports the run's own disposition (§8.4) |
 | 25 | Take `ended` from the actor's report rather than the supervisor's clock | the record's `ended` is actor-supplied |
+| 26 | Leave `current_branch` / `stage_all` / `mkdir` unnormalized | a raw `GitError` escapes the library and the CLI exits 1 with a traceback |
+| 27 | Catch only `ValueError` around ingestion | an unreadable report aborts before the tree is settled |
+| 28 | Return exit 0 for a quarantined outcome | a denied run reports success |
+| 29 | Return exit 0 for an unwired outcome | a run that could not be judged reports success |
 
 ### 8.1 Row 11 needs more than one fixture
 
@@ -680,7 +708,24 @@ The test asserts on the sentinels, not on the argv. An argv assertion passes for
 builds the right flags by hand and would keep passing when a later call site forgets them;
 the sentinel asserts the property the flags exist to produce.
 
-### 8.4 One convention with no guard
+### 8.4 A mutation must be reachable by the test that names it
+
+Four rows in revision 3 named a mutation their test could not reach, which is the same defect
+as a vacuous fixture wearing different clothes. Each is now paired with a test that *induces*
+the condition:
+
+- **Row 4** (skip the branch-identity check) needs an actor that changes branch. The happy path
+  never leaves `auto/<slug>`, so it passes with the check deleted.
+- **Row 19** (`--allow-empty` instead of checking for nothing to settle) is a mutation in
+  `_settle`; a test calling `commit_tree` directly never executes it.
+- **Row 23**: see §3.2 — one mutation, both halves.
+- **Row 24** (swallow a `_settle` failure) needs a `_settle` that fails. The happy path cannot
+  distinguish raising from swallowing, because nothing raises.
+
+The general rule, in the form worth carrying forward: **name the test that induces the
+condition, not the test that would notice it if the condition arose.**
+
+### 8.5 One convention with no guard
 
 **"No `Science-Run` trailer on the post-verdict commit" is a convention, not a certifiable
 invariant.** `verify_marks` reads only `base..head`, and `check_autonomous_runs` accepts any
