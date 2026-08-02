@@ -10,14 +10,17 @@ from typing import Any
 from science_tool.annotation.io import atomic_write_text, serialize_sidecar
 from science_tool.annotation.model import Sidecar, TextualBody
 from science_tool.annotation.cross_paper_evidence import _resolve_paper_ref
-from science_tool.annotation.proposition_reconciliation_apply import (
+from science_tool.annotation.planned_edits import (
     PlannedFileEdit,
+    changed_and_noop_paths,
+    current_text,
+    path_string,
+    plan_update,
+    sha256_text,
+)
+from science_tool.annotation.proposition_reconciliation_apply import (
     ReconciliationApplyError,
-    _changed_and_noop_paths,
-    _edit,
     _live_annotation_index,
-    _path_string,
-    _sha256_text,
 )
 from science_tool.annotation.proposition_reconciliation_plan import reconciliation_action_id
 from science_tool.annotation.proposition_resynthesis import (
@@ -159,7 +162,7 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
 
 
 def _resume_snapshot_path(project_root: Path, action_id: str) -> Path:
-    return project_root / "results" / "annotation" / "proposition-resynthesis" / f"{_sha256_text(action_id)[:16]}.json"
+    return project_root / "results" / "annotation" / "proposition-resynthesis" / f"{sha256_text(action_id)[:16]}.json"
 
 
 def _resume_snapshot_payload(draft: ResynthesisDraft) -> dict[str, Any]:
@@ -495,7 +498,7 @@ def _original_edit(
         final_text, _changed = render_entity_frontmatter_updates(location.path, updates, as_of=as_of)
     except EntityCommandError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
-    return _edit(location.path, final_text, "original_resynthesis_lineage")
+    return plan_update(location.path, final_text, "original_resynthesis_lineage")
 
 
 def _new_or_existing_edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
@@ -503,8 +506,8 @@ def _new_or_existing_edit(path: Path, final_text: str, reason: str) -> PlannedFi
     return PlannedFileEdit(
         path=path,
         reason=reason,
-        before_sha256=_sha256_text(before),
-        after_sha256=_sha256_text(final_text),
+        before_sha256=sha256_text(before),
+        after_sha256=sha256_text(final_text),
         final_text=final_text,
         changed=before != final_text,
     )
@@ -558,7 +561,7 @@ def plan_resynthesis_apply(
         root,
         draft.annotation_assignments,
     ).items():
-        edits[sidecar_path] = _edit(sidecar_path, final_text, "annotation_promoted_to_rewrite")
+        edits[sidecar_path] = plan_update(sidecar_path, final_text, "annotation_promoted_to_rewrite")
 
     return ResynthesisPreflight(
         draft=draft,
@@ -583,15 +586,15 @@ def _postflight(project_root: Path, preflight: ResynthesisPreflight) -> None:
     draft = preflight.draft
     for edit in preflight.file_edits:
         try:
-            current_text = edit.path.read_text(encoding="utf-8")
+            actual_text = current_text(edit.path)
         except OSError as exc:
             raise ResynthesisApplyError(
-                f"{_path_string(edit.path)} missing after write; planned file state could not be verified"
+                f"{path_string(edit.path)} missing after write; planned file state could not be verified"
             ) from exc
-        actual_sha256 = _sha256_text(current_text)
+        actual_sha256 = sha256_text(actual_text)
         if actual_sha256 != edit.after_sha256:
             raise ResynthesisApplyError(
-                f"{_path_string(edit.path)} postflight planned file state mismatch: "
+                f"{path_string(edit.path)} postflight planned file state mismatch: "
                 f"sha256={actual_sha256}, expected {edit.after_sha256}"
             )
 
@@ -670,7 +673,7 @@ def apply_resynthesis_draft(
 ) -> ResynthesisApplyReport:
     root = project_root.resolve()
     preflight = plan_resynthesis_apply(root, draft, as_of=as_of)
-    changed_paths, noop_paths = _changed_and_noop_paths(preflight.file_edits)
+    changed_paths, noop_paths = changed_and_noop_paths(preflight.file_edits)
     written: list[str] = []
     for edit in preflight.file_edits:
         if not edit.changed:
@@ -684,9 +687,9 @@ def apply_resynthesis_draft(
                 "[stage=write, "
                 f"files_written={len(written_paths)}, "
                 f"written_paths={written_paths}] "
-                f"failed to write {_path_string(edit.path)}: {exc}"
+                f"failed to write {path_string(edit.path)}: {exc}"
             ) from exc
-        written.append(_path_string(edit.path))
+        written.append(path_string(edit.path))
 
     try:
         _postflight(root, preflight)

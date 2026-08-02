@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -13,6 +12,12 @@ from science_tool.annotation.cross_paper_evidence import (
 )
 from science_tool.annotation.io import atomic_write_text, serialize_sidecar
 from science_tool.annotation.model import Sidecar
+from science_tool.annotation.planned_edits import (
+    PlannedFileEdit,
+    changed_and_noop_paths,
+    path_string,
+    plan_update,
+)
 from science_tool.annotation.proposition_reconciliation_plan import (
     ReconciliationAction,
     ReconciliationActionPlan,
@@ -33,16 +38,6 @@ from science_tool.entities import (
 
 class ReconciliationApplyError(RuntimeError):
     """Raised when proposition reconciliation apply cannot proceed safely."""
-
-
-@dataclass(frozen=True)
-class PlannedFileEdit:
-    path: Path
-    reason: str
-    before_sha256: str
-    after_sha256: str
-    final_text: str
-    changed: bool
 
 
 @dataclass(frozen=True)
@@ -154,44 +149,12 @@ def apply_report_to_json(
     }
 
 
-def _path_string(path: Path) -> str:
-    return path.as_posix()
-
-
-def _sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _current_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def _changed_and_noop_paths(
-    edits: Sequence[PlannedFileEdit],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    changed = tuple(_path_string(edit.path) for edit in edits if edit.changed)
-    noop = tuple(_path_string(edit.path) for edit in edits if not edit.changed)
-    return changed, noop
-
-
 def _changed_and_noop_paths_from_path_changes(
     path_changes: Mapping[Path, bool],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    changed = tuple(_path_string(path) for path, path_changed in sorted(path_changes.items()) if path_changed)
-    noop = tuple(_path_string(path) for path, path_changed in sorted(path_changes.items()) if not path_changed)
+    changed = tuple(path_string(path) for path, path_changed in sorted(path_changes.items()) if path_changed)
+    noop = tuple(path_string(path) for path, path_changed in sorted(path_changes.items()) if not path_changed)
     return changed, noop
-
-
-def _edit(path: Path, final_text: str, reason: str) -> PlannedFileEdit:
-    before = _current_text(path)
-    return PlannedFileEdit(
-        path=path,
-        reason=reason,
-        before_sha256=_sha256_text(before),
-        after_sha256=_sha256_text(final_text),
-        final_text=final_text,
-        changed=before != final_text,
-    )
 
 
 def _annotation_ref(sidecar_path: Path, project_root: Path, annotation_id: str) -> str:
@@ -649,7 +612,7 @@ def plan_canonicalization_apply(
             canonical_refs,
             as_of=as_of,
         )
-        canonical_edit = _edit(
+        canonical_edit = plan_update(
             canonical_location.path,
             final_text,
             "canonical_source_refs",
@@ -670,7 +633,7 @@ def plan_canonicalization_apply(
                 {"status": "superseded", "superseded_by": canonical},
                 as_of=as_of,
             )
-            duplicate_edit = _edit(
+            duplicate_edit = plan_update(
                 duplicate_location.path,
                 final_text,
                 "duplicate_supersession",
@@ -695,7 +658,7 @@ def plan_canonicalization_apply(
         project_root,
         live_backlinks,
     ).items():
-        edits[sidecar_path] = _edit(sidecar_path, final_text, "sidecar_promoted_to")
+        edits[sidecar_path] = plan_update(sidecar_path, final_text, "sidecar_promoted_to")
 
     return CanonicalizationPreflight(
         actions=actions,
@@ -799,7 +762,7 @@ def apply_canonicalization_plan(
         requested_action_ids=requested_action_ids,
         as_of=as_of,
     )
-    changed_paths, noop_paths = _changed_and_noop_paths(preflight.file_edits)
+    changed_paths, noop_paths = changed_and_noop_paths(preflight.file_edits)
     written: list[str] = []
     for edit in preflight.file_edits:
         if not edit.changed:
@@ -812,9 +775,9 @@ def apply_canonicalization_plan(
                 "[stage=write, "
                 f"files_written={len(written_paths)}, "
                 f"written_paths={written_paths}] "
-                f"failed to write {_path_string(edit.path)}: {exc}"
+                f"failed to write {path_string(edit.path)}: {exc}"
             ) from exc
-        written.append(_path_string(edit.path))
+        written.append(path_string(edit.path))
 
     try:
         _postflight(
