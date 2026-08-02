@@ -156,6 +156,14 @@ def render_health_report(
     type=click.Path(path_type=Path),
     default=None,
 )
+@click.option(
+    "--ingestion-ref", default=None,
+    help="Supervisor-dictated ingestion reference. Requires --generated-at.",
+)
+@click.option(
+    "--generated-at", default=None,
+    help="Supervisor-dictated ISO-8601 generation instant. Requires --ingestion-ref.",
+)
 def health_command(
     project_root: Path,
     output_format: str,
@@ -166,6 +174,8 @@ def health_command(
     list_checks: bool,
     severity: str,
     output_path: Path | None,
+    ingestion_ref: str | None,
+    generated_at: str | None,
 ) -> None:
     from rich.table import Table
 
@@ -214,8 +224,15 @@ def health_command(
         sink.flush()
         return
 
-    ingestion_ref = f"health:{uuid4().hex}"
-    generated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    if (ingestion_ref is None) != (generated_at is None):
+        raise click.UsageError(
+            "--ingestion-ref and --generated-at must be supplied together: a dictated "
+            "reference with an invented timestamp is not an attestable provenance"
+        )
+    if ingestion_ref is None:
+        ingestion_ref = f"health:{uuid4().hex}"
+        generated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    assert generated_at is not None
     try:
         execution = execute_health_report(
             project_root,
