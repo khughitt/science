@@ -80,13 +80,25 @@ $ git status --porcelain
 ```
 
 A supervisor that then stages the actor's output with `git add -A` sweeps its own write into
-the actor's attested range. Under `report-only` the gate denies it, and the first end-to-end
-run quarantines for the supervisor's own materialization:
+the actor's attested range. Under `report-only` the gate denies it, and the run quarantines for
+the supervisor's own materialization:
 
 ```
 quarantined: 0 belief-basis delta(s), 1 path-gate denial(s), 1 commit-mark issue(s)
   denied: knowledge/graph.trig -- tier 'report-only' may write only the run's own report path
 ```
+
+**The condition, stated precisely, because it decides how this is tested.** The residue appears
+when the committed `knowledge/graph.trig` differs from a fresh materialization — most commonly
+when the project has never materialized and the file is absent, which is the state of any
+project that has not run `science graph`. Measured the other way: with the graph already
+committed and the rebuild byte-identical, `start_run` leaves `git status --porcelain` **empty**.
+
+That is why `test_autonomy_lifecycle.py`'s `project` fixture materializes and commits before
+`git init` — its docstring says so outright, that otherwise "every dirty-tree test below would
+then pass because of the supervisor's own write instead of the condition it names." The same
+fixture is therefore **unusable** for testing this defect: against it, both the fixed and the
+broken implementation leave a clean tree. §8 row 1 requires a project whose graph is absent.
 
 **The capture commit's author identity is fixed and undocumented.** `verify_marks`
 (`autonomy/marks.py:55`) requires the commit author *name* to equal the run's `agent` and the
@@ -329,6 +341,13 @@ blanking covers the `clean` filter `add` would otherwise run.
 `gpg.program` pointing at an actor-supplied script reaches a program during the harness's own
 commit. The commit invocation therefore pins `--no-gpg-sign`, and supplies its message with
 `-m` so `core.editor` is never reached.
+
+**The argv is built in the gateway, not at the call site.** `--no-gpg-sign` passed by the
+harness is a flag that can be forgotten by the next caller; `git.py`'s own rule is that "what
+none of them may differ on is the argv, which is why it is built here and nowhere else". The
+four write subcommands therefore get named functions in `autonomy/git.py` — `checkout_branch`,
+`checkout_paths`, `clean_worktree`, `stage_all`, `commit_tree` — each building its own argv and
+checking its own return code. The harness passes values, never flags.
 
 **The hardening set is probed, not assumed.** `git.py`'s standing rule is that a key is pinned
 only where it demonstrably reaches a program under that subcommand, and each row in its
@@ -593,7 +612,7 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 
 | # | Mutation | Expected failure |
 |---|---|---|
-| 1 | Drop the restore postcondition | a report-only run quarantines on `knowledge/graph.trig` |
+| 1 | Drop the restore postcondition | a report-only run quarantines on `knowledge/graph.trig` — **against a project with no committed graph** (§1.1); a fixture that commits one leaves both implementations clean |
 | 2 | Restore on return but not on `_capture`'s raise | the next `start_run` refuses a dirty tree |
 | 3 | Restore `knowledge/graph.trig` by name | a second materialized path survives the restore |
 | 4 | Skip the branch-identity check | off-branch actor work is attested to a branch it never touched |
