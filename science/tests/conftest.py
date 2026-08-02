@@ -1297,3 +1297,27 @@ def ungraphed_project(tmp_path: Path) -> Path:
             capture_output=True, check=True,
         )
     return root
+
+
+@pytest.fixture
+def supervised_project(ungraphed_project: Path, tmp_path: Path, monkeypatch) -> Path:
+    """`ungraphed_project` with the toolkit-cleanliness check and the control plane pinned.
+
+    `assert_toolkit_matches` refuses a dirty judging toolkit, and the checkout these tests run
+    in is dirty exactly while this plan is being implemented -- which is not what any harness
+    test is about. Lifted from `test_autonomy_lifecycle.py`'s `pinned_toolkit` fixture.
+
+    `SCIENCE_CONTROL_PLANE` is pinned for a second, independent reason, and it is not tidiness.
+    The harness derives its baseline path from `run_dir`, which defaults to the REAL
+    `$XDG_STATE_HOME/science/runs/<project-key>/<run-slug>/`. That location outlives the
+    process, while `project_key` is only a digest of the project path -- so a `tmp_path` that
+    pytest ever reuses resolves to a directory that already holds a baseline, and `start_run`
+    correctly refuses to overwrite a run's before-state. The failure is a stale directory in
+    the developer's home, not anything about the run, and the tests would also be writing
+    there. Every other autonomy suite pins this variable for the same reason.
+    """
+    from science_tool.autonomy import toolkit as toolkit_module
+
+    monkeypatch.setattr(toolkit_module, "toolkit_is_clean", lambda root=None: True)
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    return ungraphed_project

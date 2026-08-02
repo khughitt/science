@@ -18,6 +18,11 @@ TRAILER_KEY = "Science-Run"
 #: Design §3: unattended commits set the author to `<role> <agent@science.local>`. The
 #: role varies per run; the mailbox does not.
 AGENT_EMAIL = "agent@science.local"
+#: The supervisor's own commit identity. Observable in every repository's history, and
+#: therefore contract: `verify_marks` reads the AUTHOR of a run's commits, so the supervisor
+#: commits the actor's bytes under the agent's authorship while committing as itself.
+SUPERVISOR_NAME = "science-supervisor"
+SUPERVISOR_EMAIL = "supervisor@science.local"
 _SEP = "\x1e"  # record separator -- cannot occur in an author name or a trailer value
 
 
