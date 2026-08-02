@@ -2121,7 +2121,11 @@ for (( index = 1; index <= ${#closure_ids}; index++ )); do
     uv run --frozen science peers check --format json
     uv run --frozen science peers list --format json --output "$final_dir/peers.json"
   )
-  cmp "/tmp/task-storage-rollout-closure/$project_id/peers-before.json" \
+  peer_baseline=peers-before.json
+  if [[ "$project_id" == cycles ]]; then
+    peer_baseline=peers-before-reconcile.json
+  fi
+  cmp "/tmp/task-storage-rollout-closure/$project_id/$peer_baseline" \
     "$final_dir/peers.json"
 done
 ```
@@ -2172,13 +2176,35 @@ for (( index = 1; index <= ${#remote_ids}; index++ )); do
   project_root="${remote_roots[$index]}"
   git -C "$project_root" ls-remote origin refs/heads/main \
     > "/tmp/task-storage-rollout-closure/$project_id/remote-main-after.txt"
-  cmp "/tmp/task-storage-rollout-closure/$project_id/remote-main-before.txt" \
-    "/tmp/task-storage-rollout-closure/$project_id/remote-main-after.txt"
+  remote_sha="$(cut -f1 \
+    "/tmp/task-storage-rollout-closure/$project_id/remote-main-after.txt")"
+  test "$remote_sha" != "$(git -C "$project_root" rev-parse main)"
+  git -C "$project_root" merge-base --is-ancestor "$remote_sha" main
+  before="/tmp/task-storage-rollout-closure/$project_id/remote-main-before.txt"
+  if [[ -f "$before" ]]; then
+    if cmp -s "$before" \
+      "/tmp/task-storage-rollout-closure/$project_id/remote-main-after.txt"; then
+      printf 'unchanged\t%s\t%s\n' "$project_id" "$remote_sha"
+    else
+      before_sha="$(cut -f1 "$before")"
+      git -C "$project_root" merge-base --is-ancestor "$before_sha" "$remote_sha"
+      printf 'advanced\t%s\t%s\t%s\n' \
+        "$project_id" "$before_sha" "$remote_sha"
+    fi
+  else
+    test "$(git -C "$project_root" rev-parse origin/main)" = "$remote_sha"
+    git -C "$project_root" reflog show --date=iso refs/remotes/origin/main -1
+    printf 'no-baseline\t%s\t%s\n' "$project_id" "$remote_sha"
+  fi
   git -C "$project_root" rev-list --left-right --count origin/main...main
 done
 ```
 
-An identical remote ref proves the rollout did not publish consumer commits.
+Report every remote disposition. An identical ref proves no movement after the
+recorded baseline. A monotonic advance must name its exact reviewed commit and
+time; a missing baseline must retain the remote-tracking reflog evidence rather
+than inventing one. In every case the final local tip must remain ahead of and
+absent from the remote.
 
 - [ ] **Step 9: Remove only clean, merged consumer worktrees**
 
@@ -2201,4 +2227,4 @@ Leave the toolkit worktree in place for final review and branch handoff.
 
 - [ ] **Step 10: Write the completion report**
 
-Report: public final toolkit SHA; exact final pins in all 15 closure targets; all consumer commit SHAs; 272/272 parsed-task parity plus seven reviewed promotions for 279 active tasks; both preamble dispositions and the therapeutics archive; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; 16 tracked workflow-run manifests with ignored payloads; primary/worktree semantic parity; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; and which consumer mains remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, workflow-manifest schema projection, and historical-citation follow-ups.
+Report: public final toolkit SHA; exact final pins in all 15 closure targets; all consumer commit SHAs; 272/272 parsed-task parity plus seven reviewed promotions for 279 active tasks; both preamble dispositions and the therapeutics archive; empty-store outcomes; 15 local and 14 composite zero-diff results; zero absolute overlay identifiers; 16 tracked workflow-run manifests with ignored payloads; primary/worktree semantic parity; cBioPortal 74 and pan-disease 58 no-refusal proofs; validation activations; unchanged registry and peer topology; Commons success; worktree cleanup; every remote disposition or concurrent advance; and which final consumer tips remain unpublished. Also list the intentionally deferred `obsproj`, registry-parent, peer-symmetry, standalone-graph, workflow-manifest schema projection, and historical-citation follow-ups.
