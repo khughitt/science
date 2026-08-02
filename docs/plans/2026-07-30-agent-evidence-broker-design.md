@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 35)
+**Status:** partially implemented (revision 36)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | **merged** at `cbb7656f` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–35**, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–36**, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -273,6 +273,26 @@ eligibility rows are derived from the predicate's clauses rather than from a rea
 
 The fifth was an explanation that predicted the right outcome from the wrong mechanism — see §4.2 on
 `with_review`, which does not do what revision 34 first said it does.
+
+**Revision 36 closes two residues of the round below, both of the same kind as the rest.**
+
+- **Step 0's rows still passed for the wrong reason.** A forged `LocationEvidence` that survives to
+  step 4 cites a path the served map cannot cover, so `check_correspondence` returns `violated` and
+  step 5 raises `IngestError` anyway — the mutant reaches the same outcome by the longer road. Both
+  submission rows now additionally require that **`check_correspondence` is never called**, and the
+  attestation row that **`load_run_records` is never called**, since a forged agent attestation with
+  `lens=None` is otherwise refused later by the cross-check or by `Review` construction. The rows are
+  now about where the refusal happens, which is the only thing step 0 changes.
+- **`locked_store`'s passthrough claim overreached by one sentence.** Revision 35 wrote "whatever the
+  caller raises passes through untouched" immediately above the measurement showing `case_store`
+  converting body-raised `FileNotFoundError` and `PathSafetyError`. The honest claim is about what
+  `locked_store` *adds*: no catch spanning its body. What survives that body is a fact about
+  `case_store`, and it is not "untouched".
+
+The first is the fourth appearance in this design of a mutation whose outcome is right for a reason
+unrelated to the guard, and the pattern is now specific enough to state as a check: **when a mutation
+removes an early refusal, ask what the later stages would do with the same input** — if they refuse
+too, the row must assert that the later stage never ran.
 
 **Revision 35 is a third round, and its number exists because revision 34's second round changed the
 settled contract while still calling itself 34.** Two commits claiming one revision is a versioning
@@ -2876,11 +2896,15 @@ importing a neighbour's underscore-prefixed contextmanager would make `append_re
   other conversion removed: the call still raises `CaseStorageError`. The claim that the lock leaf
   "sits outside `case_store`'s try" was false, and both fixtures written to prove it were vacuous.
 
-  **Its scope is still setup and teardown, not the body.** Whatever the caller raises inside the
-  `with` passes through untouched: the conversion wraps the code around the `yield`, never the
-  `yield` itself. A contextmanager whose `try` spans its own yield relabels its caller's exceptions
-  as its own — which is exactly the fault `case_store` already has, and the reason `locked_store`
-  must not copy its shape while sharing its module.
+  **Its scope is setup and teardown, and the claim has to be stated as what it adds.**
+  `locked_store` introduces **no catch spanning its body**: its conversion wraps the code around the
+  `yield`, never the `yield` itself. It does not follow that a body exception reaches the caller
+  untouched — `case_store`'s existing clauses still convert a body-raised `FileNotFoundError` or
+  `PathSafetyError` on the way out, as measured above. Revision 35 wrote the stronger sentence
+  ("whatever the caller raises passes through untouched") one line before acknowledging the fact
+  that contradicts it. A contextmanager whose `try` spans its own yield relabels its caller's
+  exceptions as its own; that is the fault `case_store` has, and `locked_store` must not copy its
+  shape while sharing its module — but not copying it is all `locked_store` can promise.
 - **Each writer translates at its own boundary.** `ingest_report` catches `CaseStorageError` and
   raises `IngestError`, exactly as callers observe today; `append_review` does the same for itself.
   Storage raises storage errors; a boundary names its own.
@@ -3180,9 +3204,9 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Drop `ReviewAttestation`'s agent-requires-`lens` | an agent attestation with no `lens` raises **at the attestation** |
 | 4c | Drop `ReviewAttestation`'s agent-requires-`model` | an agent attestation with no `model`, **its `lens` present**, raises at the attestation |
 | 4c | Let `ReviewSubmission` accept a `correspondence` key | constructing a submission carrying `correspondence` raises |
-| 4c | Skip step 0 for `submission` | a submission built with `model_construct`, carrying a `LocationEvidence` whose `path` holds a `..` segment, is refused rather than reaching the checker |
-| 4c | Skip step 0 for `attestation` | a `model_construct`-forged **attestation** — an agent with `lens=None` — is refused rather than reaching the cross-checks |
-| 4c | Spell step 0 as `T.model_validate(arg)` without the dump | the same forged nested `LocationEvidence` is refused |
+| 4c | Skip step 0 for `submission` | a submission built with `model_construct`, carrying a `LocationEvidence` whose `path` holds a `..` segment, raises `IngestError` **and `check_correspondence` is never called** |
+| 4c | Skip step 0 for `attestation` | a `model_construct`-forged **attestation** — an agent with `lens=None` — raises `IngestError` **and `load_run_records` is never called** |
+| 4c | Spell step 0 as `T.model_validate(arg)` without the dump | the same forged nested `LocationEvidence` raises **and `check_correspondence` is never called** |
 | 4c | Dump in `mode="json"` at step 0 | a **well-formed** submission and attestation append successfully |
 | 4c | Run `check_correspondence` before the cross-checks | an attested agent whose `model` disagrees, **against an exposure whose replay raises `ServeError`**, fails with `IngestError` and not `ServeError` |
 | 4c | Let a `finding_id` naming no case surface as `CaseStorageError` | `append_review` against an unknown `finding_id` raises `IngestError` |
