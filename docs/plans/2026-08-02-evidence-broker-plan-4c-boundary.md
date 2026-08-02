@@ -67,8 +67,9 @@ Test files (flat, matching the repo's existing convention):
 
 | Test file | Covers |
 |---|---|
+| `science/tests/conftest.py` | **modified** — the shared fixtures Tasks 5–7 all use (`stored_case`, `human_attestation`, `agent_attestation`, `unbrokered_run`, `sealed_agent_run`, `case_files`). `science/tests/` is not a package, so fixtures are the only sharing mechanism that works |
 | `science/model/tests/test_audit_review_contract.py` | Tasks 2–4 (model types, invariants, eligibility) |
-| `science/model/tests/test_audit_import_cycle.py` | the two subprocess cycle rows (Task 3) |
+| `science/model/tests/test_audit_import_cycle.py` | the two subprocess cycle rows (Task 3). The leaf-loads-no-audit guard is 4b's and already lives in `test_correspondence.py` — do not restate it |
 | `science/tests/test_findings_locked_store.py` | Task 1 |
 | `science/tests/test_findings_reviews.py` | Tasks 5–6 |
 | `science/tests/test_review_confirmations_check.py` | Task 7 |
@@ -225,10 +226,11 @@ def locked_store(project_root: Path) -> Iterator[CaseStore]:
     is its behaviour, not a promise this function makes.)
     """
     with case_store(project_root, create=True) as store:
-        try:
-            descriptor = store.lock()
-        except OSError as exc:
-            raise CaseStorageError(f"could not open the case store lock: {exc}") from exc
+        # NO try around `store.lock()`. `open_lock_at` already converts its `OSError` to
+        # `PathSafetyError` (paths.py:556-563), and `case_store`'s own `try` — which
+        # stays active across its `yield` — converts that to `CaseStorageError`. A clause
+        # here would be unreachable, and an unreachable clause reads as a guard.
+        descriptor = store.lock()
         try:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -333,13 +335,9 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from science_model.audit import (
-    MAX_UNCERTAINTY_ENTRIES,
-    ReviewAttestation,
-    ReviewSubmission,
-    Uncertainty,
-)
+from science_model.audit import ReviewAttestation, ReviewSubmission, Uncertainty
 from science_model.audit.evidence import MAX_EVIDENCE_ENTRIES, TextEvidence
+from science_model.audit.record import MAX_UNCERTAINTY_ENTRIES
 
 AT = datetime(2026, 8, 2, tzinfo=UTC)
 
@@ -489,9 +487,15 @@ Check that `Instant` is imported in `record.py`; `Review.at: Instant` already us
 
 - [ ] **Step 4: Re-export from `audit/__init__.py`**
 
-Add `MAX_UNCERTAINTY_ENTRIES`, `ReviewAttestation`, `ReviewSubmission`, `Uncertainty` to the
+Add `ReviewAttestation`, `ReviewSubmission`, `Uncertainty` to the
 `from science_model.audit.record import (...)` block at line 10, and add each name to `__all__`,
 keeping both lists in their existing alphabetical order.
+
+**Only those three.** Design §2 names exactly `Uncertainty, ReviewAttestation, ReviewSubmission` for
+this file. `MAX_UNCERTAINTY_ENTRIES` stays importable from `science_model.audit.record`, beside
+`MAX_EVIDENCE_ENTRIES` which is likewise not re-exported here — a bound is not part of the package's
+public type surface, and widening the re-export list beyond the contract is how a cell stops
+describing the diff.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -645,23 +649,15 @@ def test_evidence_broker_imports_in_a_fresh_interpreter() -> None:
 def test_correspondence_leaf_imports_in_a_fresh_interpreter() -> None:
     result = _fresh("import science_model.correspondence")
     assert result.returncode == 0, result.stderr
-
-
-def test_correspondence_leaf_loads_no_audit_module() -> None:
-    """A predicate over what the leaf loads, not a roster of its imports.
-
-    A normal package import cannot establish this: eager `science_model/__init__.py`
-    loads `audit` first. Executing the leaf directly is what isolates it.
-    """
-    result = _fresh(
-        "import runpy, sys, science_model.correspondence as m;"
-        "sys.modules.pop('science_model.correspondence', None);"
-        "runpy.run_path(m.__file__);"
-        "assert not [n for n in sys.modules if n.startswith('science_model.audit')], "
-        "sorted(n for n in sys.modules if n.startswith('science_model.audit'))"
-    )
-    assert result.returncode == 0, result.stderr
 ```
+
+> **Do NOT add a third test here asserting the leaf loads no `audit` module.** That guard is plan
+> 4b's and already exists, as `test_running_correspondence_leaf_does_not_load_audit` in
+> `science/model/tests/test_correspondence.py:32`. It resolves the leaf's path from `__file__` of
+> the *test* and hands it to `runpy.run_path` in a subprocess — never importing
+> `science_model.correspondence` first. A version that imports the module to find its path (to get
+> `m.__file__`) loads the whole eager package, `science_model.audit.*` included, and so **fails on a
+> healthy tree**. Measured. Reuse the existing test; do not restate it.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -670,8 +666,9 @@ cd science/model && uv run --frozen pytest tests/test_audit_review_contract.py t
 ```
 
 Expected: the contract tests fail on `Review` having no `correspondence` field
-(`ValidationError: Extra inputs are not permitted`); the cycle tests pass already (the import does
-not exist yet) — that is correct, they guard Step 3's change.
+(`ValidationError: Extra inputs are not permitted`); the two cycle tests pass already (the import
+does not exist yet) — that is correct, they guard Step 3's change and are certified by mutation in
+Step 5.
 
 - [ ] **Step 3: Add the fields and invariants**
 
@@ -724,7 +721,7 @@ Extend the existing `_agent_provenance` validator and add the second invariant:
 cd science/model && uv run --frozen pytest tests/test_audit_review_contract.py tests/test_audit_import_cycle.py -q
 ```
 
-Expected: all pass (16 in the contract file, 3 in the cycle file).
+Expected: all pass (16 in the contract file, 2 in the cycle file).
 
 - [ ] **Step 5: Certify the two cycle mutations by hand**
 
@@ -732,9 +729,9 @@ This is the mutation check for the rows the design assigns to 4c. Do it now, whi
 
 1. In `science_model/correspondence.py`, temporarily add `from science_model.audit.record import _Base`
    and make `Correspondence` inherit it. Run
-   `cd science/model && uv run --frozen pytest tests/test_audit_import_cycle.py -q`.
-   **Expected: `test_correspondence_leaf_imports_in_a_fresh_interpreter` and
-   `test_correspondence_leaf_loads_no_audit_module` both FAIL.** Revert.
+   `cd science/model && uv run --frozen pytest tests/test_audit_import_cycle.py tests/test_correspondence.py -q`.
+   **Expected: `test_correspondence_leaf_imports_in_a_fresh_interpreter` FAILS** (the new guard) **and
+   `test_running_correspondence_leaf_does_not_load_audit` FAILS** (4b's existing guard). Revert.
 2. Temporarily move the `Correspondence` class into `science_model/evidence_broker.py` and import it
    from there in `record.py`. Run the same file.
    **Expected: `test_evidence_broker_imports_in_a_fresh_interpreter` FAILS.** Revert.
@@ -835,10 +832,13 @@ def test_every_reviewer_kind_is_covered() -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd science/model && uv run --frozen pytest tests/test_audit_review_contract.py -q -k counts_as_support
+cd science/model && uv run --frozen pytest tests/test_audit_review_contract.py -q
 ```
 
-Expected: `AttributeError: 'Review' object has no attribute 'counts_as_support'`.
+Expected: the eight tests added above fail with `AttributeError: 'Review' object has no attribute
+'counts_as_support'`; the sixteen from Tasks 2–3 still pass. Do **not** narrow this with
+`-k counts_as_support` — no test name contains that substring, so the selection would be empty and
+pytest would exit "no tests ran", which is not a red test.
 
 - [ ] **Step 3: Add the method and rewrite the aggregate**
 
@@ -923,13 +923,14 @@ git commit -m "feat(audit): make agent confirmation eligibility a review-level p
   (Task 3).
 - Produces:
   ```python
-  class ReviewAppendError(ValueError): ...   # aliased below; see Step 3
   def append_review(
       project_root: Path, finding_id: str, submission: ReviewSubmission,
       *, attestation: ReviewAttestation,
   ) -> Review: ...
   ```
-  Task 6 extends the same function with the agent branch.
+  Every refusal is an `IngestError`, imported from `science_tool.findings.ingest` — this boundary
+  defines **no error type of its own**. Task 6 extends the same function with the agent branch, and
+  Tasks 6–7 consume the `conftest.py` fixtures added in Step 1.
 
 **Background.** This task builds steps 0, 1, 6 and 7 of the design's executable order. The agent
 branch (steps 2–5) is Task 6, and until then a `reviewer_kind == "agent"` attestation raises
@@ -953,7 +954,102 @@ And one ordering rule: **derive `review_id` only after the case scan matches.** 
 `finding_id` would raise `RecordError` out of `review_id()` before the scan could return the
 `IngestError` this boundary promises.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Add the shared fixtures to `science/tests/conftest.py`**
+
+`science/tests/` has **no `__init__.py`** — it is not a package, so Task 6 and Task 7 cannot
+`import` helpers out of `test_findings_reviews.py`. Shared setup goes in `conftest.py` as fixtures,
+which is how pytest shares across non-package test modules.
+
+Append to `science/tests/conftest.py`:
+
+```python
+# --- plan 4c: review-append fixtures -----------------------------------------
+
+REVIEW_AT = datetime(2026, 8, 2, tzinfo=UTC)
+REVIEW_RUN_ID = "run:2026-07-25-lifecycle-agent-a3f1"
+
+
+@pytest.fixture
+def stored_case(tmp_path: Path):
+    """A project holding exactly one stored case, ready to review.
+
+    Built through `AuditFindingRecord`'s own constructor and written with `write_case`,
+    so every derived value is the one the model computes. Read
+    `science/tests/test_findings_storage.py` for the canonical construction and mirror
+    it here rather than inventing a second shape.
+    """
+    from science_tool.findings.storage import write_case
+
+    record = _build_audit_finding_record()   # see the note below
+    write_case(tmp_path, record)
+    return record
+
+
+@pytest.fixture
+def human_attestation():
+    from science_model.audit import ReviewAttestation
+
+    def build(**overrides):
+        fields = {
+            "reviewer_kind": "human",
+            "reviewer_ref": "keith",
+            "run_ref": "manual-review-2026-08-02",
+            "at": REVIEW_AT,
+        }
+        fields.update(overrides)
+        return ReviewAttestation(**fields)
+
+    return build
+
+
+@pytest.fixture
+def agent_attestation():
+    from science_model.audit import ReviewAttestation
+
+    def build(**overrides):
+        fields = {
+            "reviewer_kind": "agent",
+            "reviewer_ref": "lifecycle-agent",
+            "lens": "rubric.md",
+            "model": "test-model",
+            "run_ref": REVIEW_RUN_ID,
+            "at": REVIEW_AT,
+        }
+        fields.update(overrides)
+        return ReviewAttestation(**fields)
+
+    return build
+
+
+@pytest.fixture
+def case_files():
+    """Snapshot the CANONICAL case files only.
+
+    Not every file in the directory: entering `locked_store` creates `.ingest.lock`, so
+    a whole-directory snapshot changes on a legitimately refused append and the
+    "byte-identical" assertion would reject the correct implementation. Measured:
+    ['case.md'] becomes ['.ingest.lock', 'case.md'].
+    """
+
+    def snapshot(project_root: Path) -> dict[str, bytes]:
+        cases = project_root / "doc" / "audits" / "cases"
+        return {p.name: p.read_bytes() for p in sorted(cases.glob("*.md"))}
+
+    return snapshot
+```
+
+Everything shared is a **fixture**, deliberately. `science/tests/` is not a package, and while
+pytest's `prepend` import mode usually leaves `conftest` importable by name, a test suite that
+depends on that is depending on an import-mode default rather than on an interface.
+
+> **Implementer note — `_build_audit_finding_record`.** `AuditFindingRecord` requires a real
+> `finding_id`, a `rule_id`, at least one `Occurrence` with a matching `idempotency_key`, and a
+> genesis `Transition`. That construction already exists in
+> `science/tests/test_findings_storage.py`; lift it verbatim into `conftest.py` as
+> `_build_audit_finding_record()`. Do **not** invent a second way to build a case — a fixture that
+> disagrees with the storage tests' shape will pass here and fail in the suite.
+
+- [ ] **Step 2: Write the failing tests**
 
 Create `science/tests/test_findings_reviews.py`:
 
@@ -964,140 +1060,112 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from science_model.audit import (
-    AuditFindingRecord,
-    Occurrence,
-    ReviewAttestation,
-    ReviewSubmission,
-)
+from science_model.audit import ReviewAttestation, ReviewSubmission
 from science_model.audit.evidence import LocationEvidence
 
 from science_tool.findings.ingest import IngestError
 from science_tool.findings.reviews import append_review
-from science_tool.findings.storage import load_cases, write_case
+from science_tool.findings.storage import load_cases
 
-AT = datetime(2026, 8, 2, tzinfo=UTC)
-
-
-def _case(project_root: Path) -> AuditFindingRecord:
-    """One stored case to review. Built through the constructor so every derived
-    value is the one the model computes."""
-    record = AuditFindingRecord(
-        finding_id="",  # replaced below; see the helper in conftest note
-    )
-    raise NotImplementedError
-
-
-def _human(**overrides: object) -> ReviewAttestation:
-    fields: dict[str, object] = {
-        "reviewer_kind": "human",
-        "reviewer_ref": "keith",
-        "run_ref": "manual-review-2026-08-02",
-        "at": AT,
-    }
-    fields.update(overrides)
-    return ReviewAttestation(**fields)  # type: ignore[arg-type]
-```
-
-> **Implementer note on the fixture.** `AuditFindingRecord` requires a real `finding_id`,
-> `rule_id`, at least one `Occurrence`, and a genesis `Transition` — building one by hand is
-> fiddly and already solved. **Before writing these tests, read
-> `science/tests/test_findings_storage.py` and reuse its case-construction helper**, lifting it
-> into a module-level `_stored_case(project_root) -> AuditFindingRecord` here (or importing it if
-> it is already importable). Do not invent a second way to build a case. Replace the
-> `NotImplementedError` stub above with that helper, then write the tests below against it.
-
-```python
-def test_a_human_review_is_stored_with_no_correspondence(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
+def test_a_human_review_is_stored_with_no_correspondence(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
+    attestation = human_attestation()
     review = append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="looks right"),
-        attestation=_human(),
+        attestation=attestation,
     )
     assert review.correspondence is None
-    assert review.at == AT
+    assert review.at == attestation.at
     stored = load_cases(tmp_path)[0]
     assert [r.review_id for r in stored.reviews] == [review.review_id]
 
 
-def test_a_human_review_needs_no_control_plane(tmp_path: Path) -> None:
+def test_a_human_review_needs_no_control_plane(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
     """No run lookup, no git, no control plane on the non-agent path."""
-    case = _stored_case(tmp_path)
     assert not (tmp_path / "runs").exists()
     append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n"),
-        attestation=_human(),
+        attestation=human_attestation(),
     )
 
 
-def test_a_deterministic_review_is_stored(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
+def test_a_deterministic_review_is_stored(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
     review = append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n"),
-        attestation=_human(reviewer_kind="deterministic", reviewer_ref="linter"),
+        attestation=human_attestation(reviewer_kind="deterministic", reviewer_ref="linter"),
     )
     assert review.reviewer_kind == "deterministic"
 
 
-def test_the_stored_at_is_the_attested_instant(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
+def test_the_stored_at_is_the_attested_instant(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
     past = datetime(2020, 1, 1, tzinfo=UTC)
     review = append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n"),
-        attestation=_human(at=past),
+        attestation=human_attestation(at=past),
     )
     assert review.at == past
 
 
-def test_an_unknown_finding_id_is_refused(tmp_path: Path) -> None:
-    _stored_case(tmp_path)
-    before = (tmp_path / "doc" / "audits" / "cases").read_bytes if False else _snapshot(tmp_path)
+def test_an_unknown_finding_id_is_refused(
+    tmp_path: Path, stored_case, human_attestation, case_files
+) -> None:
+    before = case_files(tmp_path)
     with pytest.raises(IngestError):
         append_review(
             tmp_path, "f" * 64,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_human(),
+            attestation=human_attestation(),
         )
-    assert _snapshot(tmp_path) == before
+    assert case_files(tmp_path) == before
 
 
-def test_an_unknown_nul_bearing_finding_id_is_an_ingest_error(tmp_path: Path) -> None:
+def test_an_unknown_nul_bearing_finding_id_is_an_ingest_error(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
     """`review_id` must be derived AFTER the scan: hashing a NUL-bearing id first
     would raise RecordError and break the boundary's own totality rule."""
-    _stored_case(tmp_path)
     with pytest.raises(IngestError):
         append_review(
             tmp_path, "abc\0def",
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_human(),
+            attestation=human_attestation(),
         )
 
 
-def test_a_duplicate_review_is_refused_and_writes_nothing(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    submission = ReviewSubmission(outcome="confirms", note="n")
-    append_review(tmp_path, case.finding_id, submission, attestation=_human())
-    before = _snapshot(tmp_path)
-    with pytest.raises(IngestError, match="already"):
-        append_review(tmp_path, case.finding_id, submission, attestation=_human())
-    assert _snapshot(tmp_path) == before
-
-
-def test_a_forged_submission_is_refused_before_the_checker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_duplicate_review_is_refused_and_writes_nothing(
+    tmp_path: Path, stored_case, human_attestation, case_files
 ) -> None:
-    """Step 0. The mutant reaches the same IngestError by the longer road -- through
-    `violated` at step 5 -- so the assertion that matters is that the checker never ran."""
-    case = _stored_case(tmp_path)
-    called: list[object] = []
-    monkeypatch.setattr(
-        "science_tool.findings.reviews.check_correspondence",
-        lambda *a, **k: called.append(a) or (_ for _ in ()).throw(AssertionError("called")),
-    )
+    submission = ReviewSubmission(outcome="confirms", note="n")
+    append_review(tmp_path, stored_case.finding_id, submission,
+                  attestation=human_attestation())
+    before = case_files(tmp_path)
+    with pytest.raises(IngestError, match="already"):
+        append_review(tmp_path, stored_case.finding_id, submission,
+                      attestation=human_attestation())
+    assert case_files(tmp_path) == before
+
+
+def test_a_forged_submission_raises_ingest_error_not_validation_error(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
+    """Step 0, on the path where it is observable without a run record.
+
+    Skip step 0 and the forged member survives to `Review(...)`, which revalidates it
+    (`_Base.revalidate_instances="always"`) and raises a ValidationError — a different
+    exception type, leaking out of a boundary that promises IngestError. The
+    "checker never ran" half of this row needs an agent attestation and lives in Task 6.
+    """
     forged = ReviewSubmission.model_construct(
         outcome="confirms", note="n",
         evidence=(LocationEvidence.model_construct(
@@ -1106,28 +1174,24 @@ def test_a_forged_submission_is_refused_before_the_checker(
         uncertainty=(),
     )
     with pytest.raises(IngestError):
-        append_review(tmp_path, case.finding_id, forged, attestation=_human())
-    assert called == []
+        append_review(tmp_path, stored_case.finding_id, forged,
+                      attestation=human_attestation())
 
 
-def test_step_zero_accepts_a_well_formed_submission(tmp_path: Path) -> None:
-    """Guards the mode="json" mutation: a JSON dump renders `at` as a string that
-    strict validation then refuses, so a correct pair must still round-trip."""
-    case = _stored_case(tmp_path)
+def test_step_zero_accepts_a_well_formed_pair(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
+    """Guards the mode="json" mutation: a JSON dump renders the attestation's `at` as a
+    string that strict validation then refuses, so a correct pair must still round-trip."""
     append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n",
                          evidence=(LocationEvidence(type="location", path="a.txt"),)),
-        attestation=_human(),
+        attestation=human_attestation(),
     )
-
-
-def _snapshot(project_root: Path) -> dict[str, bytes]:
-    cases = project_root / "doc" / "audits" / "cases"
-    return {p.name: p.read_bytes() for p in sorted(cases.iterdir()) if p.is_file()}
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 3: Run the tests to verify they fail**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_findings_reviews.py -q
@@ -1135,7 +1199,7 @@ cd science && uv run --frozen pytest tests/test_findings_reviews.py -q
 
 Expected: collection error — `ModuleNotFoundError: No module named 'science_tool.findings.reviews'`.
 
-- [ ] **Step 3: Write `reviews.py`**
+- [ ] **Step 4: Write `reviews.py`**
 
 ```python
 """The trusted review-append boundary (design §5.4).
@@ -1260,7 +1324,7 @@ def append_review(
 Note the `except CaseStorageError` sits **outside** the `with`, so it catches storage faults without
 spanning anything `locked_store` yields into.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
 cd science && uv run --frozen pytest tests/test_findings_reviews.py -q
@@ -1268,11 +1332,88 @@ cd science && uv run --frozen pytest tests/test_findings_reviews.py -q
 
 Expected: all pass.
 
-- [ ] **Step 5: Lint and commit**
+- [ ] **Step 6: Certify the lock conversions through this boundary**
+
+Task 1 proved `locked_store` raises `CaseStorageError`. The design's rows are about what
+`append_review` raises, and the translation between them is code this task wrote. Append to
+`tests/test_findings_reviews.py`:
+
+```python
+def test_a_lock_acquisition_failure_surfaces_as_ingest_error(
+    tmp_path: Path, stored_case, human_attestation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import errno
+    import fcntl
+
+    monkeypatch.setattr(
+        fcntl, "flock",
+        lambda fd, op: (_ for _ in ()).throw(OSError(errno.ENOLCK, "no locks")),
+    )
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path, stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+
+
+def test_a_lock_release_failure_surfaces_as_ingest_error(
+    tmp_path: Path, stored_case, human_attestation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import errno
+    import fcntl
+
+    real = fcntl.flock
+
+    def flaky(fd: int, op: int) -> None:
+        if op == fcntl.LOCK_UN:
+            raise OSError(errno.EIO, "release failed")
+        real(fd, op)
+
+    monkeypatch.setattr(fcntl, "flock", flaky)
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path, stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+
+
+def test_a_lock_close_failure_surfaces_as_ingest_error(
+    tmp_path: Path, stored_case, human_attestation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import errno
+    import os
+
+    real = os.close
+    state = {"armed": False}
+
+    def flaky(fd: int) -> None:
+        if state["armed"]:
+            state["armed"] = False
+            raise OSError(errno.EIO, "close failed")
+        real(fd)
+
+    monkeypatch.setattr(os, "close", flaky)
+    state["armed"] = True
+    with pytest.raises(IngestError):
+        append_review(
+            tmp_path, stored_case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=human_attestation(),
+        )
+```
+
+All three use a **non-agent** attestation, so no run resolution or git precedes the lock and the
+failure has exactly one possible source.
+
+Run: `cd science && uv run --frozen pytest tests/test_findings_reviews.py -q`. Expected: all pass.
+
+- [ ] **Step 7: Lint and commit**
 
 ```bash
 cd science && uv run ruff check && uv run pyright
-git add science/src/science_tool/findings/reviews.py science/tests/test_findings_reviews.py
+git add science/src/science_tool/findings/reviews.py science/tests/test_findings_reviews.py science/tests/conftest.py
 git commit -m "feat(findings): add the review-append boundary for unbrokered reviewers"
 ```
 
@@ -1285,8 +1426,9 @@ git commit -m "feat(findings): add the review-append boundary for unbrokered rev
 - Test: `science/tests/test_findings_reviews.py` (extend)
 
 **Interfaces:**
-- Consumes: Task 5's `append_review`.
-- Produces: the completed boundary. No signature change.
+- Consumes: Task 5's `append_review` and its `conftest.py` fixtures.
+- Produces: the completed boundary, plus the `unbrokered_run` and `sealed_agent_run` fixtures Task 7
+  uses. No signature change to `append_review`.
 
 **Background — the executable order for steps 2 through 5.**
 
@@ -1307,168 +1449,262 @@ git commit -m "feat(findings): add the review-append boundary for unbrokered rev
    `project_root`, so the exposure's commit is a commit of this repository by construction.
 5. `status == "violated"` → `IngestError`.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Add the run fixtures, then write the failing tests**
 
-Append to `science/tests/test_findings_reviews.py`. Build run records with
-`science_tool.autonomy.record_writer.write_run_record`; read
-`science/tests/test_autonomy_validate_check.py` for a working `AutonomousRunRecord` fixture and reuse
-its shape rather than inventing one.
+**First, add two more fixtures to `science/tests/conftest.py`.** The unbrokered one writes a bare run
+record; the sealed one drives the real lifecycle.
 
 ```python
-RUN_ID = "run:2026-08-02-curation-sweep-a3f1"
+@pytest.fixture
+def unbrokered_run(tmp_path: Path):
+    """A finalized run record with `evidence=None` — a run that was never brokered.
+
+    Read `science/tests/test_autonomy_validate_check.py` for the canonical
+    `AutonomousRunRecord` field set and mirror it; write with
+    `science_tool.autonomy.record_writer.write_run_record`.
+    """
+    from science_tool.autonomy.record_writer import write_run_record
+
+    def build(*, agent: str = "lifecycle-agent", model: str = "test-model"):
+        record = _build_run_record(id=REVIEW_RUN_ID, agent=agent, model=model, evidence=None)
+        write_run_record(tmp_path, record)
+        return record
+
+    return build
 
 
-def _agent(**overrides: object) -> ReviewAttestation:
-    fields: dict[str, object] = {
-        "reviewer_kind": "agent",
-        "reviewer_ref": "curation-sweep",
-        "lens": "instrument:review-v1",
-        "model": "test-model",
-        "run_ref": RUN_ID,
-        "at": AT,
-    }
-    fields.update(overrides)
-    return ReviewAttestation(**fields)  # type: ignore[arg-type]
+@pytest.fixture
+def sealed_agent_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A project with a REAL sealed exposure, plus one stored case to review.
 
+    The recipe is `test_autonomy_lifecycle.py::test_a_brokered_run_seals_its_exposure`
+    (lines 484-499). Do not reinvent it — that module's `project` fixture commits
+    `knowledge/graph.trig` on purpose, because `start_run` materializes and an
+    uncommitted graph makes every dirty-tree assertion pass for the wrong reason. Its
+    `pinned_toolkit` autouse fixture is also required: `assert_toolkit_matches` refuses a
+    dirty judging toolkit, and this checkout is dirty exactly while 4c is being built.
 
-def test_an_agent_review_of_an_unbrokered_run_is_unwired(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None)          # a run record with evidence=None
+    The run's instrument ref is `rubric.md` and its agent is that module's `AGENT`, so
+    the `agent_attestation` fixture's `lens` and `reviewer_ref` must match both.
+    """
+    from science_tool.evidence_broker.policy import EvidenceOp, EvidenceRequest
+    from science_tool.evidence_broker.session import Session
+    from science_tool.findings.storage import write_case
+
+    project = _seeded_git_project(tmp_path)          # mirrors lifecycle's `project`
+    monkeypatch.setattr(_toolkit_module, "toolkit_is_clean", lambda root=None: True)
+    baseline = _start_brokered_run(project, tmp_path, monkeypatch)
+    Session(project, baseline.evidence).request(
+        EvidenceRequest(op=EvidenceOp.READ, target="science.yaml")
+    )
+    outcome = _finish_run(project, baseline.evidence.journal_path.parent / "baseline.json")
+    assert outcome.record is not None and outcome.record.evidence is not None
+
+    record = _build_audit_finding_record()
+    write_case(project, record)
+    return project, record, baseline.evidence.journal_path.parent
+```
+
+> **Implementer note.** `_seeded_git_project`, `_start_brokered_run` and `_finish_run` are
+> `_seed_science_project` + the `project` fixture, `_start_brokered`, and `_finish` from
+> `science/tests/test_autonomy_lifecycle.py:50-140`. Lift them into `conftest.py` verbatim, renamed
+> as above. They need `monkeypatch` (for `SCIENCE_CONTROL_PLANE` and the toolkit pin), which is why
+> `sealed_agent_run` takes it. Note this fixture returns **its own** `project` root, not `tmp_path` —
+> every test using it must pass that root to `append_review`.
+
+Now append the tests to `science/tests/test_findings_reviews.py`:
+
+```python
+def test_an_agent_review_of_an_unbrokered_run_is_unwired(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    unbrokered_run()
     review = append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n"),
-        attestation=_agent(),
+        attestation=agent_attestation(),
     )
     assert review.correspondence is not None
     assert review.correspondence.status == "unwired"
     assert review.correspondence.code == "NO_EXPOSURE"
 
 
-def test_the_lens_check_is_skipped_when_the_run_has_no_exposure(tmp_path: Path) -> None:
+def test_the_lens_check_is_skipped_when_the_run_has_no_exposure(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
     """Applied unconditionally, this would refuse the one case §5.3 defines as unwired."""
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None)
+    unbrokered_run()
     review = append_review(
-        tmp_path, case.finding_id,
+        tmp_path, stored_case.finding_id,
         ReviewSubmission(outcome="confirms", note="n"),
-        attestation=_agent(lens="instrument:something-else"),
+        attestation=agent_attestation(lens="something-else.md"),
     )
     assert review.correspondence is not None
     assert review.correspondence.status == "unwired"
 
 
-def test_a_reviewer_ref_mismatch_is_refused(tmp_path: Path) -> None:
+def test_a_lens_mismatch_against_an_EXPOSED_run_is_refused(
+    sealed_agent_run, agent_attestation
+) -> None:
+    """The other half of the conditional. Without a run that HAS an exposure, the lens
+    comparison never executes and 'skip the lens cross-check' cannot be certified."""
+    project, case, _control = sealed_agent_run
+    with pytest.raises(IngestError, match="lens|instrument"):
+        append_review(
+            project, case.finding_id,
+            ReviewSubmission(outcome="confirms", note="n"),
+            attestation=agent_attestation(lens="not-the-instrument.md"),
+        )
+
+
+def test_a_reviewer_ref_mismatch_is_refused(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
     """`model` AGREES, so this can only fail on reviewer_ref."""
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None, agent="curation-sweep", model="test-model")
+    unbrokered_run(agent="lifecycle-agent", model="test-model")
     with pytest.raises(IngestError, match="reviewer_ref|agent"):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_agent(reviewer_ref="someone-else", model="test-model"),
+            attestation=agent_attestation(reviewer_ref="someone-else", model="test-model"),
         )
 
 
-def test_a_model_mismatch_is_refused(tmp_path: Path) -> None:
+def test_a_model_mismatch_is_refused(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
     """`reviewer_ref` AGREES, so this can only fail on model."""
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None, agent="curation-sweep", model="test-model")
+    unbrokered_run(agent="lifecycle-agent", model="test-model")
     with pytest.raises(IngestError, match="model"):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_agent(reviewer_ref="curation-sweep", model="a-different-model"),
+            attestation=agent_attestation(
+                reviewer_ref="lifecycle-agent", model="a-different-model"
+            ),
         )
 
 
-def test_a_run_ref_with_no_record_is_refused_and_writes_nothing(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    before = _snapshot(tmp_path)
+def test_a_run_ref_with_no_record_is_refused_and_writes_nothing(
+    tmp_path: Path, stored_case, agent_attestation, case_files
+) -> None:
+    before = case_files(tmp_path)
     with pytest.raises(IngestError):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_agent(run_ref="run:2020-01-01-nobody-0000"),
+            attestation=agent_attestation(run_ref="run:2020-01-01-nobody-0000"),
         )
-    assert _snapshot(tmp_path) == before
+    assert case_files(tmp_path) == before
 
 
-def test_a_symlinked_runs_directory_is_refused(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
+def test_a_symlinked_runs_directory_is_refused(
+    tmp_path: Path, stored_case, agent_attestation
+) -> None:
     elsewhere = tmp_path.parent / "elsewhere"
     elsewhere.mkdir()
     (tmp_path / "runs").symlink_to(elsewhere)
     with pytest.raises(IngestError):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_agent(),
+            attestation=agent_attestation(),
         )
 
 
-def test_an_unreadable_runs_directory_is_an_ingest_error(tmp_path: Path) -> None:
-    """`load_run_records` emits a raw OSError here, not RunRecordError."""
-    case = _stored_case(tmp_path)
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unreadable_runs_directory_is_an_ingest_error(
+    tmp_path: Path, stored_case, agent_attestation
+) -> None:
+    """`load_run_records` emits a raw OSError here, not RunRecordError -- catching only
+    RunRecordError leaks a PermissionError out of a boundary promising IngestError."""
     runs = tmp_path / "runs"
     runs.mkdir()
     runs.chmod(0o000)
     try:
         with pytest.raises(IngestError):
             append_review(
-                tmp_path, case.finding_id,
+                tmp_path, stored_case.finding_id,
                 ReviewSubmission(outcome="confirms", note="n"),
-                attestation=_agent(),
+                attestation=agent_attestation(),
             )
     finally:
         runs.chmod(0o755)
 
 
 def test_a_forged_attestation_is_refused_before_the_run_lookup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, stored_case, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Step 0 for the attestation. Without it, `lens=None` is refused later by the
-    cross-check or by Review construction -- same IngestError, wrong reason."""
-    case = _stored_case(tmp_path)
+    cross-check or by Review construction -- same IngestError, wrong reason. The
+    load-bearing assertion is that the run lookup never ran."""
     monkeypatch.setattr(
         "science_tool.findings.reviews.load_run_records",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("run lookup ran")),
     )
     forged = ReviewAttestation.model_construct(
-        reviewer_kind="agent", reviewer_ref="curation-sweep", lens=None,
-        model="test-model", run_ref=RUN_ID, at=AT,
+        reviewer_kind="agent", reviewer_ref="lifecycle-agent", lens=None,
+        model="test-model", run_ref="run:2026-07-25-lifecycle-agent-a3f1",
+        at=datetime(2026, 8, 2, tzinfo=UTC),
     )
     with pytest.raises(IngestError):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
             attestation=forged,
         )
 
 
+def test_a_forged_submission_is_refused_before_the_checker(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation,
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of the step-0 submission row, on the AGENT path.
+
+    A human attestation would make "the checker never ran" true regardless of step 0,
+    since the non-agent branch never calls it -- the assertion would hold for a reason
+    unrelated to the guard.
+    """
+    unbrokered_run()
+    monkeypatch.setattr(
+        "science_tool.findings.reviews.check_correspondence",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("checker ran")),
+    )
+    forged = ReviewSubmission.model_construct(
+        outcome="confirms", note="n",
+        evidence=(LocationEvidence.model_construct(
+            type="location", path="a/../b.txt", pointer=None, line=None, span=None
+        ),),
+        uncertainty=(),
+    )
+    with pytest.raises(IngestError):
+        append_review(tmp_path, stored_case.finding_id, forged,
+                      attestation=agent_attestation())
+
+
 def test_the_cross_checks_run_before_the_checker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation,
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Against an unreachable repository the checker RETURNS unwired rather than
     raising, so both orders end in the same IngestError and the order is invisible.
     It is observable only where the checker would raise."""
     from science_tool.evidence_broker.serve import ServeError
 
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None, agent="curation-sweep", model="test-model")
+    unbrokered_run(agent="lifecycle-agent", model="test-model")
     monkeypatch.setattr(
         "science_tool.findings.reviews.check_correspondence",
         lambda *a, **k: (_ for _ in ()).throw(ServeError("replay exploded")),
     )
-    with pytest.raises(IngestError):
+    with pytest.raises(IngestError, match="model"):
         append_review(
-            tmp_path, case.finding_id,
+            tmp_path, stored_case.finding_id,
             ReviewSubmission(outcome="confirms", note="n"),
-            attestation=_agent(model="a-different-model"),
+            attestation=agent_attestation(model="a-different-model"),
         )
 ```
 
-Add a `_write_run(project_root, *, evidence, agent="curation-sweep", model="test-model")` helper
-that builds an `AutonomousRunRecord` with `id=RUN_ID` and writes it with `write_run_record`.
+Add `import os` to the test module's imports for the `skipif`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1548,34 +1784,54 @@ Expected: all pass.
 - [ ] **Step 5: Add the sealed-run end-to-end guard**
 
 This is §5.4's stated regression test — the one that catches a boundary working only on the path
-nobody takes. Read `science/tests/test_evidence_broker_session.py` for how a sealed
-`EvidenceExposure` is produced, build one, then:
+nobody takes. It uses the `sealed_agent_run` fixture from Step 1. The served request in that fixture
+is `READ science.yaml`, so that is the one path a citation can correspond to.
 
 ```python
-def test_a_sealed_run_replays_with_the_control_plane_deleted(tmp_path: Path) -> None:
+def test_a_sealed_run_replays_with_the_control_plane_deleted(
+    sealed_agent_run, agent_attestation
+) -> None:
     """Revision 5's version of this guard passed while production still resolved a
     baseline. `append_review` resolves the run record and NOTHING else."""
-    case, control_plane_dir = _sealed_agent_run(tmp_path)   # see the session tests
+    import shutil
+
+    project, case, control_plane_dir = sealed_agent_run
     shutil.rmtree(control_plane_dir)
     review = append_review(
-        tmp_path, case.finding_id,
+        project, case.finding_id,
         ReviewSubmission(outcome="confirms", note="n",
-                         evidence=(LocationEvidence(type="location", path="a.txt"),)),
-        attestation=_agent(),
+                         evidence=(LocationEvidence(type="location", path="science.yaml"),)),
+        attestation=agent_attestation(),
     )
     assert review.correspondence is not None
     assert review.correspondence.status == "verified"
 
 
-def test_a_citation_the_run_was_never_shown_is_refused(tmp_path: Path) -> None:
-    case, _ = _sealed_agent_run(tmp_path)
+def test_a_citation_the_run_was_never_shown_is_refused(
+    sealed_agent_run, agent_attestation, case_files
+) -> None:
+    project, case, _control = sealed_agent_run
+    before = case_files(project)
     with pytest.raises(IngestError, match="CITATION_UNSERVED"):
         append_review(
-            tmp_path, case.finding_id,
+            project, case.finding_id,
             ReviewSubmission(outcome="confirms", note="n",
                              evidence=(LocationEvidence(type="location", path="never-read.txt"),)),
-            attestation=_agent(),
+            attestation=agent_attestation(),
         )
+    assert case_files(project) == before
+
+
+def test_a_verified_agent_confirmation_counts(sealed_agent_run, agent_attestation) -> None:
+    """End-to-end: the whole point of the slice, asserted through the real path."""
+    project, case, _control = sealed_agent_run
+    append_review(
+        project, case.finding_id,
+        ReviewSubmission(outcome="confirms", note="n",
+                         evidence=(LocationEvidence(type="location", path="science.yaml"),)),
+        attestation=agent_attestation(),
+    )
+    assert load_cases(project)[0].confirmation_count() == 1
 ```
 
 - [ ] **Step 6: Run, lint, commit**
@@ -1617,8 +1873,10 @@ Read `science/src/science_tool/validate/checks/correspondence_drift.py` for the 
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science/tests/test_review_confirmations_check.py`. Reuse `_stored_case`, `_agent`, `_human`
-and `_write_run` from `tests/test_findings_reviews.py` by importing them.
+Create `science/tests/test_review_confirmations_check.py`, using the same `conftest.py` fixtures
+Task 5 added — `stored_case`, `human_attestation`, `agent_attestation`, `unbrokered_run`,
+`sealed_agent_run`. They are fixtures precisely so this file needs no import from
+`test_findings_reviews.py`; `science/tests/` is not a package and such an import would not resolve.
 
 ```python
 from __future__ import annotations
@@ -1629,6 +1887,7 @@ from science_model.audit.evidence import LocationEvidence, TextEvidence
 from science_model.audit import ReviewSubmission
 
 from science_tool.findings.reviews import append_review
+from science_tool.findings.storage import case_path
 from science_tool.validate.checks.review_confirmations import (
     RULE_UNCOUNTED_CONFIRMATION,
     check_review_confirmations,
@@ -1648,64 +1907,83 @@ def _ctx(project_root: Path) -> ValidateContext:
     )
 
 
-def test_an_unwired_agent_confirmation_is_reported(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None)
-    append_review(tmp_path, case.finding_id,
-                  ReviewSubmission(outcome="confirms", note="n"), attestation=_agent())
+def test_an_unwired_agent_confirmation_is_reported(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    unbrokered_run()
+    append_review(tmp_path, stored_case.finding_id,
+                  ReviewSubmission(outcome="confirms", note="n"),
+                  attestation=agent_attestation())
     observations = list(check_review_confirmations(_ctx(tmp_path)))
     assert len(observations) == 1
     assert observations[0].severity == Severity.INFO
     assert "NO_EXPOSURE" in observations[0].message
+    assert observations[0].path == case_path(tmp_path, stored_case)
 
 
-def test_a_vacuously_verified_agent_confirmation_is_reported(tmp_path: Path) -> None:
+def test_a_vacuously_verified_agent_confirmation_is_reported(
+    sealed_agent_run, agent_attestation
+) -> None:
     """The case revision 26's `review.correspondence-unwired` could not see."""
-    case, _ = _sealed_agent_run(tmp_path)
-    append_review(tmp_path, case.finding_id,
-                  ReviewSubmission(outcome="confirms", note="n"), attestation=_agent())
-    observations = list(check_review_confirmations(_ctx(tmp_path)))
+    project, case, _control = sealed_agent_run
+    append_review(project, case.finding_id,
+                  ReviewSubmission(outcome="confirms", note="n"),
+                  attestation=agent_attestation())
+    observations = list(check_review_confirmations(_ctx(project)))
     assert len(observations) == 1
     assert "no location evidence" in observations[0].message
 
 
-def test_a_mixed_evidence_confirmation_is_reported(tmp_path: Path) -> None:
-    case, _ = _sealed_agent_run(tmp_path)
+def test_a_mixed_evidence_confirmation_is_reported(
+    sealed_agent_run, agent_attestation
+) -> None:
+    project, case, _control = sealed_agent_run
     append_review(
-        tmp_path, case.finding_id,
+        project, case.finding_id,
         ReviewSubmission(outcome="confirms", note="n", evidence=(
-            LocationEvidence(type="location", path="a.txt"), TextEvidence(type="text", text="p"),
+            LocationEvidence(type="location", path="science.yaml"),
+            TextEvidence(type="text", text="p"),
         )),
-        attestation=_agent(),
+        attestation=agent_attestation(),
     )
-    observations = list(check_review_confirmations(_ctx(tmp_path)))
+    observations = list(check_review_confirmations(_ctx(project)))
     assert len(observations) == 1
     assert "non-location" in observations[0].message
 
 
-def test_a_counted_agent_confirmation_is_not_reported(tmp_path: Path) -> None:
-    case, _ = _sealed_agent_run(tmp_path)
+def test_a_counted_agent_confirmation_is_not_reported(
+    sealed_agent_run, agent_attestation
+) -> None:
+    project, case, _control = sealed_agent_run
     append_review(
-        tmp_path, case.finding_id,
+        project, case.finding_id,
         ReviewSubmission(outcome="confirms", note="n",
-                         evidence=(LocationEvidence(type="location", path="a.txt"),)),
-        attestation=_agent(),
+                         evidence=(LocationEvidence(type="location", path="science.yaml"),)),
+        attestation=agent_attestation(),
     )
+    assert list(check_review_confirmations(_ctx(project))) == []
+
+
+def test_human_and_deterministic_reviews_are_not_reported(
+    tmp_path: Path, stored_case, human_attestation
+) -> None:
+    append_review(tmp_path, stored_case.finding_id,
+                  ReviewSubmission(outcome="confirms", note="n"),
+                  attestation=human_attestation())
+    append_review(tmp_path, stored_case.finding_id,
+                  ReviewSubmission(outcome="confirms", note="n"),
+                  attestation=human_attestation(reviewer_kind="deterministic",
+                                                reviewer_ref="linter"))
     assert list(check_review_confirmations(_ctx(tmp_path))) == []
 
 
-def test_human_and_deterministic_reviews_are_not_reported(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    append_review(tmp_path, case.finding_id,
-                  ReviewSubmission(outcome="confirms", note="n"), attestation=_human())
-    assert list(check_review_confirmations(_ctx(tmp_path))) == []
-
-
-def test_a_non_confirming_agent_review_is_not_reported(tmp_path: Path) -> None:
-    case = _stored_case(tmp_path)
-    _write_run(tmp_path, evidence=None)
-    append_review(tmp_path, case.finding_id,
-                  ReviewSubmission(outcome="abstains", note="n"), attestation=_agent())
+def test_a_non_confirming_agent_review_is_not_reported(
+    tmp_path: Path, stored_case, unbrokered_run, agent_attestation
+) -> None:
+    unbrokered_run()
+    append_review(tmp_path, stored_case.finding_id,
+                  ReviewSubmission(outcome="abstains", note="n"),
+                  attestation=agent_attestation())
     assert list(check_review_confirmations(_ctx(tmp_path))) == []
 
 
@@ -1752,7 +2030,7 @@ from collections.abc import Iterator
 from pydantic import BaseModel, ConfigDict
 from science_model.audit import FindingRule, FindingSection
 
-from science_tool.findings.storage import cases_dir, load_cases
+from science_tool.findings.storage import case_path, load_cases
 from science_tool.validate.checks import Check, CheckObservation
 from science_tool.validate.context import ValidateContext
 from science_tool.validate.findings import validation_observation
@@ -1812,7 +2090,10 @@ def check_review_confirmations(ctx: ValidateContext) -> Iterator[CheckObservatio
             reason = _reason(review)
             yield validation_observation(
                 severity=Severity.INFO,
-                path=cases_dir(ctx.project_root),
+                # The individual case FILE, not the directory (design §5.4). A finding
+                # whose subject is the store as a whole cannot be located, and every
+                # finding on this rule would share one subject.
+                path=case_path(ctx.project_root, record),
                 line=None,
                 message=(
                     f"agent confirmation {review.review_id} on {record.rule_id} does not "
@@ -1898,28 +2179,85 @@ Three traps this design has hit, all live here:
 since both refuse identically; and "give the check its own predicate instead of
 `counts_as_support()`".
 
-- [ ] **Step 1: Extract the row list**
+- [ ] **Step 1: Confirm the row list still has 39 entries**
+
+From the repository root:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/evidence-broker-boundary
-grep -n "^| 4c |" docs/plans/2026-07-30-agent-evidence-broker-design.md
+grep -c "^| 4c |" docs/plans/2026-07-30-agent-evidence-broker-design.md
 ```
 
-Expected: 39 rows. Write each into a checklist file at
-`docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with three columns: row text, the test that must
-fail, and PASS/FAIL after you run it.
+Expected: `39`. If the count differs, the design moved and this table is stale — reconcile before
+continuing.
 
-- [ ] **Step 2: Certify each row**
+- [ ] **Step 2: Certify each row against its named test**
 
-For every row: apply the mutation to the production code, run the **named** test, confirm it fails,
-revert, confirm the suite is green again. Record the test's node id in the ledger.
+Every row already has a test written in Tasks 1–7. For each: apply the mutation to the production
+code, run the **named** node, confirm it FAILS, revert, confirm green.
+
+Model-package nodes run from `science/model/`, CLI nodes from `science/`.
+
+| # | Mutation | Test node that must fail |
+|---|---|---|
+| 1 | Import `Correspondence` from `evidence_broker.py` | `test_audit_import_cycle.py::test_evidence_broker_imports_in_a_fresh_interpreter` |
+| 2 | Leaf imports `_Base` from `audit.subjects` | `test_audit_import_cycle.py::test_correspondence_leaf_imports_in_a_fresh_interpreter` **and** `test_correspondence.py::test_running_correspondence_leaf_does_not_load_audit` |
+| 3 | Re-add `reviewer_kind` to `ReviewSubmission` | `test_audit_review_contract.py::test_submission_cannot_express_a_reviewer_kind` |
+| 4 | Skip the `reviewer_ref` cross-check | `test_findings_reviews.py::test_a_reviewer_ref_mismatch_is_refused` |
+| 5 | Skip the `model` cross-check | `test_findings_reviews.py::test_a_model_mismatch_is_refused` |
+| 6 | Skip the lens cross-check | `test_findings_reviews.py::test_a_lens_mismatch_against_an_EXPOSED_run_is_refused` |
+| 7 | Apply the lens cross-check unconditionally | `test_findings_reviews.py::test_the_lens_check_is_skipped_when_the_run_has_no_exposure` |
+| 8 | Store an unresolvable `run_ref` as a correspondence | `test_findings_reviews.py::test_a_run_ref_with_no_record_is_refused_and_writes_nothing` |
+| 9 | Resolve a baseline / open the control plane | `test_findings_reviews.py::test_a_sealed_run_replays_with_the_control_plane_deleted` |
+| 10 | Stamp `Review.at` from a clock | `test_findings_reviews.py::test_the_stored_at_is_the_attested_instant` |
+| 11 | Drop the stored-`violated` invariant | `test_audit_review_contract.py::test_violated_is_unstorable` |
+| 12 | Drop agent-requires-`correspondence` | `test_audit_review_contract.py::test_agent_review_requires_a_correspondence` |
+| 13 | Drop `max_length` from `ReviewSubmission.uncertainty` | `test_audit_review_contract.py::test_submission_bounds_uncertainty` |
+| 14 | Drop `max_length` from `Review.uncertainty` | `test_audit_review_contract.py::test_review_bounds_uncertainty` |
+| 15 | `== "human"` instead of `!= "agent"` | `test_audit_review_contract.py::test_human_and_deterministic_count_regardless` |
+| 16 | Drop the `status == "verified"` clause | `test_audit_review_contract.py::test_unwired_does_not_count_even_with_location_evidence` |
+| 17 | Drop the non-empty `evidence` clause | `test_audit_review_contract.py::test_a_vacuous_verified_confirmation_does_not_count` |
+| 18 | `any` instead of `all` | `test_audit_review_contract.py::test_one_location_mixed_with_prose_does_not_count` |
+| 19 | Check reports only non-`verified` correspondence | `test_review_confirmations_check.py::test_a_vacuously_verified_agent_confirmation_is_reported` |
+| 20 | Omit the rule from `_POLICY_INFO_RULE_IDS` | `test_review_confirmations_check.py::test_the_finding_keeps_its_rule_and_fingerprint` |
+| 21 | Drop the `outcome == "confirms"` clause | `test_audit_review_contract.py::test_outcome_must_be_confirms` |
+| 22 | Drop `max_length` from `ReviewSubmission.evidence` | `test_audit_review_contract.py::test_submission_bounds_evidence` |
+| 23 | Drop `max_length` from `Review.evidence` | `test_audit_review_contract.py::test_review_bounds_evidence` |
+| 24 | Drop the attestation's agent-requires-`lens` | `test_audit_review_contract.py::test_agent_attestation_requires_a_lens` |
+| 25 | Drop the attestation's agent-requires-`model` | `test_audit_review_contract.py::test_agent_attestation_requires_a_model` |
+| 26 | `ReviewSubmission` accepts a `correspondence` key | `test_audit_review_contract.py::test_submission_cannot_express_a_correspondence` |
+| 27 | Skip step 0 for `submission` | `test_findings_reviews.py::test_a_forged_submission_raises_ingest_error_not_validation_error` **and** `::test_a_forged_submission_is_refused_before_the_checker` |
+| 28 | Skip step 0 for `attestation` | `test_findings_reviews.py::test_a_forged_attestation_is_refused_before_the_run_lookup` |
+| 29 | Step 0 as `T.model_validate(arg)`, no dump | `test_findings_reviews.py::test_a_forged_submission_is_refused_before_the_checker` |
+| 30 | Dump in `mode="json"` at step 0 | `test_findings_reviews.py::test_step_zero_accepts_a_well_formed_pair` |
+| 31 | Run `check_correspondence` before the cross-checks | `test_findings_reviews.py::test_the_cross_checks_run_before_the_checker` |
+| 32 | Unknown `finding_id` surfaces as `CaseStorageError` | `test_findings_reviews.py::test_an_unknown_finding_id_is_refused` |
+| 33 | Rely on `_validate_reviews` for the duplicate | `test_findings_reviews.py::test_a_duplicate_review_is_refused_and_writes_nothing` |
+| 34 | Catch only `RunRecordError` | `test_findings_reviews.py::test_an_unreadable_runs_directory_is_an_ingest_error` |
+| 35 | `OSError` from `flock` acquisition escapes | `test_findings_locked_store.py::test_flock_acquisition_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_acquisition_failure_surfaces_as_ingest_error` |
+| 36 | `OSError` from `flock` release escapes | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` |
+| 37 | `OSError` from `os.close` escapes | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` |
+| 38 | Widen `locked_store`'s `try` across its `yield` | `test_findings_locked_store.py::test_body_exception_is_not_relabelled` |
+| 39 | Derive `review_id` before the case scan | `test_findings_reviews.py::test_an_unknown_nul_bearing_finding_id_is_an_ingest_error` |
+
+**Row 32 needs its mutation restated to be applicable.** It was written against an implementation
+that asks the store for a case by id; with the scan, "no match" is this boundary's own `raise`. The
+applicable mutation is **`raise CaseStorageError` instead of `IngestError` on no-match**. Note that
+in the ledger rather than skipping the row.
+
+**Rows 35–37 are certified twice on purpose.** The `locked_store` node proves the conversion to
+`CaseStorageError`; the `append_review` node proves the translation to `IngestError`, which is
+different code in a different task. A row satisfied only at the storage layer says nothing about
+what the boundary raises.
+
+- [ ] **Step 3: Record and commit the ledger**
+
+Write the table above to `docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with a fourth column
+holding the observed result (`FAILED as required` / an explanation).
 
 A row whose mutation leaves everything green is a **defect in the guard, not a formality**. Stop,
 work out which fixture cannot distinguish the mutant, and either fix the fixture or — if nothing can
 distinguish it — move the row to the design's "must not be added" list with the reasoning. Do not
 weaken a test to make a row pass.
-
-- [ ] **Step 3: Commit the ledger**
 
 ```bash
 git add docs/plans/2026-08-02-plan-4c-mutation-ledger.md
@@ -1967,15 +2305,25 @@ Task 4. §5.4's executable order → Tasks 5–6 (steps 0–1, 6–7 in Task 5; 
 (validate check). §7's 39 rows → Task 8, with the certifying tests written in Tasks 1–7. §2.2's file
 boundary → Global Constraints.
 
-**Known gaps, stated rather than hidden.**
+**Known gaps, stated rather than hidden.** Three places send the implementer to read rather than
+handing them code, each because a second copy would be a second thing to drift:
 
-- **`_stored_case` and `_sealed_agent_run` are described, not written.** Both need helpers that
-  already exist in `tests/test_findings_storage.py` and `tests/test_evidence_broker_session.py`, and
-  inventing a second way to build a case or seal an exposure would be worse than reusing theirs. Each
-  is called out at the step that needs it with the file to read. This is the one place the plan sends
-  an implementer to read rather than handing them code.
-- **`validation_observation`'s exact signature** is referenced by file and line rather than
-  reproduced, because a stale copy of a signature is worse than a pointer to the live one.
+- **`_build_audit_finding_record`** — lift verbatim from `tests/test_findings_storage.py`. A case
+  fixture that disagrees with the storage tests' shape passes here and fails in the suite.
+- **`_seeded_git_project` / `_start_brokered_run` / `_finish_run`** — lift from
+  `tests/test_autonomy_lifecycle.py:50-140`. That module's `project` fixture commits
+  `knowledge/graph.trig` deliberately (`start_run` materializes, so an uncommitted graph makes every
+  dirty-tree assertion pass for the supervisor's own write), and its `pinned_toolkit` fixture is
+  required because `assert_toolkit_matches` refuses a dirty judging toolkit. Both properties are
+  easy to lose by reimplementing.
+- **`validation_observation`'s signature** — referenced at `validate/findings.py:113-127` rather
+  than reproduced, because a stale copy of a signature is worse than a pointer to the live one.
+
+**Fixture identity constraints, since they bind across tasks.** `sealed_agent_run` uses
+`test_autonomy_lifecycle.py`'s run: agent `lifecycle-agent`, model `test-model`, instrument ref
+`rubric.md`, run id `run:2026-07-25-lifecycle-agent-a3f1`, and one served request —
+`READ science.yaml`. `agent_attestation`'s defaults must match all four, and `science.yaml` is the
+only path a citation can correspond to.
 
 **Type consistency.** `counts_as_support()` is spelled identically in Tasks 4, 7 and 8.
 `locked_store` (public, no underscore) in Tasks 1, 5. `append_review(project_root, finding_id,
