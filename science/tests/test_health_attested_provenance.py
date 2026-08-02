@@ -40,7 +40,7 @@ def test_the_prediction_equals_what_the_report_declares(ungraphed_project: Path,
     assert expected_producer_ids(**selection) == _declared(execution.report)
 
 
-def test_schema_invalid_is_predicted_only_when_sources_load(ungraphed_project: Path):
+def test_schema_invalid_is_predicted_only_when_sources_load():
     assert "schema_invalid" in expected_producer_ids()
     assert "schema_invalid" not in expected_producer_ids(fast=True)
 

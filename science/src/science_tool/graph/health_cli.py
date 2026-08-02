@@ -229,10 +229,11 @@ def health_command(
             "--ingestion-ref and --generated-at must be supplied together: a dictated "
             "reference with an invented timestamp is not an attestable provenance"
         )
-    if ingestion_ref is None:
+    # The UsageError above already rejected the mixed case, so at this point the two are
+    # either both None or both str; the `or` lets pyright narrow both to `str` below.
+    if ingestion_ref is None or generated_at is None:
         ingestion_ref = f"health:{uuid4().hex}"
         generated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
-    assert generated_at is not None
     try:
         execution = execute_health_report(
             project_root,
