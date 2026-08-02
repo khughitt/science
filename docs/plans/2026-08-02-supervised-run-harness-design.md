@@ -1,7 +1,15 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** designed, unbuilt (revision 1)
+**Status:** designed, unbuilt (revision 2)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
+
+**Revision 2** closes five defects found in review of revision 1. Two are omissions of a
+contract the loop cannot be built without — the harness's own signature (§3.4) and the
+authority `ingest_report` requires (§5.4). Two are the same mistake in opposite directions: a
+rule stated too narrowly (git calls, §3.5) and a guarantee stated too broadly (the restore
+postcondition, §4.1) — the second would have destroyed a caller's uncommitted work. The fifth
+is a tail that assumed every outcome carries a record (§7), which `finish_run` does not
+promise.
 
 This slice builds one thing: a supervised autonomous run, end to end, with a deterministic
 actor. It ships no concurrency, no assignment records, no LLM actor, and no dispatch policy.
@@ -106,7 +114,9 @@ check silent (`grep -c "autonomous-runs.check"` → `0`).
 3. `science health --ingestion-ref` / `--generated-at` — so the attestation is dictated
    rather than read back.
 4. `graph/health.py::expected_producer_ids` — the shared producer-set derivation.
-5. The `start_run` restore postcondition (§4).
+5. The `start_run` restore postcondition (§4.1).
+6. `autonomy/git.py` extended to cover the harness's write subcommands (§3.5).
+7. `findings/ingest.py::ingestion_authority` — the shared registry/context derivation (§5.4).
 
 **Out of scope, deliberately.** Concurrency and N-way dispatch; assignment records; actor
 selection (§3.2); LLM actors; brokered runs; belief-neutral actors (§4.4); served-evidence
@@ -150,6 +160,103 @@ the trusted ingestion path rather than the untrusted one.
 `doc/audits/reports/<run-slug>.json`, from the run id. It cannot collide across runs, needs no
 flag, and is the single path `report-only` permits (`autonomy/path_gate.py:123`).
 
+### 3.4 The contract
+
+```python
+class HarnessOutcome(BaseModel):          # frozen, extra="forbid"
+    run_id: str
+    disposition: RunDisposition
+    reason: str
+    actor_exit_code: int
+    capture_commit: str | None
+    post_verdict_commit: str | None
+    record_written: bool
+    ingestion: IngestOutcome | None
+    ingestion_refusal: str | None
+
+def run_supervised_audit(
+    project_root: Path,
+    *,
+    started: datetime,
+    short_id: str,
+) -> HarnessOutcome
+```
+
+**Everything else is fixed, because there is one actor.** Exposing a flag for a value the
+slice cannot vary invites a false claim in an attested record.
+
+| Value | Fixed to | Why |
+|---|---|---|
+| `agent` | `health-audit` | a role, not a model — the only actor 2b has |
+| `model` | `deterministic` | no model executed this run; the record should say so rather than name one |
+| `tier` | `report-only` | `science health` writes its report and nothing else |
+| check selection | the full set | an audit run that skipped checks would under-report; `--fast` yields a partial audit. `expected_producer_ids` still accepts a selection, and §8.1 exercises the others at unit level |
+| `tokens` | `None` | a deterministic actor consumes none |
+| `wall_clock_seconds` | measured across the actor subprocess | caps are out of scope; accounting is not |
+
+`started` and `short_id` are parameters rather than internals so the loop is testable without
+patching a clock or a random source. The CLI supplies `datetime.now(UTC)` and four hex
+characters from `secrets.token_hex(2)`, matching the existing run-id spelling.
+
+**The baseline** goes to `control_plane.run_dir(project_root, run_id)/baseline.json` — outside
+the project root, as `start_run` requires, addressable from the run id, and retained after the
+run for triage. Using the control plane's addressing is not the same as opening a brokered
+run: `evidence` stays `None` and no journal is created. An aborted run leaves its baseline in
+place.
+
+**The commit identities are different on purpose.** The capture commit is *authored* by
+`<agent> <agent@science.local>`, which is what `verify_marks` reads (`%an`/`%ae`), and
+*committed* by the supervisor. The post-verdict commit is both authored and committed by the
+supervisor and carries no trailer. That is the whole semantic in two commits: the actor
+produced these bytes, the supervisor froze them. Both identities are pinned with `-c
+user.name` / `-c user.email` so the loop works in a repository with no configured identity.
+
+**CLI.** `science autonomy run --project-root PATH [--format table|json]`. Exit codes extend
+`autonomy finish`'s rather than inventing a scheme:
+
+| Code | Meaning |
+|---|---|
+| 0 | `clean`, and the report was ingested |
+| 1 | `quarantined` |
+| 2 | `unwired` |
+| 3 | harness abort — any step before `finish_run` |
+| 4 | `clean`, but ingestion refused |
+
+Code 4 exists because **an ingestion refusal is a failure of the run's purpose even when the
+autonomous disposition is clean.** A run that produced an unusable report and reported success
+would be the silent direction this program refuses everywhere else.
+
+### 3.5 Every git call goes through `run_git`
+
+The loop introduces `checkout`, `clean`, `add`, and `commit` — the first *write* subcommands
+in the autonomy surface. Every one of them goes through `autonomy/git.py::run_git`, with the
+return code checked; the harness builds no argv of its own.
+
+The reason is the one that module already states: **the actor owns `.git/config`**. It is
+untracked, absent from `base..head`, and invisible to `git status`, so neither the path gate
+nor the belief-basis capture can see it change — and several keys name a *program* git then
+runs with the supervisor's privileges. A git call that skips the gateway is a call the actor
+can turn into arbitrary execution, and no layer of this design would report it.
+
+Most of what the new subcommands need is already there. `run_git` applies `_HARDENING` plus
+`_filter_driver_overrides(repo_root)` on **every** call (`git.py:435`), so
+`core.hooksPath=/dev/null` disarms `commit`'s `pre-commit` / `prepare-commit-msg` /
+`commit-msg` / `post-commit` hooks and `checkout`'s `post-checkout`, and the dynamic filter
+blanking covers the `clean` filter `add` would otherwise run.
+
+**One gap is genuinely new.** `log.showSignature=false` governs signature *verification* under
+`log`; it says nothing about *signing* under `commit`. `commit.gpgsign=true` with
+`gpg.program` pointing at an actor-supplied script reaches a program during the harness's own
+commit. The commit invocation therefore pins `--no-gpg-sign`, and supplies its message with
+`-m` so `core.editor` is never reached.
+
+**The hardening set is probed, not assumed.** `git.py`'s standing rule is that a key is pinned
+only where it demonstrably reaches a program under that subcommand, and each row in its
+docstring records what was built as a working attack. The four new subcommands get the same
+treatment, and the results — including the inert ones — are recorded there in the same form.
+Asserting the set by analogy to `status` would be exactly the reasoning that module exists to
+replace.
+
 ## 4. The loop
 
 Nine steps. The harness aborts on any failure before `finish_run`, leaving every branch and
@@ -167,7 +274,7 @@ branch rather than a half-attested one."
 | 6 | `git add -A`; commit as `<agent> <agent@science.local>` with `Science-Run: <run-id>` | abort |
 | 7 | `finish_run(head=HEAD, report_path=…)` | returns `unwired`; continue to 9 |
 | 8 | If the disposition is `clean`: load and ingest (§5) | refusal is reported; continue to 9 |
-| 9 | Switch to the starting branch, carrying the supervisor's uncommitted output; commit it with the supervisor's identity and **no trailer** | abort naming the dirty tree |
+| 9 | Switch to the starting branch, then settle the tree per §4.5 | abort naming the dirty tree |
 
 Step 1 exists because step 9 otherwise has no defined destination.
 
@@ -186,8 +293,15 @@ The residue in §1.1 is a defect in shipped code, not merely an inconvenience fo
 `science autonomy start` leaves an untracked `knowledge/graph.trig` behind today. The fix
 belongs in `autonomy/lifecycle.py`, and the harness inherits it.
 
-**The postcondition:** when `start_run` returns *or raises*, the working tree is at
-`base_commit` — `git status --porcelain` is empty.
+**The postcondition, scoped precisely:** *once `assert_repository_is_at` has succeeded and
+capture has begun*, `start_run` removes its own materialization residue before returning or
+raising, leaving the working tree at `base_commit`.
+
+The scope matters. The broader phrasing — "when `start_run` returns or raises, the tree is at
+`base_commit`" — also covers the case where `assert_repository_is_at` itself fails, and there
+the tree is dirty with the **caller's** uncommitted work. Restoring then would destroy it. A
+dirty input tree must be refused byte-for-byte unchanged, which is certified by its own test
+(§8, row 15).
 
 **It must hold on the error paths.** `start_run` materializes at `_capture` and can then raise
 at least four more times: an unwired basis, an untraversable history, an uncitable tree, a
@@ -238,6 +352,34 @@ starting branch holds `base_commit`'s version. `git checkout` then either refuse
 graph inconsistent with a branch that lacks the run's entity edits. **This is an open ruling
 for whichever slice first ships a belief-neutral actor**, named rather than guessed at.
 
+### 4.5 Settling the tree: a record may not exist
+
+`finish_run` returns `unwired` **with `record=None`** on five paths — an unreadable or
+mismatched baseline, an unsealable exposure, a record that fails model validation, and a
+record the writer refuses (`lifecycle.py:543-563`). Revision 1's tail said the record "already
+exists"; on those paths it does not, and nothing was written.
+
+Step 9 therefore branches on whether a record was written, not on the disposition:
+
+- **A record was written** (`clean`, `quarantined`, or `unwired`-with-identity). Commit the
+  supervisor's output on the starting branch — `runs/<slug>.md`, `knowledge/graph.trig`, and
+  any cases — with the supervisor identity and no trailer. `post_verdict_commit` is that sha.
+- **No record was written.** The run produced no attestation, so there is nothing to publish
+  and derived state must not be committed on its behalf. Restore instead: `checkout -- .` plus
+  `clean -fd` on the starting branch. `post_verdict_commit` is `None` and `record_written` is
+  `False`.
+
+The restore is safe by §4.1's argument, unchanged: `start_run` proved the tree clean including
+untracked files, and the actor's own work is committed on `auto/<slug>`, so everything the
+restore removes is supervisor residue.
+
+Either branch may find **nothing to settle** — a `finish_run` that failed before `_capture`
+leaves no materialization behind. The harness checks `status --porcelain` first and skips the
+commit rather than passing `--allow-empty`, which would record a commit that means nothing.
+
+Step 9 ends with the tree clean on the starting branch in every case. That is the property the
+next `start_run` depends on, and it is what the step exists to guarantee.
+
 ## 5. The attestation
 
 ### 5.1 Dictated, not read back
@@ -277,6 +419,27 @@ wrote them. `load_report` enforces path containment, symlink refusal, byte-size 
 ceilings, schema and version validation, and the finding-count limit. The harness then
 constructs its own `IngestionProvenance` and ingests the loaded report in-process.
 
+### 5.4 Where the registry and the context come from
+
+`ingest_report(project_root, report, registry, *, provenance, context, actor)`
+(`findings/ingest.py:511`) requires a `FindingRegistry` and an `IngestionContext`, and **both
+are authority, not data**. Neither may come from the report.
+
+The derivation is Spec 1's, spelled out here because three wrong answers are each one step
+away: reusing anything the actor produced; reusing the health run's `load_project_sources(...,
+strict_identity=False)`, which is lenient on purpose so materialization can carry identity
+conflicts into its audit gate; or importing `findings/cli.py::_load_ingestion_context`, a
+private CLI helper, into a library.
+
+```python
+def ingestion_authority(project_root: Path) -> tuple[FindingRegistry, IngestionContext]
+```
+
+lands in `findings/ingest.py` beside the boundary it serves, calling `load_project_sources`
+with its **strict defaults** — `strict_identity=True`, so an identity conflict refuses the
+write — and `build_registry_for_entity_registry(sources.registry)`. The `findings ingest` CLI
+is cut over to it, so there is one spelling rather than two that can drift.
+
 ## 6. Toolkit changes
 
 | File | Change |
@@ -284,6 +447,9 @@ constructs its own `IngestionProvenance` and ingests the loaded report in-proces
 | `autonomy/harness.py` | new — the loop of §4 |
 | `autonomy/cli.py` | new `run` command |
 | `autonomy/lifecycle.py` | `start_run` restore postcondition (§4.1) |
+| `autonomy/git.py` | probe and pin the four write subcommands (§3.5) |
+| `findings/ingest.py` | `ingestion_authority` (§5.4) |
+| `findings/cli.py` | cut `_load_ingestion_context` over to it |
 | `graph/health.py` | `expected_producer_ids` |
 | `graph/health_cli.py` | `--ingestion-ref` / `--generated-at` |
 | `budget/registry.py` | classify `autonomy run` (§6.1) |
@@ -299,25 +465,45 @@ fixed summary per invocation plus whatever `finish_run` reports, so it is bounde
 argument. Registering the surface also means the `cli-and-workflows.md` entry, which the same
 suite covers.
 
-`autonomy/marks.py`, `autonomy/path_gate.py`, `findings/ingest.py`, and
-`validate/checks/autonomous_runs.py` are **consumed unchanged**. If the loop appears to need a
-change in any of them, that is a signal the loop is wrong, not that the contract is.
+`autonomy/marks.py`, `autonomy/path_gate.py`, and `validate/checks/autonomous_runs.py` are
+**consumed unchanged**, as is `ingest_report` itself — §5.4 adds a derivation beside it, not a
+change to it. If the loop appears to need a change in any of them, that is a signal the loop is
+wrong, not that the contract is.
 
 ## 7. Errors
 
-Every step before `finish_run` aborts with a message naming the step, and writes no record.
-`finish_run` never raises for an expected condition — it returns `unwired`, which blocks — so
-steps 7 through 9 always complete. An ingestion refusal at step 8 is reported and does not stop
-step 9: the record already exists and the tree must be left clean regardless.
+Every step before `finish_run` aborts with a message naming the step, writes no record, and
+exits 3. The branch and every file are left in place for triage.
 
-The harness result carries the disposition, the actor's exit code, the ingestion outcome or
-refusal, and the two commit shas.
+`finish_run` never raises for an expected condition — it returns `unwired`, which blocks — so
+steps 7 through 9 always complete once reached. Two things revision 1 got wrong about that
+tail:
+
+- **A record may not exist** (§4.5). Step 9 branches on `record_written`, not on the
+  disposition, and settles the tree either way.
+- **An ingestion refusal is a failure.** It does not stop step 9 — the tree must be left clean
+  regardless — but it is reported in `ingestion_refusal` and exits **4**, not 0, even though
+  the autonomous disposition is `clean`. The run's purpose was to produce an ingestible report;
+  a refused one did not achieve it.
+
+`HarnessOutcome` (§3.4) carries the disposition, the actor's exit code, both commit shas or
+`None`, whether a record was written, and the ingestion outcome or refusal. The library
+function returns it; the CLI renders it and maps it to the exit codes in §3.4.
 
 ## 8. Testing
 
-The end-to-end test is the deliverable: run the loop against a fixture project; assert the
-disposition is `clean`; assert the cases exist; assert `check_autonomous_runs` is silent from
-the starting branch.
+The end-to-end test is the deliverable. Run the loop against a fixture project and assert all
+of it, not only the verdict:
+
+- the disposition is `clean` and the exit code is 0;
+- the starting branch is restored and `status --porcelain` is empty;
+- the report exists on `auto/<slug>` and **only** there;
+- `runs/<slug>.md` and `doc/audits/cases/` exist on the starting branch;
+- the record is not inside `base..head`;
+- `check_autonomous_runs` is silent from the starting branch.
+
+Asserting the disposition alone would pass for a loop that left the operator on `auto/<slug>`
+with a dirty tree — which is exactly the failure §1.1 found by hand.
 
 Mutation rows, in the discipline plan 4c established — apply one mutation alone, require a
 *named* test to fail for the stated reason, restore, require it to pass:
@@ -338,6 +524,13 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 12 | Read `generated_at` off the report | the attested value differs from the commissioned one (§8.2) |
 | 13 | Start from a detached HEAD | refused before `start_run` |
 | 14 | Accept only exit 0 from the actor | a project with an invalid acceptance configuration aborts |
+| 15 | Widen the restore postcondition to cover a failed precondition | a dirty input tree loses the caller's uncommitted work (§4.1) |
+| 16 | Build a git argv directly instead of routing through `run_git` | a hostile `.git/config` reaches a program (§8.3) |
+| 17 | Drop `--no-gpg-sign` from the capture commit | `commit.gpgsign` + `gpg.program` reaches an actor-named program |
+| 18 | Commit on the record-less path instead of restoring | a commit is recorded for a run with no attestation (§4.5) |
+| 19 | Pass `--allow-empty` rather than checking for nothing to settle | an empty post-verdict commit is recorded |
+| 20 | Derive the ingestion context from the health run's lenient sources | an identity conflict is ingested instead of refused (§5.4) |
+| 21 | Exit 0 on an ingestion refusal | a run that produced an unusable report reports success |
 
 ### 8.1 Row 11 needs more than one fixture
 
@@ -350,11 +543,29 @@ would also pass certifies nothing.
 ### 8.2 Row 12 needs a fake actor
 
 Real `health` echoes the dictated timestamp, so "dictate it" and "read it back" are
-observationally identical against the real actor. The row uses a stub actor that writes a
+observationally identical against the real actor. The row needs an actor whose report carries a
 `generated_at` different from the commissioned one; only then does reading it back produce a
 different attested value.
 
-### 8.3 One convention with no guard
+**It gets there by monkeypatching the harness's fixed subprocess seam**, not by introducing a
+production actor abstraction. §3.2 declined actor selection deliberately, and adding a seam so
+a test can vary the actor would put the interface back through the test suite's door. The
+patched seam writes a report at the same path with a shifted timestamp; nothing in the shipped
+code learns that actors are pluggable.
+
+### 8.3 The hostile-configuration test
+
+Rows 16 and 17 need a repository configured to attack. One test plants, in `.git/config` and
+`$GIT_DIR/hooks/`, every vector the four new subcommands can reach — a `pre-commit` hook, a
+`post-checkout` hook, a `filter.<driver>.clean` bound by an untracked `.gitattributes`,
+`core.fsmonitor`, and `commit.gpgsign=true` with `gpg.program` naming a script — each writing a
+sentinel file. The loop runs to completion and **no sentinel exists**.
+
+The test asserts on the sentinels, not on the argv. An argv assertion passes for a harness that
+builds the right flags by hand and would keep passing when a later call site forgets them;
+the sentinel asserts the property the flags exist to produce.
+
+### 8.4 One convention with no guard
 
 **"No `Science-Run` trailer on the post-verdict commit" is a convention, not a certifiable
 invariant.** `verify_marks` reads only `base..head`, and `check_autonomous_runs` accepts any
@@ -370,7 +581,9 @@ provenance. `science autonomy start` that no longer dirties the tree it just dec
 
 **Costs.** A supervisor that owns the working tree, the branch, and two commits — a large
 responsibility concentrated in one function. A `git clean -fd` inside `start_run`, safe only
-because of the cleanliness assertion immediately preceding it. One actor, hard-wired.
+because of the cleanliness assertion immediately preceding it. One actor, hard-wired. Four
+write subcommands added to the hardened gateway, each owing its own probe. Five exit codes
+where `finish` has three.
 
 **Deliberately not addressed.** Concurrency and fan-out; how a generic actor receives its
 report path and provenance; belief-neutral actors across the branch switch (§4.4); whether a
