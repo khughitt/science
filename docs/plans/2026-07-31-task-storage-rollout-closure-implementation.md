@@ -1,5 +1,12 @@
 # Task-storage Rollout Closure Implementation Plan
 
+**Status:** Complete — executed and merged to `main` at `6fd80378` (2026-08-01).
+Do not re-run this plan. The step checkboxes below were not maintained during
+execution and are left unchecked; they record the intended procedure, not
+outstanding work. Completion is certified by the §12 criteria in
+[the design](2026-07-31-task-storage-rollout-closure-design.md), re-verified
+against the tree on 2026-08-02.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Correct bracket handling, overlay provenance, revision-manifest source coverage, and lossy aggregate-preamble handling in the shared toolkit; make workflow-run provenance durable; transactionally migrate all 13 registered legacy task stores while preserving 272 parsed tasks and reconciling seven additional live reminders; close 15 local graphs; and refresh the 14 affected composites.
