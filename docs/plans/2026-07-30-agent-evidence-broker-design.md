@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 36)
+**Status:** partially implemented (revision 37)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | **merged** at `cbb7656f` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–36**, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–37**, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -293,6 +293,14 @@ The first is the fourth appearance in this design of a mutation whose outcome is
 unrelated to the guard, and the pattern is now specific enough to state as a check: **when a mutation
 removes an early refusal, ask what the later stages would do with the same input** — if they refuse
 too, the row must assert that the later stage never ran.
+
+**Revision 37 removes one vacuous 4c mutation found by the mechanical certification sweep.** The
+scan-specific mutant raised `CaseStorageError` rather than `IngestError` when no case matched a
+`finding_id`, but the enclosing storage boundary catches `CaseStorageError` and translates it to
+`IngestError`. The named test therefore stayed green: direct `IngestError` and internal
+`CaseStorageError` have the same public type and no write in both implementations. Only exception
+cause, message, or code structure could distinguish them, and none is part of this boundary's
+contract. The row moves to §7's "must not be added" list; 4c now has 38 certifiable rows.
 
 **Revision 35 is a third round, and its number exists because revision 34's second round changed the
 settled contract while still calling itself 34.** Two commits claiming one revision is a versioning
@@ -3209,7 +3217,6 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Spell step 0 as `T.model_validate(arg)` without the dump | the same forged nested `LocationEvidence` raises **and `check_correspondence` is never called** |
 | 4c | Dump in `mode="json"` at step 0 | a **well-formed** submission and attestation append successfully |
 | 4c | Run `check_correspondence` before the cross-checks | an attested agent whose `model` disagrees, **against an exposure whose replay raises `ServeError`**, fails with `IngestError` and not `ServeError` |
-| 4c | Let a `finding_id` naming no case surface as `CaseStorageError` | `append_review` against an unknown `finding_id` raises `IngestError` |
 | 4c | Rely on `_validate_reviews` for the duplicate instead of checking first | re-submitting an identical review raises `IngestError`, **not `RecordError`**, and leaves the case byte-identical |
 | 4c | Catch only `RunRecordError` around `load_run_records` | an agent review against an **unreadable** `runs/` raises `IngestError`, not `PermissionError` |
 | 4c | Let `OSError` from `flock` **acquisition** escape `locked_store` | with `fcntl.flock` injected to raise `OSError`, a **non-agent** review raises `IngestError` |
@@ -3301,7 +3308,7 @@ belongs in §5.2's prose and nowhere here. Revision 27 established the disciplin
 `GIT_SHALLOW_FILE` pair for the same reason: a roster row whose mutation cannot fail certifies
 nothing and reads as though it does.
 
-**Two more that must not be added, both from revision 34's 4c rows.**
+**Three more that must not be added, from 4c's certification rounds.**
 
 - **Treating a broken `runs/` as a missing run.** While a missing record was to be stored as
   `unwired` and a broken directory refused, the two had different outcomes and the mutation was
@@ -3317,6 +3324,10 @@ nothing and reads as though it does.
   vacuously-`verified` fixture separates. This is the mirror image of the vacuous fixtures revisions
   31 and 32 corrected: there the input could not distinguish a genuinely different mutant, here the
   mutant was not different from the original.
+- **Raise `CaseStorageError` rather than `IngestError` when the case scan finds no matching
+  `finding_id`.** The enclosing `except CaseStorageError` translates either implementation to the
+  same public `IngestError`, before any write. Only cause, message, or source structure distinguishes
+  them; none is a boundary guarantee, so a test for this row would certify an implementation detail.
 
 **Why §4.2.1 gets five rows rather than one.** Its eligibility has five independent conditions —
 outcome, reviewer kind, correspondence present, status `verified`, and every entry a location — and a

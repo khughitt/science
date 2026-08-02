@@ -2158,7 +2158,7 @@ git commit -m "feat(validate): report agent confirmations that do not count as s
 
 **Files:** no production changes expected. Add tests where a row has no test that can fail.
 
-**Background.** The design's §7 carries **39 rows tagged `4c`**. A row is certified when you break
+**Background.** The design's §7 carries **38 rows tagged `4c`**. A row is certified when you break
 what it guards and watch a **named** test fail. This is not a review pass — it is a mechanical sweep,
 and it has repeatedly found rows that certified nothing.
 
@@ -2176,10 +2176,11 @@ Three traps this design has hit, all live here:
    non-`verified` correspondence*.
 
 **Rows that must NOT be added** (the design records why): treating a broken `runs/` as a missing run,
-since both refuse identically; and "give the check its own predicate instead of
-`counts_as_support()`".
+since both refuse identically; "give the check its own predicate instead of
+`counts_as_support()`"; and raising `CaseStorageError` rather than `IngestError` on a case-scan
+no-match, since the enclosing translation makes their public behaviour identical.
 
-- [ ] **Step 1: Confirm the row list still has 39 entries**
+- [ ] **Step 1: Confirm the row list still has 38 entries**
 
 From the repository root:
 
@@ -2187,7 +2188,7 @@ From the repository root:
 grep -c "^| 4c |" docs/plans/2026-07-30-agent-evidence-broker-design.md
 ```
 
-Expected: `39`. If the count differs, the design moved and this table is stale — reconcile before
+Expected: `38`. If the count differs, the design moved and this table is stale — reconcile before
 continuing.
 
 - [ ] **Step 2: Certify each row against its named test**
@@ -2230,28 +2231,22 @@ Model-package nodes run from `science/model/`, CLI nodes from `science/`.
 | 29 | Step 0 as `T.model_validate(arg)`, no dump | `test_findings_reviews.py::test_a_forged_submission_is_refused_before_the_checker` |
 | 30 | Dump in `mode="json"` at step 0 | `test_findings_reviews.py::test_step_zero_accepts_a_well_formed_pair` |
 | 31 | Run `check_correspondence` before the cross-checks | `test_findings_reviews.py::test_the_cross_checks_run_before_the_checker` |
-| 32 | Unknown `finding_id` surfaces as `CaseStorageError` | `test_findings_reviews.py::test_an_unknown_finding_id_is_refused` |
-| 33 | Rely on `_validate_reviews` for the duplicate | `test_findings_reviews.py::test_a_duplicate_review_is_refused_and_writes_nothing` |
-| 34 | Catch only `RunRecordError` | `test_findings_reviews.py::test_an_unreadable_runs_directory_is_an_ingest_error` |
-| 35 | `OSError` from `flock` acquisition escapes | `test_findings_locked_store.py::test_flock_acquisition_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_acquisition_failure_surfaces_as_ingest_error` |
-| 36 | `OSError` from `flock` release escapes | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` |
-| 37 | `OSError` from `os.close` escapes | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` |
-| 38 | Widen `locked_store`'s `try` across its `yield` | `test_findings_locked_store.py::test_body_exception_is_not_relabelled` |
-| 39 | Derive `review_id` before the case scan | `test_findings_reviews.py::test_an_unknown_nul_bearing_finding_id_is_an_ingest_error` |
+| 32 | Rely on `_validate_reviews` for the duplicate | `test_findings_reviews.py::test_a_duplicate_review_is_refused_and_writes_nothing` |
+| 33 | Catch only `RunRecordError` | `test_findings_reviews.py::test_an_unreadable_runs_directory_is_an_ingest_error` |
+| 34 | `OSError` from `flock` acquisition escapes | `test_findings_locked_store.py::test_flock_acquisition_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_acquisition_failure_surfaces_as_ingest_error` |
+| 35 | `OSError` from `flock` release escapes | `test_findings_locked_store.py::test_flock_release_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_release_failure_surfaces_as_ingest_error` |
+| 36 | `OSError` from `os.close` escapes | `test_findings_locked_store.py::test_close_failure_becomes_case_storage_error` **and** `test_findings_reviews.py::test_a_lock_close_failure_surfaces_as_ingest_error` |
+| 37 | Widen `locked_store`'s `try` across its `yield` | `test_findings_locked_store.py::test_body_exception_is_not_relabelled` |
+| 38 | Derive `review_id` before the case scan | `test_findings_reviews.py::test_an_unknown_nul_bearing_finding_id_is_an_ingest_error` |
 
-**Row 32 needs its mutation restated to be applicable.** It was written against an implementation
-that asks the store for a case by id; with the scan, "no match" is this boundary's own `raise`. The
-applicable mutation is **`raise CaseStorageError` instead of `IngestError` on no-match**. Note that
-in the ledger rather than skipping the row.
-
-**Rows 35–37 are certified twice on purpose.** The `locked_store` node proves the conversion to
+**Rows 34–36 are certified twice on purpose.** The `locked_store` node proves the conversion to
 `CaseStorageError`; the `append_review` node proves the translation to `IngestError`, which is
 different code in a different task. A row satisfied only at the storage layer says nothing about
 what the boundary raises.
 
 - [ ] **Step 3: Record and commit the ledger**
 
-Write the table above to `docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with a fourth column
+Write the 38-row table above to `docs/plans/2026-08-02-plan-4c-mutation-ledger.md` with a fourth column
 holding the observed result (`FAILED as required` / an explanation).
 
 A row whose mutation leaves everything green is a **defect in the guard, not a formality**. Stop,
