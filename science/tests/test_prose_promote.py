@@ -92,6 +92,23 @@ def _persist_artifact(
     return artifact
 
 
+def _write_existing_proposition(root: Path) -> None:
+    dest = root / "entities" / "propositions" / "existing.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        "---\n"
+        "id: proposition:existing\n"
+        "kind: proposition\n"
+        "title: Basalt flows record the cooling history.\n"
+        "status: active\n"
+        "source_refs: []\n"
+        "---\n"
+        "\n"
+        "Existing body.\n",
+        encoding="utf-8",
+    )
+
+
 def test_promote_prose_unit_mints_proposition_and_records_state(tmp_path: Path) -> None:
     artifact = _persist_artifact(tmp_path)
     unit = artifact.units[0]
@@ -210,6 +227,27 @@ def test_promote_prose_unit_links_existing_proposition_and_appends_two_refs(tmp_
     assert "prose-source:example" in text
     assert artifact_unit_ref(artifact, unit) in text
     assert not (tmp_path / "entities" / "propositions" / "basalt-flows-record-the-cooling-history.md").exists()
+
+
+def test_promote_prose_unit_surfaces_a_degradation_refusal_as_its_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EntityDegradationError is covered by promote_prose_unit's EntityCommandError catch."""
+    import science_tool.annotation.prose_promote as prose_promote_mod
+    from science_tool.entities import EntityDegradationError
+
+    _persist_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+
+    def refuse(file_path, ref, *, as_of=None):
+        raise EntityDegradationError(f"{file_path} would be degraded")
+
+    monkeypatch.setattr(prose_promote_mod, "append_entity_source_ref", refuse)
+
+    with pytest.raises(ProsePromotionError):
+        promote_prose_unit(
+            project_root=tmp_path, source_ref="prose-source:example", unit_id="u001", apply=True
+        )
 
 
 def test_promote_prose_unit_recovers_index_when_retry_sees_linked_ref_without_duplicate_refs(

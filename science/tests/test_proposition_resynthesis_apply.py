@@ -42,6 +42,29 @@ def _annotation_stance(sidecar_path: Path, annotation_id: str) -> str:
     raise AssertionError(f"{annotation_id} has no JSON body")
 
 
+def test_resynthesis_surfaces_a_degradation_refusal_as_its_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EntityDegradationError is covered by _original_edit's EntityCommandError catch."""
+    import science_tool.annotation.proposition_resynthesis_apply as resynth
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        plan_resynthesis_apply,
+    )
+    from science_tool.entities import EntityDegradationError
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+
+    def refuse(current_text, updates, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(resynth, "render_entity_frontmatter_updates", refuse)
+
+    with pytest.raises(ResynthesisApplyError):
+        plan_resynthesis_apply(tmp_path, draft)
+
+
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
     tmp_path: Path,
 ):

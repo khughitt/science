@@ -598,6 +598,7 @@ def plan_canonicalization_apply(
     listed_refs_by_action = _listed_sidecar_refs_by_action(actions)
     action_edit_paths_by_id: dict[str, tuple[Path, ...]] = {}
     action_path_changed_by_id: dict[str, Mapping[Path, bool]] = {}
+    degradations: list[str] = []
 
     for action in actions:
         canonical = action.canonical_proposition
@@ -608,12 +609,16 @@ def plan_canonicalization_apply(
         canonical_location = _entity_location(project_root, canonical)
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
-        final_text, _changed = render_entity_source_refs(
-            current_text(canonical_location.path),
-            canonical_refs,
-            entity_path=canonical_location.path,
-            as_of=as_of,
-        )
+        try:
+            final_text, _changed = render_entity_source_refs(
+                current_text(canonical_location.path),
+                canonical_refs,
+                entity_path=canonical_location.path,
+                as_of=as_of,
+            )
+        except EntityCommandError as exc:
+            degradations.append(f"{canonical}: {exc}")
+            continue
         canonical_edit = plan_update(
             canonical_location.path,
             final_text,
@@ -630,12 +635,16 @@ def plan_canonicalization_apply(
             existing_superseded_by = frontmatter.get("superseded_by")
             if existing_superseded_by is not None and str(existing_superseded_by) != canonical:
                 raise ReconciliationApplyError(f"{duplicate} already has superseded_by {existing_superseded_by}")
-            final_text, _changed = render_entity_frontmatter_updates(
-                current_text(duplicate_location.path),
-                {"status": "superseded", "superseded_by": canonical},
-                entity_path=duplicate_location.path,
-                as_of=as_of,
-            )
+            try:
+                final_text, _changed = render_entity_frontmatter_updates(
+                    current_text(duplicate_location.path),
+                    {"status": "superseded", "superseded_by": canonical},
+                    entity_path=duplicate_location.path,
+                    as_of=as_of,
+                )
+            except EntityCommandError as exc:
+                degradations.append(f"{duplicate}: {exc}")
+                continue
             duplicate_edit = plan_update(
                 duplicate_location.path,
                 final_text,
@@ -656,6 +665,13 @@ def plan_canonicalization_apply(
                 action_path_changed[sidecar_path] = action_path_changed.get(sidecar_path, False) or target_changed
         action_edit_paths_by_id[action.action_id] = tuple(sorted(action_path_changed))
         action_path_changed_by_id[action.action_id] = dict(action_path_changed)
+
+    if degradations:
+        joined = "\n  ".join(degradations)
+        raise ReconciliationApplyError(
+            f"{len(degradations)} record(s) would be degraded by this canonicalization and "
+            f"nothing was written:\n  {joined}"
+        )
 
     for sidecar_path, final_text in _sidecar_final_texts(
         project_root,

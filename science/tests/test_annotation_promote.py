@@ -294,6 +294,62 @@ def test_apply_links_to_existing_appends_both_refs_preserves_prose(tmp_path):
     assert read_sidecar_strict(sp).annotations[0].promoted_to == "proposition:known-claim"
 
 
+def test_apply_candidates_translates_a_degradation_refusal(tmp_path, monkeypatch):
+    """A renderer refusal must reach the promotion CLI as PromotionApplyError."""
+    from datetime import date
+
+    import science_tool.annotation.promote as promote_mod
+    from science_tool.annotation import io as anno_io
+    from science_tool.annotation.model import Status
+    from science_tool.annotation.promote import (
+        PromotionApplyError,
+        apply_candidates,
+        collect_promotable,
+        decide_candidates,
+        load_corpora,
+    )
+    from science_tool.annotation.query import read_sidecar_strict
+    from science_tool.entities import EntityDegradationError
+
+    (tmp_path / "entities" / "propositions").mkdir(parents=True)
+    existing = tmp_path / "entities" / "propositions" / "known-claim.md"
+    existing.write_text(
+        '---\nid: proposition:known-claim\nkind: proposition\ntitle: Known claim\n'
+        'status: draft\nsource_refs:\n  - "paper:other"\n'
+        'created: "2026-06-01"\nupdated: "2026-06-01"\n---\n'
+        "# Known claim\n\n## Claim\n\nHand-authored prose.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "papers").mkdir()
+    md = tmp_path / "papers" / "p.source.md"
+    md.write_text("Known claim.\n", encoding="utf-8")
+    sp = anno_io.sidecar_for_markdown(md)
+    anno_io.write_sidecar(sp, anno_io.Sidecar(annotations=(
+        _statement_ann("a-1", "Known claim", status=Status.OPEN),
+    )))
+
+    def refuse(current_text, refs_to_append, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(promote_mod, "render_entity_source_refs", refuse)
+
+    corpora, derived = load_corpora(tmp_path)
+    promotable, _ = collect_promotable(read_sidecar_strict(sp), sp, tmp_path, derived_refs=derived)
+    candidates = decide_candidates(promotable, corpora["proposition"])
+    assert candidates[0].decision == "LINK"
+
+    with pytest.raises(PromotionApplyError) as excinfo:
+        apply_candidates(
+            candidates,
+            sidecar_path=sp,
+            project_root=tmp_path,
+            paper_ref="paper:p",
+            as_of=date(2026, 6, 16),
+        )
+
+    assert "known-claim" in str(excinfo.value)
+
+
 def test_apply_refuses_overwrite_of_different_claim(tmp_path):
     # An explicit-id MINT (e.g. from a curator override) must never clobber an unrelated proposition.
     from datetime import date

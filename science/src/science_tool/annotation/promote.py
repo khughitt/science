@@ -15,6 +15,7 @@ from science_model.templates import Renderer
 
 from science_tool.annotation import io as anno_io
 from science_tool.annotation.model import Status, TextualBody
+from science_tool.annotation.planned_edits import current_text
 from science_tool.annotation.query import entity_relpath_for_sidecar, read_sidecar_strict
 from science_tool.dag.entity_frontmatter import (
     CREATE_ONLY_KEYS,
@@ -23,10 +24,11 @@ from science_tool.dag.entity_frontmatter import (
 )
 from science_tool.entities import (
     EntityCommandError,
+    EntityDegradationError,
     _atomic_replace_text,
     _parse_markdown_file,
-    append_entity_source_ref,
     default_status,
+    render_entity_source_refs,
     resolve_path_policy,
     slug_for_claim_text,
     validate_slug,
@@ -300,8 +302,11 @@ def _mint_proposition(
         # Same claim from a second source: ACCRUE, exactly as the LINK path does. Rendering it
         # as an update would replace source_refs with only this paper's refs and overwrite the
         # subject/object refinements synthesize owns.
-        for ref in source_refs:
-            append_entity_source_ref(dest, ref, as_of=as_of)
+        post_image, changed = render_entity_source_refs(
+            current_text(dest), source_refs, entity_path=dest, as_of=as_of
+        )
+        if changed:
+            _atomic_replace_text(dest, post_image)
         return MintOutcome(entity_id=prop_ref, created=False)
 
     prop = PropositionEntity(
@@ -412,26 +417,35 @@ def apply_candidates(
     backlinks: dict[str, str] = {}  # frag -> "<kind>:<local_part>"
 
     for c in candidates:
-        if c.decision == "MINT":
-            outcome = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
-            if outcome.created:
-                report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
-                report.minted += 1
-            else:
+        # Slice 1 translation: apply_candidates still writes as it goes, so a refusal must
+        # not reach the CLI as EntityDegradationError. Task 8 replaces this with the
+        # aggregated preflight report.
+        try:
+            if c.decision == "MINT":
+                outcome = targets[c.kind].mint(c, [paper_ref, c.ref], project_root, as_of)
+                if outcome.created:
+                    report.written_paths.append(str(entity_dest(outcome.entity_id, project_root)))
+                    report.minted += 1
+                else:
+                    report.linked += 1
+                backlinks[c.frag] = outcome.entity_id
+            elif c.decision == "LINK":
+                assert c.slug is not None  # "<kind>:<local_part>"
+                dest = entity_dest(c.slug, project_root)
+                # Accrue BOTH provenance refs onto the existing entity; the renderer dedups,
+                # preserves the (possibly hand-authored) prose body, and advances `updated`
+                # whenever it actually appends a ref.
+                post_image, changed = render_entity_source_refs(
+                    current_text(dest), [paper_ref, c.ref], entity_path=dest, as_of=as_of
+                )
+                if changed:
+                    _atomic_replace_text(dest, post_image)
                 report.linked += 1
-            backlinks[c.frag] = outcome.entity_id
-        elif c.decision == "LINK":
-            assert c.slug is not None  # "<kind>:<local_part>"
-            dest = entity_dest(c.slug, project_root)
-            # Accrue BOTH provenance refs onto the existing entity; append_entity_source_ref
-            # dedups, preserves the (possibly hand-authored) prose body, and advances `updated`
-            # whenever it actually appends a ref.
-            for ref in (paper_ref, c.ref):
-                append_entity_source_ref(dest, ref, as_of=as_of)
-            report.linked += 1
-            backlinks[c.frag] = c.slug
-        else:  # COLLISION / SKIP — not applied
-            report.skipped[c.reason] += 1
+                backlinks[c.frag] = c.slug
+            else:  # COLLISION / SKIP — not applied
+                report.skipped[c.reason] += 1
+        except EntityDegradationError as exc:
+            raise PromotionApplyError(str(exc)) from exc
 
     if backlinks:
         sidecar = read_sidecar_strict(sidecar_path)

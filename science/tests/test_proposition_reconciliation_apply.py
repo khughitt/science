@@ -32,8 +32,60 @@ from science_tool.annotation.proposition_reconciliation_apply import (
     plan_canonicalization_apply,
     select_canonicalization_actions,
 )
+from science_tool.entities import EntityDegradationError
 
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
+
+
+def test_canonicalization_aggregates_every_degradation_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each selected action is preflighted, so every refused record is reported."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    for slug in ("a", "b", "c", "d"):
+        _proposition(tmp_path, slug, f"Claim {slug}")
+
+    def refuse(current_text, updates, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} would be degraded")
+
+    monkeypatch.setattr(recon, "render_entity_frontmatter_updates", refuse)
+
+    plan = _manual_ready_plan(
+        actions=(
+            _action(
+                action_id="act-1",
+                canonical="proposition:a",
+                members=("proposition:a", "proposition:b"),
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:b",),
+                },
+            ),
+            _action(
+                action_id="act-2",
+                canonical="proposition:c",
+                members=("proposition:c", "proposition:d"),
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:d",),
+                },
+            ),
+        )
+    )
+
+    with pytest.raises(ReconciliationApplyError) as excinfo:
+        recon.plan_canonicalization_apply(tmp_path, plan)
+
+    message = str(excinfo.value)
+    assert "b.md" in message
+    assert "d.md" in message
+    assert "superseded" not in (tmp_path / "entities" / "propositions" / "b.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def _action(
