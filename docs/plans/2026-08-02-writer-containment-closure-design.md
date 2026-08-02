@@ -9,9 +9,14 @@ promotion batch that would do so writes nothing at all.
 
 ## 1. The gap
 
-`certify_persisted` is called in exactly two places, both inside
-`science/src/science_tool/dag/entity_frontmatter.py` — `render_create` and `render_update`.
-Every other path that rewrites entity frontmatter is uncertified.
+`certify_persisted` — the **persisted-shape** certification — is called in exactly two
+places, both inside `science/src/science_tool/dag/entity_frontmatter.py`: `render_create` and
+`render_update`. No other path that rewrites entity frontmatter certifies persisted shape.
+
+That is a narrower claim than "uncertified". `_validate_prospective_write` (`entities.py:1793`,
+used at `:920`, `:1085`, `:1326`) certifies a **different property** on other entity writers —
+prospective reference resolution and audit rows — and says nothing about whether the result
+satisfies base shape. The two are complementary, and neither substitutes for the other.
 
 Two renderers in `science/src/science_tool/entities.py` carry that traffic:
 
@@ -20,16 +25,18 @@ Two renderers in `science/src/science_tool/entities.py` carry that traffic:
 | `render_entity_source_refs` (`:477`) | `append_entity_source_ref` (`:524`), and directly by reconciliation (`:647`) |
 | `render_entity_frontmatter_updates` (`:504`) | resynthesis (`:495`), reconciliation (`:668`) |
 
-**Five workflows**, not five literal call sites — promotion contributes two separate routes
-(MINT-accrual at `promote.py:304`, LINK at `promote.py:430`) and reconciliation invokes
-*both* renderers:
+**Five workflows**, named by their entry points, not five literal call sites:
 
-1. Promotion MINT-accrual — a same-claim mint that resolves to an existing record accrues
-   refs instead of overwriting it.
-2. Promotion LINK — accrues both provenance refs onto an existing record.
-3. Prose promotion LINK (`prose_promote.py:238-239`).
-4. Prose promotion batch LINK (`prose_promotion_batch.py:135-136`).
-5. Proposition resynthesis lineage and duplicate supersession (staged; `PlannedFileEdit`).
+| # | Entry point | Renderer traffic | Write style |
+|---|---|---|---|
+| 1 | `apply_candidates` (`promote.py:400`) | both its MINT-accrual route (`:304`) and its LINK route (`:430`) | immediate |
+| 2 | `promote_prose_unit` (`prose_promote.py:148`) | LINK, two refs (`:238-239`) | immediate |
+| 3 | `apply_prose_promotion_plan` (`prose_promotion_batch.py:77`) | LINK, two refs (`:135-136`) | immediate |
+| 4 | `apply_resynthesis_draft` (`proposition_resynthesis_apply.py:665`) | lineage updates (`:495`) | staged |
+| 5 | `apply_canonicalization_plan` (`proposition_reconciliation_apply.py:788`) | **both** renderers — source refs (`:647`) and duplicate supersession (`:668`) | staged |
+
+Workflows 4 and 5 are distinct staged workflows in separate modules, not one item: resynthesis
+lineage and reconciliation supersession are planned and applied independently.
 
 Neither renderer is kind-scoped. Promotion targets `proposition`, `question` and
 `hypothesis` (`build_targets()`, `promote.py:392`); the two prose paths resolve their
@@ -78,11 +85,20 @@ Consequences, stated so a later reader does not mistake them for oversights:
 - **A record that already fails base shape stays writable.** 183 records across 13 kinds
   fail it today (measured 2026-08-02 over 8209 records in 40 project roots; 41 of them are
   `question`, a live promotion LINK target). Refusing writes to those would couple this
-  work to migrating them. This branch performs **no intentional backfill** — it neither
-  repairs a record nor blocks work on one, matching piece 1's "rejection, not backfill"
-  ruling for `render_update`.
-- **The guard is kind-agnostic**, so it protects all 53 kinds rather than the two piece 1
-  contained. It does not need to know which kinds are armed.
+  work to migrating them. This branch performs **no intentional backfill**: it never sets out
+  to repair a record, though a write whose own content happens to satisfy base shape is
+  allowed through (the `invalid → valid` row above).
+- **This is deliberately weaker than `render_update`, not the same rule.** `render_update`
+  calls `certify_persisted` unconditionally, so it **rejects an already-invalid record** —
+  that is piece 1's "rejection, not backfill" ruling, and it is what makes a workbench update
+  refuse the 769 legacy records rather than migrate them. These renderers cannot adopt it:
+  they are kind-agnostic and serve live promotion traffic onto records this branch does not
+  repair. The shared principle is only that neither writer backfills.
+- **The guard is kind-agnostic** — it applies to every built-in or project-local kind routed
+  through these renderers, rather than the two kinds piece 1 contained, and it does not need
+  to know which kinds are armed. (For scale: `EntityType` has 52 members and
+  `_BUILTIN_MARKDOWN_POLICIES` 37, plus whatever kinds a project declares locally. The guard
+  ranges over whatever actually arrives, so no roster of kinds appears in it.)
 - **Base shape only.** The typed half of `certify_persisted` needs a `WorkbenchEntity` the
   typed writers already hold and these paths do not. Fabricating one from arbitrary
   frontmatter would put the migration's own guesswork inside a certification.
@@ -93,15 +109,37 @@ Validate the mapping obtained by parsing the **rendered text**, never the in-mem
 that was dumped. `certify_persisted` documents the reason at
 `dag/entity_frontmatter.py:210-215`: the round trip is what catches a date the YAML dumper
 emitted as a bare scalar, which reloads as `datetime.date` where the schema requires a
-string. That is precisely the defect class that accrued the 769 records piece 3 repaired.
-Validating the in-memory mapping would certify something that was never persisted.
+string. Validating the in-memory mapping would certify something that was never persisted.
+
+That defect class is real but was the minority of piece 3's corpus: of the 792 records it
+repaired, **769 had an empty `title`** and **23 differed in no parsed value at all** — those
+23 were date-quoting alone, which is exactly what this round trip catches and an in-memory
+check would miss.
 
 ### 2.2 How a refusal surfaces
 
 The renderer **raises** `EntityDegradationError` (new, in `entities.py`, subclassing
 `EntityCommandError` so existing `except EntityCommandError` handlers in the prose paths keep
-their current shape). The message names the path and the validator's own text, so an operator
-sees what base shape objected to rather than a paraphrase.
+their current shape). The message names the record and the validator's own text, so an
+operator sees what base shape objected to rather than a paraphrase.
+
+Naming the record requires a path the text-in signature no longer carries, so both renderers
+take a **diagnostic-only** keyword:
+
+```python
+def render_entity_source_refs(
+    current_text: str,
+    refs_to_append: Sequence[str],
+    *,
+    entity_path: Path,
+    as_of: date | None = None,
+) -> tuple[str, bool]: ...
+```
+
+`entity_path` is used **only** to build the error message. The renderer performs no
+filesystem I/O — it neither reads nor writes that path — so text-in/text-out and composition
+(§4.3) are unaffected. Requiring it rather than defaulting it to `None` keeps every refusal
+identifiable; a planner that has text has a path, since it read the text from one.
 
 Raising rather than returning a refusal keeps the guard unskippable — a caller cannot ignore a
 return value it never inspects — and matches `certify_persisted`, which raises
@@ -119,7 +157,7 @@ raised once with all of them.
 
 ### 3.1 Renderers become text-in / text-out
 
-Both renderers currently take a `file_path` and read their own pre-image. Composition (§4.2)
+Both renderers currently take a `file_path` and read their own pre-image. Composition (§4.3)
 is impossible under that signature, because every edit would re-read the unmodified file.
 They become:
 
@@ -180,20 +218,47 @@ creating many entities in a loop calls this for each planned create up front, an
 predictable naming failure aborts the batch instead of stranding it half-written."
 Promotion half-adopted it — it pre-screens slugs, then writes as it goes.
 
-### 4.1 What all-or-nothing means, precisely
+### 4.1 Which failures aggregate, and which may abort
 
-Atomicity **against deterministic preflight failures only.** The write stage is a sequence of
-`atomic_write_text` calls and can still fail partway on I/O or concurrent drift. Reconciliation
-already models the honest answer at `proposition_reconciliation_apply.py:806-816`, and slice 2
-adopts its error shape verbatim:
+Degradation is not the only deterministic preflight failure. Collision detection, slug
+naming, template rendering and target resolution all fail deterministically too, and an
+operator who fixes one refusal only to hit the next has not been told the truth about the
+batch. The boundary:
+
+- **Candidate-local deterministic errors are collected**, and the batch reports them
+  together. This covers `EntityDegradationError`, slug-naming failures from
+  `resolve_entity_slug`, LINK target-resolution failures, and the never-overwrite guard at
+  `promote.py:296-300`. Planning continues past each one so the report is complete.
+- **Batch-global errors may abort planning immediately** — a missing or malformed packaged
+  template (`Renderer().sections(kind)`, `promote.py:351-352`), an unreadable sidecar, an
+  unresolvable project root. They are not attributable to a candidate, every later candidate
+  would raise the same thing, and continuing would produce noise rather than information.
+  They still abort **before any write**, so the all-or-nothing property holds either way.
+- Only the collected candidate-local set is aggregated. A batch-global abort reports one
+  error, and says which stage it came from.
+
+### 4.2 What all-or-nothing means, precisely
+
+Atomicity **against deterministic preflight failures only.** The write stage can still fail
+partway on I/O or concurrent drift. Reconciliation already models the honest answer at
+`proposition_reconciliation_apply.py:806-816`, and slice 2 adopts its error shape verbatim:
 
 ```
 [stage=write, files_written=N, written_paths=(...)] failed to write <path>: <error>
 ```
 
+**The wrapping must cover every way the write stage can fail, not just `OSError` from
+`atomic_write_text`.** A promotion apply's write stage also calls `claim_number_in_dir`,
+which raises `EntityCommandError` on exactly the drift it exists to detect ("number NNNN was
+committed since the preview; re-run the preview"), and then writes the sidecar via
+`anno_io.write_sidecar`. If those escape unwrapped, the operator gets a bare error after N
+files have already landed and the partial-state diagnostic — the whole point of the shape —
+is missing precisely when it matters most. Wrap the write stage on `(OSError,
+EntityCommandError)`, and let the sidecar/index write share the same wrapper.
+
 No claim of transactional rollback appears anywhere in this design.
 
-### 4.2 Planned edits compose per path
+### 4.3 Planned edits compose per path
 
 Each planner maintains `planned_text_by_path: dict[Path, str]`, initialized from disk **once**
 per path, then feeds each post-image into the next edit for that path. One `PlannedFileEdit`
@@ -209,7 +274,7 @@ Two reachable cases make this load-bearing, not theoretical:
 Independent edits computed from the same disk pre-image would each contain only their own
 change, and the last write would erase the others.
 
-### 4.3 Numeric mints plan without consuming a number
+### 4.4 Numeric mints plan without consuming a number
 
 `_mint_numeric` (`promote.py:341`) calls `reserve_entity` → `reserve_number_in_dir`, which
 claims the **next** number and commits an empty placeholder `.md` to back it. Under preflight
@@ -246,7 +311,17 @@ uses `read_text()`.
 
 **Aggregation** — a batch containing **two** unsupported records plus one valid edit: both
 refusals are named and **nothing is written**. One refusal does not prove aggregation; it is
-equally consistent with abort-on-first.
+equally consistent with abort-on-first. A second case mixes *kinds* of candidate-local failure
+— one degradation plus one slug-naming failure — so the report is proven to span the whole
+candidate-local set of §4.1 rather than degradation alone.
+
+**Batch-global abort** — a malformed packaged template aborts planning, reports one error
+naming its stage, and writes nothing. This is the §4.1 boundary's other half; without it,
+"may abort immediately" is untested and an implementer could aggregate everything.
+
+**Write-stage wrapping** — a `claim_number_in_dir` drift failure raised *after* an earlier
+file has been written carries `files_written` and `written_paths`. An `OSError`-only wrapper
+passes the plain `atomic_write_text` test and fails this one, which is the point.
 
 **Composition** — two edits to one path: the composed post-image carries both, and the first
 is not lost.
