@@ -1,7 +1,17 @@
 # Task-storage rollout closure — design
 
-**Status:** Accepted; amended after Task 10 losslessness review
+**Status:** Complete — implemented and merged to `main` at `6fd80378` (2026-08-01)
 **Date:** 2026-07-31
+
+The §12 completion criteria were re-verified against the tree on 2026-08-02: all
+15 closure targets are on split storage with 279 active task files across the 13
+migration targets; no configured project retains `tasks/active.md`; the 15 local
+graphs and 14 composites contain zero absolute `/overlays/` source identifiers
+and zero `.worktrees` provenance; and every consumer pin (`9bf9be13` cancer,
+`d5bf01e2` health, `885fccd2` multiple-myeloma) is an ancestor of `origin/main`
+containing both `36463540` and `2fc330d0`. The §11 follow-up to delete the
+missing temporary `obsproj` registry entry was applied on 2026-08-02, leaving 20
+registered projects.
 
 ## 1. Decision
 
