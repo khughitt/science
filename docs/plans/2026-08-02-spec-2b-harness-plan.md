@@ -903,10 +903,16 @@ def test_it_loads_sources_without_relaxing_identity(
 
 
 def test_the_cli_uses_the_shared_derivation():
-    """One spelling, not two that can drift. The old private helpers are gone."""
+    """One spelling, not two that can drift. The old private helpers are gone.
+
+    `.callback`, not the command object: `@findings_group.command("ingest")` rebinds the name
+    to a `click.core.Command`, and `inspect.getsource` on that raises
+    `TypeError: module, class, method, function, traceback, frame, or code object was
+    expected` -- measured. Click keeps the undecorated function on `.callback`.
+    """
     assert not hasattr(findings_cli, "_load_ingestion_context")
     assert not hasattr(findings_cli, "_registry")
-    assert "ingestion_authority" in inspect.getsource(findings_cli.ingest_command)
+    assert "ingestion_authority" in inspect.getsource(findings_cli.ingest_command.callback)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
