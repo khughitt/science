@@ -1846,6 +1846,37 @@ Execute the Composite refresh protocol for each project in that order using its 
 
 For each root, commit only a changed `knowledge/composite.trig` with `chore(science): refresh composite graph`, make no empty commit, and fast-forward the local rollout branch into local `main`. Do not push cycles, post-acute-infection, or any other consumer.
 
+### Task 24A: Close pan-disease worktree-local graph provenance
+
+**Files:** `~/d/health/comparisons/pan-disease/knowledge/graph.trig`.
+
+**Interfaces:** Consumes the concurrent local-main commits through `b94a90d`.
+Produces a graph whose source-snapshot mtimes describe the retained rollout
+worktree, without changing research or task semantics.
+
+Task 24 preflight found 599 local graph-diff rows after the rollout branch was
+fast-forwarded to current local `main`; every row was `mtime_changed`, while a
+complete `--mode hash` diff returned zero rows. Commit `6dc1dc6` had rebuilt the
+graph in the primary checkout, so its recorded source mtimes cannot satisfy the
+Composite refresh protocol's byte-stability gate in the retained worktree.
+
+- [ ] **Step 1: Capture the pre-build projections**
+
+Save the current graph hash, complete hybrid and hash diffs, task projection,
+research-semantic projection, peer list, and strict validation result set in
+the existing pan-disease evidence directory. Require exactly 599 hybrid rows,
+all `mtime_changed`, and zero hash rows before mutation.
+
+- [ ] **Step 2: Rebuild and prove the graph-only correction**
+
+Run the normal graph build with default Commons resolution. Require only
+`knowledge/graph.trig` to change; zero complete hybrid and hash diff rows; graph
+validation success; zero absolute overlay identifiers; byte-identical task,
+research-semantic, and peer projections; and a byte-identical sorted strict
+validation result set. Commit only `knowledge/graph.trig` as
+`chore(graph): close pan-disease graph provenance`, obtain independent review,
+and fast-forward local `main` before resuming Task 24. Do not push.
+
 ### Task 25: Run the registry-wide closure audit and clean consumer worktrees
 
 **Files:** Evidence only under `/tmp/task-storage-rollout-closure/`; no tracked mutation.
@@ -1911,11 +1942,15 @@ Also require no `tasks/.science/task-storage-migration.journal` in those 13 root
 
 - [ ] **Step 4: Recheck every local and composite artifact from local main**
 
-First require the exact final revision in all 15 closure targets:
+First require every closure target's exact declared pin to be present in its
+lock and to descend from the published rollout prerequisite. Several local
+mains advanced concurrently to newer published toolkit descendants; retaining
+those descendants is deliberate and must not be mistaken for pin drift:
 
 ```bash
 final_sha="$(tr -d '\n' < \
   /tmp/task-storage-rollout-closure/final-toolkit-sha.txt)"
+toolkit_root=~/d/science
 pin_roots=(
   ~/d/cancer/meta
   ~/d/cancer/mechanisms/evolution
@@ -1934,8 +1969,12 @@ pin_roots=(
   ~/d/health/processes/post-acute-infection
 )
 for project_root in $pin_roots; do
-  rg -q "$final_sha" "$project_root/pyproject.toml"
-  rg -q "$final_sha" "$project_root/uv.lock"
+  project_sha="$(yq -p=toml -oy -r '.tool.uv.sources.science.rev' \
+    "$project_root/pyproject.toml")"
+  test "$(printf '%s' "$project_sha" | wc -c)" -eq 40
+  rg -q "$project_sha" "$project_root/uv.lock"
+  git -C "$toolkit_root" merge-base --is-ancestor "$final_sha" "$project_sha"
+  printf '%s\t%s\n' "$project_root" "$project_sha"
 done
 ```
 
