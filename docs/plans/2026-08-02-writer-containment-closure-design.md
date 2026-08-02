@@ -138,7 +138,7 @@ def render_entity_source_refs(
 
 `entity_path` is used **only** to build the error message. The renderer performs no
 filesystem I/O — it neither reads nor writes that path — so text-in/text-out and composition
-(§4.3) are unaffected. Requiring it rather than defaulting it to `None` keeps every refusal
+(§4.6) are unaffected. Requiring it rather than defaulting it to `None` keeps every refusal
 identifiable; a planner that has text has a path, since it read the text from one.
 
 Raising rather than returning a refusal keeps the guard unskippable — a caller cannot ignore a
@@ -151,23 +151,50 @@ refusal does not hide the next. It raises once, after planning, naming every ref
 This is the same division piece 3 used: the repair planner collected refusals and the caller
 raised once with all of them.
 
+### 2.3 The workflow-level error contract, and what slice 1 owes
+
+Each workflow must translate a renderer refusal into the error its CLI already handles.
+Subclassing `EntityCommandError` covers the two prose workflows, which catch
+`(DecompositionError, EntityCommandError, PromotionApplyError)` (`prose_promote.py:244`,
+`prose_promotion_batch.py:141`) and re-raise `ProsePromotionError`.
+It does **not** cover promotion: `apply_candidates` lets `EntityCommandError` escape, and the
+CLI wraps that call in `except PromotionApplyError` alone (`annotation/cli.py:2640-2642`).
+
+That matters because the slices land separately. **Slice 1 makes the renderers raise while
+`apply_candidates` still writes as it goes**, so on its own it would introduce a raw traceback
+in the promotion CLI for exactly the case the guard exists to report. Slice 1 therefore adds
+the translation — `apply_candidates` catches `EntityDegradationError` and raises
+`PromotionApplyError` — and slice 2 replaces it with the aggregated report. This is a
+deliberate two-step, recorded so the intermediate state is not mistaken for the final one.
+
+The staged workflows need no translation: they already surface `ReconciliationApplyError` and
+`ResynthesisApplyError` from the same planning phase the guard now runs in.
+
 ---
 
 ## 3. Slice 1 — the guard
 
 ### 3.1 Renderers become text-in / text-out
 
-Both renderers currently take a `file_path` and read their own pre-image. Composition (§4.3)
+Both renderers currently take a `file_path` and read their own pre-image. Composition (§4.6)
 is impossible under that signature, because every edit would re-read the unmodified file.
 They become:
 
 ```python
 def render_entity_source_refs(
-    current_text: str, refs_to_append: Sequence[str], *, as_of: date | None = None
+    current_text: str,
+    refs_to_append: Sequence[str],
+    *,
+    entity_path: Path,          # diagnostic only (§2.2); no filesystem I/O
+    as_of: date | None = None,
 ) -> tuple[str, bool]: ...
 
 def render_entity_frontmatter_updates(
-    current_text: str, updates: Mapping[str, object], *, as_of: date | None = None
+    current_text: str,
+    updates: Mapping[str, object],
+    *,
+    entity_path: Path,          # diagnostic only (§2.2); no filesystem I/O
+    as_of: date | None = None,
 ) -> tuple[str, bool]: ...
 ```
 
@@ -229,11 +256,17 @@ batch. The boundary:
   together. This covers `EntityDegradationError`, slug-naming failures from
   `resolve_entity_slug`, LINK target-resolution failures, and the never-overwrite guard at
   `promote.py:296-300`. Planning continues past each one so the report is complete.
-- **Batch-global errors may abort planning immediately** — a missing or malformed packaged
-  template (`Renderer().sections(kind)`, `promote.py:351-352`), an unreadable sidecar, an
-  unresolvable project root. They are not attributable to a candidate, every later candidate
-  would raise the same thing, and continuing would produce noise rather than information.
-  They still abort **before any write**, so the all-or-nothing property holds either way.
+- **Environment and target-kind precondition failures may abort planning immediately** — a
+  missing or malformed packaged template (`Renderer().sections(kind)`, `promote.py:351-352`),
+  an unreadable sidecar, an unresolvable project root. These are properties of the
+  environment or of a target *kind*, not of a candidate, and no candidate-level fix exists:
+  the operator repairs the installation or the kind's template. They still abort **before any
+  write**, so the all-or-nothing property holds either way.
+
+  Note this is a precondition, not "every later candidate would fail" — a malformed
+  `question` template does not affect the `proposition` candidates in a mixed-kind batch. The
+  justification for aborting is that the failure is not attributable to, or fixable at, the
+  candidate level; it is not a claim about how many candidates would raise.
 - Only the collected candidate-local set is aggregated. A batch-global abort reports one
   error, and says which stage it came from.
 
@@ -258,7 +291,95 @@ EntityCommandError)`, and let the sidecar/index write share the same wrapper.
 
 No claim of transactional rollback appears anywhere in this design.
 
-### 4.3 Planned edits compose per path
+### 4.3 A planned create is not a planned update
+
+`PlannedFileEdit` models an update: `_edit` calls `_current_text(path)` unconditionally, so it
+cannot represent an absent pre-image, and the established apply loop publishes with
+`atomic_write_text` — a temp file plus `os.replace`, which overwrites whatever is there.
+
+Planned MINTs cannot use that path without **losing an invariant the code has today**.
+`create_entity_file` (`dag/entity_frontmatter.py:359-388`) refuses to clobber twice over: it
+checks `dest.exists()`, then stages to a random temp name opened `"x"` and publishes with
+`os.link(staged, dest)`, so a file that appears *between* the check and the publish raises
+`FileExistsError` → `EntityWriteError("refusing to create <dest>: it already exists")`. Under
+a plan-then-apply flow the window between check and publish is no longer microseconds — it
+spans the whole planning phase — so the link-based publish stops being belt-and-braces and
+becomes the mechanism that makes preflight safe.
+
+The plan therefore carries two operations, and they apply differently:
+
+| Operation | Pre-image | Publish | On drift |
+|---|---|---|---|
+| update | required, read once from disk | `atomic_write_text` (`os.replace`) | overwrites — acceptable, the record existed at plan time |
+| **create** | **absent** — asserted, not read | exclusive create (`open("x")` + `os.link`), i.e. `create_entity_file`'s primitive; numeric kinds use `claim_number_in_dir`, which is already exclusive | **refuses**: `EntityWriteError` / `EntityCommandError`, wrapped per §4.2 |
+
+`PlannedFileEdit` gains that distinction rather than a parallel type — `before_sha256` is
+absent for a create, and `_edit` grows a sibling constructor for the create case rather than
+calling `_current_text` on a path that does not exist.
+
+A planned create never becomes an overwrite. If the destination exists at apply time, the
+batch fails with a drift refusal naming the path, and the file on disk is untouched.
+
+### 4.4 The promotion planning contract
+
+`PromotionTarget.mint` is a **writing** function today —
+`MintFn = Callable[[PromotionCandidate, list[str], Path, date | None], MintOutcome]`
+(`promote.py:258-271`), and `MintOutcome` carries only `(entity_id, created)`. All three
+immediate workflows call it. Adding a preflight *around* that contract would leave the writes
+inside `mint` and produce a design that looks preflighted and is not.
+
+`mint` is therefore replaced by a **pure planning** function. It performs no filesystem
+writes, reserves no number, and returns everything apply needs:
+
+```python
+@dataclass(frozen=True)
+class PlannedMint:
+    entity_id: str            # "<kind>:<local_part>", the id apply must land
+    operation: str            # "create" | "accrue" -- what MintOutcome.created encoded
+    path: Path
+    post_image: str           # the exact text to publish
+    claim_number: int | None  # set for numeric kinds; None for slug-addressed
+```
+
+- `operation="accrue"` is the MINT-accrual route (`promote.py:304`): the same claim already
+  exists, so the plan is a source-ref *update* to that record, not a create. This is where
+  `MintOutcome.created is False` goes, and it keeps the accounting (`report.minted` vs
+  `report.linked`) computable from the plan rather than from write side effects.
+- `claim_number` is the number `propose_number` allocated in memory (§4.7); apply passes it to
+  `claim_number_in_dir`, which is what makes drift refuse rather than renumber.
+- `post_image` is rendered during planning, so the §2 guard runs at plan time for accruals and
+  `render_create`'s own `certify_persisted` runs at plan time for creates.
+
+`PromotionTarget.mint: MintFn` becomes `PromotionTarget.plan_mint: PlanMintFn`. A writing
+`mint` no longer exists on the target, so an implementation cannot retain writes inside it —
+there is nothing left to hide them in.
+
+### 4.5 Sidecar and decomposition-index writes are planned, not deferred
+
+A "complete plan" that still calls writers during the write stage is not complete.
+Reconciliation already gets this right: it serializes the sidecar **during planning**
+(`serialize_sidecar` into `final_texts`, `proposition_reconciliation_apply.py:478`) and the
+apply stage publishes that exact text.
+
+Slice 2 does the same for both remaining side stores:
+
+- **The promotion sidecar.** `apply_candidates` currently mutates and writes it after the loop
+  (`anno_io.write_sidecar`). Planning serializes the post-image with the backlinks already
+  applied; apply publishes it as one more planned edit.
+- **The prose decomposition index.** `ProseDecompositionStore.record_promotion`
+  (`prose_decomposition.py:211`) is called four times across the two prose workflows
+  (`prose_promote.py:186,249`, `prose_promotion_batch.py:111,146`), and it is a
+  read-modify-write of one JSON file per source slug. **Multiple rows in a batch share one
+  index**, so its post-images compose exactly as §4.6 requires for entity files — planning
+  composes the index state across all rows and emits one planned write per index.
+
+This also closes a hole in §4.2's wrap set: `record_promotion` raises `DecompositionError`,
+which is neither `OSError` nor `EntityCommandError`. Left in the write stage it would escape
+the wrapper and lose the partial-write diagnostic; planned, it fails during preflight where it
+is aggregated with the other candidate-local errors. Any residual write-stage call that can
+raise `DecompositionError` is covered by the wrap set in §4.2.
+
+### 4.6 Planned edits compose per path
 
 Each planner maintains `planned_text_by_path: dict[Path, str]`, initialized from disk **once**
 per path, then feeds each post-image into the next edit for that path. One `PlannedFileEdit`
@@ -274,7 +395,7 @@ Two reachable cases make this load-bearing, not theoretical:
 Independent edits computed from the same disk pre-image would each contain only their own
 change, and the last write would erase the others.
 
-### 4.4 Numeric mints plan without consuming a number
+### 4.7 Numeric mints plan without consuming a number
 
 `_mint_numeric` (`promote.py:341`) calls `reserve_entity` → `reserve_number_in_dir`, which
 claims the **next** number and commits an empty placeholder `.md` to back it. Under preflight
@@ -323,6 +444,25 @@ naming its stage, and writes nothing. This is the §4.1 boundary's other half; w
 file has been written carries `files_written` and `written_paths`. An `OSError`-only wrapper
 passes the plain `atomic_write_text` test and fails this one, which is the point.
 
+**Create drift (§4.3)** — a planned MINT whose destination is created by another writer
+*between planning and apply*: the batch refuses, names the path, and **the intervening file is
+byte-for-byte unchanged**. Asserting only that an error was raised is not enough — an
+`atomic_write_text` publish would overwrite the file and could still raise later in the batch.
+The assertion that fails under `os.replace` is the untouched pre-existing content.
+
+**Create planning has no pre-image** — planning a MINT for a destination that does not exist
+succeeds. Fails if `_edit` calls `_current_text` on the create path (`FileNotFoundError`).
+
+**Planning writes nothing (§4.4)** — after planning a batch containing MINTs of both a
+slug-addressed and a numeric kind, the entity directories are unchanged and **no number was
+consumed**: `propose_number` returns the same value before and after planning. This is what
+fails if an implementation keeps writes inside `mint`.
+
+**Sidecar and index are planned (§4.5)** — a batch that refuses during planning leaves the
+sidecar and every decomposition index byte-for-byte unchanged. And two prose rows sharing one
+source slug produce **one** planned index write carrying both promotions, not two writes where
+the second drops the first.
+
 **Composition** — two edits to one path: the composed post-image carries both, and the first
 is not lost.
 
@@ -342,7 +482,7 @@ Recorded so a later reader does not mistake these for oversights.
 - **No repair of the 183 pre-existing invalid records.** That is the "extend the migration to
   13 more kinds" slice, and it is independent.
 - **No typed-shape certification** on these paths — base shape only (§2).
-- **No transactional rollback** (§4.1).
+- **No transactional rollback** (§4.2).
 - **No arming** of `proposition` or `evidence-line`; neither mixin exists yet.
 - **`render_update`'s stale-owned-key hole** stays open. Clearing an owned key leaves the
   stale value (`dag/entity_frontmatter.py:298-300`), and the one-line fix also deletes the
