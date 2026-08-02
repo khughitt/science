@@ -20,7 +20,7 @@ arrives in spec 2c, and §4.2's zero-migration argument holds until it does.
 
 ## Global Constraints
 
-- **Design of record:** `docs/plans/2026-07-30-agent-evidence-broker-design.md` at **revision 36**.
+- **Design of record:** `docs/plans/2026-07-30-agent-evidence-broker-design.md` at **revision 37**.
   Where this plan and the design disagree, the design governs — raise the conflict, do not silently
   deviate.
 - **Exact file boundary (design §2.2, 4c column).** Create only `science/src/science_tool/findings/reviews.py`
@@ -2287,7 +2287,7 @@ cd science && uv run ruff check && uv run pyright
 - [ ] **Step 6: Update the design's status table**
 
 In `docs/plans/2026-07-30-agent-evidence-broker-design.md`, change plan 4c's State cell from
-`designed at revision 26, settled against the merged tree at revisions 34–36, not implemented` to
+`designed at revision 26, settled against the merged tree at revisions 34–37, not implemented` to
 `merged at <commit>` once the branch lands. Commit with the merge, not before.
 
 ---
@@ -2297,7 +2297,7 @@ In `docs/plans/2026-07-30-agent-evidence-broker-design.md`, change plan 4c's Sta
 **Spec coverage.** §4.2's types → Tasks 2–3. §4.2's two stored invariants → Task 3. §4.2.1 →
 Task 4. §5.4's executable order → Tasks 5–6 (steps 0–1, 6–7 in Task 5; steps 2–5 in Task 6). §5.4's
 `locked_store` extraction → Task 1. §5.4's two backstops → Task 3 (model invariant) and Task 7
-(validate check). §7's 39 rows → Task 8, with the certifying tests written in Tasks 1–7. §2.2's file
+(validate check). §7's 38 rows → Task 8, with the certifying tests written in Tasks 1–7. §2.2's file
 boundary → Global Constraints.
 
 **Known gaps, stated rather than hidden.** Three places send the implementer to read rather than
