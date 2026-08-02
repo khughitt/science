@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -260,20 +261,56 @@ def test_the_COMMIT_half_has_exactly_the_call_sites_we_sanctioned() -> None:
     }
 
 
-def test_the_OTHER_entity_writer_still_cannot_reach_a_hypothesis() -> None:
-    # HONESTY ABOUT THE BOUNDARY'S REACH. `_prepare_write` is not the only thing in this tree that
-    # rewrites entity frontmatter: `render_entity_frontmatter_updates` does too, it takes an
-    # arbitrary `updates` mapping, it runs NO schema or resolution check -- and it writes
-    # `superseded_by` and `resynthesized_into` outright (proposition_resynthesis_apply).
-    #
-    # It is not a hole TODAY because both its callers operate on PROPOSITIONS, and `proposition` is
-    # not in the migration slice: no project mixin, so no schema to enforce and no lineage rule to
-    # break. It becomes a hole the day a third caller points it at a hypothesis, or the day the
-    # proposition slice runs -- and this is the test that will say so.
-    assert _call_sites("render_entity_frontmatter_updates") == {
-        ("proposition_resynthesis_apply.py", "_original_edit"),
-        ("proposition_reconciliation_apply.py", "plan_canonicalization_apply"),
-    }
+def test_neither_entity_writer_can_degrade_a_hypothesis(tmp_path: Path, monkeypatch) -> None:
+    """Supersedes the roster-based guard.
+
+    The old test pinned the CALL SITES of `render_entity_frontmatter_updates` and reasoned
+    that the writer was safe because both its callers operated on propositions. The
+    reasoning was sound and the roster was real, but it ranged over one writer and not its
+    sibling: `append_entity_source_ref` already reached `hypothesis` through promotion LINK,
+    and `hypothesis` is an armed kind. A guard that LISTS its scope has a hole by
+    construction.
+
+    The renderers now certify base shape themselves, so containment no longer depends on a
+    roster staying complete -- and this test ranges over behavior instead of callers.
+    """
+    import science_tool.entities as entities
+    from science_tool.entities import (
+        EntityDegradationError,
+        render_entity_frontmatter_updates,
+        render_entity_source_refs,
+    )
+
+    valid_hypothesis = (
+        "---\n"
+        "id: hypothesis:0001-a-hypothesis\n"
+        "kind: hypothesis\n"
+        "title: a hypothesis\n"
+        "created: '2026-01-01'\n"
+        "updated: '2026-01-01'\n"
+        "---\n"
+        "body\n"
+    )
+    path = tmp_path / "entities" / "hypotheses" / "0001-a-hypothesis.md"
+
+    # `title` is required with minLength 1, so emptying it is a genuine valid -> invalid.
+    with pytest.raises(EntityDegradationError):
+        render_entity_frontmatter_updates(
+            valid_hypothesis, {"title": ""}, entity_path=path, as_of=date(2026, 6, 16)
+        )
+
+    # The source-refs renderer touches only unconstrained fields, so its guard is reached by
+    # injecting corruption at the seam both renderers share.
+    real_render_markdown = entities._render_markdown
+    monkeypatch.setattr(
+        entities,
+        "_render_markdown",
+        lambda frontmatter, body: real_render_markdown({**frontmatter, "title": ""}, body),
+    )
+    with pytest.raises(EntityDegradationError):
+        render_entity_source_refs(
+            valid_hypothesis, ["paper:new"], entity_path=path, as_of=date(2026, 6, 16)
+        )
 
 
 def _corrupt(project_root: Path, slug: str, **fields: object) -> None:
