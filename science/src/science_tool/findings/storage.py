@@ -21,6 +21,7 @@ fields is a LOAD ERROR -- never a silent repair or rename.
 
 from __future__ import annotations
 
+import fcntl
 import os
 import re
 import secrets
@@ -259,6 +260,49 @@ def case_store(project_root: Path, *, create: bool) -> Iterator[CaseStore]:
         raise CaseStorageError(f"{cases_dir(project_root)} does not exist") from exc
     except PathSafetyError as exc:
         raise CaseStorageError(str(exc)) from exc
+
+
+@contextmanager
+def locked_store(project_root: Path) -> Iterator[CaseStore]:
+    """Serialize case writes per project and hand back the SAME anchored store.
+
+    The lock and every case operation act through ONE directory descriptor. Taking the
+    lock and then obtaining a store from a second walk would reintroduce exactly the
+    check/use gap the descriptor exists to close -- the lock would be held on one
+    directory while the writes went to whatever the pathname named by then.
+
+    This function adds ONE conversion, over `flock` and `close`, which otherwise raise
+    a bare `OSError`. It deliberately adds NO catch spanning its own `yield`: a
+    contextmanager whose `try` covers the caller's body relabels the caller's
+    exceptions as its own. (`case_store` does have that shape, so a body-raised
+    `PathSafetyError` or `FileNotFoundError` is still converted one layer down -- that
+    is its behaviour, not a promise this function makes.)
+    """
+    with case_store(project_root, create=True) as store:
+        # NO try around `store.lock()`. `open_lock_at` already converts its `OSError` to
+        # `PathSafetyError` (paths.py:556-563), and `case_store`'s own `try` -- which
+        # stays active across its `yield` -- converts that to `CaseStorageError`. A clause
+        # here would be unreachable, and an unreachable clause reads as a guard.
+        descriptor = store.lock()
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+            except OSError as exc:
+                raise CaseStorageError(f"could not acquire the case store lock: {exc}") from exc
+            try:
+                yield store
+            finally:
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                except OSError as exc:
+                    raise CaseStorageError(
+                        f"could not release the case store lock: {exc}"
+                    ) from exc
+        finally:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise CaseStorageError(f"could not close the case store lock: {exc}") from exc
 
 
 def write_case(project_root: Path, record: AuditFindingRecord) -> Path:
