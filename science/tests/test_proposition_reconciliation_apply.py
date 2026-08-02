@@ -32,7 +32,7 @@ from science_tool.annotation.proposition_reconciliation_apply import (
     plan_canonicalization_apply,
     select_canonicalization_actions,
 )
-from science_tool.entities import EntityDegradationError
+from science_tool.entities import EntityCommandError, EntityDegradationError
 
 _CREATED = datetime(2026, 6, 30, tzinfo=timezone.utc)
 
@@ -83,6 +83,61 @@ def test_canonicalization_aggregates_every_degradation_refusal(
     message = str(excinfo.value)
     assert "b.md" in message
     assert "d.md" in message
+    assert "superseded" not in (tmp_path / "entities" / "propositions" / "b.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_canonicalization_aggregates_every_lookup_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Candidate-local entity lookup failures must not abort the selected action set."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    for slug in ("a", "b", "c", "d"):
+        _proposition(tmp_path, slug, f"Claim {slug}")
+
+    original_find_entity = recon.find_entity
+
+    def refuse_duplicate_lookup(project_root: Path, ref: str):
+        if ref in {"proposition:b", "proposition:d"}:
+            raise EntityCommandError(f"{ref} lookup refused")
+        return original_find_entity(project_root, ref)
+
+    monkeypatch.setattr(recon, "find_entity", refuse_duplicate_lookup)
+
+    plan = _manual_ready_plan(
+        actions=(
+            _action(
+                action_id="lookup-1",
+                canonical="proposition:a",
+                members=("proposition:a", "proposition:b"),
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:b",),
+                },
+            ),
+            _action(
+                action_id="lookup-2",
+                canonical="proposition:c",
+                members=("proposition:c", "proposition:d"),
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:d",),
+                },
+            ),
+        )
+    )
+
+    with pytest.raises(ReconciliationApplyError) as excinfo:
+        recon.plan_canonicalization_apply(tmp_path, plan)
+
+    message = str(excinfo.value)
+    assert "proposition:b" in message
+    assert "proposition:d" in message
     assert "superseded" not in (tmp_path / "entities" / "propositions" / "b.md").read_text(
         encoding="utf-8"
     )

@@ -606,7 +606,11 @@ def plan_canonicalization_apply(
             raise ReconciliationApplyError(f"{action.action_id} has no canonical_proposition")
 
         action_path_changed: dict[Path, bool] = {}
-        canonical_location = _entity_location(project_root, canonical)
+        try:
+            canonical_location = find_entity(project_root, canonical)
+        except EntityCommandError as exc:
+            degradations.append(f"{canonical}: {exc}")
+            continue
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
         try:
@@ -630,7 +634,11 @@ def plan_canonicalization_apply(
         for duplicate in action.members:
             if duplicate == canonical:
                 continue
-            duplicate_location = _entity_location(project_root, duplicate)
+            try:
+                duplicate_location = find_entity(project_root, duplicate)
+            except EntityCommandError as exc:
+                degradations.append(f"{duplicate}: {exc}")
+                continue
             frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
             existing_superseded_by = frontmatter.get("superseded_by")
             if existing_superseded_by is not None and str(existing_superseded_by) != canonical:
