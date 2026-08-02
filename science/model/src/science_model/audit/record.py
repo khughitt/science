@@ -278,6 +278,66 @@ class Transition(_Base):
         return self
 
 
+#: The same number as the evidence bound, by an honest name. Both tuples arrive on one
+#: submission from one untrusted producer, and there is no reason for them to differ; a
+#: second literal would be a second thing to drift.
+MAX_UNCERTAINTY_ENTRIES = MAX_EVIDENCE_ENTRIES
+
+
+class Uncertainty(_Base):
+    """One thing a reviewer declined to be sure about.
+
+    `field` names what the reviewer was unsure of. It enters no digest -- so it is
+    `AuthoredProvenance`, not `AuthoredHashComponent`, whatever the shape of the
+    neighbouring identity fields suggests.
+    """
+
+    field: AuthoredProvenance
+    what: AuthoredProvenance
+    why: AuthoredProvenance
+
+
+class ReviewAttestation(_Base):
+    """Who is reviewing and WHEN, asserted by the caller that KNOWS -- never by the
+    reviewer. The exact counterpart of `IngestionProvenance` at `ingest_report`.
+
+    `at` is attested rather than clocked for the same reason `ingest_report` takes
+    `observed_at` from `provenance.generated_at`: when a thing happened is part of what
+    the trusted caller attests.
+    """
+
+    reviewer_kind: ReviewerKind
+    reviewer_ref: AuthoredHashComponent
+    lens: AuthoredHashComponent | None = None
+    model: AuthoredProvenance | None = None
+    run_ref: AuthoredHashComponent
+    at: Instant
+
+    @model_validator(mode="after")
+    def _agent_provenance(self) -> ReviewAttestation:
+        if self.reviewer_kind == "agent":
+            if not self.lens:
+                raise RecordError("an agent attestation requires a lens (design §4.2)")
+            if not self.model:
+                raise RecordError("an agent attestation requires model provenance (design §4.2)")
+        return self
+
+
+class ReviewSubmission(_Base):
+    """What a producer offers: its FINDINGS, and nothing about its own identity.
+
+    Carries no correspondence field and no identity field -- not fields a producer may
+    leave blank, fields it cannot express. A Pydantic invariant can constrain a value's
+    shape but can never establish its provenance, so the submitted type is made
+    structurally incapable of carrying either.
+    """
+
+    outcome: ReviewOutcome
+    note: AuthoredProvenance
+    evidence: tuple[Evidence, ...] = Field(default=(), max_length=MAX_EVIDENCE_ENTRIES)
+    uncertainty: tuple[Uncertainty, ...] = Field(default=(), max_length=MAX_UNCERTAINTY_ENTRIES)
+
+
 class Review(_Base):
     review_id: str
     #: `reviewer_kind` is a `Literal`, so it cannot carry a NUL; the other three are
