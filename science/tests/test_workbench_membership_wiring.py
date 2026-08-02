@@ -80,7 +80,14 @@ def test_focal_hypothesis_populates_discusses(tmp_path: Path) -> None:
     assert result.propositions[0].discusses == ["hypothesis:0001-epigenetic-commitment"]
 
 
-def test_no_focal_hypothesis_leaves_discusses_empty(tmp_path: Path) -> None:
+def test_no_focal_hypothesis_leaves_discusses_unset(tmp_path: Path) -> None:
+    """No `focal_hypothesis` and no row-level `discusses` is NO OPINION, not authored-empty.
+
+    `_resolve_row_discusses` has always returned `None` for this case; the entity used to
+    flatten it to `[]`, which `render_update` then wrote over a curated membership. The
+    consumer-visible guarantee this test was created for -- no bundle membership -- is
+    asserted through `iter_memberships`, which is blind to the distinction.
+    """
     _seed_project(tmp_path)
     wb = WorkbenchFile(
         patch="h1-prognosis",
@@ -95,7 +102,8 @@ def test_no_focal_hypothesis_leaves_discusses_empty(tmp_path: Path) -> None:
         ],
     )
     result = compile_workbench(wb, project_root=tmp_path)
-    assert result.propositions[0].discusses == []
+    assert result.propositions[0].discusses is None
+    assert list(result.propositions[0].iter_memberships()) == []
 
 
 # ---------------------------------------------------------------------------

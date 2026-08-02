@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 from science_model.entities import EvidenceLineEntity
-from science_model.frontmatter import parse_entity_file
+from science_model.frontmatter import parse_entity_file, split_frontmatter
 
 from science_tool.dag.workbench import (
     CompileResult,
@@ -334,3 +334,87 @@ def test_compiled_proposition_passes_slug_conformance(tmp_path: Path) -> None:
     assert local_part_conforms("evidence-line", ev_local), (
         f"evidence-line local-part {ev_local!r} does not conform to the slug strategy"
     )
+
+
+# ---------------------------------------------------------------------------
+# (vii) `discusses` is three-state: a list, an explicit [], or "no opinion"
+# ---------------------------------------------------------------------------
+
+
+def _membership_row(**overrides) -> WorkbenchRow:
+    values: dict = {
+        "subject": "gene:PHF19",
+        "predicate": "affects",
+        "object": "construct:proliferation",
+        "polarity": "positive",
+        "patch": "patch-a",
+    }
+    return WorkbenchRow(**(values | overrides))
+
+
+def _persisted_discusses(root: Path, prop_id: str):
+    slug = prop_id.split(":", 1)[1]
+    text = (root / "entities" / "propositions" / f"{slug}.md").read_text(encoding="utf-8")
+    frontmatter, _body = split_frontmatter(text)
+    assert isinstance(frontmatter, dict)
+    return frontmatter.get("discusses", "<<absent>>")
+
+
+def test_recompile_without_focal_hypothesis_preserves_persisted_discusses(tmp_path: Path) -> None:
+    """A row expressing NO membership opinion must not erase a persisted one.
+
+    `WorkbenchRow.discusses` is three-state: a list, an explicit `[]`, or `None` meaning the
+    row says nothing. `_resolve_row_discusses` returns `None` for an ordinary row with neither
+    a row-level `discusses` nor a file-level `focal_hypothesis`. If `PropositionEntity.discusses`
+    cannot hold that `None`, compile collapses "no opinion" into "explicitly empty"; the empty
+    list then survives `exclude_none`, and `render_update` overwrites the curated value.
+    """
+    _seed_project(tmp_path)
+
+    first = compile_workbench(
+        WorkbenchFile(rows=[_membership_row()], focal_hypothesis="hypothesis:h1"),
+        project_root=tmp_path,
+    )
+    prop_id = first.propositions[0].id
+    assert prop_id is not None
+    assert _persisted_discusses(tmp_path, prop_id) == ["hypothesis:h1"]
+
+    # Same row, but `focal_hypothesis` removed from the patch file.
+    compile_workbench(WorkbenchFile(rows=[_membership_row()]), project_root=tmp_path)
+
+    assert _persisted_discusses(tmp_path, prop_id) == ["hypothesis:h1"]
+
+
+def test_row_authoring_an_explicit_empty_discusses_clears_membership(tmp_path: Path) -> None:
+    """An explicit `discusses: []` is an OPINION and must still overwrite.
+
+    This is what separates the three states. An implementation that preserved on empty-list
+    rather than on absence would pass the test above and fail here.
+    """
+    _seed_project(tmp_path)
+
+    first = compile_workbench(
+        WorkbenchFile(rows=[_membership_row()], focal_hypothesis="hypothesis:h1"),
+        project_root=tmp_path,
+    )
+    prop_id = first.propositions[0].id
+    assert prop_id is not None
+    assert _persisted_discusses(tmp_path, prop_id) == ["hypothesis:h1"]
+
+    compile_workbench(
+        WorkbenchFile(rows=[_membership_row(discusses=[])]), project_root=tmp_path
+    )
+
+    assert _persisted_discusses(tmp_path, prop_id) == []
+
+
+def test_a_row_with_no_membership_opinion_creates_without_the_key(tmp_path: Path) -> None:
+    """On CREATE there is nothing to preserve, so "no opinion" omits the key entirely
+    rather than minting an `[]` that later reads as an authored empty membership."""
+    _seed_project(tmp_path)
+
+    result = compile_workbench(WorkbenchFile(rows=[_membership_row()]), project_root=tmp_path)
+    prop_id = result.propositions[0].id
+    assert prop_id is not None
+
+    assert _persisted_discusses(tmp_path, prop_id) == "<<absent>>"

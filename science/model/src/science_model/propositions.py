@@ -66,7 +66,14 @@ class PropositionEntity(ProjectEntity):
 
     # Bundle membership: focal hypothesis/mechanism(s) this proposition discusses (→ cito:discusses).
     # A bare string means role=core; an object carries an explicit MembershipRole (spec §3).
-    discusses: list[str | DiscussesMembership] = Field(default_factory=list)
+    #
+    # THREE-state, matching `WorkbenchRow.discusses`: a list is a membership, `[]` is an authored
+    # "no bundles", and `None` means the writer expressed NO OPINION. That third state is what
+    # lets `render_update`'s preserve-by-default rule reach this field: a `None` is dropped by
+    # `render_entity_text(..., exclude_none=True)`, so an absent opinion preserves the persisted
+    # value instead of overwriting it. As a plain `list` defaulting to `[]` it was never absent,
+    # and every recompile of a row without `focal_hypothesis` erased a curated membership.
+    discusses: list[str | DiscussesMembership] | None = None
 
     # Reasoning metadata
     claim_layer: ClaimLayer | None = None
@@ -102,9 +109,13 @@ class PropositionEntity(ProjectEntity):
         return self
 
     def iter_memberships(self) -> Iterator[tuple[str, MembershipRole]]:
-        """Yield de-duped (frame_ref, role) pairs; bare strings are core."""
+        """Yield de-duped (frame_ref, role) pairs; bare strings are core.
+
+        `None` (no authored opinion) and `[]` (authored empty) both yield nothing — the
+        distinction matters only to the writer, never to a membership consumer.
+        """
         seen: set[tuple[str, MembershipRole]] = set()
-        for item in self.discusses:
+        for item in self.discusses or []:
             if isinstance(item, str):
                 pair = (item, MembershipRole.CORE)
             else:
