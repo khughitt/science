@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 34)
+**Status:** partially implemented (revision 35)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | **merged** at `cbb7656f` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revision 34**, not implemented |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, **settled against the merged tree at revisions 34–35**, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -273,6 +273,27 @@ eligibility rows are derived from the predicate's clauses rather than from a rea
 
 The fifth was an explanation that predicted the right outcome from the wrong mechanism — see §4.2 on
 `with_review`, which does not do what revision 34 first said it does.
+
+**Revision 35 is a third round, and its number exists because revision 34's second round changed the
+settled contract while still calling itself 34.** Two commits claiming one revision is a versioning
+defect in a document whose whole method is that a numbered contract can be cited. Its three findings
+share a root the second round did not reach: **revision 34 kept asserting what neighbouring code
+does without running it.**
+
+- The lock fixture was rewritten twice, each time moving closer to the leaf, while the thing making
+  it vacuous — that `case_store`'s `try` stays active across its own `yield` — was never checked.
+- Step 0 said "the same as `_snapshot_report`" and specified nothing. Measured, the natural spelling
+  `T.model_validate(instance)` does not recurse into a forged member at all, and copying
+  `_snapshot_report` literally fails on its own JSON-mode dump, which renders `at` as a string that
+  strict validation then refuses.
+- Step 7 said "load the case", and `CaseStore` has no load-by-id to call.
+
+The corrective is not more care in reading. **Each claim above is about what code does when it runs,
+and each was settled in under a minute by running it** — the FIFO reproduction, the
+`model_construct` probe, the `CaseStore` method list. A design document that describes a boundary in
+terms of its neighbours' behaviour has taken on a testable obligation, and prose review cannot
+discharge it. Revision 34 had already established that discipline for `with_review` and then did not
+extend it to the three neighbours it leaned on next.
 
 Revision 33 fixes the one place the widened tree rule had not reached: **§2.2's clause 1, which is
 where the guarantee is stated rather than merely described.**
@@ -2737,14 +2758,27 @@ carry and does not. It returns only if writer provenance gains a durable field.
 **The executable order.** Stated as numbered steps, for the reason §5.3 needed them: a list of
 independent rules does not say which fires first, and every one of these can fire on the same input.
 
-0. **Revalidate both arguments before reading either.** `ingest_report` opens with
-   `_snapshot_report`, which rebuilds the report through the constructor; `append_review` does the
-   same for `submission` and `attestation`. Without it the boundary is not total: an instance built
-   with `model_construct`, or one mutated past a `frozen=True` config through `__dict__`, reaches
-   step 4 and hands forged `LocationEvidence` straight to the checker — before any model this
-   function builds would have had a chance to reject it. A boundary that trusts the shape of its own
-   arguments has moved the trust decision to its callers, which is precisely what §4.2's
-   submission/record split exists to prevent.
+0. **Revalidate both arguments before reading either**, each as
+   `T.model_validate(arg.model_dump(mode="python", warnings="error"), strict=True)`, with
+   `ValidationError` and any serialization failure becoming `IngestError`. Without this the boundary
+   is not total: an instance built with `model_construct`, or mutated past `frozen=True` through
+   `__dict__`, reaches step 4 and hands forged `LocationEvidence` straight to the checker. A boundary
+   that trusts the shape of its own arguments has moved the trust decision to its callers, which is
+   what §4.2's submission/record split exists to prevent.
+
+   **Two spellings that look like this one and do not work.** Revision 34 said only "the same as
+   `_snapshot_report`", which is a defect twice over:
+
+   - **`ReviewSubmission.model_validate(submission)` is not recursive.** Measured: a
+     `LocationEvidence` built with `model_construct` around a path holding a `..` segment survives
+     it unchanged. `revalidate_instances="always"` governs whether an instance is revalidated *as a
+     field of something being built* — passing the outer instance straight to `model_validate` is
+     the case it does not cover. Dumping first is what forces every member back through its own
+     validators; the same forged value raises through the dump-then-validate path.
+   - **`_snapshot_report` cannot be copied literally.** It dumps in JSON mode, which renders
+     `ReviewAttestation.at` as a string that `strict=True` then refuses. `mode="python"` keeps the
+     `datetime`. `warnings="error"` is what turns a field whose forged value does not match its
+     declared type into a failure rather than a silently coerced dump.
 1. **Not an agent** → `correspondence = None`, and nothing further runs: no run lookup, no git, no
    control plane.
 2. **Agent** → `load_run_records(project_root)`, matching `record.id == attestation.run_ref`.
@@ -2755,19 +2789,28 @@ independent rules does not say which fires first, and every one of these can fir
    refuse: there is no reason to replay git for a review that will be rejected.
 4. `check_correspondence(submission.evidence, record.evidence, repo=project_root)`.
 5. `status == "violated"` → `IngestError`.
-6. `review_id(...)`, then the `Review`, stamped `at=attestation.at`.
-7. Under `locked_store(project_root)`: load the case, `with_review`, write — with both of its error
-   channels named, because "load the case" hides two failures that must not reach a caller as
-   something else:
-   - **`finding_id` names no case** → `IngestError`, no write. The case store raises
-     `CaseStorageError` for a missing record; a boundary that let that through would report a
-     storage fault for what is an argument the caller got wrong.
-   - **`review_id` already present on that case** → `IngestError`, no write, checked *before*
-     `with_review`. `_validate_reviews` already refuses a duplicate, but it refuses with
-     `RecordError` from inside the constructor, which is the model's backstop rather than this
-     boundary's answer. Re-submitting an identical review is the ordinary retry — the same
-     attestation and the same run produce the same `review_id` by construction — so this path is
-     reached by normal use and deserves a boundary error rather than a model one.
+6. Under `locked_store(project_root)`, **find the case by scanning**:
+   `store.read(name) for name in store.names()`, matching `record.finding_id`. `CaseStore` exposes
+   `names()`, `read()`, `write()` and `lock()` and has no load-by-id, so there is no call that
+   "loads the case"; `load_cases` scans for the same reason. Doing it through the held descriptor
+   rather than through the module-level `load_case` keeps the read inside the lock.
+   **No match → `IngestError`, no write** — the caller got an argument wrong, and reporting it as a
+   storage fault would name the wrong party.
+7. **Only now** derive `review_id`, from the matched record's own `finding_id`, then build the
+   `Review` stamped `at=attestation.at`, check for a duplicate, and `with_review` + write.
+   - **`review_id` already present** → `IngestError`, no write, checked *before* `with_review`.
+     `_validate_reviews` already refuses a duplicate, but with `RecordError` from inside the
+     constructor — the model's backstop, not this boundary's answer. Re-submitting an identical
+     review is the ordinary retry, since the same attestation and run produce the same `review_id`
+     by construction, so this path is reached by normal use and deserves a boundary error.
+
+**Deriving `review_id` after the match, not before it, is a correctness requirement rather than
+tidiness.** Revision 34 put it at step 6, ahead of the load. `review_id` hashes `finding_id` through
+`_components`, which rejects a NUL — so an unknown *and* NUL-bearing `finding_id` would have raised
+`RecordError` out of `review_id()` before the scan could return the `IngestError` this boundary
+promises, and the brand-new "every failure is an `IngestError`" rule would have been broken by the
+step that was added to enforce it. Hashing the matched record's canonical id also means the id is
+derived from a value the store vouched for rather than from the argument.
 
 `repo=project_root` is not a convention: `EvidenceSession.__init__` binds `_project_root = repo_root`
 and `start_run` passes `project_root`, so an exposure's commit is a commit of this repository by
@@ -2821,23 +2864,23 @@ totality resting on a roster of the cases its author happened to think of.
 importing a neighbour's underscore-prefixed contextmanager would make `append_review` raise
 `IngestError` out of a function it does not own. Two conditions on the move:
 
-- **The public `locked_store` converts to its own error, and only over the part it owns.** Today
-  `_locked_store` catches `CaseStorageError` and `PathSafetyError` and raises `IngestError`; the
-  `flock` and `close` calls raise `OSError` that nothing catches at all. The extracted function
-  converts both into `CaseStorageError`. Otherwise every caller has to know which storage-internal
-  exception types leak through, which is the abstraction not existing.
+- **The public `locked_store` adds exactly one conversion, over `flock` and `close`.** Those raise
+  `OSError` that nothing catches today; the extracted function converts them to `CaseStorageError`,
+  and the contract covers **acquisition, release and close** rather than acquisition alone, because
+  a failed unlock or a failed close is as much a lock-management failure as a failed acquire.
 
-  **Its scope is acquisition and release, not the body.** `locked_store` yields, and whatever the
-  caller raises inside the `with` passes through untouched — an `IngestError` from step 7's
-  duplicate check must not come back out as a `CaseStorageError`. The conversion wraps the setup and
-  teardown around the `yield`, never the `yield` itself. A contextmanager whose `try` spans its own
-  yield relabels its caller's exceptions as its own, which is a silent and very confusing fault.
+  **It needs no `PathSafetyError` clause, and revisions 34's two attempts at one were both wrong.**
+  `case_store` keeps its `try` **active across its own `yield`** (`storage.py:255–261`), so a
+  `PathSafetyError` raised by `store.lock()` — inside the caller's `with` body — is thrown back into
+  that generator and converted there. Measured, with a FIFO planted at `.ingest.lock` and every
+  other conversion removed: the call still raises `CaseStorageError`. The claim that the lock leaf
+  "sits outside `case_store`'s try" was false, and both fixtures written to prove it were vacuous.
 
-  **Note that `case_store` already converts `PathSafetyError`** (`storage.py:260`), so the
-  conversion `locked_store` adds is specifically for the **lock leaf** — `open_lock_at(dir_fd,
-  LOCK_NAME)`, where `LOCK_NAME = ".ingest.lock"` — and for the `flock` calls, both of which sit
-  outside `case_store`'s `try`. §7's fixtures have to target that leaf; one aimed at an unsafe
-  *cases directory* proves `case_store`'s conversion and leaves `locked_store`'s untested.
+  **Its scope is still setup and teardown, not the body.** Whatever the caller raises inside the
+  `with` passes through untouched: the conversion wraps the code around the `yield`, never the
+  `yield` itself. A contextmanager whose `try` spans its own yield relabels its caller's exceptions
+  as its own — which is exactly the fault `case_store` already has, and the reason `locked_store`
+  must not copy its shape while sharing its module.
 - **Each writer translates at its own boundary.** `ingest_report` catches `CaseStorageError` and
   raises `IngestError`, exactly as callers observe today; `append_review` does the same for itself.
   Storage raises storage errors; a boundary names its own.
@@ -3137,14 +3180,19 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4c | Drop `ReviewAttestation`'s agent-requires-`lens` | an agent attestation with no `lens` raises **at the attestation** |
 | 4c | Drop `ReviewAttestation`'s agent-requires-`model` | an agent attestation with no `model`, **its `lens` present**, raises at the attestation |
 | 4c | Let `ReviewSubmission` accept a `correspondence` key | constructing a submission carrying `correspondence` raises |
-| 4c | Skip step 0 and read `submission` as given | a submission built with `model_construct`, carrying a `LocationEvidence` whose `path` never survives `normalize_project_path`, is refused rather than reaching the checker |
+| 4c | Skip step 0 for `submission` | a submission built with `model_construct`, carrying a `LocationEvidence` whose `path` holds a `..` segment, is refused rather than reaching the checker |
+| 4c | Skip step 0 for `attestation` | a `model_construct`-forged **attestation** — an agent with `lens=None` — is refused rather than reaching the cross-checks |
+| 4c | Spell step 0 as `T.model_validate(arg)` without the dump | the same forged nested `LocationEvidence` is refused |
+| 4c | Dump in `mode="json"` at step 0 | a **well-formed** submission and attestation append successfully |
 | 4c | Run `check_correspondence` before the cross-checks | an attested agent whose `model` disagrees, **against an exposure whose replay raises `ServeError`**, fails with `IngestError` and not `ServeError` |
 | 4c | Let a `finding_id` naming no case surface as `CaseStorageError` | `append_review` against an unknown `finding_id` raises `IngestError` |
 | 4c | Rely on `_validate_reviews` for the duplicate instead of checking first | re-submitting an identical review raises `IngestError`, **not `RecordError`**, and leaves the case byte-identical |
 | 4c | Catch only `RunRecordError` around `load_run_records` | an agent review against an **unreadable** `runs/` raises `IngestError`, not `PermissionError` |
-| 4c | Let `PathSafetyError` from the **lock leaf** escape `locked_store` | a **non-agent** review against a project whose `.ingest.lock` is an unsafe leaf raises `IngestError` |
-| 4c | Let `OSError` from `flock` acquisition escape `locked_store` | a non-agent review whose lock cannot be acquired raises `IngestError` |
-| 4c | Widen `locked_store`'s `try` to span its own `yield` | step 7's duplicate-`review_id` refusal reaches the caller as `IngestError`, not `CaseStorageError` |
+| 4c | Let `OSError` from `flock` **acquisition** escape `locked_store` | with `fcntl.flock` injected to raise `OSError`, a **non-agent** review raises `IngestError` |
+| 4c | Let `OSError` from `flock` **release** escape `locked_store` | with release-only injection, a non-agent review that otherwise succeeds raises `IngestError` |
+| 4c | Let `OSError` from `os.close` escape `locked_store` | with `os.close` injected to raise, a non-agent review raises `IngestError` |
+| 4c | Widen `locked_store`'s `try` to span its own `yield` | an `OSError(EIO)` raised **inside** a `with locked_store(...)` body propagates as that same exception |
+| 4c | Derive `review_id` before the case scan | an unknown `finding_id` **containing a NUL** raises `IngestError`, not `RecordError` |
 
 **The import-cycle row must run in a subprocess, and the direction is not symmetric.** Written as an
 in-process `import science_model.audit.record`, the assertion probes the *safe* direction: it
@@ -3261,15 +3309,24 @@ alone is satisfied by an implementation that writes the review and *then* raises
 the case file to be byte-identical afterwards, which is what "refused" has to mean at a boundary that
 owns a write. The duplicate-`review_id` row carries the same second assertion for the same reason.
 
-**The two lock rows name their leaf, because the obvious fixture proves the wrong function.**
-Revision 34's first draft wrote "an unsafe case path", which fails inside `case_store` — and
-`case_store` already converts `PathSafetyError` to `CaseStorageError` at `storage.py:260`. Dropping
-`locked_store`'s conversion changes nothing under that fixture, so the row was green for a reason
-one layer away from the guard. The conversion `locked_store` owns covers exactly the lock leaf
-(`.ingest.lock`) and the `flock` calls, both outside `case_store`'s `try`, so the fixtures target
-those and nothing else. Both use a **non-agent** review, so no run resolution or git runs before the
-lock is reached and the failure has one possible source. This is the *"which line does the mutation
-break first?"* question asked of a fixture that had two candidate answers.
+**The lock rows took three attempts, and the first two were vacuous in the same way.** Revision 34
+wrote "an unsafe case path", then "an unsafe `.ingest.lock` leaf" — and `case_store` converts
+`PathSafetyError` in both cases, because its `try` stays active **across its own `yield`**
+(`storage.py:255–261`), so a failure inside the caller's `with` body is thrown back into that
+generator and handled there. Measured with a FIFO at `.ingest.lock` and every other conversion
+removed: still `CaseStorageError`. Each draft moved the fixture closer to the leaf while the thing
+that made it vacuous was never the leaf's location — it was the *extent of somebody else's `try`*,
+which neither draft had checked. `locked_store` therefore owns exactly the `flock` and `close`
+calls, and the rows reach them by injection, since a real `flock` failure is not producible from a
+fixture. All use a **non-agent** review so no run resolution or git precedes the lock and the
+failure has one possible source.
+
+**The body-passthrough row must raise an `OSError`, not an `IngestError`.** Revision 34's version
+asserted that step 7's duplicate refusal survives a widened `try` — but the widening under test is
+of an `OSError`/`PathSafetyError` catch, and `IngestError` is a `ValueError`, so no widening of the
+clause in question could ever have caught it. The row asserts that a sentinel `OSError(EIO)` raised
+inside the `with` body propagates as itself: an `OSError` that is neither `FileNotFoundError` nor
+`PathSafetyError`, so it is not intercepted by `case_store`'s pre-existing clauses on the way out.
 
 **And the ordering row needed a fixture that can see the order at all.** Against an unreachable
 repository the checker *returns* `unwired` rather than raising, so cross-checks-first and
