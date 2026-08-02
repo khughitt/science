@@ -113,8 +113,21 @@ string. Validating the in-memory mapping would certify something that was never 
 
 That defect class is real but was the minority of piece 3's corpus: of the 792 records it
 repaired, **769 had an empty `title`** and **23 differed in no parsed value at all** — those
-23 were date-quoting alone, which is exactly what this round trip catches and an in-memory
-check would miss.
+23 were date-quoting alone.
+
+**Corrected 2026-08-02, by measurement.** An earlier revision of this section claimed the
+date case is what an in-memory check "would miss", and §5 proposed it as the round trip's
+certification fixture. It is not, and it cannot be: `validate_persisted_base_shape` refuses a
+`datetime.date` **identically** whether it reads the in-memory mapping or the reparsed text,
+because `type: string` rejects the date object in both. A test built on it passes under the
+mutation and certifies nothing.
+
+The rule stands — validate what will be persisted — but its justification is structural, not
+this example: the mapping is not the artifact, and any difference introduced between building
+the mapping and emitting the text is invisible to a mapping-reading guard. The certification
+fixture is therefore an injected corruption at the render seam (a monkeypatched
+`_render_markdown`), which a mapping-reading guard demonstrably lets through. For this dumper
+and this parser today, no *naturally occurring* input is known to distinguish the two.
 
 ### 2.2 How a refusal surfaces
 
@@ -531,10 +544,11 @@ writes, valid→invalid refuses, invalid→invalid writes, invalid→valid write
 `invalid→` rows are what prove the guard forbids one transition rather than enforcing
 validity.
 
-**The round trip** — a fixture whose in-memory post-image mapping is acceptable but whose
-*rendered* text reloads differently (an unquoted date emitted as a bare scalar). It passes if
-the guard validates the reparsed text and fails if the guard validates the mapping. Without
-it, §2.1 is unenforced.
+**The rendered text** — corruption injected at the render seam (a monkeypatched
+`_render_markdown` that empties `title` after the mapping is built), for both renderers. It
+passes if the guard validates the rendered text and **fails with `DID NOT RAISE` if the guard
+validates the mapping**, which is what makes it the §2.1 certification. The unquoted-date
+fixture this section originally named does **not** discriminate — see the correction in §2.1.
 
 **CRLF** — a record with a CRLF body survives planning byte-for-byte. Fails if `_current_text`
 uses `read_text()`.
