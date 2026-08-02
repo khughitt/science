@@ -143,6 +143,51 @@ def test_canonicalization_aggregates_every_lookup_refusal(
     )
 
 
+def test_canonicalization_aggregates_canonical_and_duplicate_refusals_in_one_action(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A canonical refusal must not skip inspection of that action's duplicate members."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "Claim a")
+    _proposition(tmp_path, "b", "Claim b")
+    canonical_path = tmp_path / "entities" / "propositions" / "a.md"
+    duplicate_path = tmp_path / "entities" / "propositions" / "b.md"
+    before = {
+        canonical_path: canonical_path.read_text(encoding="utf-8"),
+        duplicate_path: duplicate_path.read_text(encoding="utf-8"),
+    }
+
+    def refuse_canonical(current_text, refs, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} canonical render refused")
+
+    def refuse_duplicate(current_text, updates, *, entity_path, as_of=None):
+        raise EntityDegradationError(f"{entity_path} duplicate render refused")
+
+    monkeypatch.setattr(recon, "render_entity_source_refs", refuse_canonical)
+    monkeypatch.setattr(recon, "render_entity_frontmatter_updates", refuse_duplicate)
+    plan = _manual_ready_plan(
+        actions=(
+            _action(
+                inputs={
+                    "source_ref_moves": (),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:b",),
+                }
+            ),
+        )
+    )
+
+    with pytest.raises(ReconciliationApplyError) as excinfo:
+        plan_canonicalization_apply(tmp_path, plan)
+
+    message = str(excinfo.value)
+    assert "a.md" in message
+    assert "b.md" in message
+    assert {path: path.read_text(encoding="utf-8") for path in before} == before
+
+
 def test_canonicalization_refuses_a_drifted_entity_without_clobbering_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -185,6 +230,81 @@ def test_canonicalization_refuses_a_drifted_entity_without_clobbering_it(
 
     assert "stage=write" in str(excinfo.value)
     assert duplicate.read_text(encoding="utf-8") == "someone else got here first\n"
+
+
+def test_canonicalization_entity_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The update hashes the same entity bytes its post-image was rendered from."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "Claim a")
+    _proposition(tmp_path, "b", "Claim b")
+    plan = _manual_ready_plan(
+        actions=(
+            _action(
+                inputs={
+                    "source_ref_moves": (
+                        {
+                            "from": "proposition:b",
+                            "to": "proposition:a",
+                            "source_refs": ("paper:B",),
+                        },
+                    ),
+                    "sidecar_backlink_rewrites": (),
+                    "archive_candidates": ("proposition:b",),
+                }
+            ),
+        )
+    )
+    canonical = tmp_path / "entities" / "propositions" / "a.md"
+    concurrent = "someone else changed the canonical before edit construction\n"
+    real_renderer = recon.render_entity_source_refs
+
+    def render_then_drift(current_text, refs, *, entity_path, as_of=None):
+        rendered = real_renderer(
+            current_text,
+            refs,
+            entity_path=entity_path,
+            as_of=as_of,
+        )
+        canonical.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(recon, "render_entity_source_refs", render_then_drift)
+
+    with pytest.raises(ReconciliationApplyError, match="stage=write"):
+        apply_canonicalization_plan(tmp_path, plan)
+
+    assert canonical.read_text(encoding="utf-8") == concurrent
+
+
+def test_canonicalization_sidecar_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sidecar update retains the exact text parsed to produce its post-image."""
+    import science_tool.annotation.proposition_reconciliation_apply as recon
+
+    _manifest(tmp_path)
+    _proposition(tmp_path, "a", "Claim a")
+    _proposition(tmp_path, "b", "Claim b")
+    sidecar_path = _paper_sidecar(tmp_path, "B", (_ann("b1", "proposition:b"),))
+    plan = _manual_ready_plan(actions=(_action(),))
+    concurrent = "someone else changed the sidecar before edit construction\n"
+    real_final_texts = recon._sidecar_final_texts
+
+    def render_then_drift(*args, **kwargs):
+        rendered = real_final_texts(*args, **kwargs)
+        sidecar_path.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(recon, "_sidecar_final_texts", render_then_drift)
+
+    with pytest.raises(ReconciliationApplyError, match="stage=write"):
+        apply_canonicalization_plan(tmp_path, plan)
+
+    assert sidecar_path.read_text(encoding="utf-8") == concurrent
 
 
 def _action(

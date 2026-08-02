@@ -8,8 +8,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
+from science_model.frontmatter import split_frontmatter
 from science_model.propositions import PropositionEntity
 from science_tool.annotation.cross_paper_evidence import KNOWN_STANCES, _resolve_paper_ref
+from science_tool.annotation.planned_edits import current_text
 from science_tool.annotation.proposition_reconciliation import (
     ReconciliationValidationError,
     build_reconciliation_report,
@@ -26,7 +28,6 @@ from science_tool.entities import (
     _render_markdown,
     find_entity,
     local_part_conforms,
-    parse_markdown_entity_file,
     resolve_path_policy,
 )
 
@@ -125,6 +126,7 @@ class RenderedReplacement:
     path: Path
     text: str
     changed: bool
+    before_text: str | None
 
 
 @dataclass(frozen=True)
@@ -811,8 +813,12 @@ def render_replacement_proposition(
     )
 
     body = f"\n# {replacement.title}\n\n{replacement.body.rstrip()}\n"
-    if path.exists():
-        existing_frontmatter, _existing_body = parse_markdown_entity_file(path)
+    try:
+        before_text = current_text(path)
+    except FileNotFoundError:
+        before_text = None
+    if before_text is not None:
+        existing_frontmatter, _existing_body = split_frontmatter(before_text)
         if "created" in existing_frontmatter:
             frontmatter["created"] = existing_frontmatter["created"]
         if "updated" in existing_frontmatter:
@@ -824,10 +830,21 @@ def render_replacement_proposition(
         raise ResynthesisDraftError(str(exc)) from exc
 
     text = _render_markdown(frontmatter, body)
-    if path.exists():
-        existing_text = path.read_text(encoding="utf-8")
-        if existing_text == text:
-            return RenderedReplacement(proposition=replacement.id, path=path, text=text, changed=False)
+    if before_text is not None:
+        if before_text == text:
+            return RenderedReplacement(
+                proposition=replacement.id,
+                path=path,
+                text=text,
+                changed=False,
+                before_text=before_text,
+            )
         raise ResynthesisDraftError("existing replacement proposition differs from draft")
 
-    return RenderedReplacement(proposition=replacement.id, path=path, text=text, changed=True)
+    return RenderedReplacement(
+        proposition=replacement.id,
+        path=path,
+        text=text,
+        changed=True,
+        before_text=None,
+    )

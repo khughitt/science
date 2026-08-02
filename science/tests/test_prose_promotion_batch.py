@@ -6,6 +6,7 @@ import pytest
 from science_tool.annotation.prose_decomposition import (
     ProseDecompositionStore,
     artifact_unit_ref,
+    canonical_json_text,
     compute_source_hash,
     parse_submitted_decomposition,
 )
@@ -399,6 +400,31 @@ def test_two_rows_sharing_a_source_slug_produce_one_index_write(tmp_path: Path) 
     assert len(promoted) == 2
 
 
+def test_two_link_rows_to_one_existing_entity_compose_source_refs(tmp_path: Path) -> None:
+    """The second row must render from the first row's batch-local post-image."""
+    from science_tool.entities import parse_markdown_entity_file
+
+    artifact = _persist_duplicate_claim_artifact(tmp_path)
+    _write_existing_proposition(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001", "u002"])
+    assert [(row.decision, row.target_ref) for row in plan.rows] == [
+        ("link", "proposition:existing"),
+        ("link", "proposition:existing"),
+    ]
+
+    report = apply_prose_promotion_plan(tmp_path, plan)
+
+    assert report.linked == 2
+    frontmatter, _body = parse_markdown_entity_file(
+        tmp_path / "entities" / "propositions" / "existing.md"
+    )
+    source_refs = set(frontmatter["source_refs"])
+    assert {
+        artifact_unit_ref(artifact, artifact.units[0]),
+        artifact_unit_ref(artifact, artifact.units[1]),
+    } <= source_refs
+
+
 def test_a_refused_row_leaves_the_index_and_every_entity_unchanged(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -470,6 +496,41 @@ def test_index_drift_before_edit_construction_refuses(tmp_path: Path, monkeypatc
         apply_prose_promotion_plan(tmp_path, plan)
 
     assert index_path.read_text(encoding="utf-8") == concurrent
+
+
+def test_index_change_between_row_validation_and_planning_snapshot_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Row validation and index composition must consume one exact index snapshot."""
+    import science_tool.annotation.prose_promotion_batch as batch
+
+    artifact = _persist_artifact(tmp_path)
+    plan = plan_prose_promotions(tmp_path, "example", ["u001"])
+    store = ProseDecompositionStore(tmp_path)
+    index_path = store.index_path("example")
+    concurrent_state = store.load_index("example")
+    concurrent_state["units"][artifact.units[0].fingerprint]["promoted_to"] = (
+        "proposition:concurrent"
+    )
+    concurrent_state["concurrent_note"] = "these bytes must survive"
+    concurrent_text = canonical_json_text(concurrent_state)
+    real_validate = batch._validate_current_row
+    changed = False
+
+    def validate_then_promote(*args, **kwargs):
+        nonlocal changed
+        current = real_validate(*args, **kwargs)
+        if not changed:
+            changed = True
+            index_path.write_text(concurrent_text, encoding="utf-8")
+        return current
+
+    monkeypatch.setattr(batch, "_validate_current_row", validate_then_promote)
+
+    with pytest.raises(ProsePromotionError, match="stage=write"):
+        apply_prose_promotion_plan(tmp_path, plan)
+
+    assert index_path.read_text(encoding="utf-8") == concurrent_text
 
 
 def test_plan_rejects_empty_unit_list(tmp_path: Path) -> None:

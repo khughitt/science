@@ -15,8 +15,8 @@ from science_tool.annotation.planned_edits import (
     changed_and_noop_paths,
     current_text,
     path_string,
-    plan_create_or_update,
-    plan_update,
+    plan_create,
+    plan_update_from_text,
     publish_edit,
     sha256_text,
 )
@@ -37,7 +37,10 @@ from science_tool.annotation.proposition_resynthesis import (
     render_replacement_proposition,
     validate_resynthesis_draft,
 )
-from science_tool.annotation.query import SidecarParseError, read_sidecar_strict
+from science_tool.annotation.query import (
+    SidecarParseError,
+    read_sidecar_snapshot_strict,
+)
 from science_tool.dag.entity_frontmatter import EntityWriteError
 from science_tool.entities import (
     EntityCommandError,
@@ -121,6 +124,8 @@ def _validate(
     project_root: Path,
     draft: ResynthesisDraft,
     as_of: date | None,
+    *,
+    resume_snapshot_text: str | None,
 ) -> ResynthesisValidationReport:
     try:
         return validate_resynthesis_draft(project_root, draft, as_of=as_of)
@@ -132,7 +137,12 @@ def _validate(
                 raise ResynthesisApplyError(str(live_exc)) from live_exc
         else:
             raise ResynthesisApplyError(str(exc)) from exc
-        resume_report = _resume_validation_report(project_root, draft, as_of=as_of)
+        resume_report = _resume_validation_report(
+            project_root,
+            draft,
+            as_of=as_of,
+            resume_snapshot_text=resume_snapshot_text,
+        )
         if resume_report is not None:
             return resume_report
         raise ResynthesisApplyError(str(exc)) from exc
@@ -151,7 +161,11 @@ def _is_consumed_or_stale_live_action_error(exc: ResynthesisDraftError) -> bool:
     )
 
 
-def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> set[str]:
+def _validate_resume_identity(
+    project_root: Path,
+    draft: ResynthesisDraft,
+    resume_snapshot_text: str | None,
+) -> set[str]:
     expected_action_id = reconciliation_action_id(
         "resynthesize_proposition",
         draft.judgment_id,
@@ -160,7 +174,7 @@ def _validate_resume_identity(project_root: Path, draft: ResynthesisDraft) -> se
     if draft.action_id != expected_action_id:
         raise ResynthesisApplyError("draft action_id is stale")
 
-    _validate_resume_snapshot(project_root, draft)
+    _validate_resume_snapshot(draft, resume_snapshot_text)
     return _draft_input_annotations(draft)
 
 
@@ -201,12 +215,11 @@ def _resume_snapshot_text(draft: ResynthesisDraft) -> str:
     return json.dumps(_resume_snapshot_payload(draft), sort_keys=True, indent=2) + "\n"
 
 
-def _validate_resume_snapshot(project_root: Path, draft: ResynthesisDraft) -> None:
-    path = _resume_snapshot_path(project_root, draft.action_id)
+def _validate_resume_snapshot(draft: ResynthesisDraft, snapshot_text: str | None) -> None:
+    if snapshot_text is None:
+        raise ResynthesisApplyError("resume snapshot missing")
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise ResynthesisApplyError("resume snapshot missing") from exc
+        loaded = json.loads(snapshot_text)
     except json.JSONDecodeError as exc:
         raise ResynthesisApplyError(f"resume snapshot is not valid JSON: {exc}") from exc
     if not isinstance(loaded, Mapping):
@@ -231,6 +244,7 @@ def _resume_validation_report(
     draft: ResynthesisDraft,
     *,
     as_of: date | None,
+    resume_snapshot_text: str | None,
 ) -> ResynthesisValidationReport | None:
     try:
         live_index = _live_annotation_index(project_root)
@@ -246,7 +260,11 @@ def _resume_validation_report(
     if not has_prior_write:
         return None
 
-    expected_action_annotations = _validate_resume_identity(project_root, draft)
+    expected_action_annotations = _validate_resume_identity(
+        project_root,
+        draft,
+        resume_snapshot_text,
+    )
 
     replacements = {replacement.id: replacement for replacement in draft.new_propositions}
     if len(replacements) != len(draft.new_propositions):
@@ -378,7 +396,7 @@ def _resume_validation_report(
 def _sidecar_final_texts_for_assignments(
     project_root: Path,
     assignments: Sequence[AnnotationAssignment],
-) -> dict[Path, str]:
+) -> dict[Path, tuple[str, str]]:
     try:
         live_index = _live_annotation_index(project_root)
     except ReconciliationApplyError as exc:
@@ -409,10 +427,10 @@ def _sidecar_final_texts_for_assignments(
             assignment.to_stance,
         )
 
-    final_texts: dict[Path, str] = {}
+    final_texts: dict[Path, tuple[str, str]] = {}
     for sidecar_path, sidecar_targets in targets.items():
         try:
-            sidecar = read_sidecar_strict(sidecar_path)
+            sidecar, before_text = read_sidecar_snapshot_strict(sidecar_path)
         except SidecarParseError as exc:
             raise ResynthesisApplyError(str(exc)) from exc
 
@@ -443,11 +461,14 @@ def _sidecar_final_texts_for_assignments(
             rel = sidecar_path.relative_to(project_root).as_posix()
             raise ResynthesisApplyError(f"{rel} missing targeted annotation(s): {', '.join(missing)}")
 
-        final_texts[sidecar_path] = serialize_sidecar(
-            Sidecar(
-                annotations=tuple(annotations),
-                ledgers=sidecar.ledgers,
-                shared_targets=sidecar.shared_targets,
+        final_texts[sidecar_path] = (
+            before_text,
+            serialize_sidecar(
+                Sidecar(
+                    annotations=tuple(annotations),
+                    ledgers=sidecar.ledgers,
+                    shared_targets=sidecar.shared_targets,
+                )
             )
         )
     return final_texts
@@ -498,15 +519,21 @@ def _original_edit(
         return None
     try:
         location = find_entity(project_root, draft.original_proposition)
+        before_text = current_text(location.path)
         final_text, _changed = render_entity_frontmatter_updates(
-            current_text(location.path),
+            before_text,
             updates,
             entity_path=location.path,
             as_of=as_of,
         )
     except EntityCommandError as exc:
         raise ResynthesisApplyError(str(exc)) from exc
-    return plan_update(location.path, final_text, "original_resynthesis_lineage")
+    return plan_update_from_text(
+        location.path,
+        before_text,
+        final_text,
+        "original_resynthesis_lineage",
+    )
 
 
 def _ordered_file_edits(edits: Mapping[Path, PlannedFileEdit]) -> tuple[PlannedFileEdit, ...]:
@@ -531,33 +558,58 @@ def plan_resynthesis_apply(
     as_of: date | None = None,
 ) -> ResynthesisPreflight:
     root = project_root.resolve()
-    validation = _validate(root, draft, as_of)
+    snapshot_path = _resume_snapshot_path(root, draft.action_id)
+    try:
+        snapshot_before = current_text(snapshot_path)
+    except FileNotFoundError:
+        snapshot_before = None
+    validation = _validate(
+        root,
+        draft,
+        as_of,
+        resume_snapshot_text=snapshot_before,
+    )
 
     edits: dict[Path, PlannedFileEdit] = {}
-    snapshot_path = _resume_snapshot_path(root, draft.action_id)
-    edits[snapshot_path] = plan_create_or_update(
-        snapshot_path,
-        _resume_snapshot_text(draft),
-        "resynthesis_resume_snapshot",
+    snapshot_text = _resume_snapshot_text(draft)
+    edits[snapshot_path] = (
+        plan_create(snapshot_path, snapshot_text, "resynthesis_resume_snapshot")
+        if snapshot_before is None
+        else plan_update_from_text(
+            snapshot_path,
+            snapshot_before,
+            snapshot_text,
+            "resynthesis_resume_snapshot",
+        )
     )
     for replacement in draft.new_propositions:
         expected_refs = validation.expected_source_refs_by_replacement[replacement.id]
         rendered = render_replacement_proposition(root, replacement, expected_refs, as_of=as_of)
-        edits[rendered.path] = plan_create_or_update(
-            rendered.path,
-            rendered.text,
-            "replacement_proposition",
+        edits[rendered.path] = (
+            plan_create(rendered.path, rendered.text, "replacement_proposition")
+            if rendered.before_text is None
+            else plan_update_from_text(
+                rendered.path,
+                rendered.before_text,
+                rendered.text,
+                "replacement_proposition",
+            )
         )
 
     original_edit = _original_edit(root, draft, as_of)
     if original_edit is not None:
         edits[original_edit.path] = original_edit
 
-    for sidecar_path, final_text in _sidecar_final_texts_for_assignments(
+    for sidecar_path, (before_text, final_text) in _sidecar_final_texts_for_assignments(
         root,
         draft.annotation_assignments,
     ).items():
-        edits[sidecar_path] = plan_update(sidecar_path, final_text, "annotation_promoted_to_rewrite")
+        edits[sidecar_path] = plan_update_from_text(
+            sidecar_path,
+            before_text,
+            final_text,
+            "annotation_promoted_to_rewrite",
+        )
 
     return ResynthesisPreflight(
         draft=draft,

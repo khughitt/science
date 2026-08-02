@@ -10,6 +10,7 @@ from science_tool.annotation.planned_edits import (
     current_text,
     plan_create,
     plan_create_or_update,
+    plan_numeric_create,
     plan_update,
     publish_edit,
     publish_order,
@@ -123,6 +124,65 @@ def test_plan_create_or_update_dispatches_on_existence(tmp_path: Path):
 
     assert plan_create_or_update(absent, "x\n", "r").operation == "create"
     assert plan_create_or_update(present, "x\n", "r").operation == "update"
+
+
+@pytest.mark.parametrize(
+    ("kind", "local_part", "number", "relative_path"),
+    (
+        pytest.param(
+            "question",
+            "0002-wrong-prefix",
+            1,
+            "entities/questions/0002-wrong-prefix.md",
+            id="wrong-number-prefix",
+        ),
+        pytest.param(
+            "question",
+            "0001-right-prefix",
+            1,
+            "entities/questions/different.md",
+            id="wrong-path",
+        ),
+        pytest.param(
+            "hypothesis",
+            "0001-right-prefix",
+            1,
+            "entities/questions/0001-right-prefix.md",
+            id="wrong-kind-directory",
+        ),
+    ),
+)
+def test_numeric_create_rejects_inconsistent_metadata_without_consuming_a_number(
+    tmp_path: Path,
+    kind: str,
+    local_part: str,
+    number: int,
+    relative_path: str,
+) -> None:
+    from science_tool.entities import EntityCommandError
+    from science_tool.entity_reservation import propose_number
+
+    before_numbers = {
+        candidate_kind: propose_number(tmp_path, candidate_kind)
+        for candidate_kind in ("question", "hypothesis")
+    }
+    edit = plan_numeric_create(
+        tmp_path / relative_path,
+        "planned entity\n",
+        "numeric metadata test",
+        kind=kind,
+        local_part=local_part,
+        number=number,
+    )
+
+    with pytest.raises(EntityCommandError, match="numeric create metadata"):
+        publish_edit(edit, project_root=tmp_path)
+
+    assert not list((tmp_path / "entities").rglob("*.md"))
+    assert {
+        candidate_kind: propose_number(tmp_path, candidate_kind)
+        for candidate_kind in before_numbers
+    } == before_numbers
 
 
 def test_publish_order_puts_entity_edits_before_side_stores(tmp_path: Path):

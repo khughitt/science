@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from science_tool.annotation.promote import (
     ApplyReport,
@@ -25,6 +25,7 @@ from science_tool.annotation.planned_edits import (
 )
 from science_tool.annotation.prose_decomposition import (
     DecompositionError,
+    DecompositionArtifact,
     ProseDecompositionStore,
     artifact_unit_ref,
     canonical_json_text,
@@ -32,6 +33,7 @@ from science_tool.annotation.prose_decomposition import (
 from science_tool.annotation.prose_promote import (
     ProsePromotionError,
     ProsePromotionPlanRow,
+    _plan_prose_unit_promotion_from_snapshot,
     plan_prose_unit_promotion,
 )
 from science_tool.dag.entity_frontmatter import EntityWriteError
@@ -90,7 +92,14 @@ def plan_prose_promotions(project_root: Path, source_slug: str, unit_ids: Sequen
             raise ProsePromotionError(f"unit {unit_id!r} does not have a mint/link promotion decision")
         rows.append(row)
     targets = build_targets()
-    _reject_duplicate_mint_targets([_validate_current_row(project_root.resolve(), row) for row in rows], targets)
+    project_root = project_root.resolve()
+    store = ProseDecompositionStore(project_root)
+    index = store.load_index(source_slug)
+    artifact = store.load_latest_from_index(source_slug, index)
+    _reject_duplicate_mint_targets(
+        [_validate_current_row(project_root, row, artifact, index) for row in rows],
+        targets,
+    )
     return ProsePromotionPlan(source_slug=source_slug, rows=tuple(rows))
 
 
@@ -104,10 +113,22 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     targets = build_targets()
     store = ProseDecompositionStore(project_root)
     rows = _plan_rows(plan)
+    index_state_by_slug: dict[str, dict[str, Any]] = {}
+    index_text_by_slug: dict[str, str] = {}
+    artifact_by_slug: dict[str, DecompositionArtifact] = {}
     try:
         for source_slug in {row.source_slug for row in rows}:
-            store.load_latest(source_slug)
-    except DecompositionError as exc:
+            index_path = store.index_path(source_slug)
+            index_text_by_slug[source_slug] = current_text(index_path)
+            index_state_by_slug[source_slug] = store.parse_index(
+                source_slug,
+                index_text_by_slug[source_slug],
+            )
+            artifact_by_slug[source_slug] = store.load_latest_from_index(
+                source_slug,
+                index_state_by_slug[source_slug],
+            )
+    except (DecompositionError, OSError) as exc:
         raise ProsePromotionError(str(exc)) from exc
 
     report = ApplyReport()
@@ -115,7 +136,14 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     current_rows: list[_ValidatedPromotionRow] = []
     for row in rows:
         try:
-            current_rows.append(_validate_current_row(project_root, row))
+            current_rows.append(
+                _validate_current_row(
+                    project_root,
+                    row,
+                    artifact_by_slug[row.source_slug],
+                    index_state_by_slug[row.source_slug],
+                )
+            )
         except ProsePromotionError as exc:
             refusals.append(f"{row.unit_id}: {exc}")
     try:
@@ -126,16 +154,7 @@ def apply_prose_promotion_plan(project_root: Path, plan: ProsePromotionPlan) -> 
     planned_text_by_path: dict[Path, str] = {}
     original_text_by_path: dict[Path, str] = {}
     creates: dict[Path, tuple[str, str, int] | None] = {}
-    index_state_by_slug: dict[str, dict] = {}
-    index_text_by_slug: dict[str, str] = {}
     next_number: dict[str, int] = {}
-
-    for source_slug in {current.row.source_slug for current in current_rows}:
-        index_path = store.index_path(source_slug)
-        index_text_by_slug[source_slug] = current_text(index_path)
-        index_state_by_slug[source_slug] = store.parse_index(
-            source_slug, index_text_by_slug[source_slug]
-        )
 
     def composed(path: Path) -> str | None:
         if path in planned_text_by_path:
@@ -313,12 +332,12 @@ def plan_from_json(payload: object) -> ProsePromotionPlan:
     return ProsePromotionPlan(source_slug=source_slug, rows=rows)
 
 
-def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _ValidatedPromotionRow:
-    store = ProseDecompositionStore(project_root)
-    try:
-        artifact = store.load_latest(row.source_slug)
-    except DecompositionError as exc:
-        raise ProsePromotionError(str(exc)) from exc
+def _validate_current_row(
+    project_root: Path,
+    row: ProsePromotionPlanRow,
+    artifact: DecompositionArtifact,
+    index: dict[str, Any],
+) -> _ValidatedPromotionRow:
     if row.source_ref != artifact.source_ref:
         raise ProsePromotionError(
             f"source_ref mismatch for unit {row.unit_id!r}: "
@@ -347,7 +366,13 @@ def _validate_current_row(project_root: Path, row: ProsePromotionPlanRow) -> _Va
             f"fingerprint mismatch for unit {row.unit_id!r}: "
             f"planned {row.fingerprint!r}, latest {unit.fingerprint!r}"
         )
-    current = plan_prose_unit_promotion(project_root, row.source_slug, row.unit_id)
+    current = _plan_prose_unit_promotion_from_snapshot(
+        project_root,
+        row.source_slug,
+        row.unit_id,
+        artifact,
+        index,
+    )
     if current is None:
         raise ProsePromotionError(f"unit {row.unit_id!r} no longer has a mint/link promotion decision")
     if (current.decision, current.target_ref) != (row.decision, row.target_ref):

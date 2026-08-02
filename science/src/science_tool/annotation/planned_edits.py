@@ -16,7 +16,11 @@ from typing import Literal
 from science_model.frontmatter import atomic_write_text
 
 from science_tool.dag.entity_frontmatter import publish_new_file
-from science_tool.entities import EntityCommandError
+from science_tool.entities import (
+    LOCAL_PART_WIDTH,
+    EntityCommandError,
+    resolve_path_policy,
+)
 from science_tool.entity_reservation import claim_number_in_dir
 
 
@@ -151,6 +155,31 @@ def publish_edit(edit: PlannedFileEdit, *, project_root: Path) -> None:
     if edit.operation == "create":
         if edit.claim_number is not None:
             assert edit.kind is not None and edit.local_part is not None
+            prefix = f"{edit.claim_number:0{LOCAL_PART_WIDTH}d}-"
+            if not edit.local_part.startswith(prefix):
+                raise EntityCommandError(
+                    "numeric create metadata mismatch: "
+                    f"{edit.local_part!r} does not start with {prefix!r}"
+                )
+            policy = resolve_path_policy(edit.kind, project_root=project_root)
+            if policy.strategy != "numeric":
+                raise EntityCommandError(
+                    "numeric create metadata mismatch: "
+                    f"{edit.kind!r} uses the {policy.strategy!r} path strategy"
+                )
+            expected_directory = project_root.resolve() / policy.root
+            if edit.path.parent != expected_directory:
+                raise EntityCommandError(
+                    "numeric create metadata mismatch: "
+                    f"{edit.path.parent} is not the canonical {edit.kind!r} directory "
+                    f"{expected_directory}"
+                )
+            expected_path = expected_directory / f"{edit.local_part}.md"
+            if edit.path != expected_path:
+                raise EntityCommandError(
+                    "numeric create metadata mismatch: "
+                    f"planned path {edit.path} does not match {expected_path}"
+                )
             claim_number_in_dir(
                 project_root, edit.kind, edit.claim_number, edit.local_part, edit.final_text
             )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from science_tool.annotation.internal_prose_adapter import InternalProseAdapter, LocatorStatus
 from science_tool.annotation.promote import (
@@ -27,6 +27,7 @@ from science_tool.annotation.planned_edits import (
 )
 from science_tool.annotation.prose_decomposition import (
     DecompositionError,
+    DecompositionArtifact,
     ProseDecompositionStore,
     Quote,
     artifact_unit_ref,
@@ -74,6 +75,23 @@ def plan_prose_unit_promotion(project_root: Path, source_slug: str, unit_id: str
         index = store.load_index(source_slug)
     except DecompositionError as exc:
         raise ProsePromotionError(str(exc)) from exc
+
+    return _plan_prose_unit_promotion_from_snapshot(
+        project_root,
+        source_slug,
+        unit_id,
+        artifact,
+        index,
+    )
+
+
+def _plan_prose_unit_promotion_from_snapshot(
+    project_root: Path,
+    source_slug: str,
+    unit_id: str,
+    artifact: DecompositionArtifact,
+    index: dict[str, Any],
+) -> ProsePromotionPlanRow | None:
 
     source_ref = artifact.source_ref
     if artifact.source.slug != source_slug:

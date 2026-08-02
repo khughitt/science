@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from science_model.frontmatter import split_frontmatter
+
 from science_tool.annotation.cross_paper_evidence import (
     _iter_project_annotation_sidecar_paths,
     _resolve_paper_ref,
@@ -17,7 +19,7 @@ from science_tool.annotation.planned_edits import (
     changed_and_noop_paths,
     current_text,
     path_string,
-    plan_update,
+    plan_update_from_text,
     publish_edit,
 )
 from science_tool.annotation.proposition_reconciliation_plan import (
@@ -28,6 +30,7 @@ from science_tool.annotation.query import (
     SidecarParseError,
     entity_relpath_for_sidecar,
     read_sidecar_strict,
+    read_sidecar_snapshot_strict,
 )
 from science_tool.dag.entity_frontmatter import EntityWriteError
 from science_tool.entities import (
@@ -411,7 +414,7 @@ def _canonical_source_refs(
 def _sidecar_final_texts(
     project_root: Path,
     live_backlinks: Sequence[InboundBacklink],
-) -> dict[Path, str]:
+) -> dict[Path, tuple[str, str]]:
     targets: dict[Path, dict[str, str]] = {}
     for backlink in live_backlinks:
         sidecar_targets = targets.setdefault(backlink.sidecar_path, {})
@@ -422,10 +425,10 @@ def _sidecar_final_texts(
             )
         sidecar_targets[backlink.annotation_id] = backlink.canonical
 
-    final_texts: dict[Path, str] = {}
+    final_texts: dict[Path, tuple[str, str]] = {}
     for sidecar_path, sidecar_targets in targets.items():
         try:
-            sidecar = read_sidecar_strict(sidecar_path)
+            sidecar, before_text = read_sidecar_snapshot_strict(sidecar_path)
         except SidecarParseError as exc:
             raise ReconciliationApplyError(str(exc)) from exc
         seen: set[str] = set()
@@ -441,11 +444,14 @@ def _sidecar_final_texts(
         if missing:
             rel = sidecar_path.relative_to(project_root).as_posix()
             raise ReconciliationApplyError(f"{rel} missing targeted annotation(s): {', '.join(missing)}")
-        final_texts[sidecar_path] = serialize_sidecar(
-            Sidecar(
-                annotations=tuple(annotations),
-                ledgers=sidecar.ledgers,
-                shared_targets=sidecar.shared_targets,
+        final_texts[sidecar_path] = (
+            before_text,
+            serialize_sidecar(
+                Sidecar(
+                    annotations=tuple(annotations),
+                    ledgers=sidecar.ledgers,
+                    shared_targets=sidecar.shared_targets,
+                )
             )
         )
     return final_texts
@@ -612,26 +618,29 @@ def plan_canonicalization_apply(
             canonical_location = find_entity(project_root, canonical)
         except EntityCommandError as exc:
             degradations.append(f"{canonical}: {exc}")
-            continue
+            canonical_location = None
         canonical_refs = _canonical_source_refs(action, live_backlinks)
         expected_refs_by_canonical[canonical] = canonical_refs
-        try:
-            final_text, _changed = render_entity_source_refs(
-                current_text(canonical_location.path),
-                canonical_refs,
-                entity_path=canonical_location.path,
-                as_of=as_of,
-            )
-        except EntityCommandError as exc:
-            degradations.append(f"{canonical}: {exc}")
-            continue
-        canonical_edit = plan_update(
-            canonical_location.path,
-            final_text,
-            "canonical_source_refs",
-        )
-        edits[canonical_location.path] = canonical_edit
-        action_path_changed[canonical_location.path] = canonical_edit.changed
+        if canonical_location is not None:
+            try:
+                canonical_before = current_text(canonical_location.path)
+                final_text, _changed = render_entity_source_refs(
+                    canonical_before,
+                    canonical_refs,
+                    entity_path=canonical_location.path,
+                    as_of=as_of,
+                )
+            except EntityCommandError as exc:
+                degradations.append(f"{canonical}: {exc}")
+            else:
+                canonical_edit = plan_update_from_text(
+                    canonical_location.path,
+                    canonical_before,
+                    final_text,
+                    "canonical_source_refs",
+                )
+                edits[canonical_location.path] = canonical_edit
+                action_path_changed[canonical_location.path] = canonical_edit.changed
 
         for duplicate in action.members:
             if duplicate == canonical:
@@ -641,13 +650,14 @@ def plan_canonicalization_apply(
             except EntityCommandError as exc:
                 degradations.append(f"{duplicate}: {exc}")
                 continue
-            frontmatter, _body = parse_markdown_entity_file(duplicate_location.path)
+            duplicate_before = current_text(duplicate_location.path)
+            frontmatter, _body = split_frontmatter(duplicate_before)
             existing_superseded_by = frontmatter.get("superseded_by")
             if existing_superseded_by is not None and str(existing_superseded_by) != canonical:
                 raise ReconciliationApplyError(f"{duplicate} already has superseded_by {existing_superseded_by}")
             try:
                 final_text, _changed = render_entity_frontmatter_updates(
-                    current_text(duplicate_location.path),
+                    duplicate_before,
                     {"status": "superseded", "superseded_by": canonical},
                     entity_path=duplicate_location.path,
                     as_of=as_of,
@@ -655,8 +665,9 @@ def plan_canonicalization_apply(
             except EntityCommandError as exc:
                 degradations.append(f"{duplicate}: {exc}")
                 continue
-            duplicate_edit = plan_update(
+            duplicate_edit = plan_update_from_text(
                 duplicate_location.path,
+                duplicate_before,
                 final_text,
                 "duplicate_supersession",
             )
@@ -683,11 +694,16 @@ def plan_canonicalization_apply(
             f"nothing was written:\n  {joined}"
         )
 
-    for sidecar_path, final_text in _sidecar_final_texts(
+    for sidecar_path, (before_text, final_text) in _sidecar_final_texts(
         project_root,
         live_backlinks,
     ).items():
-        edits[sidecar_path] = plan_update(sidecar_path, final_text, "sidecar_promoted_to")
+        edits[sidecar_path] = plan_update_from_text(
+            sidecar_path,
+            before_text,
+            final_text,
+            "sidecar_promoted_to",
+        )
 
     return CanonicalizationPreflight(
         actions=actions,

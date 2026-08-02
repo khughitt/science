@@ -231,8 +231,15 @@ class ProseDecompositionStore:
         _atomic_write_json(self.index_path(_validate_store_slug(source_slug)), state)
 
     def load_latest(self, slug: str) -> DecompositionArtifact:
+        return self.load_latest_from_index(slug, self.load_index(slug))
+
+    def load_latest_from_index(
+        self,
+        slug: str,
+        index: dict[str, Any],
+    ) -> DecompositionArtifact:
+        """Load the generation named by an already captured index snapshot."""
         slug = _validate_store_slug(slug)
-        index = self.load_index(slug)
         if not isinstance(index, dict):
             raise DecompositionError(f"prose decomposition index must be an object for source slug: {slug}")
         artifact_id = index.get("latest_artifact_id")

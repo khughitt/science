@@ -65,6 +65,126 @@ def test_resynthesis_surfaces_a_degradation_refusal_as_its_own_error(
         plan_resynthesis_apply(tmp_path, draft)
 
 
+def test_resynthesis_original_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    original = tmp_path / "entities" / "propositions" / "broad.md"
+    concurrent = "someone else changed the original before edit construction\n"
+    real_renderer = apply_module.render_entity_frontmatter_updates
+
+    def render_then_drift(current_text, updates, *, entity_path, as_of=None):
+        rendered = real_renderer(
+            current_text,
+            updates,
+            entity_path=entity_path,
+            as_of=as_of,
+        )
+        original.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(apply_module, "render_entity_frontmatter_updates", render_then_drift)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert original.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_replacement_created_before_edit_construction_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    concurrent = "another writer created this replacement\n"
+    real_renderer = apply_module.render_replacement_proposition
+
+    def render_then_create(*args, **kwargs):
+        rendered = real_renderer(*args, **kwargs)
+        if rendered.path.name == "broad-positive.md":
+            rendered.path.parent.mkdir(parents=True, exist_ok=True)
+            rendered.path.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(apply_module, "render_replacement_proposition", render_then_create)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    positive = tmp_path / "entities" / "propositions" / "broad-positive.md"
+    assert positive.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_sidecar_drift_before_edit_construction_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    sidecar_path = tmp_path / "entities" / "papers" / "A2020.source.anno.trig"
+    concurrent = "someone else changed the sidecar before edit construction\n"
+    real_final_texts = apply_module._sidecar_final_texts_for_assignments
+
+    def render_then_drift(*args, **kwargs):
+        rendered = real_final_texts(*args, **kwargs)
+        sidecar_path.write_text(concurrent, encoding="utf-8")
+        return rendered
+
+    monkeypatch.setattr(
+        apply_module,
+        "_sidecar_final_texts_for_assignments",
+        render_then_drift,
+    )
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert sidecar_path.read_text(encoding="utf-8") == concurrent
+
+
+def test_resynthesis_snapshot_created_during_validation_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.annotation.proposition_resynthesis_apply import (
+        ResynthesisApplyError,
+        apply_resynthesis_draft,
+    )
+
+    ctx = _factorization_project(tmp_path)
+    draft = parse_resynthesis_draft(_draft_payload(ctx))
+    snapshot_path = _snapshot_path(tmp_path, draft.action_id)
+    concurrent = "another writer created this snapshot\n"
+    real_validate = apply_module._validate
+
+    def validate_then_create(*args, **kwargs):
+        validation = real_validate(*args, **kwargs)
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_text(concurrent, encoding="utf-8")
+        return validation
+
+    monkeypatch.setattr(apply_module, "_validate", validate_then_create)
+
+    with pytest.raises(ResynthesisApplyError, match="stage=write"):
+        apply_resynthesis_draft(tmp_path, draft, as_of=date(2026, 7, 1))
+
+    assert snapshot_path.read_text(encoding="utf-8") == concurrent
+
+
 def test_plan_resynthesis_apply_creates_replacements_rewrites_sidecars_and_supersedes_original(
     tmp_path: Path,
 ):
