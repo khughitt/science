@@ -145,11 +145,20 @@ Raising rather than returning a refusal keeps the guard unskippable — a caller
 return value it never inspects — and matches `certify_persisted`, which raises
 `PersistedShapeError`.
 
-**Aggregation is the planner's job, not the renderer's.** A planner catches
-`EntityDegradationError` per planned edit, records it, and continues planning so that one
-refusal does not hide the next. It raises once, after planning, naming every refused record.
-This is the same division piece 3 used: the repair planner collected refusals and the caller
-raised once with all of them.
+**Translation is every planner's job; aggregation is required only where a batch exists.**
+Two distinct obligations, and conflating them would over-promise:
+
+- **Translation (all five workflows, slice 1).** No planner may let `EntityDegradationError`
+  reach its CLI. Each catches it and raises its own workflow error.
+- **Aggregation (the three immediate-write workflows, slice 2).** A planner that processes a
+  *batch* catches the refusal per planned edit, records it, continues planning so one refusal
+  does not hide the next, and raises once naming every refused record. This is the division
+  piece 3 used: the repair planner collected refusals and the caller raised once with all of
+  them.
+
+The staged workflows are single-subject — one resynthesis draft, one canonicalization action
+set — so slice 2 assigns them no aggregation work. They owe translation only. If a later slice
+gives either of them a multi-subject batch, aggregation follows then.
 
 ### 2.3 The workflow-level error contract, and what slice 1 owes
 
@@ -167,8 +176,20 @@ the translation — `apply_candidates` catches `EntityDegradationError` and rais
 `PromotionApplyError` — and slice 2 replaces it with the aggregated report. This is a
 deliberate two-step, recorded so the intermediate state is not mistaken for the final one.
 
-The staged workflows need no translation: they already surface `ReconciliationApplyError` and
-`ResynthesisApplyError` from the same planning phase the guard now runs in.
+The staged workflows are **not** uniformly covered either, and only one of the two is safe
+today:
+
+- `apply_resynthesis_draft` already translates — `_original_edit` wraps its renderer call in
+  `except EntityCommandError → ResynthesisApplyError`
+  (`proposition_resynthesis_apply.py:493-498`), so `EntityDegradationError` is caught by
+  inheritance and surfaces correctly with no change.
+- `plan_canonicalization_apply` does **not**. Its two renderer calls
+  (`proposition_reconciliation_apply.py:647`, `:668`) sit in no `try`, so
+  `EntityDegradationError` would escape as itself rather than as
+  `ReconciliationApplyError`. Slice 1 adds that translation.
+
+So slice 1 owes translation in two places — `apply_candidates` and
+`plan_canonicalization_apply` — not one.
 
 ---
 
@@ -280,16 +301,33 @@ partway on I/O or concurrent drift. Reconciliation already models the honest ans
 [stage=write, files_written=N, written_paths=(...)] failed to write <path>: <error>
 ```
 
-**The wrapping must cover every way the write stage can fail, not just `OSError` from
-`atomic_write_text`.** A promotion apply's write stage also calls `claim_number_in_dir`,
-which raises `EntityCommandError` on exactly the drift it exists to detect ("number NNNN was
-committed since the preview; re-run the preview"), and then writes the sidecar via
-`anno_io.write_sidecar`. If those escape unwrapped, the operator gets a bare error after N
-files have already landed and the partial-state diagnostic — the whole point of the shape —
-is missing precisely when it matters most. Wrap the write stage on `(OSError,
-EntityCommandError)`, and let the sidecar/index write share the same wrapper.
+**The write stage publishes planned edits and nothing else.** It calls no renderer, no store
+method, and no serializer — every post-image, including the sidecar's and every decomposition
+index's, was produced during planning (§4.5). Its whole vocabulary is: publish an update,
+publish a create, publish a numeric create.
 
-No claim of transactional rollback appears anywhere in this design.
+Three failure modes remain, and the wrapper must cover all three:
+
+| Publish | Raises |
+|---|---|
+| update — `atomic_write_text` | `OSError` |
+| create — exclusive `open("x")` + `os.link` | `EntityWriteError`, `OSError` |
+| numeric create — `claim_number_in_dir` | `EntityCommandError` (the drift it exists to detect), `OSError` |
+
+So the wrap set is **`(OSError, EntityCommandError, EntityWriteError)`**. These are *sibling*
+`ValueError` subclasses — `EntityCommandError` (`entities.py:47`), `EntityWriteError`
+(`dag/entity_frontmatter.py:314`) and `DecompositionError`
+(`annotation/prose_decomposition.py:37`) — so catching one catches neither of the others. An
+`EntityCommandError`-only wrapper would let the create publish's own refusal escape naked,
+which is the one failure preflight was added to make legible.
+
+`DecompositionError` is **not** in the set, and does not need to be: no `record_promotion`
+call survives into the write stage (§4.5). If an implementation leaves one there, the wrap
+set is wrong — but the correct fix is to plan it, not to widen the tuple.
+
+If a wrapped failure fires after N files have landed, the operator gets the partial-state
+diagnostic rather than a bare error. No claim of transactional rollback appears anywhere in
+this design.
 
 ### 4.3 A planned create is not a planned update
 
@@ -310,15 +348,29 @@ The plan therefore carries two operations, and they apply differently:
 
 | Operation | Pre-image | Publish | On drift |
 |---|---|---|---|
-| update | required, read once from disk | `atomic_write_text` (`os.replace`) | overwrites — acceptable, the record existed at plan time |
+| update | required, read once from disk | re-read and compare against `before_sha256`, then `atomic_write_text` | **refuses** — see below |
 | **create** | **absent** — asserted, not read | exclusive create (`open("x")` + `os.link`), i.e. `create_entity_file`'s primitive; numeric kinds use `claim_number_in_dir`, which is already exclusive | **refuses**: `EntityWriteError` / `EntityCommandError`, wrapped per §4.2 |
+
+**Updates get an optimistic precondition, for the same reason creates do.** `os.replace`
+overwrites unconditionally, so an update planned against bytes that have since changed would
+silently discard the other writer's work — and preflight is what makes that race worth caring
+about, since the window is now the whole planning phase rather than the microseconds between
+a read and a write. `PlannedFileEdit` already carries `before_sha256`, and today **nothing
+reads it** (`proposition_reconciliation_apply.py:42` is the only occurrence outside its own
+construction). Apply re-reads the file immediately before publishing, compares its hash to
+`before_sha256`, and refuses the batch if they differ.
+
+This applies to **every** planned update — entity files, the promotion sidecar, and each
+decomposition index — not only to entity records. An index or sidecar clobbered by a
+concurrent writer loses exactly as much as a record does.
+
+A planned create never becomes an overwrite, and a planned update never overwrites bytes it
+did not plan against. In both cases the file on disk is left untouched and the batch reports
+the drift.
 
 `PlannedFileEdit` gains that distinction rather than a parallel type — `before_sha256` is
 absent for a create, and `_edit` grows a sibling constructor for the create case rather than
 calling `_current_text` on a path that does not exist.
-
-A planned create never becomes an overwrite. If the destination exists at apply time, the
-batch fails with a drift refusal naming the path, and the file on disk is untouched.
 
 ### 4.4 The promotion planning contract
 
@@ -334,12 +386,36 @@ writes, reserves no number, and returns everything apply needs:
 ```python
 @dataclass(frozen=True)
 class PlannedMint:
-    entity_id: str            # "<kind>:<local_part>", the id apply must land
-    operation: str            # "create" | "accrue" -- what MintOutcome.created encoded
+    entity_id: str                          # "<kind>:<local_part>", the id apply must land
+    operation: Literal["create", "accrue"]  # what MintOutcome.created encoded
     path: Path
-    post_image: str           # the exact text to publish
-    claim_number: int | None  # set for numeric kinds; None for slug-addressed
+    post_image: str                         # the exact text to publish
+    claim_number: int | None                # set for numeric kinds; None for slug-addressed
+
+
+# (candidate, source_refs, project_root, as_of, assigned_number, current_text) -> PlannedMint
+PlanMintFn = Callable[
+    ["PromotionCandidate", list[str], Path, "date | None", int | None, str | None],
+    PlannedMint,
+]
 ```
+
+The two added inputs are what keep the target pure; without them an implementation must
+re-derive them, and each way of doing that reintroduces a defect this design removed:
+
+- **`assigned_number: int | None`** — the number the *outer* planner allocated in memory
+  (§4.7), passed in for numeric kinds and `None` for slug-addressed ones. A target that called
+  `propose_number` itself would hand every candidate in the batch the same number, since
+  `propose_number` is read-only and nothing has been written yet.
+- **`current_text: str | None`** — the destination's **composed** post-image so far (§4.6),
+  or `None` when the destination does not exist. Accrual is an update, so it must render from
+  what previous edits in this batch already planned for that path; re-reading disk would
+  discard them, which is exactly the composition defect §4.6 exists to prevent. The outer
+  planner owns `planned_text_by_path` and supplies this value — the target never touches the
+  filesystem, so it also cannot hide mutable state of its own.
+
+`operation` is typed `Literal["create", "accrue"]` rather than `str`, so a third value is a
+type error rather than a silently unhandled apply branch.
 
 - `operation="accrue"` is the MINT-accrual route (`promote.py:304`): the same claim already
   exists, so the plan is a source-ref *update* to that record, not a create. This is where
@@ -436,9 +512,18 @@ equally consistent with abort-on-first. A second case mixes *kinds* of candidate
 — one degradation plus one slug-naming failure — so the report is proven to span the whole
 candidate-local set of §4.1 rather than degradation alone.
 
-**Batch-global abort** — a malformed packaged template aborts planning, reports one error
+**Precondition abort** — a malformed packaged template aborts planning, reports one error
 naming its stage, and writes nothing. This is the §4.1 boundary's other half; without it,
 "may abort immediately" is untested and an implementer could aggregate everything.
+
+**Translation, per workflow (§2.3)** — each of the five workflows surfaces its own error type
+for a degradation refusal, never `EntityDegradationError` itself. `plan_canonicalization_apply`
+is the one that fails this today, so it is the one the test would catch regressing.
+
+**Update drift (§4.3)** — a planned update whose target's bytes change between planning and
+apply: the batch refuses and **the target's new content is unchanged**. Run it for an entity
+record, the sidecar, and a decomposition index, since all three are planned updates and only
+the first is obviously one.
 
 **Write-stage wrapping** — a `claim_number_in_dir` drift failure raised *after* an earlier
 file has been written carries `files_written` and `written_paths`. An `OSError`-only wrapper
