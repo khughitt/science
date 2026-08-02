@@ -1162,7 +1162,27 @@ def test_promote_prose_unit_surfaces_a_degradation_refusal_as_its_own_error(
         )
 ```
 
-`_write_existing_proposition` lives in `tests/test_prose_promotion_batch.py:152`; if `test_prose_promote.py` has no equivalent, copy that eight-line writer into this module rather than importing across test modules.
+`test_prose_promote.py` has **no** `_write_existing_proposition` — it writes this same record inline inside `test_promote_prose_unit_links_existing_proposition_and_appends_two_refs` (`:186-199`) and again inside the linked-recovery test (`:221-234`). Add the helper to `test_prose_promote.py` (an identical one lives at `tests/test_prose_promotion_batch.py:152`; define it locally rather than importing across test modules):
+
+```python
+def _write_existing_proposition(root: Path) -> None:
+    dest = root / "entities" / "propositions" / "existing.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        "---\n"
+        "id: proposition:existing\n"
+        "kind: proposition\n"
+        "title: Basalt flows record the cooling history.\n"
+        "status: active\n"
+        "source_refs: []\n"
+        "---\n"
+        "\n"
+        "Existing body.\n",
+        encoding="utf-8",
+    )
+```
+
+Leave the two inline writers alone — collapsing them onto the helper is unrelated churn in tests this task is not otherwise touching.
 
 - [ ] **Step 8: Run the affected suites**
 
@@ -1389,6 +1409,7 @@ from science_tool.annotation.planned_edits import (
     plan_create,
     plan_create_or_update,
     publish_edit,
+    publish_order,
 )
 from science_tool.dag.entity_frontmatter import EntityWriteError
 
@@ -1452,6 +1473,23 @@ def test_plan_create_or_update_dispatches_on_existence(tmp_path: Path):
 
     assert plan_create_or_update(absent, "x\n", "r").operation == "create"
     assert plan_create_or_update(present, "x\n", "r").operation == "update"
+
+
+def test_publish_order_puts_entity_edits_before_side_stores(tmp_path: Path):
+    """The paths are chosen so a plain path sort yields the OPPOSITE order: `a/index.json`
+    precedes `z/record.md` alphabetically. Prose recovery depends on the entity landing
+    first, so this ordering is a contract, not presentation."""
+    index = plan_create(tmp_path / "a" / "index.json", "{}\n", "prose_decomposition_index")
+    entity = plan_create(tmp_path / "z" / "record.md", "body\n", "prose_promotion_mint")
+
+    assert [e.path for e in publish_order([index, entity])] == [entity.path, index.path]
+
+
+def test_publish_order_is_path_sorted_within_each_group(tmp_path: Path):
+    second = plan_create(tmp_path / "b.md", "x\n", "prose_promotion_mint")
+    first = plan_create(tmp_path / "a.md", "x\n", "prose_promotion_accrual")
+
+    assert [e.path for e in publish_order([second, first])] == [first.path, second.path]
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -1517,7 +1555,7 @@ def publish_new_file(dest: Path, text: str) -> None:
 Add the imports:
 
 ```python
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from science_model.frontmatter import atomic_write_text
@@ -1769,7 +1807,17 @@ Expected: both FAIL — the other writer's bytes are gone. Revert. Then swap `pu
 cd science && uv run --frozen pytest tests/test_planned_edits.py::test_create_refuses_an_intervening_file_without_clobbering_it
 ```
 
-Expected: FAIL on the surviving-content assertion. Revert.
+Expected: FAIL on the surviving-content assertion. Revert. Then collapse `publish_order` to a plain path sort:
+
+```python
+    return sorted(edits, key=lambda e: e.path.as_posix())
+```
+
+```bash
+cd science && uv run --frozen pytest tests/test_planned_edits.py::test_publish_order_puts_entity_edits_before_side_stores
+```
+
+Expected: FAIL — `a/index.json` publishes first. Revert.
 
 - [ ] **Step 10: Lint and types**
 
@@ -3110,16 +3158,16 @@ Their contract is still live and still worth protecting: **a write-stage failure
     def fail_the_index_once(edit, *, project_root):
         if edit.path == index_path and not failed["done"]:
             failed["done"] = True
-            raise RuntimeError("simulated index write failure")
+            raise OSError("simulated index write failure")
         return real_publish(edit, project_root=project_root)
 
     monkeypatch.setattr(prose_promote_mod, "publish_edit", fail_the_index_once)
 ```
 
-Then widen the raise expectation, because the workflow now wraps write-stage failures:
+The injected type is **`OSError`, not `RuntimeError`**: `_publish` catches `(OSError, EntityCommandError, EntityWriteError)` deliberately, so a `RuntimeError` would escape naked and the test would pass without the wrap ever running. Change the raise expectation to the wrapper, which is the contract under test:
 
 ```python
-    with pytest.raises((RuntimeError, ProsePromotionError)):
+    with pytest.raises(ProsePromotionError, match="stage=write"):
 ```
 
 Every other assertion in both tests stands unchanged — the entity exists after the first run, the index has no `promoted_to`, the retry mints nothing, and the linked case's ref counts stay at 1. That those assertions survive verbatim is the evidence the contract was preserved rather than rewritten.

@@ -209,10 +209,16 @@ def certify_persisted(entity: WorkbenchEntity, text: str) -> None:
 
     Parses `text` with `split_frontmatter` -- the same parser `read_existing_target` uses for
     admission -- rather than a bare `split("---\\n", 2)`, so the two halves of "admit, then
-    certify" agree on what frontmatter is. This still validates the ROUND-TRIPPED mapping (parsing
-    the rendered text back), not the in-memory `dict` that was dumped: that is what catches an
-    unquoted date the YAML dumper emitted as a bare scalar, which reloads as a `datetime.date`
-    rather than the string the schema requires.
+    certify" agree on what frontmatter is. It validates the mapping reparsed FROM the rendered
+    text, not the in-memory `dict` that was dumped, because the text is the artifact: every later
+    reader sees only what the dumper wrote and the loader hands back, so any divergence the
+    dump/load round trip introduces is invisible to a check on the pre-dump mapping.
+
+    Measured 2026-08-02, correcting an earlier revision of this docstring: an unquoted date
+    reloading as a `datetime.date` is NOT an instance of that divergence.
+    `validate_persisted_base_shape` refuses a `datetime.date` identically either way, because
+    `type: string` rejects the object in the in-memory mapping too. The reparse rule rests on
+    the structure above, not on that example.
     """
     frontmatter, _body = split_frontmatter(text)
     try:
