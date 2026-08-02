@@ -1921,12 +1921,41 @@ parity_project_ids=(
   cbioportal pan-disease evolution pre-cancer ovarian head-and-neck
   prostate breast health-meta cycles immunity
 )
-for project_id in $parity_project_ids; do
-  cmp "/tmp/task-storage-rollout-closure/$project_id/tasks-before.json" \
-    "/tmp/task-storage-rollout-closure/$project_id/tasks-after.json"
+parity_project_roots=(
+  ~/d/cancer/data-sources/cbioportal
+  ~/d/health/comparisons/pan-disease
+  ~/d/cancer/mechanisms/evolution
+  ~/d/cancer/conditions/pre-cancer
+  ~/d/cancer/cancer-types/ovarian
+  ~/d/cancer/cancer-types/head-and-neck
+  ~/d/cancer/cancer-types/prostate
+  ~/d/cancer/cancer-types/breast
+  ~/d/health/meta
+  ~/d/health/processes/cycles
+  ~/d/health/processes/immunity
+)
+parity_baselines=(
+  tasks-before.json tasks-before.json tasks-before.json tasks-before.json
+  tasks-before.json tasks-before.json tasks-before.json tasks-before.json
+  tasks-before.json tasks-before-reconcile.json tasks-before.json
+)
+for (( index = 1; index <= ${#parity_project_ids}; index++ )); do
+  project_id="${parity_project_ids[$index]}"
+  project_root="${parity_project_roots[$index]}"
+  baseline="${parity_baselines[$index]}"
+  final_snapshot="/tmp/task-storage-rollout-closure/$project_id/final/tasks-snapshot.json"
+  mkdir -p "${final_snapshot:h}"
+  (
+    cd "$project_root"
+    uv run --frozen python /tmp/task-storage-rollout-closure/snapshot_tasks.py \
+      "$project_root" "$final_snapshot"
+  )
+  cmp "/tmp/task-storage-rollout-closure/$project_id/$baseline" \
+    "$final_snapshot"
 done
 jq -s -e 'map(.active | length) | add == 259' \
-  /tmp/task-storage-rollout-closure/{cbioportal,pan-disease,evolution,pre-cancer,ovarian,head-and-neck,prostate,breast,health-meta,cycles,immunity}/tasks-before.json
+  /tmp/task-storage-rollout-closure/{cbioportal,pan-disease,evolution,pre-cancer,ovarian,head-and-neck,prostate,breast,health-meta,immunity}/tasks-before.json \
+  /tmp/task-storage-rollout-closure/cycles/tasks-before-reconcile.json
 ```
 
 For cancer/meta, filter the row whose `.id == "t053"` from `tasks-after.json`
