@@ -44,7 +44,12 @@ from science_tool.autonomy.baseline import (
 )
 from science_tool.autonomy.control_plane import run_dir, run_slug
 from science_tool.autonomy.extract import ExtractError, _git, extract_change_set
-from science_tool.autonomy.git import GitOutputTooLarge, history_traversal_error, run_git
+from science_tool.autonomy.git import (
+    GitOutputTooLarge,
+    history_traversal_error,
+    restore_worktree,
+    run_git,
+)
 from science_tool.autonomy.marks import MarkIssue, verify_marks
 from science_tool.autonomy.path_gate import Denial, GateInputError, evaluate
 from science_tool.autonomy.record_writer import (
@@ -239,7 +244,24 @@ def start_run(
     assert_gate_is_external(project_root)
     base_commit = assert_repository_is_at(project_root)
 
-    result = _capture(project_root)
+    # The restore is scoped to `_capture` ALONE, and both halves of that matter.
+    #
+    # `materialize_graph` writes `knowledge/graph.trig` into the project, so a run opened
+    # against a project whose committed graph is absent or stale leaves residue -- which the
+    # harness would then sweep into the ACTOR's attested range, where `report-only` denies it
+    # (design §1.1). Restoring here, rather than in the caller, means every caller of
+    # `start_run` gets it, including `science autonomy start`.
+    #
+    # `try`/`finally` rather than a restore before each `return`/`raise`: `start_run` can raise
+    # four more times below, and residue left behind blocks the NEXT run rather than this one.
+    #
+    # It must NOT wrap `assert_repository_is_at`. That is the one path where a dirty tree is
+    # the CALLER's uncommitted work, and restoring it would destroy what the check exists to
+    # refuse.
+    try:
+        result = _capture(project_root)
+    finally:
+        restore_worktree(project_root)
     if result.status == "unwired":
         raise BaselineError(f"no belief basis to open a run against: ({result.code}) {result.reason}")
 

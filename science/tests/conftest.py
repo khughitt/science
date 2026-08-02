@@ -1256,3 +1256,44 @@ def plant_attacks(tmp_path: Path):
         return sentinels
 
     return _plant
+
+
+@pytest.fixture
+def ungraphed_project(tmp_path: Path) -> Path:
+    """A git project with a real belief basis and NO committed `knowledge/graph.trig`.
+
+    The distinction from `test_autonomy_lifecycle.py`'s `project` fixture is the whole point.
+    That one materializes and commits the graph before `git init`, so `start_run`'s rebuild is
+    byte-identical and leaves the tree clean -- which makes it useless for testing that
+    `start_run` cleans up after itself, because nothing is left to clean. This one has never
+    materialized, so the rebuild is the supervisor's own residue.
+    """
+    import subprocess
+
+    root = tmp_path / "ungraphed"
+    (root / "entities" / "propositions").mkdir(parents=True)
+    (root / "entities" / "papers").mkdir(parents=True)
+    (root / "entities" / "evidence-lines").mkdir(parents=True)
+    (root / "science.yaml").write_text(
+        "name: harness-fixture\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
+    (root / "entities" / "propositions" / "p1.md").write_text(
+        "---\nid: proposition:p1\nkind: proposition\ntitle: P1\n---\n\nClaim.\n", encoding="utf-8"
+    )
+    (root / "entities" / "papers" / "x.md").write_text(
+        "---\nid: paper:x\nkind: paper\ntitle: X\nvenue: Nature\n"
+        'pmid: "111"\nyear: 2020\nurl: https://example.org/x\n---\n\nBody.\n',
+        encoding="utf-8",
+    )
+    (root / "entities" / "evidence-lines" / "e1.md").write_text(
+        "---\nid: evidence-line:e1\nkind: evidence-line\ntitle: Evidence line\n"
+        "stance: supports\ntarget: proposition:p1\nsource: paper:x\n"
+        "strength: strong\nbelief_eligible: true\n---\n",
+        encoding="utf-8",
+    )
+    for args in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "base")):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root), *args],
+            capture_output=True, check=True,
+        )
+    return root
