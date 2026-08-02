@@ -18,6 +18,7 @@ from science_model.entities import OriginRecord, ProjectEntity
 from science_model.entity_schema import (
     PROJECT_MIXIN_NAMES,
     EntityValidationError,
+    EntityValidator,
     check_resolution,
     has_lineage_to_resolve,
 )
@@ -46,6 +47,17 @@ LOCAL_PART_WIDTH = 4
 
 class EntityCommandError(ValueError):
     """Raised for user-correctable entity CLI errors."""
+
+
+class EntityDegradationError(EntityCommandError):
+    """A write was refused because it would turn a base-shape-valid record invalid.
+
+    Subclasses `EntityCommandError` so the workflows that already catch that keep their
+    current shape. Deliberately WEAKER than `render_update`'s `certify_persisted`, which
+    rejects an already-invalid record outright: these renderers are kind-agnostic and serve
+    live promotion traffic onto records this branch does not repair. The shared principle is
+    only that neither writer backfills.
+    """
 
 
 @dataclass(frozen=True)
@@ -474,6 +486,44 @@ def render_entity_text(
     return _render_markdown(frontmatter, body)
 
 
+def _satisfies_base_shape(text: str) -> bool:
+    frontmatter, _body = split_frontmatter(text)
+    if not isinstance(frontmatter, dict):
+        return False
+    try:
+        EntityValidator().validate_persisted_base_shape(frontmatter)
+    except EntityValidationError:
+        return False
+    return True
+
+
+def _refuse_degradation(before_text: str, after_text: str, entity_path: Path) -> None:
+    """Refuse iff the pre-image satisfies base shape and the post-image would not.
+
+    Exactly one transition is forbidden. `invalid -> invalid` and `invalid -> valid` both
+    write: 183 records across 13 kinds fail base shape today, 41 of them `question` -- a
+    live promotion LINK target -- and refusing writes to those would couple containment to
+    migrating them.
+
+    `after_text` is REPARSED here rather than validated as the mapping that was dumped,
+    because the rendered text is what becomes authored source and the mapping is not the
+    artifact: anything introduced between building the mapping and emitting the text is
+    invisible to a mapping-reading guard. (`certify_persisted` gives the unquoted-date
+    scalar as its example; measured 2026-08-02, that case does not actually distinguish the
+    two -- `type: string` rejects a `datetime.date` either way. The rule is structural.)
+    """
+    if not _satisfies_base_shape(before_text):
+        return
+    frontmatter, _body = split_frontmatter(after_text)
+    try:
+        EntityValidator().validate_persisted_base_shape(frontmatter)
+    except EntityValidationError as exc:
+        raise EntityDegradationError(
+            f"{entity_path} satisfies the durable base shape and this write would not; "
+            f"nothing was written\n  {exc}"
+        ) from exc
+
+
 def render_entity_source_refs(
     current_text: str,
     refs_to_append: Sequence[str],
@@ -503,7 +553,9 @@ def render_entity_source_refs(
         return (current_text, False)
     frontmatter["source_refs"] = refs
     frontmatter["updated"] = (as_of or date.today()).isoformat()
-    return (_render_markdown(frontmatter, body), True)
+    rendered = _render_markdown(frontmatter, body)
+    _refuse_degradation(current_text, rendered, entity_path)
+    return (rendered, True)
 
 
 def render_entity_frontmatter_updates(
@@ -527,7 +579,9 @@ def render_entity_frontmatter_updates(
     if not changed:
         return (current_text, False)
     frontmatter["updated"] = (as_of or date.today()).isoformat()
-    return (_render_markdown(frontmatter, body), True)
+    rendered = _render_markdown(frontmatter, body)
+    _refuse_degradation(current_text, rendered, entity_path)
+    return (rendered, True)
 
 
 def append_entity_source_ref(file_path: Path, ref: str, *, as_of: date | None = None) -> bool:
