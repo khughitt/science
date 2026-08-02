@@ -208,6 +208,23 @@ def test_a_brokered_run_refuses_to_open_against_a_non_utf8_path(
         _start_brokered(project, tmp_path, monkeypatch)
 
 
+def test_a_brokered_run_refuses_to_open_against_a_backslash_path(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (project / "a\\b.txt").write_text("content\n", encoding="utf-8")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "add a backslash path")
+    tree = subprocess.run(
+        ["git", "-C", str(project), "ls-tree", "-r", "-z", "--name-only", "HEAD"],
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert b"a\\b.txt\0" in tree
+
+    with pytest.raises(BaselineError, match="cannot be spelled.*citation|false absence"):
+        _start_brokered(project, tmp_path, monkeypatch)
+
+
 def test_a_non_brokered_run_opens_against_an_nfd_tree(
     project: Path, baseline_path: Path
 ) -> None:

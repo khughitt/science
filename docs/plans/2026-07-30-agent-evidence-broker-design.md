@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 28)
+**Status:** partially implemented (revision 33)
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -13,8 +13,9 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | [Plan 1](2026-07-30-evidence-broker-plan-1-control-plane.md) | `autonomy/control_plane.py`, the `grep`/`log` probe, `LC_ALL`/`LANG` pinning in `run_git` | **merged** at `57b09bf0` |
 | [Plan 2](2026-07-30-evidence-broker-plan-2-serving.md) | `SurfacePolicy`, `evidence_broker/{policy,serve}.py` — §3.1, §3.2, §3.2.1 | **merged** at `dab47dc3` |
 | [Plan 3](2026-07-31-evidence-broker-plan-3-session.md) | the session and its record — §3.3, §3.4, §3.4.1, §3.5, §4.1, §4.3, §6's seal rule | **merged** at `f2fe585e` |
-| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **implemented** at revision 28 through `6a951c59` |
-| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | designed at revision 26, not implemented |
+| Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
+| Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | four tasks implemented through `d1340e64`; revision 32's fix wave merged at `c7429300` |
+| Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
 | Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | designed at revision 26, not implemented |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
@@ -98,6 +99,229 @@ this design has had.
    initialises `audit` first and then succeeds, and under pytest `sys.modules` may answer without
    executing anything at all. It must spawn a fresh interpreter on
    `import science_model.evidence_broker`.
+
+Revision 29 is pre-flight for plan 4b: §5 read against the merged tree rather than against itself.
+Three of its assumptions were **confirmed by probe** and are now stated as such; four points it left
+underdetermined are decided; two of §7's own rows are corrected; and design review of this revision
+closed five more, listed at the end. None is a defect in the production boundary. All four
+undetermined points are places an implementer would have had to invent a rule, and three of them have
+a permissive default that an invented rule lands on by accident.
+
+**Confirmed, so 4b may rely on them.** Citation keys and served-map keys land in one namespace, and
+4b normalises nothing — but that rests on **two** facts, not one, because a search's target is a
+regex and is deliberately never normalised (§3.2). `LocationEvidence.path`, a read or history
+`entry.target`, a search's `entry.pathspec` and `InlineInput.target` are all outputs of the same
+idempotent `normalize_project_path`; a **search's map keys are not among them** — they are the paths
+parsed out of the replayed grep payload, which are git's own tree paths. Take away either fact and
+the namespace splits.
+
+**Revision 31 corrects what the second fact has to be.** This sentence said those paths are
+"project-relative and NFC by 4a's clause 1" — true, and not enough: NFC does not imply
+backslash-free, and `normalize_project_path` rewrites a backslash. The property the served map
+actually needs is that **the normalizer returns a tree path unchanged**, which is now what §3.1
+guarantees. Revision 29 named this exact class of error in its own finding (3) and then committed a
+fresh instance of it one clause later, in the paragraph whose whole subject is which facts the
+namespace rests on. The journal's digest is
+`sha256(payload)` with no framing, so re-serving alone reproduces it. And revision 23's
+import-cycle probe re-runs true on the merged tree.
+
+1. **A replay-time git fault has a disposition, and it is not `unwired` by default.** Exactly two
+   conditions are decided before any entry is replayed — the repository does not hold
+   `exposure.commit`, and `history_traversal_error` is non-`None` — and those two own
+   `EXPOSURE_UNREACHABLE`. Anything else from git propagates, per §6's standing rule for the same
+   failure at serving time. The alternative reading, wrapping the whole replay and calling every
+   fault `unwired`, is the shape of revision 4's own bug: a project rename silently turned every
+   review `unwired`, and this design treated that as a fail-open to close, not as graceful
+   degradation. §5.2.
+2. **`line_count` is LF-based, and `InlineInput.lines` is not.** MEASURED:
+   `b"a\rb\n".splitlines()` is 2 because `bytes.splitlines()` splits on CR as well, and the sealed
+   manifest is built that way. `git grep -n` numbers by LF, and §5.1 makes `FULL` supersede `LINES`
+   on a path that was both read and searched — so a non-LF `FULL` count is not commensurable with
+   the `LINES` numbers beside it. Read coverage uses the LF rule; inline coverage uses the sealed
+   count, because 4b has no payload to recount and may not touch the model. The divergence is
+   permissive on CR-bearing files and is recorded rather than buried. §5.1.
+3. **The coverage merge was stated for one pair out of ten.** "`FULL` supersedes `LINES`" is not a
+   total rule. §5.1 now enumerates all ten, including the four self-pairs — nothing bounds a run to
+   one request per path — and the single unreachable pair, with why.
+4. **An inline entry disagreeing with the sealed manifest is `EXPOSURE_UNREPRODUCIBLE`, not absent
+   coverage.** `entries` and `exposure.inline` are seeded from one `session.inline`, so they agree by
+   construction; a record where they disagree is a record disagreeing with itself, which is what §5.2
+   exists to catch. §7 said "absent from the **baseline** manifest does not correspond" — stale
+   wording from before revision 5 moved replay off the baseline, and weaker than the fact. Under the
+   weaker reading, editing an inline entry's target is a free way to make a fabricated citation land
+   nowhere at no cost.
+
+**And one constraint that reads as tidy-able and is not.** §4.2 spells `Correspondence` as
+`Correspondence(_Base)`, but `_Base` lives in `audit/subjects.py`, and importing anything from
+`science_model.audit` runs `audit/__init__.py`, which eagerly imports `audit.record` — the module
+that will import `Correspondence` back. So `science_model/correspondence.py` inherits nothing from
+`audit` and repeats its own two-line model config. Revision 23's mutation row covers importing
+`Correspondence` *from* `evidence_broker.py`; this is the other edge of the same cycle.
+
+**Both edges turn out to be 4c rows, not 4b's.** The cycle does not exist until
+`audit/record.py` imports `Correspondence`, which is 4c's change — 4b touches no stored-record model.
+Run against 4b's tree either mutation imports cleanly and the row passes for the wrong reason, which
+is exactly what §7's `Slice` column exists to catch, found one slice later than the last time. 4b
+keeps a row it can certify on its own tree: a fresh interpreter executes
+`science_model/correspondence.py` with `runpy.run_path`, and that leaf execution must not load
+`science_model.audit` at all.
+
+**Design review of revision 29 closed five more, two of them inside revision 29's own fixes** —
+the pattern this document has now recorded five rounds running. The fourth is older than all of
+them; the fifth was introduced by the implementation plan.
+
+1. **The merge table was incomplete in the same way the thing it replaced was.** Revision 29 replaced
+   a one-pair rule with a five-row table and called it total; four pairs were missing, and the
+   omission was systematic rather than random — every missing pair was a **self-pair or a pair
+   involving one**, because the table was built by asking how two *different* operations combine.
+   Nothing bounds a run to one request per path. The costly one is `LINES` + `LINES`: two searches
+   expose disjoint line sets of one file, and a rank-based merge discards one of them, refusing a
+   citation to a line the reviewer demonstrably saw. It is also the only row where a union is
+   correct, which makes "just union everything" look like the safe repair — and unioning `FULL`
+   counts takes the maximum, inverting `FULL(min)`. §5.1.
+2. **§5.3's order was unexecutable as written.** The table put `EXPOSURE_UNREACHABLE` before
+   `REPLAY_PROTOCOL_MISMATCH` while the prose said all three `unwired` conditions are decided
+   "before any git call" — but deciding a repository lacks a commit, or will not walk, *is* a git
+   call. Only the first two rows are free. §5.3 now numbers the five steps, names
+   `serve.verify_commit` so 4b does not grow a second commit probe, and keeps the true part of the
+   old claim: a protocol mismatch classifies identically against a healthy repository, an
+   unreachable one, and a path that is not a repository.
+3. **Revision 29's own "one namespace" claim overshot, on the operation it had just finished calling
+   special.** It said every `ExposureEntry.target` is a `normalize_project_path` output; a search's
+   target is a regex and is deliberately never normalised (§3.2), and a search's map keys are not
+   targets at all — they are hit paths parsed from the payload, project-relative and NFC by 4a's
+   clause 1. The namespace rests on two facts, and stating it as one would have licensed a checker to
+   normalise a pattern. The same sentence appeared in §5.2 calling the journalled search target an
+   "`authorize` output", which it is not. Both corrected.
+4. **A §7 row that has been vacuous since revision 1.** "Make a span cite only its endpoints /
+   a ten-line span against a one-line hit is refused" — endpoint-checking refuses that too, since
+   line 10 is not among `{1}`. The mutation stayed green for twenty-nine revisions, and §5.1's prose
+   supplied the same example, so an implementer taking the fixture from either would have certified
+   nothing. Separating it needs both endpoints served and the middle not: lines 2–4 against `{2, 4}`.
+   Found by self-review of the *plan*, not of this document, which is where a row's fixture first
+   has to be written down concretely.
+5. **The plan silently invented a durable-model invariant.** It forbade `code` on `verified`, while
+   revision 17 required a code on non-verified results but did not state the reciprocal, and the
+   `InstrumentResult` invariant this type mirrors explicitly permits a code on `ok`. The tightening
+   is retained — a verified correspondence has no failure to classify, so a code beside it is stale
+   or contradictory — but §4.2 now states the deliberate divergence instead of letting 4c inherit a
+   plan-time assumption as though it had been reviewed here.
+
+Finding (3) is the **second** overshoot in this document to name a mechanism next to the property
+instead of the property — §2.2 records the first, three ways over three revisions — and it arrived
+in a paragraph whose subject was *which* facts the namespace rests on. Proximity to the caveat is not
+protection from the error.
+
+Revision 33 fixes the one place the widened tree rule had not reached: **§2.2's clause 1, which is
+where the guarantee is stated rather than merely described.**
+
+Revisions 31 and 32 restated the rule in §3.1, in §5.1's assumption sentence, and in the
+three-directions analysis, and left clause 1 reading "valid UTF-8 and already NFC" — two lines above
+the sentence that draws the entitlement from it: "Clause 1 is what licenses 4b to key its served map
+on the decoded path without re-normalising." That conclusion does not follow from NFC. The guarantee
+and the entitlement it grants disagreed, adjacently, for fourteen revisions, and commit `33bbdaf2`
+had already shipped the stronger property in code. Clause 1 now reads **decodes as UTF-8 and is
+returned unchanged by `normalize_project_path`** — in that order, since the round-trip needs a `str`
+before it can run. The same two-part spelling now appears in §3.1's rule and in the three-directions
+conclusion, so the seam states one predicate on both sides.
+
+**Why this one outlived three revisions of the same correction.** Revisions 31 and 32 fixed every
+sentence that *argued about* the rule and missed the sentence that *is* the rule. §2.2 opens by
+declaring itself authoritative for the seam precisely so this cannot happen — and being the
+authoritative statement is what made it invisible, because the review attention went to the prose
+that reasons and not to the clause it reasons from. **When a rule changes, the numbered contract
+changes first and the discussion second.** That is the sixth instance in this document of a fix
+carrying a defect of its own shape, and the first where the defect was the *scope* of an otherwise
+correct fix rather than its content.
+
+Revision 32 corrects both of revision 31's span mutation fixtures, found while executing the fix wave
+it authorised. Revision 31 wrote a section warning that a timeout row is only as strong as the input
+that keeps the mutant running, and then supplied two inputs that do not.
+
+1. **The `FULL` row's mutation short-circuits after four iterations.** `Full(3)` against a span of 1
+   to `10**18` makes the iterating form return `False` at line **4** — the predicate is false almost
+   immediately, so nothing runs long and the row certified nothing. The count must sit just *below*
+   the span's end, so every line but the last satisfies it: `Full(10**18 - 1)`.
+2. **The `LINES` row's mutation cannot hang at all, so the row is deleted.** A span is contiguous and
+   `numbers` holds at most n elements, so among any n+1 consecutive lines at least one is absent and
+   the iteration short-circuits within `len(numbers) + 1` steps regardless of the span's declared
+   length. The pre-check is a same-verdict optimisation and now sits beside the quadratic
+   accumulation in §7's "must not be added" list.
+
+The two share one cause: revision 31 saw two loops over a span and gave them the same treatment
+without asking **what bounds each loop**. `FULL` compares against a count, so an authored `end_line`
+sets the iteration length directly; `LINES` compares against a set, whose size is fixed by the
+payload cap. Only the first is authored-unbounded. This is the fourth time in this document that a
+fix has carried a defect of its own shape into the next round — and the first where the *warning
+paragraph* and the defective fixture were written in the same revision.
+
+Revision 31 closes the five defects found by plan 4b's final cumulative review of implemented code.
+None is a fail-open in 4b — but one is a fail-open in **4a**, which 4b's own assumption sentence had
+been quietly repeating for three revisions.
+
+**The one that changes a slice boundary: a backslash in a tree path certifies a false absence.**
+`normalize_project_path` maps `\` to `/`. §3.1's tree scan checks UTF-8 and NFC and says nothing
+about either character, so a repository holding `a\b.txt` opens a brokered run. A `read` of
+`a\b.txt` authorizes as `a/b.txt`, git reports that absent, and the served map records `Absent` for
+`a/b.txt` — under which a citation to `a\b.txt`, normalising to the same string, corresponds. **An
+agent claims a file does not exist, is wrong, and is certified `verified`.** That is direction 3 of
+§3.1's own three-directions analysis, reproduced with no Unicode involved and no deny prefix
+required, and §3.1's stated rationale already covers it: a path that cannot be spelled as a
+`LocationEvidence.path` can never be cited honestly, "so it is the same rule in the same place."
+
+So §3.1's rule widens, and the repair lands in `autonomy/lifecycle.py` — **4a's cell, not 4b's**. It
+ships as a 4a follow-up commit *before* 4b's fix wave rather than folded into it. §2.2's 4b row keeps
+saying `Modifies: —` and keeps meaning it; a contract amended once to accommodate the slice that
+found a neighbour's bug is a contract that will be amended again. What 4b owns here is the
+discovery, not the fix.
+
+**And 4b's assumption sentence was overstated a third time, in the same paragraph as the first two.**
+Revision 29 said search-hit paths are "project-relative and NFC by 4a's clause 1", which is true and
+insufficient: NFC does not imply backslash-free, and the served map needs the *stronger* property.
+Revision 29's own finding (3) named this class of error and then committed a new instance of it one
+clause later.
+
+1. **A valid filename containing LF breaks the parser.** MEASURED, git 2.55: `git grep -z` emits the
+   path **raw**, so a hit on `a\nb.txt` produces `<commit>:a` LF `b.txt` NUL `1` NUL `content` LF, and
+   splitting the payload on LF splits mid-record. It fails loudly — the first fragment carries no NUL
+   — so no citation is misclassified. The repair is nevertheless **not** a wider delimiter: splitting
+   on `LF + <commit>:` is defeated by a filename containing that literal sequence, and the commit is
+   knowable. §5.1 now specifies a **forward scan**, which is unambiguous by construction and needs no
+   4a change.
+2. **The backslash case above.** §3.1, plus the widened §5.1 assumption.
+3. **Inline integrity was one-directional and lost multiplicity.** A dict keyed on
+   `(target, sha256)` proves every entry has a manifest item and never the converse, so a manifest
+   item with no entry — a record disagreeing with itself in the other direction — passed. It also
+   collapsed duplicates. §5.2 now compares **multisets**, and separately refuses a manifest in which
+   one `(target, sha256)` key carries two different `lines` values: identical duplicate inputs stay
+   reproducible, contradictory line counts are not a coverage question with an answer.
+4. **A span can be constructed that never terminates.** `Span.end_line` is `Field(ge=1)` with **no
+   upper bound**, so `Span(start_line=1, end_line=10**18)` is constructible and iterating it inside
+   `all(...)` hangs. Reachable from authored review content on a write path, and it hangs rather than
+   fails, which makes it the most serious of the five. §5.1 now requires the check to be bounded.
+5. **Hit accumulation was quadratic.** Uniting a fresh one-element `Lines` per hit rebuilds the set
+   each time, so a path with *k* hits costs O(k²) — and `MAX_SERVED_BYTES` admits roughly twenty
+   thousand hits in one payload. §5.1 now groups by path before constructing coverage.
+
+**None of these bumps `REPLAY_PROTOCOL_VERSION`, and that needs saying rather than assuming**, since
+§5.2 lists "the hit-line parsing" among the things the protocol covers. The bump exists so a changed
+*meaning* of serving cannot silently reclassify honest historical work. Every repair here is a strict
+widening or a bounded rewrite of the same answer: the parser fix affects only payloads that
+previously raised, the span and accumulation fixes compute the identical verdict, the inline fix
+tightens a check rather than changing what replay serves, and the tree rule changes which runs may
+**open** — not what serving or replay computes. No sealed exposure's verdict moves off `verified`.
+The tree rule does mean a repository holding such a filename can no longer open a brokered run; that
+is a real behaviour change to 4a, recorded here, not a version bump.
+
+Revision 30 corrects 4b's leaf-import guard. A normal `import science_model.correspondence` always
+executes the existing eager `science_model/__init__.py`; its current chain already loads
+`science_model.audit` before the leaf executes. The old `sys.modules` predicate therefore measured
+package initialisation, not the leaf's dependencies, and could not certify the boundary it named.
+4b instead starts a fresh interpreter, executes the leaf file directly with
+`runpy.run_path(sys.argv[1])`, and asserts that `science_model.audit` remains absent. Temporarily
+importing `_Base` or anything else from `science_model.audit` in that file makes this guard fail.
+The real package-cycle rows remain 4c: their `audit.record -> Correspondence` edge does not exist in
+4b's tree, and this correction changes no production boundary.
 
 Revision 28 closes the cross-task defect found by Plan 4a's final cumulative review.
 
@@ -329,10 +553,19 @@ only the first was ever written down:
    which §5.1 defines as "the path is not at the commit, and that was served as the answer" and makes
    citable. An agent could claim a file does not exist, be wrong, and be certified `verified`.
 
+**Revision 31: none of this is really about Unicode.** A tree path holding a **backslash** walks
+directions 2 and 3 unchanged — `normalize_project_path` maps `\` to `/`, so `a\b.txt` is uncitable
+under its own name, and a `read` of it authorizes as `a/b.txt`, misses, and certifies the absence of
+a file that exists. The three directions are consequences of *any* divergence between the tree's
+spelling and the normalizer's output; NFD was simply the first one found. §3.1's rule is therefore
+stated against the normalizer rather than against an encoding, and this analysis holds verbatim with
+"NFD path" read as "path the normalizer would rewrite".
+
 Direction 3 is the one that decides the design. It involves no collision, no deny prefix and no
-search — one NFD path anywhere in the tree is enough — so no filter on the serving side reaches it.
-**The session therefore refuses at open any pinned tree holding a path that is not valid UTF-8 or not
-already NFC**, verified by one `git ls-tree -r -z --name-only` pass. All three directions become
+search — one such path anywhere in the tree is enough — so no filter on the serving side reaches it.
+**The session therefore refuses at open any pinned tree holding a path that does not decode as UTF-8,
+or that `normalize_project_path` does not return unchanged**, verified by one
+`git ls-tree -r -z --name-only` pass. All three directions become
 unreachable at once, in the one layer that can still refuse, instead of three guards in three layers.
 The serve-time post-filter that revision 17 first proposed came back out: it defended direction 1
 only, and it would have read as coverage.
@@ -635,7 +868,9 @@ may reach backwards**, and each is independently mergeable.
 **The guarantee 4a hands forward, stated as three clauses because 4b is entitled to rely on each and
 on nothing beyond them.** Every exposure sealed at `REPLAY_PROTOCOL_VERSION = 2`:
 
-1. was served from a tree whose every path is valid UTF-8 and already NFC;
+1. was served from a tree whose every path **decodes as UTF-8 and is returned unchanged by
+   `normalize_project_path`** — the two parts in that order, since the second needs a `str` before it
+   can run, and NFC is one of several things it subsumes (§3.1);
 2. was served under a per-request byte ceiling, with overflow refusing rather than truncating; and
 3. was served **entirely from objects the local repository already held**, by a traversal git did not
    silently truncate. A repository that cannot supply an object locally **fails the invocation** —
@@ -659,7 +894,13 @@ than the mechanism delivered — and it then wrote a clause narrower than the ha
 and undershooting the same sentence are one error**: describing the mechanism you happen to be
 looking at instead of the property the consumer needs.
 
-Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising.
+Clause 1 is what licenses 4b to key its served map on the decoded path without re-normalising — and
+it licenses that **only in the round-trip spelling above**. Revisions 19–32 wrote it as "valid UTF-8
+and already NFC" while the sentence immediately below drew the no-re-normalisation conclusion from
+it, which does not follow: NFC says nothing about a backslash, and `normalize_project_path` rewrites
+one. A guarantee and the entitlement it grants sat two lines apart, disagreeing, for fourteen
+revisions. The round-trip form is the property the entitlement actually needs, and it is the same
+predicate §3.1 enforces at open — one sentence, one mechanism, stated once on each side of the seam.
 
 It is also what licenses 4b to perform no tree scan of its own (§5.2). A 4b implementer who adds a
 normalisation guard "to be safe" is not adding safety — they are adding a second place for the rule
@@ -692,6 +933,15 @@ needed on both sides of the seam, and each would otherwise be written twice with
 - The `run_git` output ceiling, including its refuse-not-truncate discipline.
 - `MAX_SERVED_BYTES` and `MAX_RUN_SERVED_BYTES`, in `science_model/evidence_broker.py` with the
   other bounds.
+
+**When a slice finds a defect in a neighbour's cell, the fix ships in the neighbour's cell**
+(revision 31). 4b's review found that §3.1's tree rule admits a backslash path, which certifies a
+false absence — a 4a fail-open, in `autonomy/lifecycle.py`, a file 4b may not modify. The repair is a
+**4a follow-up commit landing before 4b's fix wave**, not an amendment widening 4b's `Modifies` cell
+to cover it. A contract amended once to accommodate the slice that happened to find a neighbour's bug
+is a contract that will be amended again, and the seam's value is that it says the same thing in
+month six as in month one. 4b owns the discovery; 4a owns the file. Sequencing, not scope, is what
+moves.
 
 **"Must not touch `audit/*`" was a proxy, and revision 23 replaces it with the claim it stood for.**
 What must hold is that **4b changes no stored-record model**, so 4c inherits an unmodified `Review`.
@@ -750,14 +1000,26 @@ pathspecs byte-exactly. So a policy and a repository can be spelled differently 
   certifying a **false absence claim** — is reachable with no deny prefix and no search at all, so no
   amount of filtering on the serving side closes it.
 
-  **A brokered run refuses to open against a pinned tree containing a path that is not valid UTF-8 or
-  not already NFC**, established by one `git ls-tree -r -z --name-only` pass at the pinned commit, in
+  **A brokered run refuses to open against a pinned tree containing a path that does not decode as
+  UTF-8, or that `normalize_project_path` does not return unchanged**, established by one
+  `git ls-tree -r -z --name-only` pass at the pinned commit, in
   `autonomy/lifecycle.py::start_run` — the same place that creates the journal and seals the session,
   and the only one that sees the commit before any request exists (§2.2). UTF-8
   travels with NFC in the same check because a path that does not decode cannot be spelled as a
   `LocationEvidence.path` either, so it can never be cited honestly and refusing it is the same rule
   in the same place. `serve` is unchanged: with the tree guaranteed NFC, git's own pathspec matching
   is byte-exact against the only spelling the model can produce.
+
+  **The third clause is revision 31's, and it is the rule the first two were an instance of.**
+  Revisions 17–30 spelled the condition as "UTF-8 and NFC", which is what `normalize_project_path`
+  happened to do to the *encoding* — while the same function also maps `\` to `/`, and nothing
+  checked that. A tree path holding a backslash therefore survived the scan and reproduced direction
+  3 below with no Unicode involved. Stated positively and as a predicate rather than a roster of
+  characters: **a tree path is admissible only if `normalize_project_path` returns it unchanged.**
+  That is one comparison against the function the citation side already uses, it needs no list of
+  forbidden bytes to keep in sync, and it subsumes UTF-8, NFC, backslash, and anything the normalizer
+  learns to do later. A path containing LF is admissible under it and is handled where it actually
+  bites, in §5.1's parser.
 
 The cost, stated rather than buried: a genuinely NFD-authored repository cannot be brokered until it
 renames. That is narrower than it sounds — git on macOS sets `core.precomposeunicode=true` by
@@ -1633,7 +1895,7 @@ class Uncertainty(_Base):
 
 class Correspondence(_Base):
     status: Literal["verified", "violated", "unwired"]
-    code: str | None = None      # required when unwired
+    code: str | None = None      # required when non-verified; forbidden when verified
     reason: str | None = None
 
 class ReviewAttestation(_Base):
@@ -1714,6 +1976,11 @@ that boundary (plan 4c): `check_correspondence` returns a `violated` result to a
 this the §5.3 codes `EXPOSURE_UNREPRODUCIBLE` and `CITATION_UNSERVED` would be unrepresentable on the
 value that carries them — recoverable only as prose in an error message. `verified` remains the one
 status with nothing to explain.
+
+**And that implication runs both ways: `verified` forbids a code.** This is deliberately stricter
+than `InstrumentResult`, whose `ok()` constructor accepts one despite supplying the invariant this
+type otherwise mirrors. Correspondence codes name the non-verified classifications in §5.3; a code
+on `verified` is therefore stale or contradictory state, not information to preserve.
 
 `evidence` is bounded by the existing `MAX_EVIDENCE_ENTRIES`.
 
@@ -1914,6 +2181,18 @@ picture. That isolation is worth a module because revisions 1–9 stated the for
 and nothing caught it. `evidence_broker/correspondence.py` holds the served map and the check.
 `serve.py` is untouched by this slice; §3.1's NFC rule lands in the session's open path.
 
+**`science_model/correspondence.py` inherits nothing, and that is the point.** §4.2 spells the type
+as `Correspondence(_Base)`, but `_Base` lives in `audit/subjects.py`, and importing *anything* from
+`science_model.audit` runs `audit/__init__.py`, which eagerly imports `audit.record` — the module
+that imports `Correspondence` back. So the leaf repeats its own
+`ConfigDict(extra="forbid", frozen=True)` rather than sharing one. Factoring that back out is not a
+cleanup; it is the cycle, entered from the edge revision 23's mutation row does not cover.
+
+**A naming adjacency, so a reader does not conflate two things.** `validate/findings.py` already
+defines `CorrespondenceQualifiers` — a spec-1 findings artifact pairing a task with an evidence
+signature, unrelated to this section and never imported alongside it. They share a word and nothing
+else; the new module says so in its docstring.
+
 ### 5.1 The served set — coverage, not paths
 
 Revision 1 built a set of paths. That certified a whole file from a single grep hit: a match on line 1
@@ -1975,7 +2254,25 @@ variant to special-case — `-a` means even a binary file yields ordinary number
 - **Remove the `<commit>:` prefix by exact string removal, not by splitting on `:`.** The commit is
   known to the parser, and a path may legitimately contain a colon.
 
-Records are LF-delimited, and matched content cannot contain LF because a matched line ends at one.
+**Records are parsed by a forward scan, not by splitting the payload on LF.** Matched content cannot
+contain LF, because a matched line ends at one — but a **path can**, and git emits it raw.
+MEASURED, git 2.55: a hit on a file named `a<LF>b.txt` serves
+`<commit>:a` LF `b.txt` NUL `1` NUL `content` LF, so an LF split cuts the record in half. It fails
+loudly rather than misparsing, since the leading fragment carries no NUL at all, but a parser that
+raises on a legal repository is still wrong.
+
+The repair is not a wider delimiter. Splitting on `LF + <commit>:` looks safe and is not: a filename
+may contain that literal sequence, and the pinned commit is knowable to whoever writes the filename.
+Parse forward instead, from a known start — the prefix, then the path up to the first NUL, the line
+up to the second, and the content up to the next LF, which is the record's end. Every field boundary
+is then found by scanning rather than inferred from a split, and no byte in any field can be mistaken
+for a delimiter. `maxsplit=2` on a single record is the same discipline stated for one record; this
+states it for the payload.
+
+**Accumulate hits per path before constructing coverage.** A payload may carry many hits on one file,
+and uniting a fresh one-element `Lines` per hit rebuilds the set on every merge — O(k²) for k hits.
+`MAX_SERVED_BYTES` admits on the order of twenty thousand hits, so this is a real cost inside a
+bound, not a theoretical one. Group first, construct once.
 
 **Two definitions this section left implicit, which is where off-by-one defects live.** `line_count`
 is the number of LF-terminated lines plus one if any bytes follow the final LF; an empty payload is
@@ -1983,11 +2280,56 @@ is the number of LF-terminated lines plus one if any bytes follow the final LF; 
 `ABSENT` is the strongest claim the table can express — it is what certifies "this file does not
 exist at this commit" — which is why §3.1's NFC rule has to hold for it to mean anything at all.
 
+**LF, and only LF — which puts read coverage and inline coverage on different counts.** The obvious
+spelling of `line_count` is `len(payload.splitlines())`, and it is wrong: MEASURED,
+`b"a\rb\n".splitlines()` is 2, because `bytes.splitlines()` splits on CR as well. `git grep -n`
+numbers by LF, and `FULL` supersedes `LINES` on a path that was both read and searched, so a `FULL`
+count in any other numbering is not commensurable with the `LINES` numbers sitting beside it in the
+same map — a matched line number could exceed the line count of the same file.
+
+`InlineInput.lines` is already computed the wrong way (`lifecycle.py`, at manifest time), and 4b
+cannot recompute it: `exposure.inline` seals `target`, `sha256` and `lines`, and no payload. So
+inline `FULL` carries the sealed count and read `FULL` carries the LF count, and on a CR-bearing file
+the inline one is larger. The error is **permissive** — it admits a citation to a line the LF rule
+says is not there — and it is stated here rather than silently inherited. Correcting it means
+changing a sealed model, which is 4a's cell and not the checker's (§2.2); it is a follow-up, and the
+one place where fixing the divergence and shipping 4b are separable.
+
 **`Coverage` is a `science_tool`-local sum type, not a sealed model** — `Full(line_count)`,
 `Lines(numbers)`, `PathOnly`, `Absent`. It is derived at check time from a replayed exposure and
 never stored, so putting it in `science_model` beside the sealed types would advertise a durability
 it does not have. `Correspondence`, which *is* returned across the boundary, ships in its **own
 dependency-neutral module**, `science_model/correspondence.py`, importing pydantic and nothing else.
+
+**One path can pick up two contributions, and "`FULL` supersedes `LINES`" covers one pair of ten.**
+Stating only that pair leaves an implementer to invent the rest, and every plausible invention —
+last-write-wins, first-write-wins, blanket union — is wrong on at least one row below, usually in the
+permissive direction. Merging is therefore a single named function, **total over the four coverages**
+and enumerated here rather than left as a rank to infer. Nothing bounds a run to one request per
+path: the budget buys requests, not paths, so every self-pair is reachable too.
+
+| Pair | Reachable via | Result |
+|---|---|---|
+| `FULL` + `FULL` | a path inline-seeded **and** read | `FULL(min)` — the commit is the audited artifact, so a line present only in the working-tree copy is refused |
+| `FULL` + `LINES` | a path read and searched | `FULL` |
+| `FULL` + `PATH_ONLY` | a path read and asked for history | `FULL` |
+| `FULL` + `ABSENT` | a path inline-seeded, absent at the commit | `FULL` — it admits every citation `ABSENT` admits, since a bare path citation corresponds under any coverage |
+| `LINES` + `LINES` | **one path searched twice, for different patterns** | `LINES(union)` — each search showed the reviewer its own hit lines, and both were shown |
+| `LINES` + `PATH_ONLY` | a path searched and asked for history | `LINES` |
+| `PATH_ONLY` + `PATH_ONLY` | history asked twice | `PATH_ONLY` — idempotent |
+| `PATH_ONLY` + `ABSENT` | a history entry and a read miss | `ABSENT`; they admit exactly the same citations, and `ABSENT` carries the clearer `reason` |
+| `ABSENT` + `ABSENT` | an absent path read twice | `ABSENT` — idempotent |
+| `LINES` + `ABSENT` | — | **unreachable**: grep matched the path at commit C, so it exists at C |
+
+**Two rows are doing real work; the rest restate a rank, and mistaking which is which is the whole
+risk here.** `FULL(min)` resolves two honest counts of different bytes — a working-tree file and a
+committed blob, both of which the reviewer saw — towards the artifact an auditor can re-derive, and
+needs no story about which entry arrived first. `LINES(union)` is the one place a *union* is correct
+rather than permissive, and it is exactly where a rank-based implementation silently discards
+evidence: two searches expose disjoint line sets of one file, and replacing instead of uniting
+refuses a citation to a line the reviewer demonstrably saw. A blanket union would then look like the
+safe generalisation — and it is not, because unioning `FULL` counts takes the maximum, which is the
+`FULL(min)` row inverted.
 
 Revisions 17–22 put it in `evidence_broker.py` beside `Outcome`, which reads well and does not load:
 `evidence_broker.py` imports `audit.subjects`, and `science_model/audit/__init__.py` eagerly imports
@@ -2011,8 +2353,31 @@ A `LocationEvidence` corresponds iff:
 - under `PATH_ONLY` or `ABSENT`, no line or span is cited at all; **and**
 - `pointer` is absent under every coverage except `FULL`.
 
-A span cites every line it covers, so a ten-line span against a one-line grep hit does not correspond.
-That is strict on purpose: a reviewer wanting to cite a span should read the file. The line-count check
+**The span check must be bounded, because a span is not.** `Span.end_line` is `Field(ge=1)` with no
+upper bound, so `Span(start_line=1, end_line=10**18)` is constructible and evaluating it by iterating
+`range(...)` inside `all(...)` does not return. It is reachable from authored review content on a
+write path, and it hangs rather than raising — the one failure mode in this section that no timeout
+or error message describes. Under `FULL`, compare `end_line <= line_count` directly: every line in
+`[start, end]` is at most `end`, so the O(1) form is not an optimisation but the same predicate.
+
+**`LINES` needs no such repair, and revision 32 corrects revision 31 for thinking it did.** A span is
+*contiguous*, and `numbers` holds at most n elements, so among the first n+1 lines of any span at
+least one is absent — the iteration short-circuits within `len(numbers) + 1` steps whatever the
+span's declared length, and n is bounded by the payload cap. The obvious guard
+(`end_line - start_line + 1 > len(numbers)` refuses immediately) is therefore a same-verdict
+optimisation, not a termination guarantee. Keep it for the constant factor; do not describe it as
+what makes `LINES` safe, and do not write a mutation row for it — see §7.
+
+Only the unbounded comparison against a *count* can run away, because there the predicate is true for
+every line until the last one. That asymmetry is the whole finding: `FULL` iterates until the span
+exceeds the file, `LINES` iterates until the span leaves the hit set, and only the first of those can
+be made arbitrarily long by an authored value.
+
+A span cites every line it covers — **every line, not its endpoints**, and the difference is only
+visible on a span whose *interior* is unserved. A span of lines 2–4 against hits `{2, 4}` does not
+correspond, because line 3 was never shown; the obvious illustration, a ten-line span against a
+one-line hit, is refused by endpoint-checking too and so demonstrates nothing. That is strict on
+purpose: a reviewer wanting to cite a span should read the file. The line-count check
 under `FULL` is free once the bytes are replayed, and it closes fabricated line numbers into files the
 reviewer genuinely opened — a case revision 1 did not consider at all.
 
@@ -2049,10 +2414,68 @@ request refused when the reviewer worked must be refused again, and an entry tha
 where the record says `refused` is `EXPOSURE_UNREPRODUCIBLE`. §5.1's over-exclusion case covers the
 narrowing direction; this covers the other one.
 
+**Re-serving reconstructs the request from the entry, and adds no normalisation.** An
+`ExposureEntry` becomes `EvidenceRequest(op, target=entry.target, pathspec=entry.pathspec)` handed to
+`serve` with `exposure.commit` and `exposure.surface_policy`. `session.py` journals `served.target`
+and `served.pathspec`, and what those hold **differs by operation**: for `read` and `history` the
+target is `auth.path`, already normalised; for `search` it is the raw pattern, which goes through
+`_judge_pattern` and no normaliser at all, while the *pathspec* beside it is the normalised one.
+Either way re-serving is stable — `normalize_project_path` is idempotent and `_judge_pattern` is a
+pure function of the string — so passing the journalled values back through `authorize` returns them
+unchanged. A checker that "helpfully" pre-normalised, or that reached for a raw requester spelling
+the journal never stored, would be authorizing one path and comparing another; a checker that
+normalised a *search* target would be rewriting a regex.
+
+**A replay-time git fault is `unwired` in exactly two cases, decided before any entry is replayed.**
+The repository does not hold `exposure.commit` — asked through the **existing**
+`serve.verify_commit`, not a second probe — and `history_traversal_error(repo, exposure.commit)` is
+non-`None`. Both are properties of the *environment*, decidable once and cheaply, and both yield
+`EXPOSURE_UNREACHABLE`; §5.3 fixes their position in the executable order. Everything after that
+point — a `ServeError` on unclassifiable stderr, a `GitError` — **propagates**, which is §6's
+standing rule for the same failure at serving time ("anything else from git raises") applied to the
+same code on the other side of the seam. So the checker holds exactly one `except ServeError`, around
+`verify_commit`, and a second one anywhere is the wrapping this section rejects arriving by
+increment.
+
+The alternative is to wrap the whole replay and read every fault as `unwired`. It is attractive
+because `check_correspondence` is called from a write path, and because §5.3's own prose says a
+journal that cannot be reached could not be checked. It is nevertheless the shape of the bug revision
+4 closed: a project rename turned every review in a run silently `unwired`, which under §4.2.1 zeroes
+their support, and this design treated that as a fail-open rather than as graceful degradation. A
+systematic breakage that reports "could not check" for everything, with an info-severity validate
+notice as its only signal, is that failure again with a wider blast radius. The known cost is
+concrete and accepted: appending a review against a `--filter=blob:none` clone raises rather than
+storing `unwired`, since §2.2 records that the blob case is not pre-empted at open either.
+
+What no fault may ever produce is `violated`. That is the invariant both readings preserve and the
+one a third reading — catching exceptions and calling them mismatches — would break.
+
 Inline entries are not in the tree and cannot be re-served; they are checked against
 **`exposure.inline`** — the sealed copy of the manifest, not the baseline's. The baseline is where the
 manifest is *declared* (§4.3) and the exposure is where it is *sealed* (§4.1); replay reads the sealed
 copy, and reaches for no control-plane file at all.
+
+**Compared as multisets, in both directions.** Revision 31: a lookup table keyed on
+`(target, sha256)` answers "does every entry have a manifest item" and never the converse, so a
+manifest item with no entry — the same record disagreeing with itself, read the other way — passed
+unnoticed; and it collapses duplicates, so two entries against one item, or one against two, are
+indistinguishable from a clean pairing. The check is therefore multiset equality between
+`[(e.target, e.sha256) for e in entries if e.op == "inline"]` and
+`[(i.target, i.sha256) for i in exposure.inline]`.
+
+Separately, a manifest in which one `(target, sha256)` key carries two different `lines` values is
+refused outright. Identical duplicate inputs are legitimate and remain reproducible — seeding the
+same file twice is wasteful, not dishonest. Two different line counts for one content hash are a
+contradiction, and coverage derived from whichever item a lookup happened to return would be a
+verdict that depends on iteration order.
+
+**A disagreement there is `EXPOSURE_UNREPRODUCIBLE`, not missing coverage.** `entries` and
+`exposure.inline` are seeded from one `session.inline` — `create_journal` writes the manifest into
+the journal and `finish_run` seals the same tuple — so they agree by construction, and an entry whose
+target is absent from the manifest, or whose `sha256` differs from it, is a record disagreeing with
+itself. Treating it as merely uncovered would make editing an inline entry's target a free way to
+land a fabricated citation nowhere: no coverage, no cost, and the review still reaches the citation
+check with everything else intact.
 
 **No cross-exposure memoisation.** Revisions 1–17 memoised on `(commit, op, target, pathspec)` within
 an ingestion run, on the reasoning that reviews of sibling documents read many of the same files. That
@@ -2104,20 +2527,44 @@ exists to close. §5.4 governs.
 | Situation | Status / code | Stored? | Counts as support? |
 |---|---|---|---|
 | No exposure log | `unwired` / `NO_EXPOSURE` | yes | **no** |
-| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
 | Exposure sealed under a different replay protocol | `unwired` / `REPLAY_PROTOCOL_MISMATCH` | yes | **no** |
+| Repo or commit unavailable; replay cannot run | `unwired` / `EXPOSURE_UNREACHABLE` | yes | **no** |
 | Replay ran; an entry did not reproduce | `violated` / `EXPOSURE_UNREPRODUCIBLE` | **refused** | — |
 | Replay ran; a citation was never served, or cites unserved lines | `violated` / `CITATION_UNSERVED` | **refused** | — |
 | Replay ran; everything corresponded | `verified` | yes | yes |
 
-**The rows are ordered, and the order is load-bearing.** The three `unwired` conditions are decided
-first, before any git call — a protocol mismatch in particular short-circuits, since re-serving under
-a protocol whose meaning has changed produces bytes that answer no question. Then **replay integrity
-is checked in full, and any entry that fails to reproduce short-circuits to
+**The rows are ordered, and the order is load-bearing — so it is written as executable steps rather
+than as a claim about git calls.** Revisions 1–29 said "the three `unwired` conditions are decided
+first, before any git call", which cannot be true of all three: deciding that a repository lacks
+`exposure.commit`, or that its history will not walk, *is* a git call. Only the first two rows are
+free. The order is:
+
+1. `exposure is None` → `NO_EXPOSURE`.
+2. `exposure.replay_protocol != REPLAY_PROTOCOL_VERSION` → `REPLAY_PROTOCOL_MISMATCH`. **Before any
+   git call**, and that is the part of the old claim worth keeping: re-serving under a protocol whose
+   meaning has changed produces bytes that answer no question, so spending git on it is spending it
+   on nothing. A mismatched exposure therefore classifies identically against a healthy repository,
+   an unreachable one, and a path that is not a repository at all.
+3. `serve.verify_commit(repo, exposure.commit)` raises → `EXPOSURE_UNREACHABLE`. **The existing
+   helper, not a second commit probe** — it already resolves through hardened `run_git`, and a
+   checker that reached for a bare `rev-parse` would be the two-spellings-of-one-mechanism failure
+   §2.2 names three times. This is the one narrowly scoped `except ServeError` in the checker;
+   §5.2's propagate rule governs every call after it.
+4. `history_traversal_error(repo, exposure.commit)` is non-`None` → `EXPOSURE_UNREACHABLE`. Second
+   because it is the more expensive walk and because a commit the repository does not hold has no
+   ancestry to fail on.
+5. Replay integrity, then citations, as below.
+
+Then **replay integrity is checked in full, and any entry that fails to reproduce short-circuits to
 `EXPOSURE_UNREPRODUCIBLE`; citations are never evaluated.** A served map built from entries that did
 not reproduce is not a map of anything, so reporting `CITATION_UNSERVED` off it would name a symptom
 as the cause and point an operator at the reviewer instead of at the record. Only against a fully
 reproduced exposure are citations checked.
+
+**The table is exhaustive over verdicts, not over outcomes.** A git fault outside the two
+environment checks of §5.2 produces no row at all — it raises, and `check_correspondence` returns
+nothing. That is deliberate: adding a seventh row for it would be choosing the wrapping behaviour
+§5.2 rejects, one table over.
 
 The checker reproduces the distinction it exists to enforce: *could not check* is not *checked and
 found false*. A journal that fails to reproduce at a pinned commit under a canonical invocation is not
@@ -2300,8 +2747,16 @@ downgrade is a lie about what was checked.
   file's length does not correspond; a `history` entry does not validate a line citation **nor a
   pointer**; a pointer under `LINES` does not correspond; a read miss validates a path-only citation
   and refuses a lined one; **a search miss and an empty history contribute no coverage at all**; an
-  inline target absent from the baseline manifest does not correspond; a policy narrowed between
-  serving and replay does not silently re-serve denied hits; the vacuous `verified`.
+  inline entry whose target is absent from **`exposure.inline`**, and one whose `sha256` disagrees
+  with it, each yield `violated` / `EXPOSURE_UNREPRODUCIBLE` rather than merely contributing no
+  coverage; a policy narrowed between serving and replay does not silently re-serve denied hits; the
+  vacuous `verified`. Plus, from revision 29: a file whose only line break is a CR reads
+  `line_count = 1` from a `read`, not 2; a path both inline-seeded and read takes the **smaller**
+  count; a path searched twice for different patterns admits citations to **both** hit sets; a
+  mismatched `replay_protocol` classifies the same against a healthy repository and against a
+  directory that is not a repository at all; and a repository missing `exposure.commit` yields
+  `unwired` while a `ServeError` raised after both environment checks pass **propagates** rather
+  than becoming a verdict.
 - **`append_review`** — a human review is stored with no control-plane directory existing at all; the
   same for `deterministic`; an agent review whose run record carries **no exposure** yields
   `unwired`, not a crash. Plus attestation (revision 18): a submission cannot express a
@@ -2333,7 +2788,21 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4a | Diagnose with `rev-parse --is-shallow-repository` through hardened `run_git` | a **complete** repository reports no traversal error |
 | 4a | Diagnose with `rev-parse --is-shallow-repository` under a detector-specific environment omitting `GIT_SHALLOW_FILE` | a complete repository with `.git/shallow` **planted** reports no traversal error |
 | 4a | Journal a shallow-`history` refusal instead of refusing at open | a brokered run against a shallow clone opens instead of refusing before session creation |
-| 4b | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
+| 4c | Import `Correspondence` from `evidence_broker.py` | a **subprocess** running `python -c "import science_model.evidence_broker"` exits non-zero |
+| 4c | Have `science_model/correspondence.py` import `_Base` from `audit.subjects` | a **subprocess** running `python -c "import science_model.correspondence"` exits non-zero |
+| 4b | Have `science_model/correspondence.py` import anything from `science_model.audit` | a **subprocess** executing the leaf with `runpy.run_path` finds `science_model.audit` absent from `sys.modules` |
+| 4b | Compute `line_count` with `splitlines()` | a file whose only line break is a CR reads `line_count = 1` |
+| 4b | Merge two `Full` contributions by taking the larger, or by last-write-wins | a path inline-seeded at `n+1` lines and read at `n` refuses a citation to line `n+1` |
+| 4b | Merge two `Lines` contributions by replacing rather than uniting | one path searched twice for different patterns admits a citation to a line matched **only by the first** search |
+| 4a follow-up | Check UTF-8 and NFC instead of `normalize_project_path(p) == p` | a brokered run opens against a tree holding `a\b.txt` |
+| 4b | Split the payload on LF, or on `LF + <commit>:` | a search hit on a file named `a<LF>b.txt` parses to that path and line, under **both** spellings |
+| 4b | Evaluate a `FULL` span by iterating its lines | a citation spanning lines 1 to `10**18` against **`Full(10**18 - 1)`** is refused **within the test timeout** |
+| 4b | Compare inline entries to the manifest with a dict keyed on `(target, sha256)` | a manifest item with **no** corresponding entry yields `EXPOSURE_UNREPRODUCIBLE`; and two entries against one manifest item do too |
+| 4b | Accept a manifest with one `(target, sha256)` at two `lines` values | that exposure is refused rather than classified |
+| 4b | Check the protocol after resolving the commit | a v1 exposure against a repository that is not a git repository at all yields `REPLAY_PROTOCOL_MISMATCH`, not `EXPOSURE_UNREACHABLE` |
+| 4b | Probe the commit with a bare `rev-parse --verify` instead of `serve.verify_commit` | an exposure whose `commit` is the 40-hex OID of a **tree or blob** present in the repository yields `unwired` / `EXPOSURE_UNREACHABLE` |
+| 4b | Wrap replay and return `unwired` on any git fault | a `ServeError` raised after both environment checks pass propagates out of `check_correspondence` |
+| 4b | Treat an inline entry missing from `exposure.inline` as merely uncovered | a tampered inline `target` yields `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
 | 4a | Check the payload cap after `communicate()` | an oversized `search` refuses without first buffering the output |
 | 4a | Remove the `read` size pre-check | an oversized blob refuses without being read |
 | 4a | Bound stdout only | an oversized `stderr` refuses |
@@ -2350,7 +2819,7 @@ tree where the guard it breaks exists, so a 4b row run during 4a is green for th
 | 4b | Drop the trailing-bytes clause in `line_count` | a citation to the last line of a file with no final newline |
 | 4b | Permit `pointer` under `Lines` | a pointer citation on a search-only path is refused |
 | 4b | Ignore `replay_protocol` | a v1 exposure yields `unwired`, not a verdict |
-| 4b | Make a span cite only its endpoints | a ten-line span against a one-line hit is refused |
+| 4b | Make a span cite only its endpoints | a span of lines **2–4** against hits `{2, 4}` is refused |
 | 4b | Evaluate citations before replay integrity | an unreproducible exposure reports `EXPOSURE_UNREPRODUCIBLE`, not `CITATION_UNSERVED` |
 | 4b | Drop the traversal check at replay | a `history` exposure replayed in a `--depth 1` clone yields `unwired`, not `violated` |
 | 4b | Memoise replay across exposures | two exposures differing only in `surface_policy` do not share a cached payload |
@@ -2368,6 +2837,79 @@ interpreter** entering `science_model.evidence_broker`, which reaches `audit/__i
 into a partially initialised `audit.record`. Spawn it; do not trust the ambient module cache. This is
 the general form: *a cycle test that shares a process with its own test runner tests the runner's
 import order.*
+
+**Revisions 29–30 move both cycle rows to 4c, and give 4b the row it can actually certify.** The cycle
+does not exist until `audit/record.py` imports `Correspondence`, and that import is 4c's — 4b changes
+no stored-record model at all (§2.2). Run against 4b's tree, either mutation imports cleanly and the
+row passes for the wrong reason, which is the `Slice` column's whole purpose one slice over from
+where it was last needed. What 4b *can* prove is the structural fact it is actually responsible for:
+`science_model/correspondence.py` reaches `science_model.audit` by no path. A normal package import
+cannot establish that fact because eager `science_model/__init__.py` loads audit first. Instead, a
+fresh interpreter executes the leaf directly with `runpy.run_path(sys.argv[1])` and asserts audit is
+absent from `sys.modules`. This is still a predicate over what the leaf loads rather than a roster of
+imports someone maintains, and the `_Base` mutation breaks it immediately on 4b's own tree, without
+waiting for 4c to close the loop.
+
+**The span row needs an unserved *interior*, and revisions 1–29 specified one that cannot fail.** A
+ten-line span against a one-line hit is refused by endpoint-checking as readily as by the real rule —
+line 10 is not in `{1}` — so the mutation stayed green and the row certified nothing for
+twenty-nine revisions. Only a span whose endpoints are both served and whose middle is not
+separates them: lines 2–4 against `{2, 4}`. This is the `Full`-supersedes-`Lines` caution in a second
+costume — a fixture that satisfies the assertion for a reason unrelated to the guard — and the same
+question finds it: which line does the mutation break first? With the ten-line span, none.
+
+**The `verify_commit` row needs a non-commit object, or it certifies nothing.** Against an exposure
+whose commit is merely *absent*, a bare `rev-parse --verify` and `verify_commit` agree — both fail,
+both give `EXPOSURE_UNREACHABLE` — so the obvious fixture leaves the mutation green. What
+`verify_commit` adds is `^{commit}` (and `--end-of-options`): it requires the object to be a
+**commit**, where the bare form accepts any object name. `EvidenceExposure.commit` is pattern-bound
+to 40 hex, which a tree or blob OID satisfies, so that is a constructible record — and under the
+mutation it resolves, replay proceeds against a non-commit, and the checker raises instead of
+classifying. Which line does the mutation break first: with an absent commit, none.
+
+**The span row is a timeout row, and a timeout row has one honest form.** The defect it guards is
+non-termination, so the mutation does not produce a wrong answer to compare against — it produces no
+answer. Assert the refusal under a bounded timeout and choose a span whose length makes iteration
+impossible rather than merely slow (`10**18`, not `10**6`, which a fast machine would grind through
+and pass). Do not write it as a timing comparison between the two implementations; that is a
+benchmark, and it goes flaky on shared runners. The failing observation is "did not return", not
+"returned late".
+
+**Its coverage value must not let the mutation short-circuit, which revision 31's did.** The row
+first read `Full(3)`, and `all(line <= 3 for line in range(1, 10**18 + 1))` returns `False` at line
+**4** — four iterations, well inside any timeout, so the mutation passed and the row certified
+nothing. The count has to sit just below the span's end so that every line but the last satisfies the
+predicate: `Full(10**18 - 1)` against a span of 1 to `10**18` refuses instantly under the O(1) form
+and cannot return under iteration. A timeout row is only as strong as the input that keeps the
+mutant running — *which line does the mutation break first?* With `Full(3)`, the fourth.
+
+**The LF row must assert both wrong spellings, because the obvious repair is also wrong.** Splitting
+on `LF + <commit>:` passes a naive fixture and fails on a filename containing that sequence — and the
+commit is knowable to whoever names the file. The row is discharged only if the same test refuses
+both the plain LF split and the prefixed one, which the forward scan satisfies by construction.
+
+**Three rows that must not be added: the quadratic accumulation, the `LINES` span pre-check, and the
+widened tree assumption.** Grouping hits by path before constructing coverage computes the *same*
+verdict as merging one at a time, so no mutation of it changes an answer — only a timing, and §7 does
+not certify timings. The `LINES` pre-check joined that list at revision 32: a contiguous span leaves
+a set of n elements within n+1 steps, so removing the guard changes the constant factor and nothing
+else. Likewise §5.1's assumption sentence about what the namespace rests on is prose describing a
+guarantee enforced in §3.1; the 4a follow-up row above is where that property is certified, and a
+second row asserting the prose would test nothing. All three are recorded here so their absence reads
+as a decision rather than an oversight.
+
+**Note what separates these from the `FULL` span row, since all four look alike.** An optimisation
+whose removal leaves the answer and the termination unchanged gets no row. An optimisation whose
+removal leaves the answer unchanged but the termination *unbounded* is not an optimisation, and gets
+one. Revision 31 put `FULL` and `LINES` on the same side of that line by pattern-matching on their
+shapes instead of asking what bounds each loop.
+
+**A row that must not be added: pre-normalising the replayed request target.** `normalize_project_path`
+is idempotent and the journal stores its output, so a checker that normalises again and one that does
+not are observationally identical, in both fixtures. There is no test that turns red, so the rule
+belongs in §5.2's prose and nowhere here. Revision 27 established the discipline on the
+`GIT_SHALLOW_FILE` pair for the same reason: a roster row whose mutation cannot fail certifies
+nothing and reads as though it does.
 
 **The lazy-fetch row has three ways to go wrong, and the third is the interesting one.**
 
