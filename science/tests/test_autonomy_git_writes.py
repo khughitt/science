@@ -10,8 +10,10 @@ from science_tool.autonomy.git import (
     commit_tree,
     create_branch,
     current_branch,
+    restore_path,
     restore_worktree,
     stage_all,
+    stage_paths,
     switch_branch,
     worktree_status,
 )
@@ -70,6 +72,76 @@ def test_restore_worktree_discards_modifications_and_untracked_files(repo: Path)
     assert (repo / "a.txt").read_text(encoding="utf-8") == "one\n"
     assert not (repo / "new.txt").exists()
     assert not (repo / "sub").exists()
+
+
+def test_restore_path_discards_a_tracked_modification_and_leaves_everything_else(repo: Path):
+    """The branch `restore_worktree`'s whole-tree form cannot express.
+
+    Both states are asserted, in two tests, because `restore_path` takes a DIFFERENT
+    subcommand for each and the harness fixture only ever reaches one of them: a project that
+    never materialized has an untracked `knowledge/graph.trig`, and only a project that
+    committed one has a tracked modification. A single test would leave half the function
+    unexecuted.
+    """
+    (repo / "a.txt").write_text("two\n", encoding="utf-8")
+    (repo / "keep-me.txt").write_text("k\n", encoding="utf-8")
+
+    restore_path(repo, "a.txt")
+
+    assert (repo / "a.txt").read_text(encoding="utf-8") == "one\n"
+    # The whole point of being path-scoped: `restore_worktree` would have deleted this.
+    assert (repo / "keep-me.txt").read_text(encoding="utf-8") == "k\n"
+
+
+def test_restore_path_removes_a_path_head_does_not_have(repo: Path):
+    """"Restore to HEAD's version" of a path HEAD never had means REMOVE it.
+
+    `checkout -- <path>` refuses a pathspec the index does not know, so this state needs the
+    other subcommand -- and it is the state the supervised harness actually hits, since a
+    project with no committed graph gets an untracked one from the run.
+    """
+    (repo / "derived.txt").write_text("d\n", encoding="utf-8")
+    (repo / "keep-me.txt").write_text("k\n", encoding="utf-8")
+
+    restore_path(repo, "derived.txt")
+
+    assert not (repo / "derived.txt").exists()
+    assert (repo / "keep-me.txt").read_text(encoding="utf-8") == "k\n"
+
+
+def test_stage_paths_stages_only_what_it_names(repo: Path):
+    (repo / "named.txt").write_text("n\n", encoding="utf-8")
+    (repo / "unnamed.txt").write_text("u\n", encoding="utf-8")
+
+    stage_paths(repo, ["named.txt"])
+
+    staged = _plain_git(repo, "diff", "--cached", "--name-only").splitlines()
+    assert staged == ["named.txt"]
+
+
+def test_stage_paths_refuses_a_path_that_is_not_there(repo: Path):
+    """Fail early: a caller naming a path it believes it produced is wrong about the run."""
+    with pytest.raises(GitError):
+        stage_paths(repo, ["runs/never-written.md"])
+
+
+def test_no_planted_vector_executes_through_the_path_scoped_primitives(repo: Path, plant_attacks):
+    """The pathspec-limited spellings go through the same gateway as the whole-tree ones.
+
+    A separate test from the primitives one above because `restore_path` and `stage_paths`
+    are separate call sites: a hand-built argv in either would leave that test green.
+    """
+    sentinels = plant_attacks(repo)
+
+    (repo / "derived.txt").write_text("d\n", encoding="utf-8")
+    (repo / "a.txt").write_text("two\n", encoding="utf-8")
+    stage_paths(repo, ["a.txt"])
+    restore_path(repo, "derived.txt")
+    restore_path(repo, "a.txt")
+
+    assert sorted(p.name for p in sentinels.iterdir()) == [], (
+        "a planted git-config vector reached a program through the path-scoped primitives"
+    )
 
 
 def test_commit_tree_splits_author_from_committer(repo: Path):

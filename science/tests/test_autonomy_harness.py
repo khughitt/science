@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml
 from science_model.autonomous_runs import RunDisposition
 
 from science_tool.autonomy import harness as harness_module
 from science_tool.autonomy.git import current_branch, worktree_status
 from science_tool.autonomy.harness import HarnessError, run_supervised_audit
+from science_tool.commons.errors import CommonsError
 
 STARTED = datetime(2026, 8, 2, 9, 0, tzinfo=UTC)
 
@@ -19,6 +21,13 @@ STARTED = datetime(2026, 8, 2, 9, 0, tzinfo=UTC)
 def _git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def _git_unchecked(root: Path, *args: str) -> str:
+    """For subcommands whose ANSWER is a non-zero exit -- `git grep` reports "no match" as 1."""
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True
     ).stdout.strip()
 
 
@@ -148,6 +157,84 @@ def test_a_failed_ingestion_is_a_refusal_and_not_an_abort(
     assert current_branch(supervised_project) == start_branch
     assert worktree_status(supervised_project) == ""
     assert _git(supervised_project, "rev-parse", "HEAD") != head_before
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(CommonsError("commons store not found"), id="commons"),
+        pytest.param(yaml.YAMLError("relations.yaml is malformed"), id="yaml"),
+    ],
+)
+def test_an_ingestion_authority_failure_is_a_refusal_and_not_an_abort(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+):
+    """The same guarantee as the test above, through the door its catch list did not close.
+
+    `ingestion_authority` loads project sources, so it reaches the commons resolver and
+    `yaml.safe_load` -- and `CommonsError` and `yaml.YAMLError` derive straight from
+    `Exception`, so neither is caught by `(IngestError, OSError, ValueError)`. An absent
+    commons store is an ORDINARY state (an unmounted share, a fresh clone, a different
+    machine), not an exotic one, so this was reachable without any hostility.
+
+    Asserted on the tree coming home rather than only on the refusal: escaping here skips the
+    branch switch AND the settle, which is a strictly worse failure than the refusal itself --
+    a verdict rendered, a record written, and an operator left on `auto/<slug>` to discover
+    both by hand. The `finally` around step 9 is what makes the second half of this test pass
+    independently of whether the catch list happens to name the exception.
+    """
+    start_branch = current_branch(supervised_project)
+
+    def _explode(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(harness_module, "ingestion_authority", _explode)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.CLEAN
+    assert outcome.ingestion is None
+    assert outcome.ingestion_refusal is not None
+
+    assert outcome.record_written is True
+    assert current_branch(supervised_project) == start_branch
+    assert worktree_status(supervised_project) == ""
+
+
+class _Unforeseen(Exception):
+    """Deliberately NOT a `RuntimeError`: `HarnessError` is one, so `pytest.raises(RuntimeError)`
+    would be satisfied by the harness's own normalization and certify nothing."""
+
+
+def test_an_unforeseen_ingestion_failure_still_settles_the_tree(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """What the `finally` buys, and the only way to see it.
+
+    Widening the catch list and putting step 9 in a `finally` are two fixes for one hazard, and
+    a test that induces a *caught* exception cannot tell them apart: with the list widened the
+    `finally` is inert, and removing it leaves every such test green. So this induces an
+    exception the list does not name and never will -- the case a catch list is structurally
+    unable to cover, being a claim about what was foreseen.
+
+    The exception is REQUIRED to propagate. The `finally` is not a swallow: an unforeseen
+    failure is not a refusal, and recording it as one would be the harness reporting a verdict
+    it never reached. What the `finally` guarantees is narrower, and is the whole point -- the
+    operator gets the traceback back on their OWN branch with a clean tree, rather than parked
+    on `auto/<slug>` with an uncommitted record.
+    """
+    start_branch = current_branch(supervised_project)
+
+    def _explode(*args, **kwargs):
+        raise _Unforeseen("nobody foresaw this")
+
+    monkeypatch.setattr(harness_module, "ingest_report", _explode)
+
+    with pytest.raises(_Unforeseen):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert current_branch(supervised_project) == start_branch
+    assert worktree_status(supervised_project) == ""
 
 
 def test_a_run_with_no_record_commits_nothing(
@@ -318,10 +405,23 @@ def test_an_actor_that_leaves_the_branch_is_refused(
 def test_a_quarantined_run_ingests_nothing(
     supervised_project: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """A denied run's report is not evidence of anything.
+    """A denied run's report is not evidence of anything -- and neither is its shadow.
 
     The gate denies the entity write, so the disposition is `quarantined` -- and ingestion is
     conditioned on the DISPOSITION, not on whether a report happens to be readable.
+
+    THE COMMIT IS ASSERTED ON, NOT ONLY THE VERDICT. `finish_run` re-materializes
+    `knowledge/graph.trig` while HEAD is still `auto/<slug>`, over the tree the actor wrote,
+    and `switch_branch` carries that modified file to the starting branch. A `_settle` that
+    blanket-stages therefore publishes a graph naming `proposition:p9` on a branch whose own
+    sources have never contained it -- the denied write's derived effect crossing the exact
+    boundary the gate denied it at. Measured against the pre-fix implementation: the
+    post-verdict commit held `knowledge/graph.trig`, and `git grep proposition:p9 HEAD`
+    matched it, while `p9.md` itself was correctly absent.
+
+    `git grep` over HEAD rather than over the graph file alone: the claim is about the
+    STARTING BRANCH's committed state, and a check that names the graph would go quiet the
+    day the leak arrives through some other derived file.
     """
     real = harness_module._run_actor
 
@@ -339,6 +439,20 @@ def test_a_quarantined_run_ingests_nothing(
     assert outcome.disposition is RunDisposition.QUARANTINED
     assert outcome.ingestion is None
     assert not (supervised_project / "doc" / "audits" / "cases").exists()
+
+    slug = outcome.run_id.removeprefix("run:")
+    assert outcome.post_verdict_commit is not None
+    changed = _git(
+        supervised_project, "show", "--format=", "--name-only", outcome.post_verdict_commit
+    ).splitlines()
+
+    # The record is published -- the run WAS attested -- and nothing derived from the denied
+    # write travels with it. Ordered from the specific claim to the general one, so a
+    # regression names the graph rather than only the set it belongs to.
+    assert "knowledge/graph.trig" not in changed
+    assert _git_unchecked(supervised_project, "grep", "-l", "proposition:p9", "HEAD") == ""
+    assert changed == [f"runs/{slug}.md"]
+    assert worktree_status(supervised_project) == ""
 
 
 def test_the_attested_instant_is_the_commissioned_one(
@@ -417,7 +531,10 @@ def test_settling_a_clean_tree_creates_no_commit(supervised_project: Path):
     head_before = _git(supervised_project, "rev-parse", "HEAD")
 
     assert _settle(
-        supervised_project, record_written=True, run_id="run:2026-08-02-health-audit-a1b2"
+        supervised_project,
+        record_written=True,
+        disposition=RunDisposition.CLEAN,
+        run_id="run:2026-08-02-health-audit-a1b2",
     ) is None
     assert _git(supervised_project, "rev-parse", "HEAD") == head_before
 
@@ -449,7 +566,95 @@ def test_a_raw_git_failure_is_normalized(
 
     monkeypatch.setattr(harness_module, "current_branch", _explode)
 
-    with pytest.raises(HarnessError):
+    # `match=` because a bare `HarnessError` is satisfied by any failure at all: the run dying
+    # somewhere else entirely would keep this green while the wrapper it names was gone.
+    with pytest.raises(HarnessError, match="could not read the current branch"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_the_second_branch_read_is_normalized_too(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`current_branch` is wrapped at TWO call sites, and one test cannot certify both.
+
+    Patching it to raise unconditionally dies at the first (`harness.py`'s step 1), so removing
+    the second wrapper -- the post-actor re-read -- leaves that test green. This one lets the
+    first read succeed and fails only the second.
+    """
+    from science_tool.autonomy.git import GitError, current_branch as real_current_branch
+
+    calls = {"n": 0}
+
+    def _explode_on_the_second(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_current_branch(*args, **kwargs)
+        raise GitError("cannot re-read HEAD")
+
+    monkeypatch.setattr(harness_module, "current_branch", _explode_on_the_second)
+
+    with pytest.raises(HarnessError, match="could not re-read the current branch"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_a_raw_staging_failure_is_normalized(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`stage_all` raises `GitError` of its own, and nothing else in the loop normalizes it."""
+    from science_tool.autonomy.git import GitError
+
+    def _explode(*args, **kwargs):
+        raise GitError("cannot stage the actor's output")
+
+    monkeypatch.setattr(harness_module, "stage_all", _explode)
+
+    with pytest.raises(HarnessError, match="the actor's output could not be captured"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_a_raw_report_directory_failure_is_normalized(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The report directory's `mkdir` raises `OSError`, not `GitError` -- a different type
+    reaching the same wrapper, and the third helper design row 26 named."""
+    real_mkdir = Path.mkdir
+
+    def _explode(self: Path, *args, **kwargs):
+        if self.name == "reports":
+            raise OSError("cannot create the report directory")
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", _explode)
+
+    with pytest.raises(HarnessError, match="the report directory could not be created"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(CommonsError("commons store not found"), id="commons"),
+        pytest.param(yaml.YAMLError("relations.yaml is malformed"), id="yaml"),
+    ],
+)
+def test_a_source_layer_failure_is_normalized(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+):
+    """Design §3.4.1 promises EVERY orchestration failure raises `HarnessError`.
+
+    `CommonsError` and `yaml.YAMLError` derive straight from `Exception` -- neither is an
+    `OSError` nor a `ValueError` -- and both are reachable from ordinary project state through
+    the very step this induces: `start_run` -> `_capture` -> `materialize_graph` ->
+    `load_project_sources`, which reads `relations.yaml` and resolves the configured commons
+    store. Before the widening they escaped `_step` and the CLI exited 1 with a traceback where
+    §3.4.1 promises 3.
+    """
+    def _explode(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(harness_module, "start_run", _explode)
+
+    with pytest.raises(HarnessError, match="the run could not be opened"):
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
 
@@ -467,12 +672,20 @@ def test_no_planted_vector_executes_through_the_supervised_loop(
 
     The `plant_attacks` fixture is shared with that test rather than re-inlined -- its workshop
     is a sibling of the repository precisely so `start_run`'s clean-tree assertion still passes.
+
+    THE POST-VERDICT COMMIT IS ASSERTED BEFORE THE SENTINELS. An empty sentinel directory is
+    the assertion's whole content, and it is empty for a *second* reason too: a `_settle` that
+    stopped committing would make no git calls at all, so nothing would fire and row 16 --
+    this ledger's strongest row -- would quietly stop testing anything. Requiring the commit
+    to exist is what makes the emptiness mean the vectors were disarmed rather than never
+    reached.
     """
     sentinels = plant_attacks(supervised_project)
 
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
     assert outcome.disposition is RunDisposition.CLEAN
+    assert outcome.post_verdict_commit is not None
     fired = sorted(path.name for path in sentinels.iterdir())
     assert fired == [], f"a hostile git configuration executed during the run: {fired}"
 

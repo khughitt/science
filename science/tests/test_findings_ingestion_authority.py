@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import inspect
+import json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from science_tool.findings import cli as findings_cli
 from science_tool.findings.ingest import IngestionContext, ingestion_authority
@@ -47,14 +48,65 @@ def test_it_loads_sources_without_relaxing_identity(
     )
 
 
-def test_the_cli_uses_the_shared_derivation():
+def test_the_cli_uses_the_shared_derivation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """One spelling, not two that can drift. The old private helpers are gone.
 
-    `.callback`, not the command object: `@findings_group.command("ingest")` rebinds the name
-    to a `click.core.Command`, and `inspect.getsource` on that raises
-    `TypeError: module, class, method, function, traceback, frame, or code object was
-    expected` -- measured. Click keeps the undecorated function on `.callback`.
+    ASSERTED ON THE CALL, NOT ON THE SOURCE TEXT -- the same discipline the test above states,
+    which this one used to violate. `"ingestion_authority" in inspect.getsource(...)` is
+    satisfied by a COMMENT mentioning the name, by a dead import, or by a second private
+    derivation sitting beside a docstring that cites the shared one; none of those is the
+    command calling it. Monkeypatching the module attribute and requiring it to be invoked
+    over the project root is a claim about behaviour, and it fails the moment the command
+    grows a private path again.
     """
     assert not hasattr(findings_cli, "_load_ingestion_context")
     assert not hasattr(findings_cli, "_registry")
-    assert "ingestion_authority" in inspect.getsource(findings_cli.ingest_command.callback)
+
+    calls: list[Path] = []
+
+    def _record(project_root: Path):
+        calls.append(project_root)
+        return ingestion_authority(project_root)
+
+    monkeypatch.setattr(findings_cli, "ingestion_authority", _record)
+
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "fingerprint_version": 1,
+                "ingestion_ref": "ing:1",
+                "generated_at": "2026-07-27T12:00:00+00:00",
+                "findings": [],
+                "accepted": [],
+                "metrics": {},
+                "unwired": [],
+                "totals": {
+                    "findings_total": 0,
+                    "findings_by_severity": {},
+                    "accepted_total": 0,
+                    "unwired_total": 0,
+                },
+                "meta": {
+                    "producers_run": ["dataset_anomalies"],
+                    "total_duration_seconds": 0.0,
+                    "timings": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        findings_cli.findings_group,
+        [
+            "ingest", str(report),
+            "--project-root", str(tmp_path),
+            "--attest-ingestion-ref", "ing:1",
+            "--attest-generated-at", "2026-07-27T12:00:00+00:00",
+            "--attest-producer-id", "dataset_anomalies",
+        ],
+    )
+
+    assert calls == [tmp_path], result.output
