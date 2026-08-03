@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +20,39 @@ def _git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, text=True, check=True
     ).stdout.strip()
+
+
+def _commit_all(root: Path, message: str) -> None:
+    _git(root, "add", "-A")
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root),
+         "commit", "-q", "-m", message],
+        capture_output=True, check=True,
+    )
+
+
+def _shift_the_reported_instant(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """Make the actor's report disagree with the instant the supervisor dictated.
+
+    Design §8.2: the real `health` ECHOES `--generated-at`, so "dictate the instant" and "read
+    it back out of the report" are observationally identical against an honest actor. Two rows
+    turn on telling them apart -- the attested provenance and the record's clock -- and neither
+    can be certified without an actor whose report says something else.
+
+    Patches the FIXED subprocess seam rather than introducing an actor abstraction: §3.2
+    declined actor selection, and a test-only seam would put that interface back through the
+    suite's door.
+    """
+    real = harness_module._run_actor
+
+    def _shifted(project_root: Path, *, report_path: Path, **kwargs):
+        completed = real(project_root, report_path=report_path, **kwargs)
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        payload["generated_at"] = value
+        report_path.write_text(json.dumps(payload), encoding="utf-8")
+        return completed
+
+    monkeypatch.setattr(harness_module, "_run_actor", _shifted)
 
 
 def test_a_supervised_run_completes_and_leaves_the_tree_clean(supervised_project: Path):
@@ -258,27 +293,224 @@ def test_an_existing_auto_branch_refuses_the_run(supervised_project: Path):
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
 
-def test_the_actor_runs_the_supervisors_own_toolkit(supervised_project: Path):
-    """Design §3.2: a package planted in the actor-controlled tree cannot shadow the real one.
+def test_an_actor_that_leaves_the_branch_is_refused(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Design §4.4: the condition has to be INDUCED, not merely noticeable.
 
-    This certifies the PAIR of controls, not either one, and that is a measurement rather than
-    a reading of the code. Mutating `_run_actor` three ways: `-P` alone with `cwd=project_root`
-    passes; the neutral `cwd` alone with `-P` dropped passes; dropping BOTH fails with
-    `the actor exited 1: shadowed`. So they are redundant by construction -- `-m` puts the
-    working directory on `sys.path` and `-P` is what removes it, so aiming `cwd` somewhere
-    harmless and refusing to trust `cwd` are two answers to one question. Do not read a green
-    result here as evidence for `-P` specifically.
+    The happy path never leaves `auto/<slug>`, so a loop with the branch check deleted still
+    passes every other test in this module. Only an actor that wanders off it puts control on
+    the comparison at all.
+    """
+    real = harness_module._run_actor
+
+    def _wander(project_root: Path, **kwargs):
+        completed = real(project_root, **kwargs)
+        _git(project_root, "checkout", "-q", "-b", "elsewhere")
+        return completed
+
+    monkeypatch.setattr(harness_module, "_run_actor", _wander)
+
+    with pytest.raises(HarnessError, match="left"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_a_quarantined_run_ingests_nothing(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A denied run's report is not evidence of anything.
+
+    The gate denies the entity write, so the disposition is `quarantined` -- and ingestion is
+    conditioned on the DISPOSITION, not on whether a report happens to be readable.
+    """
+    real = harness_module._run_actor
+
+    def _also_write_elsewhere(project_root: Path, **kwargs):
+        completed = real(project_root, **kwargs)
+        (project_root / "entities" / "propositions" / "p9.md").write_text(
+            "---\nid: proposition:p9\nkind: proposition\ntitle: P9\n---\n", encoding="utf-8"
+        )
+        return completed
+
+    monkeypatch.setattr(harness_module, "_run_actor", _also_write_elsewhere)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.QUARANTINED
+    assert outcome.ingestion is None
+    assert not (supervised_project / "doc" / "audits" / "cases").exists()
+
+
+def test_the_attested_instant_is_the_commissioned_one(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The provenance the supervisor attests is the one it DICTATED, not one it read back.
+
+    `ingest_report` compares the report's `generated_at` against the attestation and refuses on
+    any difference, so a supervisor that sourced its attestation from the report would agree
+    with the actor by construction -- and the comparison would be a tautology.
+    """
+    _shift_the_reported_instant(monkeypatch, "2099-01-01T00:00:00.000000+00:00")
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.ingestion is None
+    assert outcome.ingestion_refusal is not None
+
+
+def test_the_record_ended_is_the_supervisors_clock(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Design §3.4.2: every wall instant comes from the supervisor, never from the actor.
+
+    The shifted report is what makes this observable. Against an honest actor the report's
+    instant IS the supervisor's, and it falls inside `before <= ended <= after` whichever
+    source the record drew it from -- so a run over the untouched fixture certifies nothing
+    here.
+    """
+    from science_tool.graph.autonomous_runs import load_run_records
+
+    _shift_the_reported_instant(monkeypatch, "2099-01-01T00:00:00.000000+00:00")
+
+    before = datetime.now(UTC)
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+    after = datetime.now(UTC)
+
+    record = {r.id: r for r in load_run_records(supervised_project)}[outcome.run_id]
+
+    assert before <= record.ended <= after
+
+
+def test_an_actor_exit_two_still_completes(supervised_project: Path):
+    """`science health` writes a complete report and THEN exits 2 for an invalid acceptance
+    configuration (design §4.2), so exit 2 is not actor failure.
+
+    `accepted_validation` must be a LIST holding an unusable entry. A scalar there is discarded
+    by `accepted_validation_entries` before any check sees it, and the run exits 0 -- which
+    would make this test green without ever producing the code it is about.
+    """
+    (supervised_project / "science.yaml").write_text(
+        "name: harness-fixture\nknowledge_profiles:\n  local: local\n"
+        "health:\n  accepted_validation:\n    - not-a-mapping\n",
+        encoding="utf-8",
+    )
+    _commit_all(supervised_project, "bad acceptance")
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.actor_exit_code == 2
+    assert outcome.disposition is RunDisposition.CLEAN
+
+
+def test_settling_a_clean_tree_creates_no_commit(supervised_project: Path):
+    """The status check is the only thing standing between `_settle` and an empty commit, and
+    only the `record_written=True` branch reaches the commit call at all.
+
+    Called directly, because the loop cannot produce this state: `finish_run` writes the record
+    file, so every run that sets `record_written` arrives here with a dirty tree. Asserting on
+    the happy path would certify a guard whose condition was never false, and the record-less
+    test returns at the `record_written` branch without reaching this one.
+    """
+    from science_tool.autonomy.harness import _settle
+
+    assert worktree_status(supervised_project) == ""
+    head_before = _git(supervised_project, "rev-parse", "HEAD")
+
+    assert _settle(
+        supervised_project, record_written=True, run_id="run:2026-08-02-health-audit-a1b2"
+    ) is None
+    assert _git(supervised_project, "rev-parse", "HEAD") == head_before
+
+
+def test_a_settlement_failure_raises(supervised_project: Path, monkeypatch: pytest.MonkeyPatch):
+    """Design §8.4: the happy path cannot distinguish raising from swallowing, because nothing
+    raises. The condition has to be induced."""
+    from science_tool.autonomy.git import GitError
+
+    def _explode(*args, **kwargs):
+        raise GitError("settlement blew up")
+
+    monkeypatch.setattr(harness_module, "_settle", _explode)
+
+    with pytest.raises(HarnessError, match="settled"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_a_raw_git_failure_is_normalized(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Every orchestration failure raises `HarnessError`, including one from a helper that
+    raises on its own -- the CLI catches nothing else, so an unnormalized `GitError` exits 1
+    with a traceback where §3.4.1 promises 3."""
+    from science_tool.autonomy.git import GitError
+
+    def _explode(*args, **kwargs):
+        raise GitError("cannot read HEAD")
+
+    monkeypatch.setattr(harness_module, "current_branch", _explode)
+
+    with pytest.raises(HarnessError):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+
+def test_no_planted_vector_executes_through_the_supervised_loop(
+    supervised_project: Path, plant_attacks
+):
+    """The whole loop over a hostile repository.
+
+    `.git/config`, `.git/hooks/` and `$GIT_DIR/info/attributes` all belong to the ACTOR, so
+    every git invocation the supervisor makes AFTER the actor runs is executing against a
+    configuration the actor wrote. `test_no_planted_vector_executes_through_the_write_primitives`
+    proves the primitives are hardened; it says nothing about whether the LOOP calls them, and a
+    bare `subprocess.run(["git", ...])` anywhere in it bypasses every defence while that test
+    stays green.
+
+    The `plant_attacks` fixture is shared with that test rather than re-inlined -- its workshop
+    is a sibling of the repository precisely so `start_run`'s clean-tree assertion still passes.
+    """
+    sentinels = plant_attacks(supervised_project)
+
+    outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert outcome.disposition is RunDisposition.CLEAN
+    fired = sorted(path.name for path in sentinels.iterdir())
+    assert fired == [], f"a hostile git configuration executed during the run: {fired}"
+
+
+def test_the_actor_runs_the_supervisors_own_toolkit(
+    supervised_project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Design §3.2: neither a package planted in the actor-controlled tree nor a `science` on
+    `PATH` can stand in for the supervisor's own installation.
+
+    TWO PLANTS, because the argv makes two independent commitments. `sys.executable -m
+    science_tool` is what refuses a `science` resolved from `PATH` -- a different toolkit
+    revision would be invisible, since `assert_toolkit_matches` checks the SUPERVISOR's toolkit
+    and not the actor's. The `-P` / neutral-`cwd` pair is what refuses a `science_tool` package
+    sitting in the project.
+
+    That pair certifies as ONE control, and that is a measurement rather than a reading of the
+    code. Mutating `_run_actor` three ways: `-P` alone with `cwd=project_root` passes; the
+    neutral `cwd` alone with `-P` dropped passes; dropping BOTH fails with
+    `the actor exited 1: shadowed`. `-m` puts the working directory on `sys.path` and `-P` is
+    what removes it, so aiming `cwd` somewhere harmless and refusing to trust `cwd` are two
+    answers to one question. Do not read a green result here as evidence for `-P` specifically.
+
+    The `PATH` plant lives outside the project: an untracked executable beside the entities
+    would make `start_run` refuse the dirty tree before the actor was ever started.
     """
     shadow = supervised_project / "science_tool"
     shadow.mkdir()
     (shadow / "__init__.py").write_text("raise SystemExit('shadowed')\n", encoding="utf-8")
     (shadow / "__main__.py").write_text("raise SystemExit('shadowed')\n", encoding="utf-8")
-    _git(supervised_project, "add", "-A")
-    subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(supervised_project),
-         "commit", "-q", "-m", "plant"],
-        capture_output=True, check=True,
-    )
+    _commit_all(supervised_project, "plant")
+
+    impostor_dir = tmp_path / "impostor-bin"
+    impostor_dir.mkdir()
+    impostor = impostor_dir / "science"
+    impostor.write_text("#!/bin/sh\necho 'impostor toolkit' >&2\nexit 1\n", encoding="utf-8")
+    impostor.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{impostor_dir}:{os.environ['PATH']}")
 
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
