@@ -283,3 +283,96 @@ def test_the_actor_runs_the_supervisors_own_toolkit(supervised_project: Path):
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
     assert outcome.actor_exit_code in (0, 2)
+
+
+def test_the_command_exits_zero_on_a_clean_ingested_run(supervised_project: Path):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    result = CliRunner().invoke(
+        main, ["autonomy", "run", "--project-root", str(supervised_project)]
+    )
+
+    assert result.exit_code == 0, result.output
+
+
+def test_the_command_exits_three_on_an_orchestration_failure(supervised_project: Path):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    _git(supervised_project, "checkout", "-q", "--detach")
+
+    result = CliRunner().invoke(
+        main, ["autonomy", "run", "--project-root", str(supervised_project)]
+    )
+
+    assert result.exit_code == 3, result.output
+
+
+def test_the_command_exits_four_when_ingestion_refuses(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Design §7: a run that produced an unusable report has not achieved its purpose, even
+    though the autonomous disposition is clean."""
+    from click.testing import CliRunner
+
+    from science_tool.autonomy import harness as harness_module
+    from science_tool.cli import main
+    from science_tool.findings.ingest import IngestError
+
+    def _refuse(*args, **kwargs):
+        raise IngestError("refused for the test")
+
+    monkeypatch.setattr(harness_module, "ingest_report", _refuse)
+
+    result = CliRunner().invoke(
+        main, ["autonomy", "run", "--project-root", str(supervised_project)]
+    )
+
+    assert result.exit_code == 4, result.output
+
+
+@pytest.mark.parametrize(
+    ("disposition", "expected_code"),
+    [("quarantined", 1), ("unwired", 2)],
+)
+def test_the_command_maps_each_disposition_to_its_exit_code(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch, disposition, expected_code
+):
+    """Codes 1 and 2 need no end-to-end run: the mapping is the thing under test, and a
+    constructed outcome exercises it without a second full loop."""
+    from click.testing import CliRunner
+
+    from science_tool.autonomy import harness as harness_module
+    from science_tool.autonomy.harness import HarnessOutcome
+    from science_tool.cli import main
+
+    outcome = HarnessOutcome(
+        run_id="run:2026-08-02-health-audit-a1b2",
+        disposition=RunDisposition(disposition),
+        reason="constructed for the exit-code mapping",
+        actor_exit_code=0,
+        capture_commit="0" * 40,
+        post_verdict_commit=None,
+        record_written=True,
+        ingestion=None,
+        ingestion_refusal=None,
+    )
+    # Patch the HARNESS module, not the CLI one: `run_command` imports the function inside its
+    # body, so the name is resolved from `science_tool.autonomy.harness` at call time and an
+    # attribute set on the CLI module would never be consulted.
+    monkeypatch.setattr(harness_module, "run_supervised_audit", lambda *a, **k: outcome)
+
+    result = CliRunner().invoke(
+        main, ["autonomy", "run", "--project-root", str(supervised_project)]
+    )
+
+    assert result.exit_code == expected_code, result.output
+
+
+def test_the_command_is_classified_for_the_budget_boundary():
+    from science_tool.budget.registry import BUDGETS, DEFERRED, EXEMPTIONS
+
+    assert "autonomy run" in (set(BUDGETS) | set(DEFERRED) | set(EXEMPTIONS))

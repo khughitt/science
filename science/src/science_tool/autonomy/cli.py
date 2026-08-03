@@ -305,3 +305,60 @@ def finish_command(
 
     emit(output_format=effective_format, payload=payload, render_text=_render_text)
     sys.exit({RunDisposition.CLEAN: 0, RunDisposition.QUARANTINED: 1, RunDisposition.UNWIRED: 2}[outcome.disposition])
+
+
+@autonomy_group.command("run")
+@click.option(
+    "--project-root", type=click.Path(path_type=Path), default=Path("."), show_default=True,
+)
+@click.option(
+    "--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table",
+    show_default=True,
+)
+def run_command(project_root: Path, output_format: str) -> None:
+    """Run one supervised audit: open, run the actor, gate, ingest, record.
+
+    Exit codes: 0 clean and ingested, 1 quarantined, 2 unwired, 3 an orchestration failure,
+    4 clean but ingestion refused. Code 4 is not a success: the run's purpose was an
+    ingestible report, and a refused one did not achieve it.
+    """
+    from datetime import UTC, datetime
+
+    from science_model.autonomous_runs import RunDisposition
+
+    from science_tool.autonomy.harness import (
+        HarnessError,
+        generate_short_id,
+        run_supervised_audit,
+    )
+
+    try:
+        outcome = run_supervised_audit(
+            project_root.resolve(),
+            started=datetime.now(UTC),
+            short_id=generate_short_id(),
+        )
+    except HarnessError as exc:
+        click.echo(f"harness error: {exc}", err=True)
+        sys.exit(3)
+
+    payload = outcome.model_dump(mode="json")
+
+    def render_text() -> None:
+        click.echo(f"{outcome.disposition.value}: {outcome.reason}")
+        if outcome.ingestion is not None:
+            click.echo(
+                f"  ingested {outcome.ingestion.records_written} new case(s), "
+                f"{outcome.ingestion.occurrences_appended} occurrence(s)"
+            )
+        if outcome.ingestion_refusal is not None:
+            click.echo(f"  ingestion refused: {outcome.ingestion_refusal}")
+
+    emit(output_format=output_format, payload=payload, render_text=render_text)
+
+    if outcome.disposition is RunDisposition.QUARANTINED:
+        sys.exit(1)
+    if outcome.disposition is RunDisposition.UNWIRED:
+        sys.exit(2)
+    if outcome.ingestion_refusal is not None:
+        sys.exit(4)

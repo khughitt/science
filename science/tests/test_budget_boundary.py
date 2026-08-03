@@ -24,7 +24,7 @@ from science_tool.cli import main
 EXPECTED_CLASSIFICATION_COUNTS = {
     "budgeted": 69,
     "exempt": 122,
-    "deferred": 103,
+    "deferred": 104,
 }
 
 
@@ -170,6 +170,11 @@ def test_classification_partition_has_the_audited_cardinality() -> None:
         `evidence serve` receipt as one exempt leaf; served bytes never reach stdout and
         its target/path strings are model-bounded, taking the partition to
         69/122/102 = 293.
+
+    Spec 2b's dispatch harness then adds `autonomy run` as one deferred leaf, beside its
+    `start`/`finish`/`path-gate` siblings: it emits one fixed summary record per
+    invocation, plus whatever `finish` reports, taking the live partition to
+    69/122/104 = 295.
     """
     actual = {
         "budgeted": len(BUDGETS),
