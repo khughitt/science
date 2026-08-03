@@ -73,7 +73,8 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   default `gpg` on `PATH`. Pinned in `commit_tree`, not at the call site.
 * `core.worktree=<sibling>` -- REDIRECTS every worktree-reading or -writing subcommand while
   `-C <repo>` still selects the intended repository. The command-line `--work-tree` in
-  `_argv` outranks repository configuration and pins every call to the resolved project root.
+  `_argv` outranks repository configuration and pins every call to the nearest enclosing
+  worktree root discovered from an unfollowed `.git` marker.
 * `grep.column=true`, `color.grep=always`, `color.ui=always` -- RENDER, under `grep`:
   they change output but spawn nothing. The broker pins the argv keys this shapes
   (`--no-color`, etc.) rather than neutralizing them here, since there is nothing here
@@ -204,10 +205,29 @@ _HARDENING: tuple[str, ...] = (
 _FILTER_COMMAND_KEYS: tuple[str, ...] = ("clean", "smudge", "process")
 
 
+def _worktree_root(project_root: Path) -> Path:
+    """Find the nearest enclosing worktree marker without trusting Git configuration."""
+    resolved = project_root.resolve()
+    current = resolved
+    while True:
+        marker = current / ".git"
+        try:
+            os.lstat(marker)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise GitError(f"cannot inspect Git repository marker {marker}: {exc}") from exc
+        else:
+            return current
+        if current.parent == current:
+            return resolved
+        current = current.parent
+
+
 def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) -> list[str]:
     """The single place autonomy's git argv is built."""
     root = repo_root.resolve()
-    argv = ["git", "--no-replace-objects", f"--work-tree={root}"]
+    argv = ["git", "--no-replace-objects", f"--work-tree={_worktree_root(root)}"]
     for override in overrides:
         argv += ["-c", override]
     argv += ["-C", str(root), *args]

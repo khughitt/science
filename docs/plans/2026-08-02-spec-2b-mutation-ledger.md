@@ -1,6 +1,6 @@
 # Spec 2b — mutation ledger
 
-Design §8. Forty-one rows, each certified by the plan-4c discipline: apply **one** mutation
+Design §8. Forty-two rows, each certified by the plan-4c discipline: apply **one** mutation
 alone, require a **named** test to fail **for the stated reason**, revert, require that same
 test to pass before the next row.
 
@@ -20,6 +20,12 @@ own line rather than smoothed over.
 revision 7. Rows **34–38** are new and were certified against the revision-7 working tree;
 row **33** was re-certified because the unforeseen exception now leaves as a caused
 `HarnessError` after settlement rather than escaping raw.
+
+**Nested-worktree correction baseline:** `51b83f4f` (`docs(plans): record supervised run final
+fixes`) is the tree on which the full suite exposed the project-root pin regression. Row **39**
+was certified against the revision-8 correction: falling back to the resolved Science project
+directory loses the enclosing repository's nested prefix while the malicious
+`core.worktree=<sibling>` remains overridden.
 
 A row whose test fails for a *different* reason than the one stated certifies nothing, so the
 observed result below records the actual failure text rather than "fails". Every row was also
@@ -81,7 +87,7 @@ says nothing about whether `_settle` calls them;
 against a raw `subprocess.run` in `_settle`. That is why row 16 has its own test over the
 `supervised_project` fixture, sharing Task 1's `plant_attacks` factory.
 
-## Rows 22–38 — revisions 3 through 7
+## Rows 22–39 — revisions 3 through 8
 
 | # | Mutation | Test node | Observed result |
 |---|---|---|---|
@@ -105,6 +111,7 @@ against a raw `subprocess.run` in `_settle`. That is why row 16 has its own test
 | 36 | Re-raise an unforeseen ingestion exception unchanged | `test_autonomy_harness.py::test_an_unforeseen_ingestion_failure_still_settles_the_tree` | KILLED — raw `_Unforeseen: nobody foresaw this` escapes instead of the required caused `HarnessError` |
 | 37 | Remove `_settle`'s post-commit `worktree_status` check | `test_autonomy_harness.py::test_settlement_names_an_unaccounted_dirty_path` | KILLED — `Failed: DID NOT RAISE HarnessError`; the named commit succeeds while `?? unexpected.txt` remains unaccounted |
 | 38 | Treat every nonzero `cat-file -t` answer as absence | `test_autonomy_git_writes.py::test_restore_path_fails_closed_when_cat_file_does_not_prove_absence` | KILLED — `Failed: DID NOT RAISE GitError`; the simulated object-database failure fell through to cleanup |
+| 39 | Pin `--work-tree` to the resolved Science project directory instead of the nearest enclosing worktree root | `test_autonomy_git_writes.py::test_nested_project_uses_enclosing_worktree_without_trusting_core_worktree` | KILLED — `build/x.csv` appeared despite the enclosing ignore rule, and the indexed `science.yaml` also appeared as `projects/demo/science.yaml`; the project-root pin destroyed the nested prefix |
 
 **Rows 32, 33, and 36 split one hazard into three observable contracts.** Row 32's expected
 project-state failures become refusals. Row 36's private `_Unforeseen(Exception)` becomes a
@@ -214,6 +221,14 @@ node passed before the next mutation. Row 33 was repeated under the revised exce
 and killed on the restored-branch assertion while still observing the required caused
 `HarnessError`.
 
+## Nested-worktree regression certification
+
+Row 39 was applied alone against revision 8 by replacing `_worktree_root(root)` with `root` in
+the central `--work-tree` argument. The named node failed on its literal visible-path list:
+`build/x.csv` was the first unexpected path and `projects/demo/science.yaml` was also present.
+After restoring the nearest-marker derivation, the same node passed. No other mutation was
+active.
+
 ## Result
 
-41 rows applied, 41 killed, 0 unkillable. Every reverted re-run passed.
+42 rows applied, 42 killed, 0 unkillable. Every reverted re-run passed.

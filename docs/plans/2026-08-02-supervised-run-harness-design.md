@@ -1,11 +1,19 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** implemented (revision 7)
+**Status:** implemented (revision 8)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
+
+**Revision 8** corrects revision 7's worktree pin target. A Science project may be nested
+inside an enclosing Git worktree; pinning the project directory as Git's worktree root loses
+the nested path prefix, its enclosing ignore rules, and its indexed paths. The gateway now
+walks upward from the resolved project path with `lstat`, selects the directory containing the
+nearest unfollowed `.git` marker, and pins that enclosing worktree root (§3.5). Git still
+validates directory markers, linked-worktree gitfiles, corrupt or dangling nearest markers,
+and genuine non-repositories. Row 39 makes a fallback to the project directory observable.
 
 **Revision 7** closes the final whole-branch review at the two remaining authority boundaries
 and three error postconditions. Repository-local `core.worktree` can redirect every Git write
-despite `-C`, so the gateway now pins the resolved worktree on every invocation (§3.5). The
+despite `-C`, so the gateway introduced a command-line worktree pin on every invocation (§3.5). The
 actor no longer receives a project pathname: it writes one bounded regular file in
 supervisor-owned temporary storage, whose bytes are installed through the existing anchored,
 exclusive path primitives (§3.3). An unforeseen ingestion `Exception` settles first and then
@@ -416,9 +424,16 @@ can turn into arbitrary execution, and no layer of this design would report it.
 Configuration can redirect an operation without executing a program. Repository-local
 `core.worktree=<sibling>` makes `git -C <repo> status`, `add`, `checkout`, and `clean` operate
 on the sibling while still using `<repo>`'s object database. Every gateway argv therefore
-includes an explicit command-line `--work-tree=<resolved-project-root>`, which outranks the
-repository configuration. It is centralized in `_argv`, including the configuration preflight,
-so every current and future helper receives the same pin.
+includes an explicit command-line `--work-tree=<nearest-enclosing-worktree-root>`, which
+outranks the repository configuration. The root comes from walking upward from the resolved
+Science project path and selecting the directory that contains the nearest `.git` marker via
+`lstat`, without following the marker or asking repository configuration. This preserves Git's
+nested-project prefix and enclosing ignore/index semantics. The nearest marker wins even if it
+is a linked-worktree gitfile, corrupt, or dangling, so Git validates that marker and fails
+closed rather than silently skipping to an ancestor. With no marker, the resolved project path
+is passed only so Git can return its genuine non-repository verdict. The logic is centralized
+in `_argv`, including the configuration preflight, so every current and future helper receives
+the same pin.
 
 Most of what the new subcommands need is already there. `run_git` applies `_HARDENING` plus
 `_filter_driver_overrides(repo_root)` on **every** call (`git.py:435`), so
@@ -799,6 +814,7 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 36 | Re-raise an unforeseen ingestion `Exception` unchanged | the library leaks the private exception instead of a caused `HarnessError` (§3.4.1) |
 | 37 | Remove `_settle`'s post-commit status check | an unaccounted `unexpected.txt` remains dirty while the loop returns success (§4.5) |
 | 38 | Treat every nonzero `cat-file -t` answer as absence | an object-database failure triggers cleanup instead of failing closed (§3.5) |
+| 39 | Pin `--work-tree` to the Science project directory instead of the nearest enclosing worktree root | a nested project loses its enclosing ignore rules and indexed path prefix (§3.5) |
 
 **Rows 32, 33, and 36 split one hazard into its three outcomes.** The expected catch list keeps
 ordinary project-state failures as refusals. An exception outside that list is normalized to a

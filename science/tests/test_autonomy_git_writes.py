@@ -12,6 +12,7 @@ from science_tool.autonomy.git import (
     current_branch,
     restore_path,
     restore_worktree,
+    run_git,
     stage_all,
     stage_paths,
     switch_branch,
@@ -250,3 +251,36 @@ def test_repo_local_core_worktree_cannot_redirect_write_primitives(
     assert (outside / "named.txt").read_text(encoding="utf-8") == "outside changed\n"
     assert (outside / "all.txt").read_text(encoding="utf-8") == "outside dirty\n"
     assert (outside / "outside-untracked.txt").read_text(encoding="utf-8") == "outside\n"
+
+
+def test_nested_project_uses_enclosing_worktree_without_trusting_core_worktree(
+    tmp_path: Path,
+):
+    """The pin preserves the nested prefix while overriding a configured worktree."""
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    _plain_git(parent, "init", "-q")
+    project = parent / "projects/demo"
+    (project / "build").mkdir(parents=True)
+    (parent / ".gitignore").write_text("projects/demo/build/\n", encoding="utf-8")
+    (project / "science.yaml").write_text("name: Demo\nid: demo\n", encoding="utf-8")
+    (project / "keep.csv").write_text("keep\n", encoding="utf-8")
+    (project / "build/x.csv").write_text("ignored\n", encoding="utf-8")
+    _plain_git(parent, "add", "projects/demo/science.yaml")
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "outside.csv").write_text("outside\n", encoding="utf-8")
+    _plain_git(parent, "config", "core.worktree", str(outside))
+
+    completed = run_git(
+        project,
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.split(b"\0") == [b"keep.csv", b"science.yaml", b""]
