@@ -1270,6 +1270,9 @@ def ungraphed_project(tmp_path: Path) -> Path:
     """
     import subprocess
 
+    from science_tool.boundary.config import BoundaryConfig
+    from science_tool.boundary.generate import render_managed_block, splice_managed_block
+
     root = tmp_path / "ungraphed"
     (root / "entities" / "propositions").mkdir(parents=True)
     (root / "entities" / "papers").mkdir(parents=True)
@@ -1290,6 +1293,12 @@ def ungraphed_project(tmp_path: Path) -> Path:
         "stance: supports\ntarget: proposition:p1\nsource: paper:x\n"
         "strength: strong\nbelief_eligible: true\n---\n",
         encoding="utf-8",
+    )
+    # A real enrolled project carries the science-managed boundary block in its root
+    # `.gitignore` -- this fixture has no declared boundary roots, but the block is
+    # unconditional (it also ignores the ingestion lock), so it renders even here.
+    (root / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(BoundaryConfig())), encoding="utf-8"
     )
     for args in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "base")):
         subprocess.run(

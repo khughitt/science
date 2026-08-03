@@ -56,6 +56,12 @@ def test_the_post_verdict_commit_carries_exactly_what_settling_swept_up(
 
     The case files are not enumerated: how many findings the fixture project has is not what
     this test is about, and pinning the count would make it fail for the wrong reason.
+
+    `doc/audits/cases/.ingest.lock` used to show up here too: `locked_store` creates it and
+    never unlinks it (by design -- see `boundary/generate.py`'s docstring), so `stage_all`
+    swept it into every supervised run's commit. Task 9 closed that by teaching the
+    science-managed `.gitignore` block to ignore the lock unconditionally, so it must now be
+    ABSENT from the post-verdict commit.
     """
     outcome = run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
     assert outcome.post_verdict_commit is not None
@@ -67,14 +73,11 @@ def test_the_post_verdict_commit_carries_exactly_what_settling_swept_up(
     cases = [path for path in changed if path.startswith("doc/audits/cases/") and path.endswith(".md")]
 
     assert cases, changed
+    assert "doc/audits/cases/.ingest.lock" not in changed
     assert set(changed) - set(cases) == {
-        # Design §4.5's named set:
+        # Design §4.5's named set -- nothing else.
         f"runs/{slug}.md",
         "knowledge/graph.trig",
-        # NOT in §4.5's set, and the one open item here: `locked_store` creates this lock
-        # file and never unlinks it, so `stage_all` commits it. Under decision above this
-        # module -- pinned so the decision is made deliberately, not absorbed silently.
-        "doc/audits/cases/.ingest.lock",
     }
 
 
