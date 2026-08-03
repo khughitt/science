@@ -4,13 +4,15 @@
 
 DONE. All five behavioral findings and both documentation findings from the final
 whole-branch review are fixed. The relevant mutation ledger is fully certified at
-41/41 killed.
+42/42 killed, including the nested-worktree correction found by the full suite.
 
 ## Commits
 
 - Initial snapshot (`FIX_BASE`): `46eb7c1835e23e24510768bff25b56d644bb05f4`
 - Production, tests, design, and ledger:
   `bdada2d377117669aec0d0b0eb37744b1076a1b4`
+- Nested-project worktree correction, regression test, design, and ledger:
+  `ef134dd4ac1df89b0afd7f2354108be75f30ea20`
 
 The reviewed working tree was already clean when this fixing wave began, so the
 required initial snapshot is an empty checkpoint that preserves the exact reviewed
@@ -31,9 +33,10 @@ Before the fix, the assertion read `HEAD:named` as `outside named` rather than
 sibling worktree.
 
 Fix: `autonomy/git.py::_argv` now supplies
-`--work-tree=<resolved-project-root>` on every gateway invocation, including the
-configuration preflight. Every production Git operation still goes through this
-gateway.
+`--work-tree=<nearest-enclosing-worktree-root>` on every gateway invocation, including
+the configuration preflight. The root is derived from the nearest unfollowed `.git`
+marker rather than repository configuration. Every production Git operation still goes
+through this gateway.
 
 Green evidence: the same test passes and exercises create/switch, `stage_paths`,
 `commit`, `restore_path`, `stage_all`, and `restore_worktree` while asserting the
@@ -151,7 +154,7 @@ after ingestion caused the unforeseen-ingestion guard to observe the required ca
 `HarnessError` while the branch remained `auto/<run-id>` rather than returning to the
 starting branch. Restoring the `finally` made the guard pass.
 
-Ledger result: **41/41 killed; no surviving or flaky mutants; no mutant left active.**
+Ledger result: **42/42 killed; no surviving or flaky mutants; no mutant left active.**
 
 ## Verification
 
@@ -225,3 +228,83 @@ contract surfaces were run instead.
 ## Concerns
 
 None.
+
+## Full-suite nested-worktree correction
+
+Fresh full-suite evidence on `51b83f4f` exposed a regression in the first worktree pin:
+
+```text
+12840 passed, 7 skipped, 142 deselected, 2 failed
+tests/test_boundary_checks.py::test_nested_science_project_in_enclosing_worktree_is_checked
+tests/test_data_audit_scope.py::test_nested_project_uses_parent_git_visibility
+```
+
+The two nodes were reproduced unchanged. The first omitted
+`boundary.tracked-ignored`; the second incorrectly surfaced `build/x.csv`.
+
+### Focused TDD evidence
+
+The gateway regression combines a Science project nested beneath a parent repository,
+an enclosing ignore rule and indexed path, and malicious parent
+`core.worktree=<sibling>` configuration:
+
+```text
+uv run --frozen pytest tests/test_autonomy_git_writes.py::test_nested_project_uses_enclosing_worktree_without_trusting_core_worktree -q
+```
+
+RED: the old project-root pin surfaced `build/x.csv` despite the parent ignore rule and
+also surfaced the indexed `science.yaml` under `projects/demo/science.yaml`, proving the
+nested prefix was lost.
+
+GREEN: `_worktree_root` walks upward from the resolved Science project with `lstat` and
+returns the directory containing the nearest `.git` marker. `_argv` pins that directory,
+so the same test sees exactly `keep.csv` and `science.yaml`; the configured sibling is
+not visible.
+
+The two full-suite nodes then passed together:
+
+```text
+uv run --frozen pytest tests/test_boundary_checks.py::test_nested_science_project_in_enclosing_worktree_is_checked tests/test_data_audit_scope.py::test_nested_project_uses_parent_git_visibility -q
+2 passed
+```
+
+The marker derivation does not import `boundary/gitio.py`, which already imports this Git
+gateway. A nearest directory marker or gitfile returns its containing directory; a
+corrupt or dangling nearest marker is not skipped; and no marker returns the resolved
+project path so Git can render its genuine non-repository verdict.
+
+### Mutation row 39
+
+The sole mutant replaced `_worktree_root(root)` with `root` in the central
+`--work-tree` argument. The focused node failed on its literal path list:
+`build/x.csv` was the first unexpected path and `projects/demo/science.yaml` was also
+present. After restoring the nearest-marker call, the same node passed. No other mutant
+was active.
+
+Ledger result after row 39: **42/42 killed; the mutant was restored before commit.**
+
+### Verification after the correction
+
+```text
+uv run --frozen pytest tests/test_autonomy_git_writes.py tests/test_autonomy_git_canonical.py -q
+36 passed
+
+uv run --frozen pytest tests/test_boundary_checks.py -q
+48 passed
+
+uv run --frozen pytest tests/test_data_audit_scope.py -q
+8 passed
+
+uv run --frozen ruff check
+All checks passed!
+
+uv run --frozen pyright
+0 errors, 0 warnings, 0 informations
+
+git diff --check
+passed with no output
+```
+
+Correction commit: `ef134dd4ac1df89b0afd7f2354108be75f30ea20`.
+
+Concerns: none.
