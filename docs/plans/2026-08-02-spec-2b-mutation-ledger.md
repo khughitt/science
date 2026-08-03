@@ -1,17 +1,23 @@
 # Spec 2b — mutation ledger
 
-Design §8. Twenty-nine rows, each certified by the plan-4c discipline: apply **one** mutation
+Design §8. Thirty-six rows, each certified by the plan-4c discipline: apply **one** mutation
 alone, require a **named** test to fail **for the stated reason**, revert, require that same
 test to pass before the next row.
 
 **Production baseline:** `51a22c07` (`feat(autonomy): register the supervised run command
-surface`) — the tree every mutation was applied to and reverted back to. Only
+surface`) — the tree rows 1–29 were applied to and reverted back to. Only
 `science/tests/test_autonomy_harness.py` differs from it in the commit that carries this
 ledger; no production file was left changed.
 
+**Second baseline:** the whole-branch fix wave (§ *Re-certification after the fix wave*)
+changed `_settle`'s signature and body and `_step`'s catch set. Rows **26a–26d and 30–33** are
+new and were certified against that tree; rows **9, 16, 18, 19 and 24** touch the two changed
+functions and were re-run against it. Row 19's failure *mode* changed, which is recorded in its
+own line rather than smoothed over.
+
 A row whose test fails for a *different* reason than the one stated certifies nothing, so the
 observed result below records the actual failure text rather than "fails". Every row was also
-re-run after reverting; all 29 reverted runs exited 0.
+re-run after reverting; all reverted runs exited 0.
 
 ## Reading the table
 
@@ -31,7 +37,7 @@ plan-named node did not exist are listed under [Drift](#drift-from-the-plans-row
 | 6 | Author the capture commit as the supervisor | `test_autonomy_harness.py::test_the_capture_commit_carries_the_agent_authorship_and_the_run_trailer` | KILLED — `assert 'science-supervisor <supervisor@science.local>' == 'health-audit <agent@science.local>'` |
 | 7 | Drop the `Science-Run` trailer from the capture message | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` | KILLED — `assert <RunDisposition.QUARANTINED> is <RunDisposition.CLEAN>`; `verify_marks` refuses the unmarked commit |
 | 8 | `_settle` before `switch_branch` | `test_autonomy_harness.py::test_the_autonomous_runs_check_is_silent_from_the_starting_branch` | KILLED — one `Result(severity=ERROR, ...)` observation: `commit f39f275fdc3b carries Science-Run: run... missing-record`; the record commit landed on `auto/<slug>`, so the starting branch's tree cannot see it |
-| 9 | Return before `_settle` | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` | KILLED — `assert 'auto/2026-08-02-health-audit-a1b2' == 'main'`; the operator is stranded on the run's branch |
+| 9 | Return before `_settle` | `test_autonomy_harness.py::test_a_supervised_run_completes_and_leaves_the_tree_clean` | KILLED — `assert 'auto/2026-08-02-health-audit-a1b2' == 'main'`; the operator is stranded on the run's branch. **As applied this certifies "skip step 9 entirely", not `_settle` alone**: the assertion that fires is the BRANCH SWITCH's, and the mutation removes the switch along with the settle. A mutation that kept `switch_branch` and dropped only `_settle` would leave this assertion green. That is not a gap — rows 18 and 19 certify the two commit conditions independently, and row 24 certifies that a `_settle` failure raises — but the row's evidence should not be read as being about `_settle` on its own. |
 
 ## Rows 10–14 — attestation and the actor
 
@@ -77,10 +83,39 @@ against a raw `subprocess.run` in `_settle`. That is why row 16 has its own test
 | 23 | Drop `-P` **and** pass `cwd=project_root` | `test_autonomy_harness.py::test_the_actor_runs_the_supervisors_own_toolkit` | KILLED — `HarnessError: the actor exited 1: shadowed`; the `science_tool` package planted in the project was imported |
 | 24 | Swallow a `_settle` failure instead of raising | `test_autonomy_harness.py::test_a_settlement_failure_raises` | KILLED — `Failed: DID NOT RAISE HarnessError` |
 | 25 | Take `ended` from the loaded report | `test_autonomy_harness.py::test_the_record_ended_is_the_supervisors_clock` | KILLED — `assert datetime(2099, 1, 1, …) <= datetime(2026, 8, 3, …)`; the record carried the actor's instant |
-| 26 | Remove the `_step` wrapper from `current_branch` | `test_autonomy_harness.py::test_a_raw_git_failure_is_normalized` | KILLED — the raw `GitError: cannot read HEAD` escapes instead of a `HarnessError` |
+| 26a | Remove the `_step` wrapper from the **first** `current_branch` read (step 1) | `test_autonomy_harness.py::test_a_raw_git_failure_is_normalized` | KILLED — the raw `GitError: cannot read HEAD` escapes instead of a `HarnessError` |
+| 26b | Remove the `_step` wrapper from the **second** `current_branch` read (the post-actor re-read) | `test_autonomy_harness.py::test_the_second_branch_read_is_normalized_too` | KILLED — the raw `GitError: cannot re-read HEAD` escapes |
+| 26c | Move `stage_all` outside `_step("the actor's output could not be captured")` | `test_autonomy_harness.py::test_a_raw_staging_failure_is_normalized` | KILLED — the raw `GitError: cannot stage the actor's output` escapes |
+| 26d | Remove the `_step` wrapper from the report directory's `mkdir` | `test_autonomy_harness.py::test_a_raw_report_directory_failure_is_normalized` | KILLED — the raw `OSError: cannot create the report directory` escapes; a different exception type through the same wrapper |
 | 27 | Catch only `ValueError` around ingestion | `test_autonomy_harness.py::test_a_failed_ingestion_is_a_refusal_and_not_an_abort` | KILLED — `OSError: report is unreadable` escapes the loop, abandoning the tree before step 9 |
 | 28 | Return exit 0 for a quarantined outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[quarantined-1]` | KILLED — `assert 0 == 1` |
 | 29 | Return exit 0 for an unwired outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[unwired-2]` | KILLED — `assert 0 == 2` |
+| 30 | `_settle` blanket-stages (`add -A`) instead of the named set, committing the graph on every disposition | `test_autonomy_harness.py::test_a_quarantined_run_ingests_nothing` | KILLED — `assert 'knowledge/graph.trig' not in ['knowledge/graph.trig', 'runs/2026-08-02-health-audit-a1b2.md']`; the denied write's derived graph is published on the starting branch. Measured separately against the same mutation: `git grep -l proposition:p9 HEAD` answers `HEAD:knowledge/graph.trig`, so the leaked graph really does name the entity the gate denied. |
+| 31 | `_step` catches only `(OSError, ValueError)` | `test_autonomy_harness.py::test_a_source_layer_failure_is_normalized` | KILLED, both parameters — `CommonsError: commons store not found` and `yaml.error.YAMLError: relations.yaml is malformed` each escape `_step` uncaught, where §3.4.1 promises a `HarnessError` |
+| 32 | The **ingestion** block catches only `(OSError, ValueError)` | `test_autonomy_harness.py::test_an_ingestion_authority_failure_is_a_refusal_and_not_an_abort` | KILLED, both parameters — `CommonsError: commons store not found` and `yaml.error.YAMLError: relations.yaml is malformed` escape the ingestion block instead of being recorded as a refusal |
+| 33 | Run step 9 **sequentially** instead of in a `finally` | `test_autonomy_harness.py::test_an_unforeseen_ingestion_failure_still_settles_the_tree` | KILLED — `assert 'auto/2026-08-02-health-audit-a1b2' == 'main'`; an exception the catch list does not name skips the switch and the settle, stranding the operator on the run's branch |
+
+**Rows 32 and 33 are two fixes for one hazard, and only one test can see each.** Widening the
+ingestion catch list and moving step 9 into a `finally` both address "an exception between the
+verdict and the settle". Measured: with the list widened, mutation 33 leaves
+`test_a_failed_ingestion_is_a_refusal_and_not_an_abort` and row 32's own test **green** — the
+exception is caught, so the `finally` never does anything they can observe. The `finally` is
+therefore only visible to a test that induces an exception the list does not name and never
+will, which is what row 33's test does with a private `_Unforeseen(Exception)` — deliberately
+not a `RuntimeError`, since `HarnessError` is one and `pytest.raises(RuntimeError)` would be
+satisfied by the harness's own normalization. Row 33 requires the exception to **propagate**:
+the `finally` is not a swallow, and an unforeseen failure reported as a refusal would be the
+harness claiming a verdict it never reached.
+
+**Row 26 was one row claiming three helpers, and certified one.** Its test patched
+`current_branch` to raise unconditionally, so control died at the FIRST of two wrapped call
+sites; deleting the second wrapper alone (`harness.py`'s post-actor re-read) left the test
+green, and `stage_all`'s and the `mkdir`'s wrappers were never exercised at all. Four rows
+now, one per wrapped call site, each with a test that induces a failure only that wrapper can
+normalize — and 26a's test gained a `match=`, since a bare `pytest.raises(HarnessError)` is
+satisfied by the run dying anywhere at all (the module's own convention, see
+`test_an_existing_auto_branch_refuses_the_run`). Lettered rather than renumbered so rows 27–29
+keep the numbers the design table gives them.
 
 **Row 23 is one mutation with two halves, deliberately.** Re-measured here and consistent with
 the earlier measurement recorded in the test's docstring: `-P` alone with `cwd=project_root`
@@ -134,6 +169,36 @@ survives. The test now shifts the report's `generated_at` to 2099 through the sa
 `_run_actor` seam row 12 uses (factored into `_shift_the_reported_instant`), which is what makes
 "the supervisor's clock" and "the actor's report" distinguishable at all.
 
+## Re-certification after the fix wave
+
+The whole-branch review's fix wave changed `_settle`'s signature and body (named-set staging,
+the disposition-conditioned graph) and `_step`'s catch set. Every row touching either function
+was applied again against the fixed tree:
+
+| # | Verdict on re-run |
+|---|---|
+| 9 | KILLED, same evidence — and annotated above, because that evidence is the branch switch's |
+| 16 | KILLED, and more directly than before: the hand-built `add -A` fires the actor's `core.fsmonitor` and `filter.<driver>.clean`, so the test now fails on its own sentinel assertion (`['filter', 'fsmonitor']`) rather than on a `CalledProcessError` from a later commit |
+| 18 | KILLED, same evidence |
+| 19 | KILLED — **failure mode changed**, see below |
+| 24 | KILLED, same evidence (`DID NOT RAISE HarnessError`) |
+| 26a–26d, 30–33 | KILLED — new rows, evidence in the tables above |
+
+**Row 19's failure mode changed, and the row is weaker for it.** The mutation removes the
+"nothing to settle" status guard. Under `add -A` that let control reach
+`commit --allow-empty` and record an empty commit, which is what the row's stated reason
+describes. Under named-set staging control now dies one line earlier, in `stage_paths`:
+
+> `GitError: git add -A -- runs/2026-08-02-health-audit-a1b2.md knowledge/graph.trig failed …:
+> fatal: pathspec 'runs/2026-08-02-health-audit-a1b2.md' did not match any files`
+
+A clean tree has no record file to name, so `--allow-empty` is now unreachable and the second
+half of the mutation is inert. The test still goes red, and it goes red *on the line the
+removed guard exists to skip* — so the guard is still certified as load-bearing — but the harm
+it demonstrates is "the harness refuses" rather than "an empty commit is recorded". Recorded
+rather than restated, because a row whose observed failure is quietly re-described is exactly
+what this ledger exists to prevent.
+
 ## Result
 
-29 rows applied, 29 killed, 0 unkillable. Every reverted re-run passed.
+36 rows applied, 36 killed, 0 unkillable. Every reverted re-run passed.

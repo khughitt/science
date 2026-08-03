@@ -1,7 +1,21 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** designed, unbuilt (revision 5)
+**Status:** implemented (revision 6)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
+
+**Revision 6** comes from the whole-branch review of the built loop, and its findings are about
+**a safety argument that was measured on one path and stated for all of them.** §4.4 held that
+carrying uncommitted output across the branch switch is safe because 2b's post-verdict
+artifacts are "untracked or unchanged — measured"; that is true of a *clean* run and false of a
+denied one, where the re-materialized `knowledge/graph.trig` carries the denied write's derived
+effect onto the starting branch. The deferral beneath it named only a *belief-neutral* actor —
+an actor authorized to edit entities — and so did not cover the case the path gate exists to
+catch: a report-only actor that wrote an entity anyway. §4.5 now names the published set
+explicitly and conditions the graph on `clean`. Two smaller findings of the same family: a
+refusal set justified by a hierarchy check that had walked only the autonomy and findings
+layers, missing `CommonsError` and `yaml.YAMLError` from the commons and YAML layers underneath
+(§3.4.1); and a mutation row claiming three helpers while certifying one (§8). **A property
+measured on the success path is not a property of the mechanism.**
 
 **Revision 2** closes five defects found in review of revision 1. Two are omissions of a
 contract the loop cannot be built without — the harness's own signature (§3.4) and the
@@ -278,9 +292,30 @@ functions the loop happens to call.** `current_branch`, `run_dir`, `stage_all`, 
 directory's `mkdir`, and the actor subprocess itself all raise `GitError` or `OSError` of their
 own, and the CLI catches only `HarnessError` — so an unnormalized path exits 1 with a traceback
 instead of 3. Each orchestration step is wrapped at the library boundary and re-raised as
-`HarnessError` naming the step. The ingestion step's refusal set is `IngestError`, `OSError`,
-and `ValueError` together: `load_report` reaches the filesystem, so an unreadable report is a
-refusal to ingest, not a reason to abandon the tree before step 9.
+`HarnessError` naming the step.
+
+**The normalized set is `OSError`, `ValueError`, `CommonsError` and `yaml.YAMLError`.** The
+first two were justified by a hierarchy check — `GitError`, `BaselineError`,
+`RepositoryStateError` and `IngestError` are all `ValueError` subclasses — and that check was
+run over the autonomy and findings layers only. `start_run` reaches `load_project_sources`
+through `_capture` → `materialize_graph`, and the commons and YAML layers underneath it raise
+neither: `CommonsRootNotFoundError` for an absent commons store, `yaml.YAMLError` for a
+malformed `relations.yaml` or `science.yaml`. Both are ordinary project states, not exotic
+ones. A refusal set is only as wide as the modules its hierarchy check walked.
+
+The ingestion step's refusal set is **the same set `findings/cli.py` catches over the same
+three calls** — `ingestion_authority` → `load_report` → `ingest_report` — so there is one
+refusal boundary with one spelling. `load_report` reaches the filesystem, so an unreadable
+report is a refusal to ingest, not a reason to abandon the tree before step 9; the commons and
+YAML members are there for the same reason, since `ingestion_authority` loads project sources
+too. `IngestError` is deliberately **not** named: it is a `ValueError` subclass, and a
+redundant member invites the next reader to widen the list by example rather than by hierarchy.
+
+**Step 9 runs in a `finally` regardless.** A catch list is a claim about which exceptions were
+foreseen, and ingestion sits between the verdict and the settle — the one interval where being
+wrong strands the operator on `auto/<slug>` with an uncommitted record. The list keeps a
+foreseen failure a *refusal*; the `finally` keeps an unforeseen one from being an
+*abandonment*.
 
 ### 3.4.2 Which clock, and when
 
@@ -471,14 +506,41 @@ it could only persist the intended branch as though it had been observed.
 
 ### 4.4 What step 9 assumes
 
-Carrying uncommitted output across the branch switch is safe here because 2b's post-verdict
-artifacts are untracked (`runs/`, `doc/audits/cases/`) or unchanged — measured.
+Revision 5 said carrying uncommitted output across the branch switch is safe here because 2b's
+post-verdict artifacts are "untracked (`runs/`, `doc/audits/cases/`) or unchanged — measured".
+**That measurement held only for the clean path, and the sentence generalized past it.**
 
-A **belief-neutral** actor breaks that assumption. It edits entities and rebuilds
-`knowledge/graph.trig`, leaving a modified *tracked* file whose base is `auto`'s HEAD while the
-starting branch holds `base_commit`'s version. `git checkout` then either refuses or carries a
-graph inconsistent with a branch that lacks the run's entity edits. **This is an open ruling
-for whichever slice first ships a belief-neutral actor**, named rather than guessed at.
+`finish_run` re-materializes `knowledge/graph.trig` while HEAD is still `auto/<slug>`, over a
+tree holding whatever the actor wrote. `switch_branch` carries that file to the starting
+branch and a blanket `add -A` in step 9 commits it there. On a clean run that is exactly
+right — §4.5 names the graph in the published set. On a **quarantined** run it is a leak: the
+actor's source edits are correctly left behind on `auto/<slug>`, and their *derived
+consequence* is not, so the starting branch acquires a graph naming entities its own sources
+do not contain.
+
+**The case the deferral did not cover.** The paragraph below defers the graph problem to a
+belief-neutral actor — an actor *authorized* to edit entities. The leak above needs no such
+authorization. It is a **report-only** actor that wrote an entity anyway, which is precisely
+what the path gate exists to catch, and precisely where publishing the derived effect is
+worst: the run was denied, and the denial's whole content is that nothing of it may cross onto
+the starting branch. Reproduced against a scratch project: `disposition: quarantined`, `p9.md`
+correctly absent from the starting branch, and the post-verdict commit carrying a
+`knowledge/graph.trig` that mentions `proposition:p9`.
+
+**The rule, and it is not deferred.** Step 9 stages §4.5's named set explicitly rather than
+blanket-staging, and includes `knowledge/graph.trig` **only when the disposition is `clean`**.
+On any other disposition that still wrote a record, the graph is restored to the starting
+branch's version *before* staging — a path-scoped restore, not `restore_worktree`, whose
+`checkout -- .` plus `clean -fd` is whole-tree and would take the record and the cases with
+it. The restore spans both states a project can be in: a tracked modification where the graph
+is committed, an untracked file where it never was.
+
+A **belief-neutral** actor is still an open question, and a different one. It edits entities
+*legitimately* and rebuilds `knowledge/graph.trig`, so the rebuilt graph is output the run is
+entitled to publish — while the starting branch holds `base_commit`'s version and lacks the
+entity edits the graph derives from. `git checkout` then either refuses or carries an
+inconsistent graph, and dropping it is not the answer it is here. **This remains an open
+ruling for whichever slice first ships a belief-neutral actor**, named rather than guessed at.
 
 ### 4.5 Settling the tree: a record may not exist
 
@@ -490,8 +552,14 @@ exists"; on those paths it does not, and nothing was written.
 Step 9 therefore branches on whether a record was written, not on the disposition:
 
 - **A record was written** (`clean`, `quarantined`, or `unwired`-with-identity). Commit the
-  supervisor's output on the starting branch — `runs/<slug>.md`, `knowledge/graph.trig`, and
-  any cases — with the supervisor identity and no trailer. `post_verdict_commit` is that sha.
+  supervisor's output on the starting branch with the supervisor identity and no trailer.
+  `post_verdict_commit` is that sha. The set is **named, not swept**: `runs/<slug>.md`, any
+  cases, and — **only when the disposition is `clean`** — `knowledge/graph.trig`. On
+  `quarantined` or `unwired`-with-identity the graph is restored to the starting branch's
+  version before staging, per §4.4: those runs have a record to publish and a graph nobody may
+  trust. Staging the named set rather than `add -A` is what makes that conditional expressible
+  at all, and it also means a path neither the design nor the run accounts for is not published
+  by accident.
 - **No record was written.** The run produced no attestation, so there is nothing to publish
   and derived state must not be committed on its behalf. Restore instead: `checkout -- .` plus
   `clean -fd` on the starting branch. `post_verdict_commit` is `None` and `record_written` is
@@ -507,6 +575,13 @@ commit rather than passing `--allow-empty`, which would record a commit that mea
 
 Step 9 ends with the tree clean on the starting branch in every case. That is the property the
 next `start_run` depends on, and it is what the step exists to guarantee.
+
+Named-set staging narrows *how* that guarantee is met, and the narrowing is deliberate. Under
+`add -A` a path the design never accounted for was swept into the commit and the tree came out
+clean either way; under a named set it is left uncommitted, so the tree is dirty and the
+end-to-end test's `status --porcelain` assertion fails. **A path nobody reasoned about should
+stop the harness, not be published by it** — fail early rather than sweep, and the assertion is
+where the discovery lands.
 
 ## 5. The attestation
 
@@ -666,10 +741,32 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 23 | Drop `-P` **and** run the actor with `cwd=project_root` | a `science_tool/` planted in the project root is imported by the actor (§3.2 — neither half alone is observable) |
 | 24 | Return an outcome instead of raising when `_settle` fails | a failed switch-back reports the run's own disposition (§8.4) |
 | 25 | Take `ended` from the actor's report rather than the supervisor's clock | the record's `ended` is actor-supplied |
-| 26 | Leave `current_branch` / `stage_all` / `mkdir` unnormalized | a raw `GitError` escapes the library and the CLI exits 1 with a traceback |
+| 26a | Leave the **first** `current_branch` wrapper off (step 1) | a raw `GitError` escapes the library and the CLI exits 1 with a traceback |
+| 26b | Leave the **second** `current_branch` wrapper off (the post-actor re-read) | the same, at the call site an unconditional patch never reaches |
+| 26c | Leave `stage_all`'s wrapper off | a raw `GitError` from staging escapes |
+| 26d | Leave the report directory's `mkdir` unwrapped | a raw `OSError` escapes — a different type through the same wrapper |
 | 27 | Catch only `ValueError` around ingestion | an unreadable report aborts before the tree is settled |
 | 28 | Return exit 0 for a quarantined outcome | a denied run reports success |
 | 29 | Return exit 0 for an unwired outcome | a run that could not be judged reports success |
+| 30 | `_settle` blanket-stages (`add -A`) and commits the graph on every disposition | a quarantined run publishes a `knowledge/graph.trig` naming the denied entity on the starting branch (§4.4) |
+| 31 | `_step` catches only `(OSError, ValueError)` | a `CommonsError` or `yaml.YAMLError` from the source layer exits 1 with a traceback where §3.4.1 promises 3 |
+| 32 | The ingestion block catches only `(OSError, ValueError)` | an absent commons store or a malformed `relations.yaml` aborts instead of being recorded as a refusal (§3.4.1) |
+| 33 | Run step 9 sequentially rather than in a `finally` | an exception the catch list does not name strands the operator on `auto/<slug>` with an uncommitted record (§3.4.1) |
+
+**Rows 32 and 33 are two fixes for one hazard, and each needs its own test.** With the catch
+list widened, a mutation that removes the `finally` leaves every *caught*-exception test green
+— the `finally` never runs anything they can observe. It is visible only to a test inducing an
+exception the list does not name and never will, which is the case a catch list is
+structurally unable to cover. That test must also require the exception to **propagate**: the
+`finally` is not a swallow, and an unforeseen failure recorded as a refusal would be the
+harness reporting a verdict it never reached.
+
+**Row 26 was one row claiming three helpers, and certified one.** Its test patched
+`current_branch` unconditionally, so control died at the *first* of two wrapped call sites;
+removing the second wrapper alone left it green, and `stage_all`'s and the `mkdir`'s wrappers
+were never exercised. One row per helper, one test each, and the first-site test carries a
+`match=` — a bare `pytest.raises(HarnessError)` is satisfied by the run dying anywhere at all.
+The split is why the numbering runs 26a–26d rather than renumbering the rows after it.
 
 ### 8.1 Row 11 needs more than one fixture
 
@@ -771,6 +868,15 @@ where `finish` has three.
 **Deliberately not addressed.** Concurrency and fan-out; how a generic actor receives its
 report path and provenance; belief-neutral actors across the branch switch (§4.4); whether a
 quarantined run's branch is ever cleaned up; retention of anything.
+
+**A named gap: the actor subprocess has no `timeout=`.** A hung `science health` holds
+`auto/<slug>` indefinitely, with no diagnostic and no verdict — the operator sees a command
+that never returns and a branch nothing will settle. It is not fixed here because choosing the
+value is a design decision, not an oversight to patch: health runtime scales with project size,
+so any constant is either too small for a large project or too large to be a useful guard, and
+a bound expressed some other way (per-producer, or a supervisor-side watchdog with a
+diagnostic) is a different mechanism than a `subprocess.run` keyword. Named so it is not
+mistaken for a decision already made.
 
 ## 10. Adjacent 2a closure
 
