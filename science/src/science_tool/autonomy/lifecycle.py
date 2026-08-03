@@ -73,6 +73,7 @@ from science_tool.graph.belief_policy import DEFAULT_BELIEF_POLICY
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store.identity import graph_uri
 from science_tool.graph.trig import load_trig_dataset_preserving_literals
+from science_tool.evidence_broker.correspondence import _line_count
 from science_tool.evidence_broker.journal import (
     JournalError,
     count_requests,
@@ -328,7 +329,7 @@ def _read_inline_manifest(
             InlineInput(
                 target=target,
                 sha256=hashlib.sha256(payload).hexdigest(),
-                lines=len(payload.splitlines()),
+                lines=_line_count(payload),
             )
         )
     return tuple(manifest)
