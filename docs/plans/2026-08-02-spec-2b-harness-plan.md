@@ -1,6 +1,14 @@
 # Spec 2b — Supervised Run Harness Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status: complete.** All 9 tasks executed, all 56 steps done, all 42 mutation rows certified
+killed ([`2026-08-02-spec-2b-mutation-ledger.md`](2026-08-02-spec-2b-mutation-ledger.md)).
+Verified on the finished branch: full CLI suite 12,843 passed / 7 skipped / 0 failed
+(pytest exit 0), `ruff check` clean, `pyright` 0 errors. Task 9 was added mid-execution and is
+not in the numbered task list below; its brief closed the ingestion-lock defect Task 5's review
+surfaced. Follow-ups deliberately carried past merge are named in design §9.
+
+> **For agentic workers:** this plan is finished — it is kept as the execution record, not as
+> work to pick up. Its steps are checked off; do not re-execute them.
 
 **Goal:** Build `science autonomy run` — one command that opens an autonomous run, runs
 `science health` as its actor, gates the result, and ingests the report under an attestation
@@ -15,8 +23,12 @@ argv so no call site can forget the hardening.
 **Tech Stack:** Python 3.13, click, pydantic v2, pytest, git 2.55.
 
 **Design:** [`2026-08-02-supervised-run-harness-design.md`](2026-08-02-supervised-run-harness-design.md),
-revision 5. Section references below point at it. The design is authoritative; where this plan
-and the design disagree, stop and ask.
+now at revision 8. Section references below point at it, and were written against revision 5;
+revisions 6–8 came out of reviews *of the built loop* and changed three things this plan's task
+text predates — `_settle` gates the graph on a CLEAN disposition, the actor writes to
+supervisor-owned temporary storage rather than a project path, and every gateway call carries a
+`--work-tree` pin. The design is authoritative; where this plan and the design disagree, the
+design is what shipped.
 
 ## Global Constraints
 
@@ -110,7 +122,7 @@ else."
   - `commit_tree(repo_root: Path, *, message: str, author: str, committer_name: str, committer_email: str) -> str` — returns the new sha
   - All raise `GitError` on a non-zero exit.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `science/tests/test_autonomy_git_writes.py`:
 
@@ -212,12 +224,12 @@ def test_commit_tree_raises_when_there_is_nothing_to_commit(repo: Path):
         commit_tree(repo, message="empty", author="a <a@b.c>", **SUPERVISOR)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: collection error — `ImportError: cannot import name 'commit_tree'`.
 
-- [ ] **Step 3: Add the primitives**
+- [x] **Step 3: Add the primitives**
 
 Append to `src/science_tool/autonomy/git.py`, after `run_git`:
 
@@ -305,12 +317,12 @@ def commit_tree(
     return _checked(repo_root, "rev-parse", "HEAD").decode("utf-8", "replace").strip()
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 7 passed.
 
-- [ ] **Step 5: Add the hostile-configuration fixture**
+- [x] **Step 5: Add the hostile-configuration fixture**
 
 Design §8.3. Two tests at two levels plant the same vectors — this one over the write
 primitives, Task 7's over the whole loop — so the planter is a **conftest factory fixture**, not
@@ -385,7 +397,7 @@ def plant_attacks(tmp_path: Path):
     return _plant
 ```
 
-- [ ] **Step 6: Write the hostile-configuration test**
+- [x] **Step 6: Write the hostile-configuration test**
 
 Append to `science/tests/test_autonomy_git_writes.py`:
 
@@ -405,13 +417,13 @@ def test_no_planted_vector_executes_through_the_write_primitives(repo: Path, pla
     )
 ```
 
-- [ ] **Step 7: Run it**
+- [x] **Step 7: Run it**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_git_writes.py -q)`
 Expected: 8 passed. If the `gpg` sentinel appears, `--no-gpg-sign` is missing from
 `commit_tree`; if `filter` appears, the call is not going through `run_git`.
 
-- [ ] **Step 8: Record the probe in the module docstring**
+- [x] **Step 8: Record the probe in the module docstring**
 
 `git.py`'s docstring records, per subcommand, what was built as a working attack and what
 executed. Add a paragraph in the same form, after the existing `cat-file` rows:
@@ -431,7 +443,7 @@ executed. Add a paragraph in the same form, after the existing `cat-file` rows:
   default `gpg` on `PATH`. Pinned in `commit_tree`, not at the call site.
 ```
 
-- [ ] **Step 9: Lint, type-check, and commit**
+- [x] **Step 9: Lint, type-check, and commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -465,7 +477,7 @@ rebuild leaves a clean tree. Against that fixture the broken and the fixed imple
 indistinguishable — measured: `git status --porcelain` is empty after `start_run` either way.
 A test for this defect needs a project whose graph is **absent**.
 
-- [ ] **Step 1: Add the fixture**
+- [x] **Step 1: Add the fixture**
 
 Append to `science/tests/conftest.py`:
 
@@ -511,7 +523,7 @@ def ungraphed_project(tmp_path: Path) -> Path:
     return root
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `science/tests/test_autonomy_start_restore.py`:
 
@@ -584,14 +596,14 @@ def test_a_dirty_input_tree_is_refused_byte_for_byte_unchanged(
     assert (tracked.read_text(encoding="utf-8"), untracked.read_text(encoding="utf-8")) == before
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q)`
 Expected: the first two FAIL with a non-empty status naming `?? knowledge/`. The third
 PASSES already — `assert_repository_is_at` raises before anything is written. Keep it: it is
 the regression guard that stops Step 4 from over-restoring.
 
-- [ ] **Step 4: Scope the restore around `_capture`**
+- [x] **Step 4: Scope the restore around `_capture`**
 
 In `src/science_tool/autonomy/lifecycle.py`, add the import:
 
@@ -627,19 +639,19 @@ Then replace the single `result = _capture(project_root)` line inside `start_run
         restore_worktree(project_root)
 ```
 
-- [ ] **Step 5: Run them to verify they pass**
+- [x] **Step 5: Run them to verify they pass**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_start_restore.py -q)`
 Expected: 3 passed.
 
-- [ ] **Step 6: Run the neighbouring suites**
+- [x] **Step 6: Run the neighbouring suites**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_autonomy_record_writer.py tests/test_autonomy_perturbation_alarm.py -q)`
 Expected: all pass. The `project` fixture commits its graph, so the restore is a no-op there.
 If a test fails because it *expected* residue, stop and report it — that is a real behaviour
 change the design should name, not a test to adjust.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -667,7 +679,7 @@ the same selection function health uses.
   - `expected_producer_ids(*, checks=None, skip_checks=None, fast=False) -> frozenset[str]`
   - `science health --ingestion-ref TEXT --generated-at TEXT`, required together.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `science/tests/test_health_attested_provenance.py`:
 
@@ -749,12 +761,12 @@ def test_the_two_provenance_options_are_required_together(ungraphed_project: Pat
     assert "--generated-at" in result.output
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `(cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q)`
 Expected: `ImportError: cannot import name 'expected_producer_ids'`.
 
-- [ ] **Step 3: Add `expected_producer_ids`**
+- [x] **Step 3: Add `expected_producer_ids`**
 
 In `src/science_tool/graph/health.py`, immediately after `_select_health_checks`:
 
@@ -782,7 +794,7 @@ def expected_producer_ids(
     return frozenset(ids)
 ```
 
-- [ ] **Step 4: Add the CLI options**
+- [x] **Step 4: Add the CLI options**
 
 In `src/science_tool/graph/health_cli.py`, add two options to the `health` command declaration
 in `src/science_tool/cli.py` where the other `health` options are declared, or to
@@ -814,17 +826,17 @@ Add both to `health_command`'s signature as `ingestion_ref: str | None` and
         generated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
 ```
 
-- [ ] **Step 5: Run them to verify they pass**
+- [x] **Step 5: Run them to verify they pass**
 
 Run: `(cd science && uv run --frozen pytest tests/test_health_attested_provenance.py -q)`
 Expected: 8 passed (5 parametrized + 3).
 
-- [ ] **Step 6: Run the health suites**
+- [x] **Step 6: Run the health suites**
 
 Run: `(cd science && uv run --frozen pytest tests/test_health.py tests/test_health_projection.py tests/test_health_subject_contract.py tests/test_command_docs.py -q)`
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -848,7 +860,7 @@ are authority. Today only a private CLI helper knows how to build them.
 - Produces: `ingestion_authority(project_root: Path) -> tuple[FindingRegistry, IngestionContext]`
   in `findings/ingest.py`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `science/tests/test_findings_ingestion_authority.py`:
 
@@ -915,12 +927,12 @@ def test_the_cli_uses_the_shared_derivation():
     assert "ingestion_authority" in inspect.getsource(findings_cli.ingest_command.callback)
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `(cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py -q)`
 Expected: `ImportError: cannot import name 'ingestion_authority'`.
 
-- [ ] **Step 3: Add the derivation**
+- [x] **Step 3: Add the derivation**
 
 In `src/science_tool/findings/ingest.py`, after the `IngestionContext` class:
 
@@ -947,7 +959,7 @@ def ingestion_authority(project_root: Path) -> tuple[FindingRegistry, IngestionC
     return build_registry_for_entity_registry(sources.registry), context
 ```
 
-- [ ] **Step 4: Cut the CLI over**
+- [x] **Step 4: Cut the CLI over**
 
 **Do not keep the old helpers as adapters.** The existing call site
 (`findings/cli.py:262`) reads
@@ -984,12 +996,12 @@ already makes. Before deleting `_registry`, check for other callers:
 If either has another caller, cut that one over too rather than keeping the helper — two
 spellings of one derivation is the defect this task removes.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `(cd science && uv run --frozen pytest tests/test_findings_ingestion_authority.py tests/test_findings_cli.py tests/test_findings_ingest.py -q)`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -1017,7 +1029,7 @@ Design §3.4, §4, §4.5. The nine-step loop, end to end.
   - `HarnessOutcome` — frozen pydantic model, fields per design §3.4
   - `run_supervised_audit(project_root: Path, *, started: datetime, short_id: str) -> HarnessOutcome`
 
-- [ ] **Step 1: Add the identity constants**
+- [x] **Step 1: Add the identity constants**
 
 In `src/science_tool/autonomy/marks.py`, beside `AGENT_EMAIL`:
 
@@ -1029,7 +1041,7 @@ SUPERVISOR_NAME = "science-supervisor"
 SUPERVISOR_EMAIL = "supervisor@science.local"
 ```
 
-- [ ] **Step 2: Add the fixture**
+- [x] **Step 2: Add the fixture**
 
 Append to `science/tests/conftest.py`:
 
@@ -1048,7 +1060,7 @@ def supervised_project(ungraphed_project: Path, monkeypatch) -> Path:
     return ungraphed_project
 ```
 
-- [ ] **Step 3: Write the end-to-end test**
+- [x] **Step 3: Write the end-to-end test**
 
 Create `science/tests/test_autonomy_harness.py`:
 
@@ -1200,12 +1212,12 @@ def test_the_actor_runs_the_supervisors_own_toolkit(supervised_project: Path):
     assert outcome.actor_exit_code in (0, 2)
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q)`
 Expected: collection error — `No module named 'science_tool.autonomy.harness'`.
 
-- [ ] **Step 5: Write the harness**
+- [x] **Step 5: Write the harness**
 
 Create `src/science_tool/autonomy/harness.py`:
 
@@ -1503,7 +1515,7 @@ def run_supervised_audit(
     )
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q)`
 Expected: 8 passed.
@@ -1512,7 +1524,7 @@ Expected: 8 passed.
 `producer_ids: frozenset[str]` (`findings/ingest.py:81-89`), each with a validator that refuses
 empty or NUL-bearing values — verified, not assumed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -1535,7 +1547,7 @@ Design §3.4, §6.1.
 **Interfaces:**
 - Consumes: `run_supervised_audit`, `HarnessOutcome`, `HarnessError`, `generate_short_id`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `science/tests/test_autonomy_harness.py`:
 
@@ -1633,12 +1645,12 @@ def test_the_command_is_classified_for_the_budget_boundary():
     assert "autonomy run" in (set(BUDGETS) | set(DEFERRED) | set(EXEMPTIONS))
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py -q -k 'command_exits or classified')`
 Expected: `Error: No such command 'run'`.
 
-- [ ] **Step 3: Add the command**
+- [x] **Step 3: Add the command**
 
 In `src/science_tool/autonomy/cli.py`, after `finish_command`:
 
@@ -1704,7 +1716,7 @@ def run_command(project_root: Path, output_format: str) -> None:
 If `emit` is not already imported in `autonomy/cli.py`, follow how `start_command` renders its
 summary and match it.
 
-- [ ] **Step 4: Classify the command**
+- [x] **Step 4: Classify the command**
 
 In `src/science_tool/budget/registry.py`, beside its three siblings:
 
@@ -1715,17 +1727,17 @@ In `src/science_tool/budget/registry.py`, beside its three siblings:
     ),
 ```
 
-- [ ] **Step 5: Register the surface**
+- [x] **Step 5: Register the surface**
 
 Add a row for `science autonomy run` to `docs/user-guide/cli-and-workflows.md`, in the same
 form as the neighbouring `autonomy start` / `autonomy finish` entries.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_budget_boundary.py tests/test_command_docs.py -q)`
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)
@@ -1751,12 +1763,12 @@ row is wrong. Record it either way.
 **Interfaces:**
 - Consumes: every test written in Tasks 1–6.
 
-- [ ] **Step 1: Write the ledger header**
+- [x] **Step 1: Write the ledger header**
 
 Create `docs/plans/2026-08-02-spec-2b-mutation-ledger.md` with a header naming the production
 baseline sha, and a table with columns `# | Mutation | Test node | Observed result`.
 
-- [ ] **Step 2: Certify rows 1–9 (the loop)**
+- [x] **Step 2: Certify rows 1–9 (the loop)**
 
 | # | Mutation | Test node |
 |---|---|---|
@@ -1796,7 +1808,7 @@ def test_an_actor_that_leaves_the_branch_is_refused(
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 ```
 
-- [ ] **Step 3: Certify rows 10–14 (attestation and the actor)**
+- [x] **Step 3: Certify rows 10–14 (attestation and the actor)**
 
 | # | Mutation | Test node |
 |---|---|---|
@@ -1888,7 +1900,7 @@ If `test_an_actor_exit_two_still_completes` does not observe exit 2, read
 configuration it actually rejects. Do not weaken the assertion to `in (0, 2)` — a row that
 cannot distinguish the two certifies nothing.
 
-- [ ] **Step 4: Certify rows 15–21 (the revision-2 rows)**
+- [x] **Step 4: Certify rows 15–21 (the revision-2 rows)**
 
 | # | Mutation | Test node |
 |---|---|---|
@@ -1992,7 +2004,7 @@ inherits `[commit] gpgsign = true` with a `gpg.program` that exits 1, so the com
 any sentinel is written. Record the row as certified on either signal, but read the failure
 output to confirm it is that one and not an unrelated fixture error.
 
-- [ ] **Step 5: Certify rows 22–29 (the revision-3 and -4 rows)**
+- [x] **Step 5: Certify rows 22–29 (the revision-3 and -4 rows)**
 
 | # | Mutation | Test node |
 |---|---|---|
@@ -2091,12 +2103,12 @@ def test_the_record_ended_is_the_supervisors_clock(supervised_project: Path):
 `load_run_records` lives in `graph/autonomous_runs.py:77`, not in `record_writer.py` — the
 writer and the reader are deliberately in different modules.
 
-- [ ] **Step 6: Run the whole 2b test set**
+- [x] **Step 6: Run the whole 2b test set**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_harness.py tests/test_autonomy_git_writes.py tests/test_autonomy_start_restore.py tests/test_health_attested_provenance.py tests/test_findings_ingestion_authority.py -q)`
 Expected: all pass.
 
-- [ ] **Step 7: Commit the ledger**
+- [x] **Step 7: Commit the ledger**
 
 ```bash
 git add docs/plans/2026-08-02-spec-2b-mutation-ledger.md science/tests/
@@ -2114,7 +2126,7 @@ Design §10. Independent of Tasks 1–7; may run at any point.
 - Modify: `src/science_tool/autonomy/lifecycle.py:309`
 - Test: `science/tests/test_autonomy_lifecycle.py` (extend)
 
-- [ ] **Step 1: Refresh the 2a status rows**
+- [x] **Step 1: Refresh the 2a status rows**
 
 In `docs/plans/2026-07-30-agent-evidence-broker-design.md`, change the plan-4c row from
 "**implemented on `feat/evidence-broker-boundary` and settled through revision 38; not
@@ -2122,7 +2134,7 @@ merged**" to "**merged** at `1c11c922`", and change §0's Spec 2a row from "this
 plans 1–3 merged, 4a/4b designed at revision 17" to "this document — **all seven plans
 merged**; 4c at `1c11c922`". Add a Spec 2b row pointing at the harness design.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Append to `science/tests/test_autonomy_lifecycle.py`:
 
@@ -2144,12 +2156,12 @@ def test_an_inline_input_counts_lines_the_way_the_checker_does(project: Path, tm
     assert manifest[0].lines == _line_count(payload)
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py::test_an_inline_input_counts_lines_the_way_the_checker_does -q)`
 Expected: FAIL — `3 != 2`.
 
-- [ ] **Step 4: Use one line-counting rule**
+- [x] **Step 4: Use one line-counting rule**
 
 In `src/science_tool/autonomy/lifecycle.py`, replace `lines=len(payload.splitlines())` at
 line 309 with `lines=_line_count(payload)`, importing the checker's own function:
@@ -2162,13 +2174,13 @@ If that import creates a cycle, move `_line_count` to `science_model/evidence_br
 the `InlineInput` model it bounds and import it from there in both places. Do not duplicate the
 arithmetic — two spellings of one rule is the defect being fixed.
 
-- [ ] **Step 5: Run it and its neighbours**
+- [x] **Step 5: Run it and its neighbours**
 
 Run: `(cd science && uv run --frozen pytest tests/test_autonomy_lifecycle.py tests/test_evidence_broker_correspondence.py -q)`
 Expected: all pass. If no `test_evidence_broker_correspondence.py` exists, find the
 correspondence tests with `ls science/tests | grep correspondence` and run those.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 (cd science && uv run ruff check && uv run pyright)

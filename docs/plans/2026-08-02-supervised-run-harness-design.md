@@ -940,6 +940,36 @@ a bound expressed some other way (per-producer, or a supervisor-side watchdog wi
 diagnostic) is a different mechanism than a `subprocess.run` keyword. Named so it is not
 mistaken for a decision already made.
 
+**Known follow-ups, carried past merge.** Each was found in review, adjudicated as
+non-blocking, and is recorded here because the review scratch it was first written in is not
+checked in. None is load-bearing; all are cheap, and the next 2b touch should take them.
+
+1. **§4.5 contradicts itself on whether step 9 always ends clean.** Two adjacent paragraphs
+   disagree, and one says a stray path "should stop the harness" — which, as of revision 7, is
+   now what `_settle`'s residue check does. Text lagging behaviour, not behaviour lagging text:
+   no reachable stray path exists today (the baseline lives outside the project, the report is
+   tracked on `auto/*` only, and the ingestion lock is ignored).
+2. **`restore_path`'s docstring over-claims.** It says it restores "the way HEAD has it", but
+   `checkout -- <path>` restores from the INDEX. True at the sole call site, because
+   `switch_branch` leaves the index at HEAD; the primitive is documented more broadly than it
+   behaves, and a second caller would inherit a promise it does not keep.
+3. **A list-shaped claim is already stale.** `harness.py`'s `_step` docstring and §3.4.1 both
+   enumerate the helpers whose raw errors `_step` normalizes, and neither names `stage_paths`
+   or `restore_path`. This is the failure mode mutation row 26 was split into 26a–26d to catch:
+   a guard that LISTS its scope has a hole by construction. Prefer replacing the enumeration
+   with the property it is standing in for.
+4. **One `_step` description no longer matches its block.** `_step("the report directory could
+   not be created")` wraps three distinct failures since revision 7: opening the actor's
+   temporary output directory, *reading the actor's report* (absent, irregular, or over
+   `MAX_REPORT_BYTES`), and creating and installing into the project's report directory. An
+   actor that exits 0 having written nothing therefore reports a project-tree fault. The run
+   still fails closed at exit 3, so this is diagnostic accuracy rather than correctness — but
+   the vocabulary to fix it already exists one step later ("the actor's output could not be
+   captured"), and splitting the block costs one line.
+5. **The `finally` widens what a mid-ingest failure publishes**, since partial cases are now
+   committed alongside the record. This matches the already-accepted caught-refusal path and
+   case writes are atomic, so it is a consistency note rather than a defect.
+
 ## 10. Adjacent 2a closure
 
 Carried on this branch, scoped as 2a closure rather than 2b:
