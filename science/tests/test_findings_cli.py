@@ -6,6 +6,7 @@ from click.testing import CliRunner
 import science_tool.findings.cli as findings_cli
 from science_tool.findings.acceptance_migration import AcceptanceMigration, EntryMigration
 from science_tool.findings.cli import findings_group
+from science_tool.findings.ingest import ingestion_authority
 from science_tool.findings.producers import FindingProducer, build_registry
 from science_tool.validate.acceptance import AcceptedValidationEntry, classify_acceptance_entry
 
@@ -24,6 +25,20 @@ REGISTRY = build_registry(
     ],
     active_kinds=frozenset(),
 )
+
+
+def _patch_registry(monkeypatch, registry=REGISTRY):
+    """Swap the registry half of `ingestion_authority` for the test double.
+
+    Keeps the real project-derived `IngestionContext`, so identity-collision and
+    malformed-configuration behavior is exercised unchanged.
+    """
+
+    def _fake(project_root):
+        _real_registry, context = ingestion_authority(project_root)
+        return registry, context
+
+    monkeypatch.setattr(findings_cli, "ingestion_authority", _fake)
 
 
 def _report_json() -> dict:
@@ -62,7 +77,7 @@ def _attestation_args() -> list[str]:
 
 
 def test_ingest_reports_what_it_did(tmp_path, monkeypatch):
-    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
+    _patch_registry(monkeypatch)
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
     result = CliRunner().invoke(
@@ -130,7 +145,7 @@ def test_ingest_requires_each_explicit_attestation_flag(tmp_path, missing_option
 
 
 def test_ingest_refuses_a_report_attestation_mismatch(tmp_path, monkeypatch):
-    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
+    _patch_registry(monkeypatch)
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
     result = CliRunner().invoke(
@@ -158,7 +173,7 @@ def test_ingest_cli_refuses_graph_identity_collisions_before_case_writes(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
+    _patch_registry(monkeypatch)
     for name in ("q1.md", "q1-duplicate.md"):
         path = tmp_path / "entities" / "questions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,7 +204,7 @@ def test_ingest_cli_wraps_malformed_graph_configuration_as_a_refusal(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setattr(findings_cli, "_registry", lambda _entity_registry: REGISTRY)
+    _patch_registry(monkeypatch)
     (tmp_path / "science.yaml").write_text(
         "name: [unterminated\n",
         encoding="utf-8",
@@ -219,7 +234,7 @@ def test_ingest_cli_refuses_non_mapping_graph_configuration(
     monkeypatch,
     configuration,
 ):
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
+    _patch_registry(monkeypatch)
     (tmp_path / "science.yaml").write_text(configuration, encoding="utf-8")
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
@@ -246,12 +261,10 @@ def test_ingest_cli_wraps_commons_context_failures_as_zero_write_refusals(
 ):
     from science_tool.commons.errors import CommonsError
 
-    monkeypatch.setattr(findings_cli, "_registry", lambda: REGISTRY)
-
-    def fail_context(_project_root):
+    def fail_authority(_project_root):
         raise CommonsError("commons identity context unavailable")
 
-    monkeypatch.setattr(findings_cli, "_load_ingestion_context", fail_context)
+    monkeypatch.setattr(findings_cli, "ingestion_authority", fail_authority)
     report = tmp_path / "report.json"
     report.write_text(json.dumps(_report_json()), encoding="utf-8")
 

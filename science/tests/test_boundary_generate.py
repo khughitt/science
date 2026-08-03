@@ -189,3 +189,52 @@ def test_payload_root_stages_nothing(tmp_path: Path):
     (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     assert "data/raw/x.csv" not in _git(repo, "ls-files").split()
+
+
+def test_the_managed_block_ignores_the_ingestion_lock():
+    """`locked_store` creates `doc/audits/cases/.ingest.lock` and deliberately never
+    unlinks it -- making it ephemeral would reopen the check/use gap the directory
+    descriptor closes. So it is permanent untracked residue in every project that has
+    ever ingested, and nothing ignored it: the supervised run harness committed it.
+
+    Derived from the two constants that already define the path, so there is no third
+    spelling to drift.
+    """
+    from science_tool.findings.storage import CASES_DIRNAME, LOCK_NAME
+
+    block = render_managed_block(BoundaryConfig())
+
+    assert f"/{CASES_DIRNAME}/{LOCK_NAME}\n" in block
+
+
+def test_the_lock_is_ignored_even_with_no_boundary_roots():
+    """The lock is not root-derived. A project with no configured roots still ingests,
+    so a block that only renders when `cfg.roots` is non-empty would miss exactly the
+    projects most likely to hit this."""
+    assert render_managed_block(BoundaryConfig(roots=())).strip() != ""
+
+
+def test_the_lock_survives_a_manifest_root_that_overlaps_the_cases_directory(tmp_path: Path):
+    """`.gitignore` is last-match-wins. Nothing in `boundary/config.py` reserves
+    `doc/audits/cases`, so a manifest root declared there with a `tracked` glob that
+    matches the lock (`*` here) legally emits `!/doc/audits/cases/**/*` -- a negation
+    that would silently re-include the lock if the fixed line were emitted BEFORE the
+    root-derived lines instead of after them.
+
+    Checked against real git, not string containment: the lock line being present
+    somewhere in the block proves nothing if a later line in the same block
+    re-includes the file it names.
+    """
+    repo = _repo(tmp_path)
+    (repo / "doc/audits/cases").mkdir(parents=True)
+    (repo / "doc/audits/cases/.ingest.lock").write_text("")
+    cfg = BoundaryConfig.model_validate(
+        {"roots": [{"path": "doc/audits/cases", "class": "manifest", "tracked": ["*"]}]}
+    )
+    (repo / ".gitignore").write_text(splice_managed_block("", render_managed_block(cfg)))
+
+    result = subprocess.run(
+        ["git", "-C", str(repo), "check-ignore", "-q", "doc/audits/cases/.ingest.lock"]
+    )
+
+    assert result.returncode == 0, "the ingestion lock must stay ignored under an overlapping manifest root"

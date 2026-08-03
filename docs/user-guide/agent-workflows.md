@@ -73,8 +73,10 @@ authoritative precisely because it does not depend on this allowlist being corre
 
 ## Running an unattended run
 
-An unattended run is bracketed by two supervisor commands. Nothing between them is part
-of Science: the actor is driven by whatever harness you use.
+An unattended run is bracketed by two supervisor commands. What happens between them can
+be yours or Science's: drive the actor with a harness of your own, or use the supervised
+harness Science ships — `science autonomy run`, described [below](#running-a-supervised-audit)
+— which is these two commands plus one fixed actor in a single invocation.
 
 ```bash
 science autonomy start --agent curation-sweep --model <model> \
@@ -149,3 +151,44 @@ the gate forbids — and destroying the evidence destroys the signal.
 catchable by anyone, independent of the run harness. It verifies record integrity and
 coverage — every autonomous commit across every branch has a record, every record's
 commits are reachable — without rebuilding the graph or re-deriving any historical basis.
+
+## Running a supervised audit
+
+`science autonomy run` is the whole bracket in one command, with one fixed actor:
+`science health`. It opens the run, creates `auto/<run-id>`, runs the actor as a
+subprocess, commits its output, judges the run with the same machinery `finish` uses, and
+— only if the verdict is `clean` — ingests the report's findings into
+`doc/audits/cases/`.
+
+```bash
+science autonomy run --project-root . --format table
+```
+
+There is no `--actor` flag, and that is the point: every value the run attests is worth
+something only because a deterministic supervisor produced it, not a model reasoning about
+its own work. Run it from a **named branch** with a **clean tree** — the command returns
+you to that branch when it finishes, and a detached HEAD gives it no destination.
+
+Five exit codes, extending `finish`'s three:
+
+| Exit | Meaning |
+|---|---|
+| 0 | `clean`, and the findings were ingested. |
+| 1 | `quarantined` — the actor wrote outside its surface. Nothing was ingested. |
+| 2 | `unwired` — no verdict could be rendered. |
+| 3 | No harness outcome was returned because an orchestration step failed, possibly during post-verdict settlement. Every branch and file is left intact for triage. |
+| 4 | `clean`, but ingestion refused. Not a success — the run's purpose was an ingestible report, and a refused one did not achieve it. The refusal is printed and carried in the JSON output. |
+
+**Where the output lands.** The actor's report stays on the retained `auto/<run-id>`
+branch, and only there. The run record (`runs/<slug>.md`) and any cases are committed on
+the branch you started from, so `validate`'s `autonomous-runs` check can see them: it reads
+the current tree for records while scanning every branch for marked commits, and a record
+committed on the run's own branch would be invisible from yours.
+
+The rebuilt `knowledge/graph.trig` joins them **only on a clean run**. A quarantined run's
+graph was re-materialized over a tree the actor had already written to, so publishing it
+would carry the denied write's derived effect onto your branch even though the write itself
+was correctly left behind.
+
+Nothing is deleted on quarantine — `auto/<run-id>` and its commits stay exactly as the run
+left them, for the same reason `finish` keeps them.

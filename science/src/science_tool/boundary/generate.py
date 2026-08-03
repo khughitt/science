@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from science_tool.boundary.config import BoundaryConfig, BoundaryRoot, StorageClass
+from science_tool.findings.storage import CASES_DIRNAME, LOCK_NAME
 
 MANAGED_BEGIN = "# BEGIN science-managed boundary — edit science.yaml, not this block"
 MANAGED_END = "# END science-managed boundary"
@@ -45,10 +46,25 @@ def _render_root(root: BoundaryRoot) -> list[str]:
 
 
 def render_managed_block(cfg: BoundaryConfig) -> str:
-    """Deterministic: roots sorted by path, tracked globs sorted within a root."""
+    """Deterministic: roots sorted by path, tracked globs sorted within a root.
+
+    The ingestion lock line is not root-derived: `locked_store` creates
+    `doc/audits/cases/.ingest.lock` and deliberately never unlinks it (see
+    `findings/storage.py`), so it is permanent untracked residue in every project
+    that has ever ingested findings -- including one with no configured roots.
+
+    It is appended LAST, after every root-derived line, and this ordering is
+    load-bearing, not cosmetic. `.gitignore` is last-match-wins: a manifest root
+    whose path overlaps `doc/audits/cases` can legally emit a `!` negation that
+    re-includes anything under it (nothing in `boundary/config.py` reserves this
+    path), and if the lock line came first such a negation would silently win and
+    reopen the hole this function exists to close. Putting it last means the lock
+    line is always the final word, no matter what roots are declared.
+    """
     lines: list[str] = []
     for root in sorted(cfg.roots, key=lambda r: r.path):
         lines.extend(_render_root(root))
+    lines.append(f"/{CASES_DIRNAME}/{LOCK_NAME}")
     return "".join(f"{line}\n" for line in lines)
 
 

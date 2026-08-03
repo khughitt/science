@@ -1195,3 +1195,138 @@ def case_files():
         return {p.name: p.read_bytes() for p in sorted(cases.glob("*.md"))}
 
     return snapshot
+
+
+@pytest.fixture
+def plant_attacks(tmp_path: Path):
+    """Factory: arm a repository with every git-config vector the write primitives reach.
+
+    Returns `plant(root) -> sentinels_dir`. Each vector writes a sentinel file into that
+    directory; a test's assertion is that the directory is still empty afterwards.
+
+    NOTHING IS PLANTED AS AN UNTRACKED FILE IN THE PROJECT. `start_run`'s
+    `assert_repository_is_at` refuses any dirty tree, untracked files included, so a driver
+    script dropped beside the entities would make the run refuse BEFORE the vector was
+    reached -- the test would pass without the defence ever running. The scripts live in
+    `workshop`, a SIBLING of the repository under test; everything else lives under `.git/`,
+    which git does not report.
+
+    For the same reason the filter attribute goes in `$GIT_DIR/info/attributes` rather than an
+    untracked `.gitattributes`. That is also the stronger probe: it is one of the three
+    attribute layers `_filter_driver_overrides` covers, `--attr-source` does not reach it, and
+    it is invisible to `git status` -- the actor-controlled layer the threat model is about.
+    """
+    workshop = tmp_path / "workshop"
+    sentinels = workshop / "sentinels"
+    sentinels.mkdir(parents=True, exist_ok=True)
+
+    def _script(name: str, body: str = "") -> Path:
+        path = workshop / f"{name}.sh"
+        path.write_text(f"#!/bin/sh\ntouch {sentinels / name}\n{body}", encoding="utf-8")
+        path.chmod(0o755)
+        return path
+
+    def _plant(root: Path) -> Path:
+        hooks = root / ".git" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        # `prepare-commit-msg` is planted because the probe claims it: a hook named in the
+        # docstring and absent from the fixture is a coverage claim nothing backs.
+        for hook in (
+            "pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout"
+        ):
+            path = hooks / hook
+            path.write_text(f"#!/bin/sh\ntouch {sentinels / hook}\n", encoding="utf-8")
+            path.chmod(0o755)
+
+        driver = _script("filter", "cat\n")
+        gpg = _script("gpg", "exit 1\n")
+        fsmonitor = _script("fsmonitor")
+
+        (root / ".git" / "info").mkdir(parents=True, exist_ok=True)
+        (root / ".git" / "info" / "attributes").write_text("* filter=evil\n", encoding="utf-8")
+        config = root / ".git" / "config"
+        config.write_text(
+            config.read_text(encoding="utf-8")
+            + f'[filter "evil"]\n\tclean = {driver}\n\tsmudge = {driver}\n'
+            + f"[core]\n\tfsmonitor = {fsmonitor}\n"
+            + "[commit]\n\tgpgsign = true\n"
+            + f"[gpg]\n\tprogram = {gpg}\n",
+            encoding="utf-8",
+        )
+        return sentinels
+
+    return _plant
+
+
+@pytest.fixture
+def ungraphed_project(tmp_path: Path) -> Path:
+    """A git project with a real belief basis and NO committed `knowledge/graph.trig`.
+
+    The distinction from `test_autonomy_lifecycle.py`'s `project` fixture is the whole point.
+    That one materializes and commits the graph before `git init`, so `start_run`'s rebuild is
+    byte-identical and leaves the tree clean -- which makes it useless for testing that
+    `start_run` cleans up after itself, because nothing is left to clean. This one has never
+    materialized, so the rebuild is the supervisor's own residue.
+    """
+    import subprocess
+
+    from science_tool.boundary.config import BoundaryConfig
+    from science_tool.boundary.generate import render_managed_block, splice_managed_block
+
+    root = tmp_path / "ungraphed"
+    (root / "entities" / "propositions").mkdir(parents=True)
+    (root / "entities" / "papers").mkdir(parents=True)
+    (root / "entities" / "evidence-lines").mkdir(parents=True)
+    (root / "science.yaml").write_text(
+        "name: harness-fixture\nknowledge_profiles:\n  local: local\n", encoding="utf-8"
+    )
+    (root / "entities" / "propositions" / "p1.md").write_text(
+        "---\nid: proposition:p1\nkind: proposition\ntitle: P1\n---\n\nClaim.\n", encoding="utf-8"
+    )
+    (root / "entities" / "papers" / "x.md").write_text(
+        "---\nid: paper:x\nkind: paper\ntitle: X\nvenue: Nature\n"
+        'pmid: "111"\nyear: 2020\nurl: https://example.org/x\n---\n\nBody.\n',
+        encoding="utf-8",
+    )
+    (root / "entities" / "evidence-lines" / "e1.md").write_text(
+        "---\nid: evidence-line:e1\nkind: evidence-line\ntitle: Evidence line\n"
+        "stance: supports\ntarget: proposition:p1\nsource: paper:x\n"
+        "strength: strong\nbelief_eligible: true\n---\n",
+        encoding="utf-8",
+    )
+    # A real enrolled project carries the science-managed boundary block in its root
+    # `.gitignore` -- this fixture has no declared boundary roots, but the block is
+    # unconditional (it also ignores the ingestion lock), so it renders even here.
+    (root / ".gitignore").write_text(
+        splice_managed_block("", render_managed_block(BoundaryConfig())), encoding="utf-8"
+    )
+    for args in (("init", "-q"), ("add", "-A"), ("commit", "-q", "-m", "base")):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-C", str(root), *args],
+            capture_output=True, check=True,
+        )
+    return root
+
+
+@pytest.fixture
+def supervised_project(ungraphed_project: Path, tmp_path: Path, monkeypatch) -> Path:
+    """`ungraphed_project` with the toolkit-cleanliness check and the control plane pinned.
+
+    `assert_toolkit_matches` refuses a dirty judging toolkit, and the checkout these tests run
+    in is dirty exactly while this plan is being implemented -- which is not what any harness
+    test is about. Lifted from `test_autonomy_lifecycle.py`'s `pinned_toolkit` fixture.
+
+    `SCIENCE_CONTROL_PLANE` is pinned for a second, independent reason, and it is not tidiness.
+    The harness derives its baseline path from `run_dir`, which defaults to the REAL
+    `$XDG_STATE_HOME/science/runs/<project-key>/<run-slug>/`. That location outlives the
+    process, while `project_key` is only a digest of the project path -- so a `tmp_path` that
+    pytest ever reuses resolves to a directory that already holds a baseline, and `start_run`
+    correctly refuses to overwrite a run's before-state. The failure is a stale directory in
+    the developer's home, not anything about the run, and the tests would also be writing
+    there. Every other autonomy suite pins this variable for the same reason.
+    """
+    from science_tool.autonomy import toolkit as toolkit_module
+
+    monkeypatch.setattr(toolkit_module, "toolkit_is_clean", lambda root=None: True)
+    monkeypatch.setenv("SCIENCE_CONTROL_PLANE", str(tmp_path / "control"))
+    return ungraphed_project

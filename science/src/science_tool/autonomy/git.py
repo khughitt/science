@@ -56,6 +56,25 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   The broker uses this rather than `show <commit>:<path>` because `show` answers a path naming
   a TREE with a directory listing at exit 0, which the evidence broker cannot distinguish from
   a file read (design §3.2). `cat-file blob` refuses it.
+* `checkout -b`, `checkout -- .`, `clean -fd`, `add -A` and `commit` -- the harness's write
+  subcommands (Spec 2b design §3.5), together with the pathspec-limited spellings of the middle
+  three that `restore_path` and `stage_paths` use. A pathspec narrows the set of worktree
+  entries git touches; it selects no configuration key the whole-tree form does not already
+  reach, so these rows cover both. Every key `_HARDENING` already pins is INERT here for the
+  reason it is inert elsewhere: `core.hooksPath=/dev/null` disarms `pre-commit`,
+  `prepare-commit-msg`, `commit-msg`, `post-commit` and `post-checkout` alike, and a hook
+  dropped straight into `$GIT_DIR/hooks/` with it. `filter.<driver>.clean` bound through
+  `$GIT_DIR/info/attributes` -- the layer no `--attr-source` reaches -- EXECUTES under `add`
+  and is neutralized by `_filter_driver_overrides`, not by a fixed key.
+* `commit.gpgsign=true` with `gpg.program=./gpg.sh` -- EXECUTES, under `commit`. This is the
+  one row the existing set does not cover: `log.showSignature=false` governs VERIFICATION
+  under `log` and has no bearing on SIGNING. `--no-gpg-sign` on the commit argv disarms it;
+  blanking `gpg.program` does not, because signing stays enabled and git falls back to the
+  default `gpg` on `PATH`. Pinned in `commit_tree`, not at the call site.
+* `core.worktree=<sibling>` -- REDIRECTS every worktree-reading or -writing subcommand while
+  `-C <repo>` still selects the intended repository. The command-line `--work-tree` in
+  `_argv` outranks repository configuration and pins every call to the nearest enclosing
+  worktree root discovered from an unfollowed `.git` marker.
 * `grep.column=true`, `color.grep=always`, `color.ui=always` -- RENDER, under `grep`:
   they change output but spawn nothing. The broker pins the argv keys this shapes
   (`--no-color`, etc.) rather than neutralizing them here, since there is nothing here
@@ -86,6 +105,7 @@ from __future__ import annotations
 import os
 import selectors
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -185,12 +205,32 @@ _HARDENING: tuple[str, ...] = (
 _FILTER_COMMAND_KEYS: tuple[str, ...] = ("clean", "smudge", "process")
 
 
+def _worktree_root(project_root: Path) -> Path:
+    """Find the nearest enclosing worktree marker without trusting Git configuration."""
+    resolved = project_root.resolve()
+    current = resolved
+    while True:
+        marker = current / ".git"
+        try:
+            os.lstat(marker)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise GitError(f"cannot inspect Git repository marker {marker}: {exc}") from exc
+        else:
+            return current
+        if current.parent == current:
+            return resolved
+        current = current.parent
+
+
 def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) -> list[str]:
     """The single place autonomy's git argv is built."""
-    argv = ["git", "--no-replace-objects"]
+    root = repo_root.resolve()
+    argv = ["git", "--no-replace-objects", f"--work-tree={_worktree_root(root)}"]
     for override in overrides:
         argv += ["-c", override]
-    argv += ["-C", str(repo_root), *args]
+    argv += ["-C", str(root), *args]
     return argv
 
 
@@ -440,6 +480,138 @@ def run_git(
         stdout_limit=stdout_limit,
         stderr_limit=MAX_GIT_STDERR_BYTES,
     )
+
+
+def _checked(repo_root: Path, *args: str) -> bytes:
+    """Run one hardened git command, failing closed on anything but a clean exit.
+
+    `run_git` deliberately returns the exit status because its readers need different
+    dispositions. Every WRITE has the same one: a write that did not happen is not a state
+    this harness may continue from.
+    """
+    result = run_git(repo_root, *args)
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", "replace").strip()
+        raise GitError(f"git {' '.join(args)} failed in {repo_root}: {message}")
+    return result.stdout
+
+
+def current_branch(repo_root: Path) -> str | None:
+    """The checked-out branch, or None on a detached HEAD.
+
+    `--abbrev-ref HEAD` answers the literal string `HEAD` when detached, which is not a
+    branch name any caller may compare against.
+    """
+    name = _checked(repo_root, "rev-parse", "--abbrev-ref", "HEAD").decode("utf-8", "replace").strip()
+    return None if name == "HEAD" else name
+
+
+def worktree_status(repo_root: Path) -> str:
+    return _checked(repo_root, "status", "--porcelain").decode("utf-8", "replace").strip()
+
+
+def create_branch(repo_root: Path, name: str) -> None:
+    """Create `name` and check it out. Fails if it already exists.
+
+    Exclusive on purpose: a run id collision must refuse rather than resume another run's
+    branch, matching `write_baseline` and `write_run_record`.
+    """
+    _checked(repo_root, "checkout", "-b", name)
+
+
+def switch_branch(repo_root: Path, name: str) -> None:
+    _checked(repo_root, "checkout", name)
+
+
+def restore_worktree(repo_root: Path) -> None:
+    """Discard every tracked modification and remove every untracked file.
+
+    Restores TO the commit, not away from a named path: a caller that lists the paths it
+    expects to have written has a hole the moment something else writes one.
+    """
+    _checked(repo_root, "checkout", "--", ".")
+    _checked(repo_root, "clean", "-fd")
+
+
+def restore_path(repo_root: Path, path: str) -> None:
+    """Put ONE path back the way HEAD has it -- discarding a modification, or removing it.
+
+    `restore_worktree` is the whole-tree answer and is too broad for a caller that must keep
+    the rest of what it just produced: `checkout -- .` plus `clean -fd` would take the run
+    record and the cases with it.
+
+    TWO SUBCOMMANDS BECAUSE NEITHER ALONE SPANS BOTH STATES, and which state applies is not
+    the caller's to know: a project that has committed `knowledge/graph.trig` has a tracked
+    modification, one that never materialized has an untracked file, and the same call must
+    settle both. `checkout -- <path>` refuses a pathspec HEAD does not know; `clean` never
+    touches a tracked file. The membership question is asked with `cat-file -t <commit>:<path>`
+    -- the subcommand this module's docstring already probed, and found INERT against every
+    key -- rather than with a new one.
+
+    Both write subcommands are the pathspec-limited spellings of `checkout -- .` and
+    `clean -fd`, which are probed above; a pathspec narrows what git touches and reaches no
+    configuration key the whole-tree form does not.
+    """
+    typed = run_git(repo_root, "cat-file", "-t", f"HEAD:{path}")
+    if typed.returncode == 0:
+        _checked(repo_root, "checkout", "--", path)
+        return
+
+    lines = [line.strip() for line in typed.stderr.strip().splitlines() if line.strip()]
+    verdict = lines[-1] if lines else b""
+    absent = (
+        f"fatal: path '{path}' does not exist in 'HEAD'".encode(),
+        f"fatal: path '{path}' exists on disk, but not in 'HEAD'".encode(),
+    )
+    if verdict not in absent:
+        message = typed.stderr.decode("utf-8", "replace").strip()
+        raise GitError(
+            f"could not determine whether {path!r} exists at HEAD in {repo_root}: {message}"
+        )
+    _checked(repo_root, "clean", "-fd", "--", path)
+
+
+def stage_all(repo_root: Path) -> None:
+    _checked(repo_root, "add", "-A")
+
+
+def stage_paths(repo_root: Path, paths: Sequence[str]) -> None:
+    """Stage exactly these pathspecs, additions and deletions included.
+
+    `add -A` with a pathspec, not a different subcommand: the `-A` is what makes a path the
+    caller names but that no longer exists stage as a deletion. A pathspec matching nothing
+    makes git exit non-zero, which `_checked` turns into a `GitError` -- deliberately, since a
+    caller naming a path it believes it produced is wrong about the run, not about the syntax.
+    """
+    _checked(repo_root, "add", "-A", "--", *paths)
+
+
+def commit_tree(
+    repo_root: Path,
+    *,
+    message: str,
+    author: str,
+    committer_name: str,
+    committer_email: str,
+) -> str:
+    """Commit the index and return the new sha.
+
+    `--no-gpg-sign` is pinned HERE rather than at the call site. `_HARDENING`'s
+    `log.showSignature=false` governs signature VERIFICATION under `log`; it says nothing
+    about `commit.gpgsign=true` with an actor-supplied `gpg.program`, which reaches a program
+    during this commit. A flag a caller must remember is a flag a later caller forgets.
+
+    The committer identity is passed as `-c` overrides so the commit succeeds in a repository
+    with no configured `user.name`, and so the supervisor's identity cannot be supplied by the
+    repository the actor controls.
+    """
+    _checked(
+        repo_root,
+        "-c", f"user.name={committer_name}",
+        "-c", f"user.email={committer_email}",
+        "commit", "--no-gpg-sign", "--author", author, "-m", message,
+    )
+    return _checked(repo_root, "rev-parse", "HEAD").decode("utf-8", "replace").strip()
 
 
 def history_traversal_error(repo_root: Path, commit: str) -> str | None:

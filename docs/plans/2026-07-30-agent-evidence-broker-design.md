@@ -1,6 +1,6 @@
 # Evidence broker — design (autonomous-audit Spec 2a)
 
-**Status:** partially implemented (revision 38)
+**Status:** implemented (revision 38) — all seven plans merged; see the table below and §0
 **Spec 2a** of the autonomous-audit program (§0). It is independently landable and useful without
 the slices that follow it.
 
@@ -16,7 +16,7 @@ fourth split in two at revision 17, on the seam between producing a `Corresponde
 | Plan 4a | serving hardening — §3.1's NFC tree rule at `start_run`; §3.2's `GIT_SHALLOW_FILE` + `GIT_NO_LAZY_FETCH` pins plus the untraversable-history diagnostic at open; the payload bound and the `run_git` ceiling; the protocol bump | **merged** at `d5bf01e2` |
 | Plan 4b | the checker — the hit parser, §5.1, §5.2, §5.3, and `Correspondence` itself | **merged** at `cbb7656f` |
 | Plan 4a follow-up | §3.1's tree rule restated as `normalize_project_path(p) == p` — see revision 31 | **merged** at `33bbdaf2` |
-| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | **implemented on `feat/evidence-broker-boundary` and settled through revision 38; not merged** |
+| Plan 4c | the boundary — §4.2's `ReviewAttestation` and stored-`Review` invariants, `ReviewSubmission`, §5.4's `append_review`, §4.2.1 eligibility | **merged** at `1c11c922` |
 
 Sections carry no per-section status marker: a section describes the design, and a section that is
 half-built is still describing the whole thing. The table above is the only status claim, and the
@@ -837,8 +837,8 @@ sub-projects renamed into it:
 | Slice | Owns | State |
 |---|---|---|
 | Spec 1 | finding convergence — one emitted `AuditFinding`, fingerprint identity, the `doc/audits/cases/` store, trusted ingestion | **shipped** |
-| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — plans 1–3 merged, 4a/4b designed at revision 17** |
-| Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | not designed |
+| **Spec 2a** | **the evidence broker — what an agent was shown, recorded and replayable; the addressable control plane** | **this document — all seven plans merged; 4c at `1c11c922`** |
+| Spec 2b | the dispatch harness — who spawns reviewers, how many run at once (formerly sub-project B) | [designed](2026-08-02-supervised-run-harness-design.md) |
 | Spec 2c | `/science:review-plans` — the first lens agent (formerly sub-project C) | not designed |
 | Spec 3 | how many confirmations promote a finding, and by whose authority | not designed |
 

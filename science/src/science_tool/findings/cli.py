@@ -20,7 +20,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from science_tool.data_root import project_config_path
-from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.findings.ingest import ingestion_authority
 from science_tool.instruments import InstrumentStatus
 from science_tool.output import OUTPUT_FORMATS, emit
 
@@ -32,23 +32,6 @@ if TYPE_CHECKING:
 @click.group("findings")
 def findings_group() -> None:
     """Ingest and inspect audit findings."""
-
-
-def _registry(entity_registry: EntityRegistry):
-    """Build the derived registry from the active deterministic producers."""
-    from science_tool.findings.catalog import build_registry_for_entity_registry
-
-    return build_registry_for_entity_registry(entity_registry)
-
-
-def _load_ingestion_context(project_root: Path):
-    """Build the trusted entity universe through the graph's strict source boundary."""
-    from science_tool.findings.ingest import IngestionContext
-    from science_tool.graph.sources import load_project_sources
-
-    sources = load_project_sources(project_root)
-    context = IngestionContext(canonical_entity_ids=frozenset(entity.canonical_id for entity in sources.entities))
-    return context, sources.registry
 
 
 def run_acceptance_migration(project_root: Path) -> AcceptanceMigration:
@@ -259,11 +242,11 @@ def ingest_command(
             generated_at=attest_generated_at,
             producer_ids=frozenset(attest_producer_ids),
         )
-        context, entity_registry = _load_ingestion_context(project_root)
+        registry, context = ingestion_authority(project_root)
         outcome = ingest_report(
             project_root,
             report,
-            _registry(entity_registry),
+            registry,
             provenance=provenance,
             context=context,
         )

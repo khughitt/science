@@ -428,15 +428,12 @@ def open_child_dir_at_if_present(
         os.close(descriptor)
 
 
-def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
-    """Read one regular file inside an ALREADY-ANCHORED directory.
+def read_regular_file_bytes_at(dir_fd: int, name: str, max_bytes: int) -> bytes:
+    """Read one regular file as bytes inside an ALREADY-ANCHORED directory.
 
     `O_NONBLOCK` so a planted FIFO cannot hang the open; `S_ISREG` so a FIFO, device,
     or directory is refused rather than read; and the `fstat` is of THIS descriptor,
     so the object that was type-checked and sized is the object that is read.
-
-    Decoding failures are raised as `PathSafetyError` rather than `UnicodeDecodeError`
-    so that malformed bytes stay inside this module's declared error channel.
     """
     name = _leaf_name(name)
     try:
@@ -449,11 +446,19 @@ def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
             f"could not open {name!r} without following a symlink: {exc}"
         ) from exc
     try:
-        return read_regular_fd(descriptor, max_bytes)
+        return _read_regular_fd_bytes(descriptor, max_bytes)
     except PathSafetyError as exc:
         raise PathSafetyError(f"could not read {name!r}: {exc}") from exc
     finally:
         os.close(descriptor)
+
+
+def read_regular_file_at(dir_fd: int, name: str, max_bytes: int) -> str:
+    """Read one UTF-8 regular file inside an already-anchored directory."""
+    try:
+        return read_regular_file_bytes_at(dir_fd, name, max_bytes).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PathSafetyError(f"could not read {name!r}: record is not valid UTF-8: {exc}") from exc
 
 
 def open_record_at(dir_fd: int, name: str) -> int:
@@ -487,8 +492,7 @@ def open_record_at(dir_fd: int, name: str) -> int:
     return descriptor
 
 
-def read_regular_fd(descriptor: int, max_bytes: int) -> str:
-    """Read an already-open regular file from offset zero without moving its offset."""
+def _read_regular_fd_bytes(descriptor: int, max_bytes: int) -> bytes:
     info = os.fstat(descriptor)
     if not stat.S_ISREG(info.st_mode):
         raise PathSafetyError("descriptor is not a regular file; refusing to read it")
@@ -502,8 +506,13 @@ def read_regular_fd(descriptor: int, max_bytes: int) -> str:
         data.extend(chunk)
     if len(data) > max_bytes:
         raise PathSafetyError(f"record exceeds {max_bytes} bytes")
+    return bytes(data)
+
+
+def read_regular_fd(descriptor: int, max_bytes: int) -> str:
+    """Read an already-open UTF-8 regular file without moving its offset."""
     try:
-        return data.decode("utf-8")
+        return _read_regular_fd_bytes(descriptor, max_bytes).decode("utf-8")
     except UnicodeDecodeError as exc:
         raise PathSafetyError(f"record is not valid UTF-8: {exc}") from exc
 

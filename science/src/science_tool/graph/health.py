@@ -78,6 +78,29 @@ def _select_health_checks(
     return tuple(check for check in HEALTH_CHECKS if check.name in selected_names)
 
 
+def expected_producer_ids(
+    *,
+    checks: set[str] | frozenset[str] | None = None,
+    skip_checks: set[str] | frozenset[str] | None = None,
+    fast: bool = False,
+) -> frozenset[str]:
+    """The producer ids a run of this selection will declare.
+
+    A supervisor attesting an ingestion must know the complete producer set WITHOUT reading
+    the report -- an attestation derived from the thing it attests is not an attestation.
+
+    Derived from `_select_health_checks`, the same function `execute_health_report` calls, so
+    there is no second list to drift. `schema_invalid` is not a health check and never appears
+    in `--list-checks`; it is produced whenever sources are loaded, under the same condition
+    `execute_health_report` applies.
+    """
+    selected = _select_health_checks(checks=checks, skip_checks=skip_checks, fast=fast)
+    ids = {check.producer.producer_id for check in selected}
+    if any(check.requires_sources for check in selected):
+        ids.add(SCHEMA_INVALID_PRODUCER.producer_id)
+    return frozenset(ids)
+
+
 def _partition_validation_acceptances(
     project_root: Path,
     producer_results: dict[str, FindingProducerResult],

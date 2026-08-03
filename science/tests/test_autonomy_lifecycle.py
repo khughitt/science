@@ -1188,3 +1188,20 @@ def test_a_belief_basis_move_quarantines_with_the_path_gate_silent(
     assert not outcome.mark_issues, "the marks must be clean, or this proves nothing"
     assert outcome.deltas
     assert outcome.disposition is RunDisposition.QUARANTINED, outcome.reason
+
+
+def test_an_inline_input_counts_lines_the_way_the_checker_does(project: Path, tmp_path: Path):
+    """`InlineInput.lines` and `correspondence._line_count` both feed the same `Full(...)`
+    ceiling. `splitlines()` splits on CR, FF, LS, PS and NEL; the checker counts `\n` only, so
+    a bare CR would give an inline input a HIGHER ceiling than the same bytes served through
+    `read` -- an agent could cite a line the LF convention says does not exist."""
+    from science_tool.autonomy.lifecycle import _read_inline_manifest
+    from science_tool.evidence_broker.correspondence import _line_count
+
+    payload = b"alpha\rbeta\ngamma\n"
+    target = project / "instrument.md"
+    target.write_bytes(payload)
+
+    manifest = _read_inline_manifest((Path("instrument.md"),), project_root=project)
+
+    assert manifest[0].lines == _line_count(payload)
