@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 
+import yaml
 from pydantic import BaseModel, ConfigDict
 from science_model.autonomous_runs import RunDisposition, RunTier
 
@@ -25,27 +26,35 @@ from science_tool.autonomy.git import (
     commit_tree,
     create_branch,
     current_branch,
+    restore_path,
     restore_worktree,
     stage_all,
+    stage_paths,
     switch_branch,
     worktree_status,
 )
 from science_tool.autonomy.lifecycle import finish_run, start_run
 from science_tool.autonomy.marks import AGENT_EMAIL, SUPERVISOR_EMAIL, SUPERVISOR_NAME
 from science_tool.autonomy.record_writer import generate_run_id
+from science_tool.commons.errors import CommonsError
 from science_tool.findings.ingest import (
-    IngestError,
     IngestionProvenance,
     IngestOutcome,
     ingest_report,
     ingestion_authority,
     load_report,
 )
+from science_tool.findings.storage import CASES_DIRNAME
+from science_tool.graph.autonomous_runs import RUNS_DIRNAME
 from science_tool.graph.health import expected_producer_ids
 
 AGENT = "health-audit"
 MODEL = "deterministic"
 TIER = RunTier.REPORT_ONLY
+
+#: The derived file `finish_run` re-materializes. Named here because `_settle` must decide
+#: about it path by path -- see `_settle`.
+GRAPH_PATH = "knowledge/graph.trig"
 
 
 class HarnessError(RuntimeError):
@@ -106,7 +115,9 @@ def _run_actor(project_root: Path, *, report_path: Path, ingestion_ref: str, gen
         )
 
 
-def _settle(project_root: Path, *, record_written: bool, run_id: str) -> str | None:
+def _settle(
+    project_root: Path, *, record_written: bool, disposition: RunDisposition, run_id: str
+) -> str | None:
     """Leave the starting branch clean, and say whether a commit was made (design §4.5).
 
     Branches on whether a RECORD exists, not on the disposition: `finish_run` returns
@@ -116,13 +127,36 @@ def _settle(project_root: Path, *, record_written: bool, run_id: str) -> str | N
     Checks for nothing to settle rather than passing `--allow-empty`: a `finish_run` that
     failed before `_capture` leaves no materialization behind, and an empty commit would
     record something that means nothing.
+
+    STAGES §4.5's NAMED SET, NOT THE WHOLE TREE, AND THE GRAPH ONLY WHEN THE RUN IS CLEAN.
+    `finish_run` re-materializes `knowledge/graph.trig` while HEAD is still `auto/<slug>`,
+    over a tree holding whatever the actor wrote -- so on a QUARANTINED run the actor's
+    source edits are left behind on that branch, as intended, while `add -A` here would
+    publish their derived consequence on the starting branch: a graph naming entities the
+    branch's own sources do not contain. Restoring the graph first is what keeps the record
+    and the cases while dropping the denied write's shadow. `record_written` and the
+    disposition are independent questions and both are asked: an `unwired`-with-identity run
+    also has a record to publish and a graph nobody may trust.
     """
     if not worktree_status(project_root):
         return None
     if not record_written:
         restore_worktree(project_root)
         return None
-    stage_all(project_root)
+
+    slug = run_id.removeprefix("run:")
+    # The same spelling `record_writer.record_path` uses, from the same constant.
+    staged = [f"{RUNS_DIRNAME}/{slug}.md"]
+    # "and any cases" (§4.5): a run that ingested nothing has no such directory, and naming
+    # an absent pathspec would make git refuse.
+    if (project_root / CASES_DIRNAME).is_dir():
+        staged.append(CASES_DIRNAME)
+    if disposition is RunDisposition.CLEAN:
+        staged.append(GRAPH_PATH)
+    else:
+        restore_path(project_root, GRAPH_PATH)
+    stage_paths(project_root, staged)
+
     return commit_tree(
         project_root,
         message=f"chore(autonomy): record {run_id}",
@@ -143,14 +177,23 @@ def _step(description: str):
     3. Every step goes through here, and the message names the step.
 
     `GitError`, `BaselineError`, `RepositoryStateError` and `IngestError` are all `ValueError`
-    subclasses -- verified, not assumed -- so `ValueError` covers every expected refusal in the
-    loop and naming them individually would be noise that goes stale.
+    subclasses -- verified, not assumed -- so naming those four individually would be noise
+    that goes stale.
+
+    `CommonsError` and `yaml.YAMLError` are neither, and both are reachable: `start_run` gets
+    to `load_project_sources` through `_capture` -> `materialize_graph`, which raises
+    `CommonsRootNotFoundError` for an absent commons store (`graph/commons_sources.py`) and
+    `yaml.YAMLError` for a malformed `relations.yaml` or `science.yaml` (`graph/sources.py`).
+    THE LESSON, not the list: the earlier set was verified against the autonomy and findings
+    layers and never against the commons and YAML layers those two sit on, so "verified"
+    covered a smaller loop than the one this function wraps. A set justified by a hierarchy
+    check is only as wide as the modules the check walked.
     """
     try:
         yield
     except HarnessError:
         raise
-    except (OSError, ValueError) as exc:
+    except (CommonsError, OSError, ValueError, yaml.YAMLError) as exc:
         raise HarnessError(f"{description}: {exc}") from exc
 
 
@@ -258,33 +301,45 @@ def run_supervised_audit(
 
     ingestion: IngestOutcome | None = None
     refusal: str | None = None
-    if outcome.disposition is RunDisposition.CLEAN:
-        try:
-            registry, context = ingestion_authority(project_root)
-            report = load_report(project_root, report_path)
-            ingestion = ingest_report(
+    # STEP 9 IS IN A `finally`, not merely after the block. Ingestion sits BETWEEN the verdict
+    # and the settle, so anything escaping here strands the operator on `auto/<slug>` with an
+    # uncommitted record -- the outcome the refusal set below exists to prevent, reached by a
+    # door no catch list can be trusted to have closed. The list keeps the failure a REFUSAL;
+    # the `finally` keeps a miss from being an abandonment.
+    try:
+        if outcome.disposition is RunDisposition.CLEAN:
+            try:
+                registry, context = ingestion_authority(project_root)
+                report = load_report(project_root, report_path)
+                ingestion = ingest_report(
+                    project_root,
+                    report,
+                    registry,
+                    provenance=IngestionProvenance(
+                        ingestion_ref=run_id,
+                        generated_at=generated_at,
+                        producer_ids=frozenset(expected_producer_ids()),
+                    ),
+                    context=context,
+                    actor=AGENT,
+                )
+            # THE SAME SET `findings/cli.py` CATCHES OVER THESE SAME THREE CALLS, deliberately
+            # -- one refusal boundary, spelled once. `CommonsError` and `yaml.YAMLError` derive
+            # straight from `Exception`, and both are reachable from ordinary project state: an
+            # unmounted commons store, a malformed `relations.yaml`. `IngestError` is NOT named,
+            # because it is a `ValueError` subclass and a redundant member invites the next
+            # reader to widen the list by example rather than by hierarchy.
+            except (CommonsError, OSError, ValueError, yaml.YAMLError) as exc:
+                refusal = str(exc)
+    finally:
+        with _step("the run's results could not be settled"):
+            switch_branch(project_root, starting_branch)
+            post_verdict_commit = _settle(
                 project_root,
-                report,
-                registry,
-                provenance=IngestionProvenance(
-                    ingestion_ref=run_id,
-                    generated_at=generated_at,
-                    producer_ids=frozenset(expected_producer_ids()),
-                ),
-                context=context,
-                actor=AGENT,
+                record_written=outcome.record is not None,
+                disposition=outcome.disposition,
+                run_id=run_id,
             )
-        # `OSError` belongs here with the rest: `load_report` reaches the filesystem, so an
-        # unreadable report is a refusal to INGEST -- not a reason to abandon the tree before
-        # step 9, which is what letting it escape would do.
-        except (IngestError, OSError, ValueError) as exc:
-            refusal = str(exc)
-
-    with _step("the run's results could not be settled"):
-        switch_branch(project_root, starting_branch)
-        post_verdict_commit = _settle(
-            project_root, record_written=outcome.record is not None, run_id=run_id
-        )
 
     return HarnessOutcome(
         run_id=run_id,

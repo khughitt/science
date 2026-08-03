@@ -57,7 +57,10 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   a TREE with a directory listing at exit 0, which the evidence broker cannot distinguish from
   a file read (design §3.2). `cat-file blob` refuses it.
 * `checkout -b`, `checkout -- .`, `clean -fd`, `add -A` and `commit` -- the harness's write
-  subcommands (Spec 2b design §3.5). Every key `_HARDENING` already pins is INERT here for the
+  subcommands (Spec 2b design §3.5), together with the pathspec-limited spellings of the middle
+  three that `restore_path` and `stage_paths` use. A pathspec narrows the set of worktree
+  entries git touches; it selects no configuration key the whole-tree form does not already
+  reach, so these rows cover both. Every key `_HARDENING` already pins is INERT here for the
   reason it is inert elsewhere: `core.hooksPath=/dev/null` disarms `pre-commit`,
   `prepare-commit-msg`, `commit-msg`, `post-commit` and `post-checkout` alike, and a hook
   dropped straight into `$GIT_DIR/hooks/` with it. `filter.<driver>.clean` bound through
@@ -98,6 +101,7 @@ from __future__ import annotations
 import os
 import selectors
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -505,8 +509,45 @@ def restore_worktree(repo_root: Path) -> None:
     _checked(repo_root, "clean", "-fd")
 
 
+def restore_path(repo_root: Path, path: str) -> None:
+    """Put ONE path back the way HEAD has it -- discarding a modification, or removing it.
+
+    `restore_worktree` is the whole-tree answer and is too broad for a caller that must keep
+    the rest of what it just produced: `checkout -- .` plus `clean -fd` would take the run
+    record and the cases with it.
+
+    TWO SUBCOMMANDS BECAUSE NEITHER ALONE SPANS BOTH STATES, and which state applies is not
+    the caller's to know: a project that has committed `knowledge/graph.trig` has a tracked
+    modification, one that never materialized has an untracked file, and the same call must
+    settle both. `checkout -- <path>` refuses a pathspec HEAD does not know; `clean` never
+    touches a tracked file. The membership question is asked with `cat-file -t <commit>:<path>`
+    -- the subcommand this module's docstring already probed, and found INERT against every
+    key -- rather than with a new one.
+
+    Both write subcommands are the pathspec-limited spellings of `checkout -- .` and
+    `clean -fd`, which are probed above; a pathspec narrows what git touches and reaches no
+    configuration key the whole-tree form does not.
+    """
+    present = run_git(repo_root, "cat-file", "-t", f"HEAD:{path}").returncode == 0
+    if present:
+        _checked(repo_root, "checkout", "--", path)
+    else:
+        _checked(repo_root, "clean", "-fd", "--", path)
+
+
 def stage_all(repo_root: Path) -> None:
     _checked(repo_root, "add", "-A")
+
+
+def stage_paths(repo_root: Path, paths: Sequence[str]) -> None:
+    """Stage exactly these pathspecs, additions and deletions included.
+
+    `add -A` with a pathspec, not a different subcommand: the `-A` is what makes a path the
+    caller names but that no longer exists stage as a deletion. A pathspec matching nothing
+    makes git exit non-zero, which `_checked` turns into a `GitError` -- deliberately, since a
+    caller naming a path it believes it produced is wrong about the run, not about the syntax.
+    """
+    _checked(repo_root, "add", "-A", "--", *paths)
 
 
 def commit_tree(
