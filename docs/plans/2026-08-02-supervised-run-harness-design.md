@@ -1,7 +1,18 @@
 # Supervised run harness — design (autonomous-audit Spec 2b)
 
-**Status:** implemented (revision 6)
+**Status:** implemented (revision 7)
 **Spec 2b** of the autonomous-audit program (§0), scoped to **the loop, not the fleet**.
+
+**Revision 7** closes the final whole-branch review at the two remaining authority boundaries
+and three error postconditions. Repository-local `core.worktree` can redirect every Git write
+despite `-C`, so the gateway now pins the resolved worktree on every invocation (§3.5). The
+actor no longer receives a project pathname: it writes one bounded regular file in
+supervisor-owned temporary storage, whose bytes are installed through the existing anchored,
+exclusive path primitives (§3.3). An unforeseen ingestion `Exception` settles first and then
+becomes `HarnessError` with its cause preserved (§3.4.1); named settlement verifies and names
+any residual dirt (§4.5); and `restore_path` classifies only Git's exact absent-path verdict
+as absence (§3.5). The common lesson is unchanged: selecting an authority is not enough unless
+the operation is pinned to it and the postcondition is checked afterward.
 
 **Revision 6** comes from the whole-branch review of the built loop, and its findings are about
 **a safety argument that was measured on one path and stated for all of them.** §4.4 held that
@@ -232,6 +243,14 @@ would put two mutations in the ledger that cannot fail.
 `doc/audits/reports/<run-slug>.json`, from the run id. It cannot collide across runs, needs no
 flag, and is the single path `report-only` permits (`autonomy/path_gate.py:123`).
 
+The actor does **not** receive that project pathname. It writes to a supervisor-owned temporary
+directory; after an accepted actor exit, the supervisor reads the output once as a bounded
+regular file and copies those bytes verbatim into the derived report name. Directory creation,
+exclusive file creation, and the write all use `findings/paths.py`'s descriptor-anchored
+primitives, so a committed symlink at `doc`, `doc/audits`, or `doc/audits/reports` is refused
+before anything outside the project can be touched. This is not an actor interface: the actor,
+model, tier, and report derivation remain fixed.
+
 ### 3.4 The contract
 
 ```python
@@ -288,11 +307,11 @@ now non-optional: an outcome that exists is an outcome whose capture commit exis
 seen — so it returns an outcome and exits 2.
 
 **"Every failure raises `HarnessError`" is a claim about *normalization*, not about the
-functions the loop happens to call.** `current_branch`, `run_dir`, `stage_all`, the report
-directory's `mkdir`, and the actor subprocess itself all raise `GitError` or `OSError` of their
-own, and the CLI catches only `HarnessError` — so an unnormalized path exits 1 with a traceback
-instead of 3. Each orchestration step is wrapped at the library boundary and re-raised as
-`HarnessError` naming the step.
+functions the loop happens to call.** `current_branch`, `run_dir`, `stage_all`, the anchored
+report installation, and the actor subprocess itself raise errors of their own, and the CLI
+catches only `HarnessError` — so an unnormalized path exits 1 with a traceback instead of 3.
+Each orchestration step is wrapped at the library boundary and re-raised as `HarnessError`
+naming the step.
 
 **The normalized set is `OSError`, `ValueError`, `CommonsError` and `yaml.YAMLError`.** The
 first two were justified by a hierarchy check — `GitError`, `BaselineError`,
@@ -314,8 +333,9 @@ redundant member invites the next reader to widen the list by example rather tha
 **Step 9 runs in a `finally` regardless.** A catch list is a claim about which exceptions were
 foreseen, and ingestion sits between the verdict and the settle — the one interval where being
 wrong strands the operator on `auto/<slug>` with an uncommitted record. The list keeps a
-foreseen failure a *refusal*; the `finally` keeps an unforeseen one from being an
-*abandonment*.
+foreseen failure a *refusal*. Any other ordinary `Exception` is raised as `HarnessError` with
+the original as `__cause__`; because that normalization happens inside the `try`, the `finally`
+settles first. The failure becomes neither a refusal nor a raw exception.
 
 ### 3.4.2 Which clock, and when
 
@@ -393,6 +413,13 @@ nor the belief-basis capture can see it change — and several keys name a *prog
 runs with the supervisor's privileges. A git call that skips the gateway is a call the actor
 can turn into arbitrary execution, and no layer of this design would report it.
 
+Configuration can redirect an operation without executing a program. Repository-local
+`core.worktree=<sibling>` makes `git -C <repo> status`, `add`, `checkout`, and `clean` operate
+on the sibling while still using `<repo>`'s object database. Every gateway argv therefore
+includes an explicit command-line `--work-tree=<resolved-project-root>`, which outranks the
+repository configuration. It is centralized in `_argv`, including the configuration preflight,
+so every current and future helper receives the same pin.
+
 Most of what the new subcommands need is already there. `run_git` applies `_HARDENING` plus
 `_filter_driver_overrides(repo_root)` on **every** call (`git.py:435`), so
 `core.hooksPath=/dev/null` disarms `commit`'s `pre-commit` / `prepare-commit-msg` /
@@ -420,6 +447,12 @@ treatment, and the results — including the inert ones — are recorded there i
 Asserting the set by analogy to `status` would be exactly the reasoning that module exists to
 replace.
 
+`restore_path` also fails closed on Git's answer. `cat-file -t HEAD:<path>` returning nonzero
+does not by itself prove absence: object corruption and unreadable history fail the same way.
+Only Git's fully interpolated absent-path sentence on the last non-empty stderr line selects
+`clean`; every other error raises before a write, matching the evidence broker's classifier
+without importing that higher layer back into the gateway.
+
 ## 4. The loop
 
 Nine steps. The harness aborts on any failure before `finish_run`, leaving every branch and
@@ -432,7 +465,7 @@ branch rather than a half-attested one."
 | 1 | Assert HEAD is a named branch; remember it as the starting branch | abort |
 | 2 | `start_run` → baseline (restores the tree itself, §4.1) | raises; abort |
 | 3 | `git checkout -b auto/<slug>`, exclusively | abort — an existing branch is a run-id collision |
-| 4 | Spawn `science health` as a subprocess | exit ∉ {0, 2} → abort (§4.2) |
+| 4 | Spawn `science health` against a supervisor-owned temporary output; bounded-read and anchored-install it at the derived project path | exit ∉ {0, 2} or an unsafe output path → abort (§3.3, §4.2) |
 | 5 | Assert HEAD is still `baseline.branch`; detached HEAD counts as a mismatch | abort, work left intact |
 | 6 | `git add -A`; commit as `<agent> <agent@science.local>` with `Science-Run: <run-id>` | abort |
 | 7 | `finish_run(head=HEAD, report_path=…)` | returns `unwired`; continue to 9 |
@@ -576,6 +609,11 @@ commit rather than passing `--allow-empty`, which would record a commit that mea
 Step 9 ends with the tree clean on the starting branch in every case. That is the property the
 next `start_run` depends on, and it is what the step exists to guarantee.
 
+The assertion is an operation, not only an end-to-end test: after the named commit, `_settle`
+re-reads `status --porcelain` and raises with the complete residual status if anything remains.
+The commit is retained and the residue is left for triage, but no successful harness outcome is
+returned for a dirty starting branch.
+
 Named-set staging narrows *how* that guarantee is met, and the narrowing is deliberate. Under
 `add -A` a path the design never accounted for was swept into the commit and the tree came out
 clean either way; under a named set it is left uncommitted, so the tree is dirty and the
@@ -621,6 +659,10 @@ The harness calls `load_report(project_root, report_path)` (`findings/ingest.py:
 wrote them. `load_report` enforces path containment, symlink refusal, byte-size and JSON-nesting
 ceilings, schema and version validation, and the finding-count limit. The harness then
 constructs its own `IngestionProvenance` and ingests the loaded report in-process.
+
+The earlier temporary-to-project copy does not trust the report either. Its only claims are
+that the source is a bounded regular file and the destination is an exclusively created regular
+file reached through anchored directories; schema and provenance trust still begin here.
 
 ### 5.4 Where the registry and the context come from
 
@@ -744,7 +786,7 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 26a | Leave the **first** `current_branch` wrapper off (step 1) | a raw `GitError` escapes the library and the CLI exits 1 with a traceback |
 | 26b | Leave the **second** `current_branch` wrapper off (the post-actor re-read) | the same, at the call site an unconditional patch never reaches |
 | 26c | Leave `stage_all`'s wrapper off | a raw `GitError` from staging escapes |
-| 26d | Leave the report directory's `mkdir` unwrapped | a raw `OSError` escapes — a different type through the same wrapper |
+| 26d | Leave the anchored report-directory open unwrapped | a raw `OSError` escapes — a different type through the same wrapper |
 | 27 | Catch only `ValueError` around ingestion | an unreadable report aborts before the tree is settled |
 | 28 | Return exit 0 for a quarantined outcome | a denied run reports success |
 | 29 | Return exit 0 for an unwired outcome | a run that could not be judged reports success |
@@ -752,18 +794,22 @@ Mutation rows, in the discipline plan 4c established — apply one mutation alon
 | 31 | `_step` catches only `(OSError, ValueError)` | a `CommonsError` or `yaml.YAMLError` from the source layer exits 1 with a traceback where §3.4.1 promises 3 |
 | 32 | The ingestion block catches only `(OSError, ValueError)` | an absent commons store or a malformed `relations.yaml` aborts instead of being recorded as a refusal (§3.4.1) |
 | 33 | Run step 9 sequentially rather than in a `finally` | an exception the catch list does not name strands the operator on `auto/<slug>` with an uncommitted record (§3.4.1) |
+| 34 | Drop the gateway's command-line `--work-tree` pin | repository-local `core.worktree` makes the write primitives commit sibling bytes (§3.5) |
+| 35 | Give the actor the derived project report path instead of the supervisor-owned temporary path | a committed report-directory symlink receives the actor's file (§3.3) |
+| 36 | Re-raise an unforeseen ingestion `Exception` unchanged | the library leaks the private exception instead of a caused `HarnessError` (§3.4.1) |
+| 37 | Remove `_settle`'s post-commit status check | an unaccounted `unexpected.txt` remains dirty while the loop returns success (§4.5) |
+| 38 | Treat every nonzero `cat-file -t` answer as absence | an object-database failure triggers cleanup instead of failing closed (§3.5) |
 
-**Rows 32 and 33 are two fixes for one hazard, and each needs its own test.** With the catch
-list widened, a mutation that removes the `finally` leaves every *caught*-exception test green
-— the `finally` never runs anything they can observe. It is visible only to a test inducing an
-exception the list does not name and never will, which is the case a catch list is
-structurally unable to cover. That test must also require the exception to **propagate**: the
-`finally` is not a swallow, and an unforeseen failure recorded as a refusal would be the
-harness reporting a verdict it never reached.
+**Rows 32, 33, and 36 split one hazard into its three outcomes.** The expected catch list keeps
+ordinary project-state failures as refusals. An exception outside that list is normalized to a
+caused `HarnessError`, not mislabeled as a refusal. The `finally` settles before that error can
+leave; moving settlement after the ingestion block strands the operator on `auto/<slug>`.
+Row 33 therefore requires the normalized error **and** the restored branch, while row 36
+requires the error type and its original `__cause__`.
 
 **Row 26 was one row claiming three helpers, and certified one.** Its test patched
 `current_branch` unconditionally, so control died at the *first* of two wrapped call sites;
-removing the second wrapper alone left it green, and `stage_all`'s and the `mkdir`'s wrappers
+removing the second wrapper alone left it green, and `stage_all`'s and the report-open wrappers
 were never exercised. One row per helper, one test each, and the first-site test carries a
 `match=` — a bare `pytest.raises(HarnessError)` is satisfied by the run dying anywhere at all.
 The split is why the numbering runs 26a–26d rather than renumbering the rows after it.

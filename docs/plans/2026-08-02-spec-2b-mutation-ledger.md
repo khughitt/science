@@ -1,6 +1,6 @@
 # Spec 2b — mutation ledger
 
-Design §8. Thirty-six rows, each certified by the plan-4c discipline: apply **one** mutation
+Design §8. Forty-one rows, each certified by the plan-4c discipline: apply **one** mutation
 alone, require a **named** test to fail **for the stated reason**, revert, require that same
 test to pass before the next row.
 
@@ -14,6 +14,12 @@ changed `_settle`'s signature and body and `_step`'s catch set. Rows **26a–26d
 new and were certified against that tree; rows **9, 16, 18, 19 and 24** touch the two changed
 functions and were re-run against it. Row 19's failure *mode* changed, which is recorded in its
 own line rather than smoothed over.
+
+**Final-review baseline (FIX_BASE):** `46eb7c1835e23e24510768bff25b56d644bb05f4`
+(`fix(autonomy): close supervised run review gaps`) records the exact reviewed snapshot before
+revision 7. Rows **34–38** are new and were certified against the revision-7 working tree;
+row **33** was re-certified because the unforeseen exception now leaves as a caused
+`HarnessError` after settlement rather than escaping raw.
 
 A row whose test fails for a *different* reason than the one stated certifies nothing, so the
 observed result below records the actual failure text rather than "fails". Every row was also
@@ -75,7 +81,7 @@ says nothing about whether `_settle` calls them;
 against a raw `subprocess.run` in `_settle`. That is why row 16 has its own test over the
 `supervised_project` fixture, sharing Task 1's `plant_attacks` factory.
 
-## Rows 22–29 — the revision-3 and -4 rows
+## Rows 22–38 — revisions 3 through 7
 
 | # | Mutation | Test node | Observed result |
 |---|---|---|---|
@@ -86,31 +92,32 @@ against a raw `subprocess.run` in `_settle`. That is why row 16 has its own test
 | 26a | Remove the `_step` wrapper from the **first** `current_branch` read (step 1) | `test_autonomy_harness.py::test_a_raw_git_failure_is_normalized` | KILLED — the raw `GitError: cannot read HEAD` escapes instead of a `HarnessError` |
 | 26b | Remove the `_step` wrapper from the **second** `current_branch` read (the post-actor re-read) | `test_autonomy_harness.py::test_the_second_branch_read_is_normalized_too` | KILLED — the raw `GitError: cannot re-read HEAD` escapes |
 | 26c | Move `stage_all` outside `_step("the actor's output could not be captured")` | `test_autonomy_harness.py::test_a_raw_staging_failure_is_normalized` | KILLED — the raw `GitError: cannot stage the actor's output` escapes |
-| 26d | Remove the `_step` wrapper from the report directory's `mkdir` | `test_autonomy_harness.py::test_a_raw_report_directory_failure_is_normalized` | KILLED — the raw `OSError: cannot create the report directory` escapes; a different exception type through the same wrapper |
+| 26d | Remove the `_step` wrapper from the anchored report-directory open | `test_autonomy_harness.py::test_a_raw_report_directory_failure_is_normalized` | KILLED — the raw `OSError: cannot create the report directory` escapes; a different exception type through the same wrapper |
 | 27 | Catch only `ValueError` around ingestion | `test_autonomy_harness.py::test_a_failed_ingestion_is_a_refusal_and_not_an_abort` | KILLED — `OSError: report is unreadable` escapes the loop, abandoning the tree before step 9 |
 | 28 | Return exit 0 for a quarantined outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[quarantined-1]` | KILLED — `assert 0 == 1` |
 | 29 | Return exit 0 for an unwired outcome | `test_autonomy_harness.py::test_the_command_maps_each_disposition_to_its_exit_code[unwired-2]` | KILLED — `assert 0 == 2` |
 | 30 | `_settle` blanket-stages (`add -A`) instead of the named set, committing the graph on every disposition | `test_autonomy_harness.py::test_a_quarantined_run_ingests_nothing` | KILLED — `assert 'knowledge/graph.trig' not in ['knowledge/graph.trig', 'runs/2026-08-02-health-audit-a1b2.md']`; the denied write's derived graph is published on the starting branch. Measured separately against the same mutation: `git grep -l proposition:p9 HEAD` answers `HEAD:knowledge/graph.trig`, so the leaked graph really does name the entity the gate denied. |
 | 31 | `_step` catches only `(OSError, ValueError)` | `test_autonomy_harness.py::test_a_source_layer_failure_is_normalized` | KILLED, both parameters — `CommonsError: commons store not found` and `yaml.error.YAMLError: relations.yaml is malformed` each escape `_step` uncaught, where §3.4.1 promises a `HarnessError` |
 | 32 | The **ingestion** block catches only `(OSError, ValueError)` | `test_autonomy_harness.py::test_an_ingestion_authority_failure_is_a_refusal_and_not_an_abort` | KILLED, both parameters — `CommonsError: commons store not found` and `yaml.error.YAMLError: relations.yaml is malformed` escape the ingestion block instead of being recorded as a refusal |
-| 33 | Run step 9 **sequentially** instead of in a `finally` | `test_autonomy_harness.py::test_an_unforeseen_ingestion_failure_still_settles_the_tree` | KILLED — `assert 'auto/2026-08-02-health-audit-a1b2' == 'main'`; an exception the catch list does not name skips the switch and the settle, stranding the operator on the run's branch |
+| 33 | Run step 9 **sequentially** instead of in a `finally` | `test_autonomy_harness.py::test_an_unforeseen_ingestion_failure_still_settles_the_tree` | KILLED — the caused `HarnessError` is raised as required, then `assert 'auto/2026-08-02-health-audit-a1b2' == 'main'`; sequential settlement is skipped and strands the operator on the run's branch |
+| 34 | Drop `_argv`'s command-line `--work-tree` pin | `test_autonomy_git_writes.py::test_repo_local_core_worktree_cannot_redirect_write_primitives` | KILLED — `assert 'outside named' == 'inside named'`; repository-local `core.worktree` made the gateway stage and commit the sibling's bytes |
+| 35 | Pass the derived project report path directly to `_run_actor` | `test_autonomy_harness.py::test_actor_output_cannot_follow_a_project_symlink` | KILLED — the external reports directory contains `2026-08-02-health-audit-a1b2.json`; the actor followed the committed parent symlink before anchored installation could refuse it |
+| 36 | Re-raise an unforeseen ingestion exception unchanged | `test_autonomy_harness.py::test_an_unforeseen_ingestion_failure_still_settles_the_tree` | KILLED — raw `_Unforeseen: nobody foresaw this` escapes instead of the required caused `HarnessError` |
+| 37 | Remove `_settle`'s post-commit `worktree_status` check | `test_autonomy_harness.py::test_settlement_names_an_unaccounted_dirty_path` | KILLED — `Failed: DID NOT RAISE HarnessError`; the named commit succeeds while `?? unexpected.txt` remains unaccounted |
+| 38 | Treat every nonzero `cat-file -t` answer as absence | `test_autonomy_git_writes.py::test_restore_path_fails_closed_when_cat_file_does_not_prove_absence` | KILLED — `Failed: DID NOT RAISE GitError`; the simulated object-database failure fell through to cleanup |
 
-**Rows 32 and 33 are two fixes for one hazard, and only one test can see each.** Widening the
-ingestion catch list and moving step 9 into a `finally` both address "an exception between the
-verdict and the settle". Measured: with the list widened, mutation 33 leaves
-`test_a_failed_ingestion_is_a_refusal_and_not_an_abort` and row 32's own test **green** — the
-exception is caught, so the `finally` never does anything they can observe. The `finally` is
-therefore only visible to a test that induces an exception the list does not name and never
-will, which is what row 33's test does with a private `_Unforeseen(Exception)` — deliberately
-not a `RuntimeError`, since `HarnessError` is one and `pytest.raises(RuntimeError)` would be
-satisfied by the harness's own normalization. Row 33 requires the exception to **propagate**:
-the `finally` is not a swallow, and an unforeseen failure reported as a refusal would be the
-harness claiming a verdict it never reached.
+**Rows 32, 33, and 36 split one hazard into three observable contracts.** Row 32's expected
+project-state failures become refusals. Row 36's private `_Unforeseen(Exception)` becomes a
+`HarnessError` whose `__cause__` is that same exception, never a refusal or raw leak. Row 33
+uses the same failure to prove the `finally`: moving settlement after the ingestion block still
+raises the normalized error, but the branch assertion finds the operator stranded on
+`auto/<slug>`. A test inducing a refusal cannot certify row 33 because no error leaves the
+ingestion block.
 
 **Row 26 was one row claiming three helpers, and certified one.** Its test patched
 `current_branch` to raise unconditionally, so control died at the FIRST of two wrapped call
 sites; deleting the second wrapper alone (`harness.py`'s post-actor re-read) left the test
-green, and `stage_all`'s and the `mkdir`'s wrappers were never exercised at all. Four rows
+green, and `stage_all`'s and the report-open wrappers were never exercised at all. Four rows
 now, one per wrapped call site, each with a test that induces a failure only that wrapper can
 normalize — and 26a's test gained a `match=`, since a bare `pytest.raises(HarnessError)` is
 satisfied by the run dying anywhere at all (the module's own convention, see
@@ -199,6 +206,14 @@ it demonstrates is "the harness refuses" rather than "an empty commit is recorde
 rather than restated, because a row whose observed failure is quietly re-described is exactly
 what this ledger exists to prevent.
 
+## Final-review certification
+
+Rows 34–38 were applied one at a time against revision 7, with no other mutation active. Each
+named node failed for the table's stated reason; after restoring the production line, the same
+node passed before the next mutation. Row 33 was repeated under the revised exception contract
+and killed on the restored-branch assertion while still observing the required caused
+`HarnessError`.
+
 ## Result
 
-36 rows applied, 36 killed, 0 unkillable. Every reverted re-run passed.
+41 rows applied, 41 killed, 0 unkillable. Every reverted re-run passed.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -211,17 +212,13 @@ def test_an_unforeseen_ingestion_failure_still_settles_the_tree(
 ):
     """What the `finally` buys, and the only way to see it.
 
-    Widening the catch list and putting step 9 in a `finally` are two fixes for one hazard, and
-    a test that induces a *caught* exception cannot tell them apart: with the list widened the
-    `finally` is inert, and removing it leaves every such test green. So this induces an
-    exception the list does not name and never will -- the case a catch list is structurally
-    unable to cover, being a claim about what was foreseen.
+    The expected-refusal catch list and the `finally` address different outcomes. This induces
+    an exception outside the refusal list: the outer catch must normalize it, and the `finally`
+    must settle before that normalized error leaves the loop.
 
-    The exception is REQUIRED to propagate. The `finally` is not a swallow: an unforeseen
-    failure is not a refusal, and recording it as one would be the harness reporting a verdict
-    it never reached. What the `finally` guarantees is narrower, and is the whole point -- the
-    operator gets the traceback back on their OWN branch with a clean tree, rather than parked
-    on `auto/<slug>` with an uncommitted record.
+    The exception is REQUIRED to leave the refusal channel and become `HarnessError`, retaining
+    the original as its cause. The `finally` is not a swallow: settlement happens first, then
+    the public orchestration error contract is restored.
     """
     start_branch = current_branch(supervised_project)
 
@@ -230,11 +227,46 @@ def test_an_unforeseen_ingestion_failure_still_settles_the_tree(
 
     monkeypatch.setattr(harness_module, "ingest_report", _explode)
 
-    with pytest.raises(_Unforeseen):
+    with pytest.raises(HarnessError, match="unexpected ingestion failure") as raised:
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
+    assert isinstance(raised.value.__cause__, _Unforeseen)
     assert current_branch(supervised_project) == start_branch
     assert worktree_status(supervised_project) == ""
+
+
+def test_actor_output_cannot_follow_a_project_symlink(
+    supervised_project: Path, tmp_path: Path
+):
+    """The actor writes to supervisor-owned storage before an anchored exclusive install."""
+    outside = tmp_path / "outside-reports"
+    outside.mkdir()
+    reports = supervised_project / "doc" / "audits" / "reports"
+    reports.parent.mkdir(parents=True, exist_ok=True)
+    reports.symlink_to(outside, target_is_directory=True)
+    _commit_all(supervised_project, "plant report redirect")
+
+    with pytest.raises(HarnessError):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
+
+    assert list(outside.iterdir()) == []
+
+
+def test_settlement_names_an_unaccounted_dirty_path(
+    supervised_project: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A named settlement cannot report success while leaving an unknown path dirty."""
+    real_ingest = harness_module.ingest_report
+
+    def _ingest_and_leave_residue(project_root: Path, *args, **kwargs):
+        outcome = real_ingest(project_root, *args, **kwargs)
+        (project_root / "unexpected.txt").write_text("residue\n", encoding="utf-8")
+        return outcome
+
+    monkeypatch.setattr(harness_module, "ingest_report", _ingest_and_leave_residue)
+
+    with pytest.raises(HarnessError, match="unexpected.txt"):
+        run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")
 
 
 def test_a_run_with_no_record_commits_nothing(
@@ -615,16 +647,14 @@ def test_a_raw_staging_failure_is_normalized(
 def test_a_raw_report_directory_failure_is_normalized(
     supervised_project: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """The report directory's `mkdir` raises `OSError`, not `GitError` -- a different type
-    reaching the same wrapper, and the third helper design row 26 named."""
-    real_mkdir = Path.mkdir
+    """The anchored directory open raises `OSError`, a different type through `_step`."""
 
-    def _explode(self: Path, *args, **kwargs):
-        if self.name == "reports":
-            raise OSError("cannot create the report directory")
-        return real_mkdir(self, *args, **kwargs)
+    @contextmanager
+    def _explode(*args, **kwargs):
+        raise OSError("cannot create the report directory")
+        yield
 
-    monkeypatch.setattr(Path, "mkdir", _explode)
+    monkeypatch.setattr(harness_module, "open_dir_inside", _explode, raising=False)
 
     with pytest.raises(HarnessError, match="the report directory could not be created"):
         run_supervised_audit(supervised_project, started=STARTED, short_id="a1b2")

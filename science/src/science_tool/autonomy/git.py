@@ -71,6 +71,9 @@ in a scratch repository against git 2.55, under exactly the commands this packag
   under `log` and has no bearing on SIGNING. `--no-gpg-sign` on the commit argv disarms it;
   blanking `gpg.program` does not, because signing stays enabled and git falls back to the
   default `gpg` on `PATH`. Pinned in `commit_tree`, not at the call site.
+* `core.worktree=<sibling>` -- REDIRECTS every worktree-reading or -writing subcommand while
+  `-C <repo>` still selects the intended repository. The command-line `--work-tree` in
+  `_argv` outranks repository configuration and pins every call to the resolved project root.
 * `grep.column=true`, `color.grep=always`, `color.ui=always` -- RENDER, under `grep`:
   they change output but spawn nothing. The broker pins the argv keys this shapes
   (`--no-color`, etc.) rather than neutralizing them here, since there is nothing here
@@ -203,10 +206,11 @@ _FILTER_COMMAND_KEYS: tuple[str, ...] = ("clean", "smudge", "process")
 
 def _argv(repo_root: Path, overrides: tuple[str, ...], args: tuple[str, ...]) -> list[str]:
     """The single place autonomy's git argv is built."""
-    argv = ["git", "--no-replace-objects"]
+    root = repo_root.resolve()
+    argv = ["git", "--no-replace-objects", f"--work-tree={root}"]
     for override in overrides:
         argv += ["-c", override]
-    argv += ["-C", str(repo_root), *args]
+    argv += ["-C", str(root), *args]
     return argv
 
 
@@ -528,11 +532,23 @@ def restore_path(repo_root: Path, path: str) -> None:
     `clean -fd`, which are probed above; a pathspec narrows what git touches and reaches no
     configuration key the whole-tree form does not.
     """
-    present = run_git(repo_root, "cat-file", "-t", f"HEAD:{path}").returncode == 0
-    if present:
+    typed = run_git(repo_root, "cat-file", "-t", f"HEAD:{path}")
+    if typed.returncode == 0:
         _checked(repo_root, "checkout", "--", path)
-    else:
-        _checked(repo_root, "clean", "-fd", "--", path)
+        return
+
+    lines = [line.strip() for line in typed.stderr.strip().splitlines() if line.strip()]
+    verdict = lines[-1] if lines else b""
+    absent = (
+        f"fatal: path '{path}' does not exist in 'HEAD'".encode(),
+        f"fatal: path '{path}' exists on disk, but not in 'HEAD'".encode(),
+    )
+    if verdict not in absent:
+        message = typed.stderr.decode("utf-8", "replace").strip()
+        raise GitError(
+            f"could not determine whether {path!r} exists at HEAD in {repo_root}: {message}"
+        )
+    _checked(repo_root, "clean", "-fd", "--", path)
 
 
 def stage_all(repo_root: Path) -> None:

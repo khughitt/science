@@ -8,6 +8,7 @@ why the supervisor is deterministic code rather than a model reasoning about the
 
 from __future__ import annotations
 
+import os
 import secrets
 import subprocess
 import sys
@@ -38,11 +39,19 @@ from science_tool.autonomy.marks import AGENT_EMAIL, SUPERVISOR_EMAIL, SUPERVISO
 from science_tool.autonomy.record_writer import generate_run_id
 from science_tool.commons.errors import CommonsError
 from science_tool.findings.ingest import (
+    MAX_REPORT_BYTES,
     IngestionProvenance,
     IngestOutcome,
     ingest_report,
     ingestion_authority,
     load_report,
+)
+from science_tool.findings.paths import (
+    create_regular_file_at,
+    open_dir_inside,
+    read_regular_file_bytes_at,
+    unlink_at,
+    write_all,
 )
 from science_tool.findings.storage import CASES_DIRNAME
 from science_tool.graph.autonomous_runs import RUNS_DIRNAME
@@ -157,13 +166,17 @@ def _settle(
         restore_path(project_root, GRAPH_PATH)
     stage_paths(project_root, staged)
 
-    return commit_tree(
+    commit = commit_tree(
         project_root,
         message=f"chore(autonomy): record {run_id}",
         author=f"{SUPERVISOR_NAME} <{SUPERVISOR_EMAIL}>",
         committer_name=SUPERVISOR_NAME,
         committer_email=SUPERVISOR_EMAIL,
     )
+    residue = worktree_status(project_root)
+    if residue:
+        raise HarnessError(f"settlement left unaccounted dirty paths:\n{residue}")
+    return commit
 
 
 @contextmanager
@@ -172,9 +185,9 @@ def _step(description: str):
 
     "Every orchestration failure raises `HarnessError`" is a claim about NORMALIZATION, not
     about the functions this loop happens to call. `current_branch`, `run_dir`, `stage_all` and
-    the report directory's `mkdir` all raise `GitError` or `OSError` of their own, and the CLI
-    catches only `HarnessError` -- so an unnormalized path exits 1 with a traceback instead of
-    3. Every step goes through here, and the message names the step.
+    the anchored report-directory open all raise `GitError`, `PathSafetyError`, or `OSError` of
+    their own, and the CLI catches only `HarnessError` -- so an unnormalized path exits 1 with a
+    traceback instead of 3. Every step goes through here, and the message names the step.
 
     `GitError`, `BaselineError`, `RepositoryStateError` and `IngestError` are all `ValueError`
     subclasses -- verified, not assumed -- so naming those four individually would be noise
@@ -246,28 +259,47 @@ def run_supervised_audit(
     ):
         create_branch(project_root, baseline.branch)
 
-    report_path = project_root / report_relative
-    with _step("the report directory could not be created"):
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-
     generated_at = _now().isoformat(timespec="microseconds")
-    started_at = perf_counter()
-    with _step("the actor could not be started"):
-        completed = _run_actor(
-            project_root,
-            report_path=report_path,
-            ingestion_ref=run_id,
-            generated_at=generated_at,
-        )
-    wall_clock_seconds = perf_counter() - started_at
+    report_path = project_root / report_relative
+    report_parent, _, report_name = report_relative.rpartition("/")
+    with tempfile.TemporaryDirectory() as actor_output_dir:
+        actor_output_root = Path(actor_output_dir)
+        actor_report = actor_output_root / report_name
+        started_at = perf_counter()
+        with _step("the actor could not be started"):
+            completed = _run_actor(
+                project_root,
+                report_path=actor_report,
+                ingestion_ref=run_id,
+                generated_at=generated_at,
+            )
+        wall_clock_seconds = perf_counter() - started_at
 
-    # Exit 2 is NOT actor failure: `science health` writes a complete report and then exits 2
-    # for an invalid acceptance configuration (design §4.2).
-    if completed.returncode not in (0, 2):
-        raise HarnessError(
-            f"the actor exited {completed.returncode}: "
-            f"{completed.stderr.decode('utf-8', 'replace').strip()}"
-        )
+        # Exit 2 is NOT actor failure: `science health` writes a complete report and then exits 2
+        # for an invalid acceptance configuration (design §4.2).
+        if completed.returncode not in (0, 2):
+            raise HarnessError(
+                f"the actor exited {completed.returncode}: "
+                f"{completed.stderr.decode('utf-8', 'replace').strip()}"
+            )
+
+        with _step("the report directory could not be created"):
+            with open_dir_inside(actor_output_root, "") as actor_dir_fd:
+                payload = read_regular_file_bytes_at(
+                    actor_dir_fd, report_name, MAX_REPORT_BYTES
+                )
+            with open_dir_inside(
+                project_root, report_parent, create=True
+            ) as report_dir_fd:
+                descriptor = create_regular_file_at(report_dir_fd, report_name)
+                try:
+                    try:
+                        write_all(descriptor, payload)
+                    finally:
+                        os.close(descriptor)
+                except BaseException:
+                    unlink_at(report_dir_fd, report_name)
+                    raise
 
     with _step("could not re-read the current branch"):
         landed_on = current_branch(project_root)
@@ -305,7 +337,8 @@ def run_supervised_audit(
     # and the settle, so anything escaping here strands the operator on `auto/<slug>` with an
     # uncommitted record -- the outcome the refusal set below exists to prevent, reached by a
     # door no catch list can be trusted to have closed. The list keeps the failure a REFUSAL;
-    # the `finally` keeps a miss from being an abandonment.
+    # the outer catch normalizes an unforeseen Exception; the `finally` settles before either
+    # one can leave the loop.
     try:
         if outcome.disposition is RunDisposition.CLEAN:
             try:
@@ -331,6 +364,8 @@ def run_supervised_audit(
             # reader to widen the list by example rather than by hierarchy.
             except (CommonsError, OSError, ValueError, yaml.YAMLError) as exc:
                 refusal = str(exc)
+            except Exception as exc:
+                raise HarnessError(f"unexpected ingestion failure: {exc}") from exc
     finally:
         with _step("the run's results could not be settled"):
             switch_branch(project_root, starting_branch)

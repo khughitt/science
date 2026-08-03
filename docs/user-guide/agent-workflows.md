@@ -176,7 +176,7 @@ Five exit codes, extending `finish`'s three:
 | 0 | `clean`, and the findings were ingested. |
 | 1 | `quarantined` — the actor wrote outside its surface. Nothing was ingested. |
 | 2 | `unwired` — no verdict could be rendered. |
-| 3 | An orchestration failure: the run never reached a verdict. Every branch and file is left intact for triage. |
+| 3 | No harness outcome was returned because an orchestration step failed, possibly during post-verdict settlement. Every branch and file is left intact for triage. |
 | 4 | `clean`, but ingestion refused. Not a success — the run's purpose was an ingestible report, and a refused one did not achieve it. The refusal is printed and carried in the JSON output. |
 
 **Where the output lands.** The actor's report stays on the retained `auto/<run-id>`

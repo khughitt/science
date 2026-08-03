@@ -99,6 +99,18 @@ def test_read_regular_fd_reads_without_moving_the_descriptor_offset(tmp_path: Pa
         os.close(descriptor)
 
 
+def test_read_regular_file_bytes_at_preserves_non_utf8_bytes(tmp_path: Path) -> None:
+    target = tmp_path / "actor-output"
+    target.write_bytes(b"{\"invalid\": \"\xff\"}\n")
+    descriptor = open_dir_anchored(tmp_path)
+    try:
+        assert finding_paths.read_regular_file_bytes_at(
+            descriptor, target.name, 1024
+        ) == target.read_bytes()
+    finally:
+        os.close(descriptor)
+
+
 def test_write_all_completes_a_short_write(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "f"
     target.write_bytes(b"")

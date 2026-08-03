@@ -2,9 +2,9 @@
 
 **Who this affects:** every Science-managed project with **declared boundary roots** in
 `science.yaml` — those are the ones `science validate` reports drift for. The rendered
-block itself gained the line unconditionally, so a project with no declared roots also
-renders it (and should still sync, so it does not become a surprise at enrollment), but
-only a project with declared roots gets the error.
+block itself gained the line unconditionally, but a project with no declared roots takes
+no action until boundary enrollment: `science boundary sync` refuses a project that
+declares no roots. Only a project with declared roots gets the drift error.
 
 **Required action:** run `science boundary sync` once, and commit the resulting
 `.gitignore`.

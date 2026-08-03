@@ -109,6 +109,31 @@ def test_restore_path_removes_a_path_head_does_not_have(repo: Path):
     assert (repo / "keep-me.txt").read_text(encoding="utf-8") == "k\n"
 
 
+def test_restore_path_fails_closed_when_cat_file_does_not_prove_absence(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """An object-database failure is not evidence that HEAD lacks the path."""
+    from science_tool.autonomy import git as git_module
+
+    target = repo / "derived.txt"
+    target.write_text("keep\n", encoding="utf-8")
+    real_run_git = git_module.run_git
+
+    def _fail_membership(root: Path, *args: str, **kwargs):
+        if args[:2] == ("cat-file", "-t"):
+            return subprocess.CompletedProcess(
+                ["git", *args], 128, b"", b"fatal: object database unavailable\n"
+            )
+        return real_run_git(root, *args, **kwargs)
+
+    monkeypatch.setattr(git_module, "run_git", _fail_membership)
+
+    with pytest.raises(GitError, match="could not determine whether"):
+        restore_path(repo, "derived.txt")
+
+    assert target.read_text(encoding="utf-8") == "keep\n"
+
+
 def test_stage_paths_stages_only_what_it_names(repo: Path):
     (repo / "named.txt").write_text("n\n", encoding="utf-8")
     (repo / "unnamed.txt").write_text("u\n", encoding="utf-8")
@@ -180,3 +205,48 @@ def test_no_planted_vector_executes_through_the_write_primitives(repo: Path, pla
     assert sorted(p.name for p in sentinels.iterdir()) == [], (
         "a planted git-config vector reached a program through the write primitives"
     )
+
+
+def test_repo_local_core_worktree_cannot_redirect_write_primitives(
+    repo: Path, tmp_path: Path
+):
+    """Every gateway operation stays on `repo`, even when its config names another tree."""
+    starting_branch = current_branch(repo)
+    assert starting_branch is not None
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "a.txt").write_text("one\n", encoding="utf-8")
+    _plain_git(repo, "config", "core.worktree", str(outside))
+
+    create_branch(repo, "auto/pinned")
+    switch_branch(repo, starting_branch)
+    switch_branch(repo, "auto/pinned")
+
+    (repo / "named.txt").write_text("inside named\n", encoding="utf-8")
+    (outside / "named.txt").write_text("outside named\n", encoding="utf-8")
+    stage_paths(repo, ["named.txt"])
+    commit_tree(repo, message="named", author="a <a@b.c>", **SUPERVISOR)
+
+    (repo / "named.txt").write_text("inside changed\n", encoding="utf-8")
+    (outside / "named.txt").write_text("outside changed\n", encoding="utf-8")
+    restore_path(repo, "named.txt")
+
+    (repo / "all.txt").write_text("inside all\n", encoding="utf-8")
+    (outside / "all.txt").write_text("outside all\n", encoding="utf-8")
+    stage_all(repo)
+    commit_tree(repo, message="all", author="a <a@b.c>", **SUPERVISOR)
+
+    (repo / "all.txt").write_text("inside dirty\n", encoding="utf-8")
+    (repo / "inside-untracked.txt").write_text("inside\n", encoding="utf-8")
+    (outside / "all.txt").write_text("outside dirty\n", encoding="utf-8")
+    (outside / "outside-untracked.txt").write_text("outside\n", encoding="utf-8")
+    restore_worktree(repo)
+
+    assert _plain_git(repo, "show", "HEAD:named.txt") == "inside named"
+    assert _plain_git(repo, "show", "HEAD:all.txt") == "inside all"
+    assert (repo / "named.txt").read_text(encoding="utf-8") == "inside named\n"
+    assert (repo / "all.txt").read_text(encoding="utf-8") == "inside all\n"
+    assert not (repo / "inside-untracked.txt").exists()
+    assert (outside / "named.txt").read_text(encoding="utf-8") == "outside changed\n"
+    assert (outside / "all.txt").read_text(encoding="utf-8") == "outside dirty\n"
+    assert (outside / "outside-untracked.txt").read_text(encoding="utf-8") == "outside\n"
